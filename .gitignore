@@ -1,0 +1,48 @@
+# Node.js / React / Vite
+node_modules/
+dist/
+.env.local
+.vite/
+
+# VSCode e editores
+.vscode/
+*.code-workspace
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python / Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.log
+.env
+*.pyc
+db.sqlite3
+venv/
+env/
+*.pyo
+
+# Django static/media
+staticfiles/
+media/
+
+# Django migrations (se quiser manter limpo)
+*/migrations/__pycache__/
+*/migrations/*.pyc
+*/migrations/*.pyo
+*/migrations/*.log
+**/migrations/*_initial.py
+
+# Outros
+.DS_Store
+Thumbs.db
+info
+
+# ✅ Permitir rastrear estas pastas
+!frontend/
+!backend/
+!README.md
+!LICENSE
