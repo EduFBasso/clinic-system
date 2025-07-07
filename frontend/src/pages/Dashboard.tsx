@@ -1,13 +1,9 @@
-import Navbar from "../components/Navbar";
-
+// frontend\src\pages\Dashboard.tsx
 export default function Dashboard() {
   return (
-    <div>
-      <Navbar />
-      <section style={{ padding: "2rem" }}>
-        <h2>Bem-vindo ao sistema!</h2>
-        <p>Escolha uma opção acima para começar.</p>
-      </section>
+    <div style={{ padding: "2rem" }}>
+      <h2>🏥 Painel da Clínica</h2>
+      <p>Você está logado! Aqui futuramente ficará o resumo da clínica, indicadores e atalhos rápidos.</p>
     </div>
   );
 }

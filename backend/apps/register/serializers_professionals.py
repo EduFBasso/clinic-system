@@ -15,7 +15,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
 class ProfessionalBasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Professional
-        fields = ['id', 'first_name', 'last_name', 'register_number']
+        fields = ['id', 'first_name', 'last_name', 'register_number', 'email']
 
 """
 📘 Módulo: serializers_professionals.py

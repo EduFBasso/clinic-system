@@ -1,4 +1,4 @@
-# backend\apps\register\views_auth.py
+# backend.apps.register.views_auth.py
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response

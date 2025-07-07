@@ -1,4 +1,4 @@
-# backend\apps\register\tests\test_clients.py
+# backend\apps\register\tests\conftest.py
 
 import django
 import os

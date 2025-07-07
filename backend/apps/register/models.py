@@ -1,5 +1,5 @@
 # backend/apps/register/models.py
-
+from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 
@@ -33,7 +33,7 @@ class ProfessionalManager(BaseUserManager):
 class Professional(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField("Nome", max_length=50)
     last_name = models.CharField("Sobrenome", max_length=70)
-    phone = models.CharField("Telefone", max_length=20, blank=True)
+    phone = PhoneNumberField("Telefone", region="BR", blank=True)
     email = models.EmailField("E-mail", unique=True)
 
     register_number = models.CharField("Registro Profissional", max_length=30, unique=True)
@@ -112,3 +112,45 @@ class Client(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+    
+    
+# apps.register.models.py
+class AccessCode(models.Model):
+    professional = models.ForeignKey(Professional, on_delete=models.CASCADE)
+    code = models.CharField(max_length=4)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.professional.email} — Código {self.code}"
+    
+"""
+    📦 Modelos Definidos
+1. ProfessionalManager
+- Gerencia criação de profissionais e superusuários
+- Trata criptografia de senha ou uso de senha descartável (OTP)
+2. Professional
+- Usuário principal do sistema
+- Campos: nome, email, telefone, número de registro profissional, especialidade, cidade/estado
+- Personalizado para login via e-mail (USERNAME_FIELD = "email")
+- Suporte a autenticação via Django (AbstractBaseUser e PermissionsMixin)
+3. Client
+- Associado a um Professional via ForeignKey
+- Campos divididos em:
+- Dados pessoais e de contato
+- Endereço completo
+- Anamnese clínica: medicação, cirurgias, gravidez, sensibilidade
+- Avaliação física: perfusão, vista plantar, dermatologia
+- Observações sobre procedimentos realizados
+- Registro automático de criação/atualização (created_at, updated_at)
+4. AccessCode
+- Sistema de código temporário para login seguro via OTP
+- Campos:
+- professional: vínculo com usuário
+- code: string de 4 dígitos
+- expires_at: data de validade
+- is_used: controle de uso único
+- created_at: registro automático
+"""
+
