@@ -1,0 +1,167 @@
+/* Linha para pares de campos (esquerdo/direito) alinhados */
+.rowPair {
+    display: flex;
+    flex-direction: row;
+    gap: 2.5rem;
+    margin-bottom: 2.5rem;
+    align-items: stretch;
+}
+
+.colPair {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    min-width: 300px;
+}
+
+@media (max-width: 1024px) {
+    .rowPair {
+        flex-direction: column;
+        gap: 2.5rem;
+        margin-bottom: 2.5rem;
+    }
+    .colPair {
+        width: 100%;
+        min-width: 0;
+        gap: 2.5rem;
+    }
+}
+/* frontend\src\styles\pages\Client.module.css */
+/* Novo título centralizado para o formulário */
+
+@import '../../styles/palette.css';
+
+.formTitle {
+    width: 100%;
+    text-align: center;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    margin-bottom: 2rem;
+    color: var(--color-primary); /* igual aos campos */
+    letter-spacing: 0.01em;
+}
+
+/* Container para os painéis lado a lado */
+.formPanels {
+    display: flex;
+    gap: 2.5rem;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-bottom: 2rem;
+    align-items: flex-start;
+}
+/* frontend\src\styles\pages\Client.module.css */
+.clientContainer {
+    padding: 2rem;
+    max-width: 980px;
+    margin: auto;
+    background-color: var(--color-bg);
+    border-radius: 8px;
+}
+
+.title {
+    text-align: center;
+    margin-bottom: 2rem;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+}
+
+.clientForm {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.leftPanel,
+.rightPanel {
+    flex: 1 1 45%;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    min-width: 300px;
+    /* min-height removido para evitar espaço desnecessário */
+}
+/* Melhora visual das seções do formulário */
+section {
+    width: 100%;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+    background: var(--color-bg-section);
+    border-radius: 8px;
+    box-shadow: 0 1px 6px 0 rgba(0, 0, 0, 0.04);
+    padding: 1.5rem 1.2rem 1.2rem 1.2rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--color-border);
+}
+
+/* Remove o margin-bottom do último section de cada painel para evitar espaço extra antes do botão */
+.leftPanel section:last-child,
+.rightPanel section:last-child,
+.formPanels > section:last-child {
+    margin-bottom: 0;
+}
+
+.panelTitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin-bottom: 1.2rem;
+    letter-spacing: 0.01em;
+    font-family: 'Roboto', sans-serif;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.5rem;
+}
+
+.submitButton {
+    margin-top: 2rem;
+    padding: 0.6rem 1.2rem;
+    background-color: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.submitButton:hover {
+    background-color: var(--color-secondary);
+}
+
+@media (max-width: 1024px) {
+    .clientForm {
+        flex-direction: column;
+        gap: 0;
+    }
+    .formPanels {
+        flex-direction: column;
+        gap: 0;
+    }
+    .leftPanel,
+    .rightPanel {
+        gap: 1rem;
+        min-width: 0;
+        min-height: unset;
+        width: 100%;
+    }
+}
+
+.sectionTitle {
+    text-align: center;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.6rem, 3vw, 2.5rem);
+    margin-bottom: 2rem;
+    color: var(--color-text-light);
+}
+
+.formActions {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+    margin-bottom: 2rem;
+}

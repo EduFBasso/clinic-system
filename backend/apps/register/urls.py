@@ -5,9 +5,9 @@ from rest_framework.routers import DefaultRouter
 
 # ▶️ Importações de views
 from .views_auth import login_professional
-from .views_auth_code import request_code, verify_code
-from .views_clients import ClientViewSet, ClientBasicViewSet
-from .views_professionals import ProfessionalViewSet, ProfessionalBasicViewSet
+from .views_auth_code import request_otp_view, verify_code
+from .client_views import ClientViewSet, ClientBasicViewSet
+from .professional_views import ProfessionalViewSet, ProfessionalBasicViewSet
 
 # ▶️ ViewSets com rotas automáticas
 router = DefaultRouter()
@@ -19,7 +19,7 @@ router.register(r'professionals-basic', ProfessionalBasicViewSet, basename='prof
 # ▶️ Rotas manuais
 urlpatterns = [
     path('login/', login_professional),
-    path('auth/request-code/', request_code),
+    path('auth/request-code/', request_otp_view),
     path('auth/verify-code/', verify_code),
     path('', include(router.urls)),
 ]

@@ -1,0 +1,28 @@
+/* frontend\src\styles\components\Main.module.csss */
+
+/* Estilos padrão */
+.main {
+    min-height: calc(
+        100vh - 128px
+    ); /* altura da viewport - header/faixa/footer */
+    padding: 2rem;
+    background-color: #fff;
+}
+
+/* Smartphones (ex: iPhone 16 Plus) */
+@media screen and (max-width: 430px) {
+    .main {
+        padding: 1rem;
+        flex-direction: column;
+    }
+}
+
+/* Tablets (ex: iPad 10) */
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+    .main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        padding: 1.5rem;
+    }
+}

@@ -1,5 +1,4 @@
 # backend/apps/register/tests/test_professionals.py
-
 from apps.register.models import Professional
 
 # 🧪 Teste 04 – Lista básica de profissionais via rota pública

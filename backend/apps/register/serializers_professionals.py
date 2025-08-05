@@ -1,29 +1,28 @@
 # backend\apps\register\serializers_professionals.py
-
 from rest_framework import serializers
 from .models import Professional
+from rest_framework.permissions import BasePermission
 
 class ProfessionalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Professional
         fields = '__all__'
         extra_kwargs = {
-            'password': {'required': False, 'write_only': True}
+            'password': {'required': False, 'write_only': True},
+            'can_manage_professionals': {'required': False}
         }
 
 
 class ProfessionalBasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Professional
-        fields = ['id', 'first_name', 'last_name', 'register_number', 'email']
+        fields = ['id', 'email', 'first_name', 'last_name', 'register_number']
 
-"""
-📘 Módulo: serializers_professionals.py
 
-Serializadores dedicados ao modelo Professional.
+from rest_framework.permissions import BasePermission
 
-- ProfessionalSerializer: versão completa com suporte a senha.
-- ProfessionalBasicSerializer: campos mínimos para dropdowns.
-
-Utiliza extra_kwargs para ocultar e tornar opcional o campo 'password'.
-"""
+class CanManageProfessionals(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and getattr(request.user, 'can_manage_professionals', False)
+    
+      

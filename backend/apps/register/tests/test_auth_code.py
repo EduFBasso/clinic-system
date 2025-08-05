@@ -1,5 +1,4 @@
 # backend/apps/register/tests/test_auth_code.py
-
 import pytest
 from apps.register.models import AccessCode, Professional
 from django.utils import timezone

@@ -1,0 +1,83 @@
+/* frontend\src\styles\components\NavBar.module.css */
+.navBar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f1f1f1;
+    padding: 0.8rem 2rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.menuContainer {
+    display: flex;
+    gap: 1rem;
+}
+
+.menuButton {
+    background: none;
+    border: none;
+    color: #333;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.menuButton:hover {
+    color: #007bff;
+}
+
+.loginContainer {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.loginInput {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.loginButton {
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.loginButton:hover {
+    background-color: #0056b3;
+}
+
+@media screen and (max-width: 480px) {
+    .navBar {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 1rem;
+        gap: 0.75rem;
+    }
+
+    .menuContainer,
+    .loginContainer {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .loginInput {
+        width: 100%;
+    }
+
+    .loginButton {
+        width: 100%;
+        /* background-color: #555;
+        border: none;
+        border-radius: 8px;
+        padding: 0.6rem; */
+    }
+}

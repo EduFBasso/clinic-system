@@ -1,0 +1,29 @@
+@import '../../styles/palette.css';
+
+.container {
+    margin-bottom: 1.5rem;
+}
+
+.checkboxGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.checkboxLabel {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--color-text-light);
+}
+
+.otherInput {
+    margin-top: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.95rem;
+    background: var(--color-bg-section);
+    color: var(--color-text);
+}

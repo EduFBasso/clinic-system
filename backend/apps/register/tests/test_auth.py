@@ -1,5 +1,4 @@
 # backend\apps\register\tests\test_auth.py
-
 # teste de login com JWT token simples
 def test_login_token_sucesso(api_client, profissional):
     response = api_client.post("/token/", {

@@ -1,82 +1,96 @@
-# apps.register.views_auth_code.py
-from rest_framework.decorators import api_view
+# backend\apps\register\views_auth_code.py
 from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from rest_framework import status
 from django.utils import timezone
-from .models import AccessCode, Professional
-from .services.access_code import generate_access_code
-from .services.notifications import send_code_email, send_code_whatsapp
+from apps.register.models import Professional, AccessCode
+from apps.register.serializers import ProfessionalSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from apps.register.services.validation_utils import is_valid_email
+from apps.register.services.otp_service import request_otp_code
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @api_view(['POST'])
-def request_code(request):
+def request_otp_view(request):
     email = request.data.get('email')
-    try:
-        professional = Professional.objects.get(email=email)
-        code_entry = generate_access_code(professional)
-        send_code_email(professional, code_entry.code)
-        send_code_whatsapp(professional, code_entry.code)
-        return Response({'message': 'Código enviado'})
-    except Professional.DoesNotExist:
-        return Response({'error': 'Profissional não encontrado'}, status=404)
 
-@api_view(['POST'])
+    if not is_valid_email(email):
+        return Response({'error': 'E-mail inválido.'}, status=400)
+
+    resultado = request_otp_code(email)
+
+    if resultado['success']:
+        return Response({'message': resultado['message']})
+    else:
+        return Response({'error': resultado['message']}, status=404)
+
+
+@api_view(["POST"])
 def verify_code(request):
-    email = request.data.get('email')
-    code = request.data.get('code')
+    email = request.data.get("email")
+    code = request.data.get("code")
+    fallback_pass = "0000" # Senha alternativa para testes
+
+    logger.info(f"[Verificação OTP] E-mail: {email} | Código: {code}")
+
     try:
         professional = Professional.objects.get(email=email)
-        access_code = AccessCode.objects.filter(professional=professional, code=code, is_used=False).last()
-        if not access_code or access_code.expires_at < timezone.now():
-            return Response({'error': 'Código inválido ou expirado'}, status=403)
-        access_code.is_used = True
-        access_code.save()
+    except Professional.DoesNotExist:
+        return Response(
+            {"valid": False, "message": "Profissional não encontrado."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 🔑 Fallback: senha alternativa (fase de testes)
+    if code == fallback_pass:
+        logger.info(f"[Fallback] Autenticado por senha alternativa: {professional.email}")
         refresh = RefreshToken.for_user(professional)
         return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'professional': {
-                'id': professional.id,
-                'first_name': professional.first_name,
-                'last_name': professional.last_name,
-                'email': professional.email
-            }
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "professional": ProfessionalSerializer(professional).data
         })
-    except Professional.DoesNotExist:
-        return Response({'error': 'Profissional não encontrado'}, status=404)
 
-"""
-📘 Módulo: views_auth_code.py — apps.register
-Responsável pelo fluxo completo de autenticação via código temporário numérico (OTP), usado como alternativa ao login tradicional com senha.
+    # 🔍 Busca código padrão OTP
+    access_code = AccessCode.objects.filter(
+        professional=professional,
+        code=code
+    ).first()
 
-📦 Funções incluídas
-1. request_code(request)
-- Gera um código seguro de 4 dígitos com secrets
-- Salva no modelo AccessCode, com validade de 10 minutos (configurável)
-- Envia o código via email e WhatsApp (simulado pelas funções send_code_email() e send_code_whatsapp())
-2. verify_code(request)
-- Verifica se o código informado:
-- Pertence ao profissional certo
-- Está dentro da validade (expires_at)
-- Ainda não foi utilizado (is_used = False)
-- Em caso de sucesso:
-- Marca o código como usado
-- Gera access e refresh tokens JWT
-- Retorna os dados essenciais do profissional logado
+    if not access_code:
+        return Response(
+            {"valid": False, "message": "Código não encontrado para este profissional."},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
-🔗 Integrações utilizadas
-- Modelos: Professional, AccessCode
-- Serviços:
-- generate_access_code(professional)
-- send_code_email(professional, code)
-- send_code_whatsapp(professional, code)
-- Bibliotecas externas:
-- datetime para expiração
-- RefreshToken do rest_framework_simplejwt para JWT
+    if access_code.is_used:
+        return Response(
+            {"valid": False, "message": "Código já utilizado."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-📌 Observações técnicas
-- Proteção contra uso indevido com validação de código único e expiração
-- Pronto para testes unitários com pytest
-- Rota esperada:
-- /auth/request-code/ (POST com email)
-- /auth/verify-code/ (POST com email + code)
-"""
+    if access_code.expires_at < timezone.now():
+        return Response(
+            {"valid": False, "message": "Código expirado."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    # ✅ Tudo certo — marcar como usado
+    access_code.is_used = True
+    access_code.save()
+
+    # Gerar JWT
+    refresh = RefreshToken.for_user(professional)
+    access_token = str(refresh.access_token)
+    refresh_token = str(refresh)
+
+    logger.info(f"[Código Validado] Profissional: {professional.email} | Código: {code}")
+
+    return Response({
+        "access": access_token,
+        "refresh": refresh_token,
+        "professional": ProfessionalSerializer(professional).data
+    }, status=status.HTTP_200_OK)

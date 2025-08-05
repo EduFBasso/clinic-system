@@ -1,5 +1,4 @@
 # backend\apps\register\tests\test_clients.py
-
 from apps.register.models import Client
 
 def test_cria_cliente(api_client):

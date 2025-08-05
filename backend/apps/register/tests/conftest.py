@@ -1,5 +1,4 @@
 # backend\apps\register\tests\conftest.py
-
 import django
 import os
 import pytest

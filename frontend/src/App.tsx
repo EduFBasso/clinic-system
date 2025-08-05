@@ -1,46 +1,21 @@
-// src/App.tsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Login from "./pages/Auth/Login";
-import Dashboard from "./pages/Dashboard";
-import ClientList from "./pages/Clients/ClientList";
-import RegisterProfessional from "./pages/Auth/RegisterProfessional";
-import NotFound from "./pages/NotFound";
-import PrivateRoute from "./auth/PrivateRoute";
-import { AuthProvider } from "./auth/AuthContext";
+// frontend\src\App.tsx
 
-export default function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/clientes"
-            element={
-              <PrivateRoute>
-                <ClientList />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <PrivateRoute>
-                <RegisterProfessional />
-              </PrivateRoute>
-            }
-          />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
-  );
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import Home from '../src/pages/Home';
+import ClientListPage from './pages/Clients/ClientListPage';
+import ClientFormPage from './pages/Clients/ClientFormPage';
+
+function App() {
+    return (
+        <Router>
+            <Routes>
+                <Route path='/' element={<Home />} />
+                <Route path='/clients' element={<ClientListPage />} />
+                <Route path='/clients/new' element={<ClientFormPage />} />
+                {/* Futuramente: <Route path='/clients/:id/edit' element={<ClientFormPage />} /> */}
+            </Routes>
+        </Router>
+    );
 }
+
+export default App;

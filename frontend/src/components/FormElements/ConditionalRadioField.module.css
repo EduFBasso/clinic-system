@@ -1,0 +1,22 @@
+@import '../../styles/palette.css';
+
+.fieldContainer {
+    margin-bottom: 1.5rem;
+}
+
+.radioGroup {
+    display: flex;
+    gap: 1.2rem;
+    margin-bottom: 0.75rem;
+    align-items: center;
+}
+
+.textInput {
+    width: 100%;
+    padding: 0.5rem;
+    font-size: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg-section);
+    color: var(--color-text);
+}

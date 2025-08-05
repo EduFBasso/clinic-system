@@ -1,0 +1,7 @@
+/* frontend\src\styles\components\Header.module.css */
+.header {
+    background-color: #004aad;
+    color: white;
+    padding: 1rem;
+    text-align: center;
+}

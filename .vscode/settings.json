@@ -1,0 +1,61 @@
+{
+  "window.zoomLevel": -0.3,
+  "editor.fontSize": 15,
+  "editor.fontFamily": "Consolas, 'Courier New', monospace",
+  "editor.fontLigatures": true,
+  "chat.editor.fontWeight": "100",
+  "editor.fontWeight": "100",
+  "editor.letterSpacing": -0.5,
+  "editor.glyphMargin": false,
+
+  "code-runner.clearPreviousOutput": true,
+  "code-runner.runInTerminal": true,
+  "code-runner.executorMap": {
+    "javascript": "node",
+    "typescript": "ts-node",
+    "python": "cls; python -u",
+    "java": "cd $dir && javac $fileName && java $fileNameWithoutExt",
+    "c": "gcc $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt",
+    "cpp": "g++ $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt"
+  },
+
+  "editor.minimap.enabled": false,
+  "editor.mouseWheelZoom": true,
+  "editor.formatOnSave": true,
+  "explorer.compactFolders": false,
+
+  "workbench.iconTheme": "material-icon-theme",
+  "workbench.colorTheme": "GitHub Dark Default",
+
+  // "debug.console.fontSize": 16,
+  "terminal.integrated.fontSize": 15,
+  "terminal.integrated.fontFamily": "monospace",
+  "workbench.activityBar.location": "hidden",
+
+  "breadcrumbs.enabled": false,
+  // "editor.lineNumbers": "off",
+  "files.eol": "\n", // Final de linha sempre será LF
+
+  // 🛠 Formatação e Lint
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[xml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[svg]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
