@@ -1,3 +1,18 @@
+/* Destaque visual para cartões internos do formulário */
+.formPanels section {
+    background: #f8fafc;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.04);
+    padding: 20px 18px 16px 18px;
+    margin-bottom: 18px;
+    border: 1px solid #e0e7ef;
+    transition: box-shadow 0.2s;
+}
+
+.formPanels section:focus-within {
+    box-shadow: 0 0 0 2px #90e0ef, 0 2px 8px 0 rgba(0, 0, 0, 0.04);
+    border-color: #90e0ef;
+}
 /* Linha para pares de campos (esquerdo/direito) alinhados */
 .rowPair {
     display: flex;
@@ -36,7 +51,7 @@
     width: 100%;
     text-align: center;
     font-family: 'Roboto', sans-serif;
-    font-weight: 700;
+    font-weight: 600;
     font-size: clamp(1.8rem, 3vw, 2.5rem);
     margin-bottom: 2rem;
     color: var(--color-primary); /* igual aos campos */
@@ -116,6 +131,17 @@ section {
     padding-bottom: 0.5rem;
 }
 
+.centeredTitle {
+    width: 100%;
+    text-align: center;
+    margin: 2rem 0 1rem 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    font-family: 'Roboto', sans-serif;
+    padding-bottom: 0.5rem;
+}
+
 .submitButton {
     margin-top: 2rem;
     padding: 0.6rem 1.2rem;
@@ -164,4 +190,32 @@ section {
     justify-content: center;
     margin-top: 1rem;
     margin-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+    .formActions {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(
+            248,
+            250,
+            252,
+            0.98
+        ); /* mesmo tom dos cartões, levemente translúcido */
+        box-shadow: 0 -2px 8px 0 rgba(0, 0, 0, 0.07);
+        padding: 12px 0 12px 0;
+        margin: 0;
+        z-index: 100;
+    }
+    .submitButton {
+        width: 90vw;
+        max-width: 420px;
+        font-size: 1.1rem;
+        padding: 12px 0;
+    }
+    .clientForm {
+        padding-bottom: 70px !important; /* espaço extra para não cobrir campos pelo botão fixo */
+    }
 }

@@ -25,4 +25,8 @@ export interface ClientData {
     dermatological_pathologies_right: string;
     nail_changes_left: string;
     nail_changes_right: string;
+    deformities_left: string;
+    deformities_right: string;
+    sensitivity_test: string;
+    other_procedures: string;
 }

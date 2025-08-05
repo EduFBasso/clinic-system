@@ -16,6 +16,9 @@ import DermatologicalPathologiesLeft from './FormElements/DermatologicalPatholog
 import DermatologicalPathologiesRight from './FormElements/DermatologicalPathologiesRight';
 import NailChangesLeft from './FormElements/NailChangesLeft';
 import NailChangesRight from './FormElements/NailChangesRight';
+import DeformitiesLeft from './FormElements/DeformitiesLeft';
+import DeformitiesRight from './FormElements/DeformitiesRight';
+import SensitivityTest from './FormElements/SensitivityTest';
 
 export default function ClientForm() {
     const [formData, setFormData] = useState<ClientData>({
@@ -44,6 +47,10 @@ export default function ClientForm() {
         dermatological_pathologies_right: '',
         nail_changes_left: '',
         nail_changes_right: '',
+        deformities_left: '',
+        deformities_right: '',
+        sensitivity_test: '',
+        other_procedures: '',
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,6 +222,8 @@ export default function ClientForm() {
                             }
                         />
                     </section>
+
+                    <h2 className={styles.centeredTitle}>Avaliação dos Pés</h2>
                     <section>
                         <h3 className={styles.panelTitle}>
                             Vista plantar (pé esquerdo)
@@ -297,6 +306,72 @@ export default function ClientForm() {
                                     nail_changes_right: val,
                                 }))
                             }
+                        />
+                    </section>
+                    <section>
+                        <h3 className={styles.panelTitle}>
+                            Deformidades (pé esquerdo)
+                        </h3>
+                        <DeformitiesLeft
+                            value={formData.deformities_left}
+                            onChange={val =>
+                                setFormData(prev => ({
+                                    ...prev,
+                                    deformities_left: val,
+                                }))
+                            }
+                        />
+                    </section>
+                    <section>
+                        <h3 className={styles.panelTitle}>
+                            Deformidades (pé direito)
+                        </h3>
+                        <DeformitiesRight
+                            value={formData.deformities_right}
+                            onChange={val =>
+                                setFormData(prev => ({
+                                    ...prev,
+                                    deformities_right: val,
+                                }))
+                            }
+                        />
+                    </section>
+                    {/* Teste de sensibilidade */}
+                    <section>
+                        <h3 className={styles.panelTitle}>
+                            Teste de Sensibilidade
+                        </h3>
+                        <SensitivityTest
+                            value={formData.sensitivity_test}
+                            onChange={val =>
+                                setFormData(prev => ({
+                                    ...prev,
+                                    sensitivity_test: val,
+                                }))
+                            }
+                        />
+                    </section>
+                    {/* Outros procedimentos */}
+                    <section>
+                        <h3 className={styles.panelTitle}>
+                            Outros procedimentos / Observações
+                        </h3>
+                        <textarea
+                            name='other_procedures'
+                            value={formData.other_procedures}
+                            onChange={e =>
+                                setFormData(prev => ({
+                                    ...prev,
+                                    other_procedures: e.target.value,
+                                }))
+                            }
+                            rows={3}
+                            style={{
+                                width: '100%',
+                                resize: 'vertical',
+                                marginTop: 4,
+                            }}
+                            placeholder='Descreva outros procedimentos realizados ou observações...'
                         />
                     </section>
                 </div>
@@ -470,7 +545,11 @@ export default function ClientForm() {
                         />
                     </section>
                 </div>
+            </div>
 
+            <h2 className={styles.centeredTitle}>Avaliação dos Pés</h2>
+
+            <div className={styles.formPanels}>
                 <div className={styles.rowPair}>
                     <div className={styles.colPair}>
                         <section>
@@ -513,6 +592,43 @@ export default function ClientForm() {
                                         nail_changes_left: val,
                                     }))
                                 }
+                            />
+                        </section>
+                        <section>
+                            <h3 className={styles.panelTitle}>
+                                Deformidades (pé esquerdo)
+                            </h3>
+                            <DeformitiesLeft
+                                value={formData.deformities_left}
+                                onChange={val =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        deformities_left: val,
+                                    }))
+                                }
+                            />
+                        </section>
+                        {/* Outros procedimentos */}
+                        <section>
+                            <h3 className={styles.panelTitle}>
+                                Outros procedimentos / Observações
+                            </h3>
+                            <textarea
+                                name='other_procedures'
+                                value={formData.other_procedures}
+                                onChange={e =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        other_procedures: e.target.value,
+                                    }))
+                                }
+                                rows={4}
+                                style={{
+                                    width: '100%',
+                                    resize: 'vertical',
+                                    marginTop: 4,
+                                }}
+                                placeholder='Descreva outros procedimentos realizados ou observações...'
                             />
                         </section>
                     </div>
@@ -561,13 +677,42 @@ export default function ClientForm() {
                                 }
                             />
                         </section>
+                        <section>
+                            <h3 className={styles.panelTitle}>
+                                Deformidades (pé direito)
+                            </h3>
+                            <DeformitiesRight
+                                value={formData.deformities_right}
+                                onChange={val =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        deformities_right: val,
+                                    }))
+                                }
+                            />
+                        </section>
+                        <section>
+                            {/* Teste de Sensibilidade */}
+                            <h3 className={styles.panelTitle}>
+                                Teste de Sensibilidade
+                            </h3>
+                            <SensitivityTest
+                                value={formData.sensitivity_test}
+                                onChange={val =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        sensitivity_test: val,
+                                    }))
+                                }
+                            />
+                        </section>
                     </div>
                 </div>
-            </div>
-            <div className={styles.formActions}>
-                <button type='submit' className={styles.submitButton}>
-                    Salvar
-                </button>
+                <div className={styles.formActions}>
+                    <button type='submit' className={styles.submitButton}>
+                        Salvar
+                    </button>
+                </div>
             </div>
         </form>
     );

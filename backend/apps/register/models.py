@@ -117,6 +117,10 @@ class Client(models.Model):
     nail_changes_left = models.TextField("Alterações nas unhas pé esquerdo", null=True, blank=True)
     nail_changes_right = models.TextField("Alterações nas unhas pé direito", null=True, blank=True)
 
+    deformities_left = models.TextField("Deformidades pé esquerdo", null=True, blank=True)
+    deformities_right = models.TextField("Deformidades pé direito", null=True, blank=True)
+
+    sensitivity_test = models.TextField("Teste de sensibilidade", null=True, blank=True)
     other_procedures = models.TextField("Outros procedimentos", null=True, blank=True)
 
     def __str__(self):
