@@ -1,3 +1,4 @@
+/* frontend\src\components\FormElements\FormElementsBase.module.css */
 @import '../../styles/palette.css';
 
 .formLabel {
@@ -14,7 +15,7 @@
     border-radius: 4px;
     font-size: 1rem;
     transition: border-color 0.3s;
-    background: var(--color-bg-section);
+    background: var(--color-primary-light);
     color: var(--color-text);
 }
 

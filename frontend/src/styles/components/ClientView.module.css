@@ -1,0 +1,57 @@
+.clientViewCard {
+    background: #f1f5fa;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
+    padding: 28px 20px 20px 20px;
+    max-width: 700px;
+    margin: 32px auto;
+    border: 1px solid #e0e7ef;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.fieldRow {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 2px;
+    flex-wrap: wrap;
+}
+
+.fieldLabel {
+    font-weight: 600;
+    color: #1a2a3a;
+    min-width: 180px;
+    flex-shrink: 0;
+}
+
+.fieldValue {
+    color: #0a2540;
+    background: #fff;
+    border-radius: 8px;
+    padding: 2px 10px;
+    font-weight: 500;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    word-break: break-word;
+}
+
+@media (max-width: 768px) {
+    .clientViewCard {
+        padding: 16px 6px 16px 6px;
+        margin: 18px 0;
+    }
+    .fieldRow {
+        flex-direction: column;
+        gap: 2px;
+    }
+    .fieldLabel {
+        min-width: unset;
+        font-size: 1rem;
+    }
+    .fieldValue {
+        font-size: 1rem;
+        padding: 2px 6px;
+    }
+}

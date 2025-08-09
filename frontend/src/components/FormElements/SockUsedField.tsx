@@ -6,13 +6,15 @@ const sockOptions = [
     'Algodão',
     'Seda',
     'Compressão',
-    'Calça',
+    'Meia-Calça',
+    'Lã',
+    'Social',
     'Outro',
 ];
 
 interface SockUsedFieldProps {
     value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onChange: (value: string) => void;
     titleClassName?: string;
 }
 

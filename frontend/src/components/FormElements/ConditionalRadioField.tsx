@@ -64,7 +64,7 @@ export default function ConditionalRadioField({
                 <input
                     type='text'
                     className={styles.textInput}
-                    placeholder='Explique brevemente...'
+                    placeholder='Descrição da atividade'
                     value={explanation}
                     onChange={handleExplanationChange}
                 />

@@ -1,3 +1,4 @@
+@import '../../styles/palette.css';
 .container {
     margin-top: 4px;
 }
@@ -13,10 +14,11 @@
     gap: 6px;
 }
 .otherInput {
-    margin-top: 4px;
-    padding: 2px 6px;
-    font-size: 1rem;
+    margin-top: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    border: 1px solid #ccc;
-    width: 180px;
+    font-size: 0.95rem;
+    background: var(--color-primary-light);
+    color: var(--color-text);
 }

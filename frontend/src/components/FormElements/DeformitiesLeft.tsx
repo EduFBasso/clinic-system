@@ -25,8 +25,16 @@ const DeformitiesLeft: React.FC<DeformitiesLeftProps> = ({
         const items = value.split(',').map(v => v.trim());
         const checks = items.filter(item => !item.startsWith('Outros:'));
         const outrosItem = items.find(item => item.startsWith('Outros:'));
-        setChecked(checks.filter(opt => options.includes(opt)));
-        setOutros(outrosItem ? outrosItem.replace('Outros: ', '') : '');
+        if (outrosItem) {
+            setChecked([
+                ...checks.filter(opt => options.includes(opt)),
+                'Outros',
+            ]);
+            setOutros(outrosItem.replace('Outros: ', ''));
+        } else {
+            setChecked(checks.filter(opt => options.includes(opt)));
+            setOutros('');
+        }
     }, [value]);
 
     React.useEffect(() => {
@@ -34,8 +42,6 @@ const DeformitiesLeft: React.FC<DeformitiesLeftProps> = ({
         if (checked.includes('Outros') && outros.trim()) {
             arr = arr.filter(opt => opt !== 'Outros');
             arr.push(`Outros: ${outros.trim()}`);
-        } else {
-            arr = arr.filter(opt => opt !== 'Outros');
         }
         onChange(arr.join(', '));
     }, [checked, outros]);

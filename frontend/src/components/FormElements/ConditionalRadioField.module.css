@@ -17,6 +17,6 @@
     font-size: 1rem;
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: var(--color-bg-section);
+    background: var(--color-primary-light);
     color: var(--color-text);
 }

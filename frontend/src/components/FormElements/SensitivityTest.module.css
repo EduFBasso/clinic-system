@@ -37,16 +37,16 @@
     transform: translateY(-50%);
     height: 18px;
     width: 18px;
-    background-color: #fff;
-    border: 2px solid #0077b6;
+    background-color: var(--color-bg-section);
+    border: 2px solid var(--color-border);
     border-radius: 50%;
     transition: border-color 0.2s;
 }
 
 .radioInput:checked + .customRadio {
-    background-color: #0077b6;
-    box-shadow: 0 0 0 2px #90e0ef;
-    border-color: #0077b6;
+    background-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-accent);
+    border-color: var(--color-primary);
 }
 
 .customRadio:after {
@@ -65,6 +65,6 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #fff;
+    background: var(--color-bg-section);
     position: absolute;
 }

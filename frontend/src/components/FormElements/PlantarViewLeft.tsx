@@ -28,12 +28,22 @@ export default function PlantarViewLeft({
         const items = value ? value.split(',').map(v => v.trim()) : [];
         const checks = items.filter(item => !item.startsWith('Outros:'));
         const outros = items.find(item => item.startsWith('Outros:'));
-        setChecked(checks.filter(opt => OPTIONS.includes(opt)));
-        setOtherInput(outros ? outros.replace('Outros: ', '') : '');
+        // Se houver texto em outros, mantém 'Outros' marcado
+        if (outros) {
+            setChecked([
+                ...checks.filter(opt => OPTIONS.includes(opt)),
+                'Outros',
+            ]);
+            setOtherInput(outros.replace('Outros: ', ''));
+        } else {
+            setChecked(checks.filter(opt => OPTIONS.includes(opt)));
+            setOtherInput('');
+        }
     }, [value]);
 
     useEffect(() => {
         let arr = [...checked];
+        // Se 'Outros' está marcado e há texto, adiciona 'Outros: texto' ao resultado
         if (checked.includes('Outros') && otherInput.trim()) {
             arr = arr.filter(opt => opt !== 'Outros');
             arr.push(`Outros: ${otherInput.trim()}`);

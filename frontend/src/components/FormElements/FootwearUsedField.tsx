@@ -1,6 +1,4 @@
 // frontend\src\components\FormElements\FootwearUsedField.tsx
-
-import { useState, useEffect } from 'react';
 import styles from './FootwearUsedField.module.css';
 import SectionTitle from './SectionTitle';
 
@@ -9,7 +7,7 @@ interface OptionWithOtherFieldProps {
     label: string;
     options: string[];
     value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onChange: (value: string) => void;
     placeholder?: string;
     titleClassName?: string;
 }
@@ -24,22 +22,17 @@ export function OptionWithOtherField({
     placeholder,
     titleClassName,
 }: OptionWithOtherFieldProps) {
-    const [isOtherSelected, setIsOtherSelected] = useState(false);
-
-    useEffect(() => {
-        setIsOtherSelected(
-            value === 'Outro' || (!options.includes(value) && value !== ''),
-        );
-    }, [value, options]);
-
     const handleRadioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selected = e.target.value;
-        setIsOtherSelected(selected === 'Outro');
-        onChange(e);
+        if (selected === 'Outro') {
+            onChange('Outro');
+        } else {
+            onChange(selected);
+        }
     };
 
     const handleOtherInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        onChange(e);
+        onChange(`Calçado: ${e.target.value}`);
     };
 
     return (
@@ -52,17 +45,24 @@ export function OptionWithOtherField({
                             type='radio'
                             name={name}
                             value={option}
-                            checked={value === option}
+                            checked={
+                                option === 'Outro'
+                                    ? value === 'Outro' ||
+                                      value.startsWith('Calçado: ')
+                                    : value === option
+                            }
                             onChange={handleRadioChange}
                         />
                         <span>{option}</span>
                     </label>
                 ))}
-                {isOtherSelected && (
+                {(value === 'Outro' || value.startsWith('Calçado: ')) && (
                     <input
                         type='text'
                         name={name}
-                        value={options.includes(value) ? '' : value}
+                        value={
+                            value.startsWith('Calçado: ') ? value.slice(9) : ''
+                        }
                         onChange={handleOtherInputChange}
                         placeholder={placeholder || 'Digite a opção'}
                         className={styles.input}
@@ -86,7 +86,7 @@ const footwearOptions = [
 
 interface FootwearUsedFieldProps {
     value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onChange: (value: string) => void;
     titleClassName?: string;
 }
 

@@ -28,8 +28,16 @@ export default function PlantarViewRight({
         const items = value ? value.split(',').map(v => v.trim()) : [];
         const checks = items.filter(item => !item.startsWith('Outros:'));
         const outros = items.find(item => item.startsWith('Outros:'));
-        setChecked(checks.filter(opt => OPTIONS.includes(opt)));
-        setOtherInput(outros ? outros.replace('Outros: ', '') : '');
+        if (outros) {
+            setChecked([
+                ...checks.filter(opt => OPTIONS.includes(opt)),
+                'Outros',
+            ]);
+            setOtherInput(outros.replace('Outros: ', ''));
+        } else {
+            setChecked(checks.filter(opt => OPTIONS.includes(opt)));
+            setOtherInput('');
+        }
     }, [value]);
 
     useEffect(() => {
@@ -39,7 +47,6 @@ export default function PlantarViewRight({
             arr.push(`Outros: ${otherInput.trim()}`);
         }
         onChange(arr.join(', '));
-        // eslint-disable-next-line
     }, [checked, otherInput]);
 
     const handleCheckboxChange = (option: string) => {
