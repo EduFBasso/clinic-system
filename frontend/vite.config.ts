@@ -7,5 +7,12 @@ export default defineConfig({
     server: {
         host: true,
         port: 5173,
+        proxy: {
+            '/register': {
+                target: 'http://localhost:8000', // backend Django
+                changeOrigin: true,
+                secure: false,
+            },
+        },
     },
 });
