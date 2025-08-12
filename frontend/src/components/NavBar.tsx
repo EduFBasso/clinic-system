@@ -11,6 +11,9 @@ interface NavBarProps {
 const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
     const [selectedProfessional, setSelectedProfessional] =
         useState<string>('');
+    const [codeSent, setCodeSent] = useState(false);
+    const [otp, setOtp] = useState('');
+    const [loadingOtp, setLoadingOtp] = useState(false);
 
     const [professionalDropdownOpen, setProfessionalDropdownOpen] =
         useState(false);
@@ -155,6 +158,8 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
                                     onClick={() => {
                                         setSelectedProfessional(prof.email);
                                         setProfessionalDropdownOpen(false);
+                                        setCodeSent(false);
+                                        setOtp('');
                                     }}
                                 >
                                     {prof.first_name} {prof.last_name}
@@ -164,12 +169,106 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
                     )}
                 </div>
 
-                <input
-                    type='password'
-                    placeholder='Senha'
-                    className={styles.loginInput}
-                />
-                <button className={styles.loginButton}>Entrar</button>
+                {/* Botão para enviar código aparece após seleção do profissional, antes do envio */}
+                {selectedProfessional && !codeSent && (
+                    <button
+                        className={styles.loginButton}
+                        style={{ marginRight: 8 }}
+                        disabled={loadingOtp}
+                        onClick={async () => {
+                            setLoadingOtp(true);
+                            try {
+                                const res = await fetch(
+                                    '/register/auth/request-code/',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            email: selectedProfessional,
+                                        }),
+                                    },
+                                );
+                                const data = await res.json();
+                                // Se vier message e status 200, considera sucesso
+                                if (data.message && res.ok) {
+                                    setCodeSent(true);
+                                    console.log('codeSent ativado');
+                                    setTimeout(() => {
+                                        alert(data.message);
+                                    }, 100);
+                                } else {
+                                    alert(
+                                        data.message || 'Erro ao enviar código',
+                                    );
+                                }
+                            } catch {
+                                alert('Erro ao enviar código');
+                            }
+                            setLoadingOtp(false);
+                        }}
+                    >
+                        Enviar código
+                    </button>
+                )}
+
+                {/* Input e botão Entrar só aparecem após envio do código */}
+                {selectedProfessional && codeSent && (
+                    <>
+                        <input
+                            type='password'
+                            placeholder='Senha'
+                            className={styles.loginInput}
+                            value={otp}
+                            onChange={e => setOtp(e.target.value)}
+                            style={{ marginRight: 8 }}
+                        />
+                        <button
+                            className={styles.loginButton}
+                            onClick={async () => {
+                                setLoadingOtp(true);
+                                try {
+                                    const res = await fetch(
+                                        '/register/auth/verify-code/',
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type':
+                                                    'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                email: selectedProfessional,
+                                                code: otp,
+                                            }),
+                                        },
+                                    );
+                                    const data = await res.json();
+                                    if (res.ok && data.access) {
+                                        alert(
+                                            'Login realizado! Dados dos clientes liberados.',
+                                        );
+                                        localStorage.setItem(
+                                            'accessToken',
+                                            data.access,
+                                        );
+                                        // Aqui você pode liberar o acesso aos dados dos clientes
+                                    } else {
+                                        alert(
+                                            data.message || 'Código inválido',
+                                        );
+                                    }
+                                } catch {
+                                    alert('Erro ao validar código');
+                                }
+                                setLoadingOtp(false);
+                            }}
+                            disabled={loadingOtp || !otp}
+                        >
+                            Entrar
+                        </button>
+                    </>
+                )}
             </div>
         </div>
     );
