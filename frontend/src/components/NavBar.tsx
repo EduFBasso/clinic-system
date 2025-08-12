@@ -1,13 +1,24 @@
 // frontend\src\components\NavBar.tsx
-import React, { useState, useRef, useEffect } from 'react';
-import styles from '../styles/components/NavBar.module.css';
 import { Link } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useProfessionals } from '../hooks/useProfessionals';
+import styles from '../styles/components/NavBar.module.css';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
 }
 
 const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
+    const [selectedProfessional, setSelectedProfessional] =
+        useState<string>('');
+
+    const [professionalDropdownOpen, setProfessionalDropdownOpen] =
+        useState(false);
+
+    const professionalDropdownRef = useRef<HTMLDivElement>(null);
+
+    const { professionals, loading, error } = useProfessionals();
+
     // Dropdown state
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -28,7 +39,7 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
     }, []);
 
     // Handler para abrir modal de novo cliente (integração futura)
-    function handleNovoCliente() {
+    function handleNewClient() {
         setDropdownOpen(false);
         if (openNewClientModal) {
             openNewClientModal();
@@ -39,7 +50,7 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
     }
 
     // Handler para editar cliente (integração futura)
-    function handleEditarCliente() {
+    function handleEditClient() {
         setDropdownOpen(false);
         // Aqui você pode navegar para a edição do cliente selecionado
         alert('Abrir edição do cliente selecionado (implementar)');
@@ -62,13 +73,13 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
                         <div className={styles.dropdownMenu}>
                             <button
                                 className={styles.dropdownItem}
-                                onClick={handleNovoCliente}
+                                onClick={handleNewClient}
                             >
                                 Novo
                             </button>
                             <button
                                 className={styles.dropdownItem}
-                                onClick={handleEditarCliente}
+                                onClick={handleEditClient}
                             >
                                 Editar
                             </button>
@@ -84,11 +95,75 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
             </div>
 
             <div className={styles.loginContainer}>
-                <input
-                    type='text'
-                    placeholder='Usuário'
-                    className={styles.loginInput}
-                />
+                <div
+                    className={styles.dropdownWrapper}
+                    style={{ marginRight: 12 }}
+                    ref={professionalDropdownRef}
+                >
+                    <button
+                        className={styles.menuButton}
+                        onClick={() =>
+                            setProfessionalDropdownOpen(open => !open)
+                        }
+                        aria-haspopup='true'
+                        aria-expanded={professionalDropdownOpen}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                        }}
+                    >
+                        <span style={{ fontSize: 18 }}>👨‍⚕️</span>
+                        <span>
+                            {selectedProfessional
+                                ? professionals.find(
+                                      p => p.email === selectedProfessional,
+                                  )?.first_name +
+                                  ' ' +
+                                  professionals.find(
+                                      p => p.email === selectedProfessional,
+                                  )?.last_name
+                                : 'Profissionais'}
+                        </span>
+                        <span style={{ fontSize: 14 }}>▼</span>
+                    </button>
+                    {professionalDropdownOpen && (
+                        <div className={styles.dropdownMenu}>
+                            <div
+                                className={styles.dropdownItem}
+                                style={{
+                                    fontWeight: 'bold',
+                                    cursor: 'default',
+                                }}
+                            >
+                                Profissionais
+                            </div>
+                            {loading && (
+                                <div className={styles.dropdownItem}>
+                                    Carregando...
+                                </div>
+                            )}
+                            {error && (
+                                <div className={styles.dropdownItem}>
+                                    Erro ao carregar
+                                </div>
+                            )}
+                            {professionals.map(prof => (
+                                <button
+                                    key={prof.id}
+                                    className={styles.dropdownItem}
+                                    onClick={() => {
+                                        setSelectedProfessional(prof.email);
+                                        setProfessionalDropdownOpen(false);
+                                    }}
+                                >
+                                    {prof.first_name} {prof.last_name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
                 <input
                     type='password'
                     placeholder='Senha'
