@@ -1,0 +1,44 @@
+/* frontend\src\styles\components\ClientCard.module.css */
+.card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.infoRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.label {
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+.value {
+    flex: 1;
+    color: #333;
+}
+
+.iconButton {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #007bff;
+    font-size: 1.2rem;
+    margin-left: 0.5rem;
+}
+
+.editButton {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}

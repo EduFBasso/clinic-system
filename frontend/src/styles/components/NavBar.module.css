@@ -117,4 +117,16 @@
         border-radius: 8px;
         padding: 0.6rem; */
     }
+
+    .menuButton {
+        width: 100%;
+        text-align: left;
+        padding: 0.5rem 1rem;
+    }
+
+    .navBar {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: stretch;
+    }
 }

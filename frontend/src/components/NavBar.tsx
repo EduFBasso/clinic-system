@@ -1,8 +1,10 @@
 // frontend\src\components\NavBar.tsx
-import { Link } from 'react-router-dom';
 import React, { useState, useRef, useEffect } from 'react';
 import { useProfessionals } from '../hooks/useProfessionals';
+import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
+import AppModal from './Modal';
+import '../styles/modal-message.css';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
@@ -14,6 +16,8 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
     const [codeSent, setCodeSent] = useState(false);
     const [otp, setOtp] = useState('');
     const [loadingOtp, setLoadingOtp] = useState(false);
+    const [loggedProfessional, setLoggedProfessional] =
+        useState<ProfessionalBasic | null>(null);
 
     const [professionalDropdownOpen, setProfessionalDropdownOpen] =
         useState(false);
@@ -25,6 +29,10 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
     // Dropdown state
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Modal state
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalMessage, setModalMessage] = useState('');
 
     // Fecha dropdown ao clicar fora
     useEffect(() => {
@@ -89,187 +97,256 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
                         </div>
                     )}
                 </div>
-                <Link to='/agenda'>
-                    <button className={styles.menuButton}>📅 Agenda</button>
-                </Link>
-                <Link to='/consultations'>
-                    <button className={styles.menuButton}>🩺 Consulta</button>
-                </Link>
+                <button
+                    className={styles.menuButton}
+                    onClick={() => {
+                        setModalMessage('Agenda: Falta implementar o Código');
+                        setModalOpen(true);
+                    }}
+                >
+                    📅 Agenda
+                </button>
+                <button
+                    className={styles.menuButton}
+                    onClick={() => {
+                        setModalMessage('Consulta: Falta implementar o Código');
+                        setModalOpen(true);
+                    }}
+                >
+                    🩺 Consulta
+                </button>
             </div>
 
             <div className={styles.loginContainer}>
-                <div
-                    className={styles.dropdownWrapper}
-                    style={{ marginRight: 12 }}
-                    ref={professionalDropdownRef}
-                >
-                    <button
-                        className={styles.menuButton}
-                        onClick={() =>
-                            setProfessionalDropdownOpen(open => !open)
-                        }
-                        aria-haspopup='true'
-                        aria-expanded={professionalDropdownOpen}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                        }}
-                    >
-                        <span style={{ fontSize: 18 }}>👨‍⚕️</span>
+                {loggedProfessional ? (
+                    <div className={styles.loggedInfo}>
                         <span>
-                            {selectedProfessional
-                                ? professionals.find(
-                                      p => p.email === selectedProfessional,
-                                  )?.first_name +
-                                  ' ' +
-                                  professionals.find(
-                                      p => p.email === selectedProfessional,
-                                  )?.last_name
-                                : 'Profissionais'}
+                            Olá Dr(a) {loggedProfessional.first_name}{' '}
+                            {loggedProfessional.last_name}
+                            {loggedProfessional.register_number
+                                ? ` CRM/COP: ${loggedProfessional.register_number}`
+                                : ''}
                         </span>
-                        <span style={{ fontSize: 14 }}>▼</span>
-                    </button>
-                    {professionalDropdownOpen && (
-                        <div className={styles.dropdownMenu}>
-                            <div
-                                className={styles.dropdownItem}
-                                style={{
-                                    fontWeight: 'bold',
-                                    cursor: 'default',
-                                }}
-                            >
-                                Profissionais
-                            </div>
-                            {loading && (
-                                <div className={styles.dropdownItem}>
-                                    Carregando...
-                                </div>
-                            )}
-                            {error && (
-                                <div className={styles.dropdownItem}>
-                                    Erro ao carregar
-                                </div>
-                            )}
-                            {professionals.map(prof => (
-                                <button
-                                    key={prof.id}
-                                    className={styles.dropdownItem}
-                                    onClick={() => {
-                                        setSelectedProfessional(prof.email);
-                                        setProfessionalDropdownOpen(false);
-                                        setCodeSent(false);
-                                        setOtp('');
-                                    }}
-                                >
-                                    {prof.first_name} {prof.last_name}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Botão para enviar código aparece após seleção do profissional, antes do envio */}
-                {selectedProfessional && !codeSent && (
-                    <button
-                        className={styles.loginButton}
-                        style={{ marginRight: 8 }}
-                        disabled={loadingOtp}
-                        onClick={async () => {
-                            setLoadingOtp(true);
-                            try {
-                                const res = await fetch(
-                                    '/register/auth/request-code/',
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                        },
-                                        body: JSON.stringify({
-                                            email: selectedProfessional,
-                                        }),
-                                    },
-                                );
-                                const data = await res.json();
-                                // Se vier message e status 200, considera sucesso
-                                if (data.message && res.ok) {
-                                    setCodeSent(true);
-                                    console.log('codeSent ativado');
-                                    setTimeout(() => {
-                                        alert(data.message);
-                                    }, 100);
-                                } else {
-                                    alert(
-                                        data.message || 'Erro ao enviar código',
-                                    );
-                                }
-                            } catch {
-                                alert('Erro ao enviar código');
-                            }
-                            setLoadingOtp(false);
-                        }}
-                    >
-                        Enviar código
-                    </button>
-                )}
-
-                {/* Input e botão Entrar só aparecem após envio do código */}
-                {selectedProfessional && codeSent && (
-                    <>
-                        <input
-                            type='password'
-                            placeholder='Senha'
-                            className={styles.loginInput}
-                            value={otp}
-                            onChange={e => setOtp(e.target.value)}
-                            style={{ marginRight: 8 }}
-                        />
                         <button
                             className={styles.loginButton}
-                            onClick={async () => {
-                                setLoadingOtp(true);
-                                try {
-                                    const res = await fetch(
-                                        '/register/auth/verify-code/',
-                                        {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type':
-                                                    'application/json',
-                                            },
-                                            body: JSON.stringify({
-                                                email: selectedProfessional,
-                                                code: otp,
-                                            }),
-                                        },
-                                    );
-                                    const data = await res.json();
-                                    if (res.ok && data.access) {
-                                        alert(
-                                            'Login realizado! Dados dos clientes liberados.',
-                                        );
-                                        localStorage.setItem(
-                                            'accessToken',
-                                            data.access,
-                                        );
-                                        // Aqui você pode liberar o acesso aos dados dos clientes
-                                    } else {
-                                        alert(
-                                            data.message || 'Código inválido',
-                                        );
-                                    }
-                                } catch {
-                                    alert('Erro ao validar código');
-                                }
-                                setLoadingOtp(false);
+                            style={{ marginLeft: 12 }}
+                            onClick={() => {
+                                localStorage.removeItem('accessToken');
+                                setLoggedProfessional(null);
+                                setSelectedProfessional('');
+                                setCodeSent(false);
+                                setOtp('');
                             }}
-                            disabled={loadingOtp || !otp}
                         >
-                            Entrar
+                            Sair
                         </button>
+                    </div>
+                ) : (
+                    <>
+                        <div
+                            className={styles.dropdownWrapper}
+                            style={{ marginRight: 12 }}
+                            ref={professionalDropdownRef}
+                        >
+                            <button
+                                className={styles.menuButton}
+                                onClick={() =>
+                                    setProfessionalDropdownOpen(open => !open)
+                                }
+                                aria-haspopup='true'
+                                aria-expanded={professionalDropdownOpen}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                }}
+                            >
+                                <span style={{ fontSize: 18 }}>👨‍⚕️</span>
+                                <span>
+                                    {selectedProfessional
+                                        ? professionals.find(
+                                              p =>
+                                                  p.email ===
+                                                  selectedProfessional,
+                                          )?.first_name +
+                                          ' ' +
+                                          professionals.find(
+                                              p =>
+                                                  p.email ===
+                                                  selectedProfessional,
+                                          )?.last_name
+                                        : 'Profissionais'}
+                                </span>
+                                <span style={{ fontSize: 14 }}>▼</span>
+                            </button>
+                            {professionalDropdownOpen && (
+                                <div className={styles.dropdownMenu}>
+                                    <div
+                                        className={styles.dropdownItem}
+                                        style={{
+                                            fontWeight: 'bold',
+                                            cursor: 'default',
+                                        }}
+                                    >
+                                        Profissionais
+                                    </div>
+                                    {loading && (
+                                        <div className={styles.dropdownItem}>
+                                            Carregando...
+                                        </div>
+                                    )}
+                                    {error && (
+                                        <div className={styles.dropdownItem}>
+                                            Erro ao carregar
+                                        </div>
+                                    )}
+                                    {professionals.map(prof => (
+                                        <button
+                                            key={prof.id}
+                                            className={styles.dropdownItem}
+                                            onClick={() => {
+                                                setSelectedProfessional(
+                                                    prof.email,
+                                                );
+                                                setProfessionalDropdownOpen(
+                                                    false,
+                                                );
+                                                setCodeSent(false);
+                                                setOtp('');
+                                            }}
+                                        >
+                                            {prof.first_name} {prof.last_name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {/* Botão para enviar código aparece após seleção do profissional, antes do envio */}
+                        {selectedProfessional && !codeSent && (
+                            <button
+                                className={styles.loginButton}
+                                style={{ marginRight: 8 }}
+                                disabled={loadingOtp}
+                                onClick={async () => {
+                                    setLoadingOtp(true);
+                                    try {
+                                        const res = await fetch(
+                                            '/register/auth/request-code/',
+                                            {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type':
+                                                        'application/json',
+                                                },
+                                                body: JSON.stringify({
+                                                    email: selectedProfessional,
+                                                }),
+                                            },
+                                        );
+                                        const data = await res.json();
+                                        // Se vier message e status 200, considera sucesso
+                                        if (data.message && res.ok) {
+                                            setModalMessage(data.message);
+                                            setModalOpen(true);
+                                            setCodeSent(true);
+                                            console.log('codeSent ativado');
+                                        } else {
+                                            setModalMessage(
+                                                data.message ||
+                                                    'Erro ao enviar código',
+                                            );
+                                            setModalOpen(true);
+                                        }
+                                    } catch {
+                                        setModalMessage(
+                                            'Erro ao enviar código',
+                                        );
+                                        setModalOpen(true);
+                                    }
+                                    setLoadingOtp(false);
+                                }}
+                            >
+                                Enviar código
+                            </button>
+                        )}
+
+                        {/* Input e botão Entrar só aparecem após envio do código */}
+                        {selectedProfessional && codeSent && (
+                            <>
+                                <input
+                                    type='password'
+                                    placeholder='Senha'
+                                    className={styles.loginInput}
+                                    value={otp}
+                                    onChange={e => setOtp(e.target.value)}
+                                    style={{ marginRight: 8 }}
+                                />
+                                <button
+                                    className={styles.loginButton}
+                                    onClick={async () => {
+                                        setLoadingOtp(true);
+                                        try {
+                                            const res = await fetch(
+                                                '/register/auth/verify-code/',
+                                                {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type':
+                                                            'application/json',
+                                                    },
+                                                    body: JSON.stringify({
+                                                        email: selectedProfessional,
+                                                        code: otp,
+                                                    }),
+                                                },
+                                            );
+                                            const data = await res.json();
+                                            // Substitui alert por modal para validação do código
+                                            if (res.ok && data.access) {
+                                                setModalMessage(
+                                                    'Login realizado! Dados dos clientes liberados.',
+                                                );
+                                                setModalOpen(true);
+                                                localStorage.setItem(
+                                                    'accessToken',
+                                                    data.access,
+                                                );
+                                                setOtp('');
+                                                setLoggedProfessional(
+                                                    data.professional,
+                                                );
+                                            } else {
+                                                setModalMessage(
+                                                    data.message ||
+                                                        'Código inválido',
+                                                );
+                                                setModalOpen(true);
+                                            }
+                                        } catch {
+                                            setModalMessage(
+                                                'Erro ao validar código',
+                                            );
+                                            setModalOpen(true);
+                                        }
+                                        setLoadingOtp(false);
+                                    }}
+                                    disabled={loadingOtp || !otp}
+                                >
+                                    Entrar
+                                </button>
+                            </>
+                        )}
                     </>
                 )}
             </div>
+
+            {/* Modal padrão para mensagens */}
+            <AppModal open={modalOpen} onClose={() => setModalOpen(false)}>
+                <div className='modal-message'>
+                    <h3>{modalMessage}</h3>
+                    <button onClick={() => setModalOpen(false)}>Ok</button>
+                </div>
+            </AppModal>
         </div>
     );
 };
