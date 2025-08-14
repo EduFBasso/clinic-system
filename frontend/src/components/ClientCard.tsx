@@ -2,12 +2,14 @@
 import React from 'react';
 import styles from '../styles/components/ClientCard.module.css';
 import { FaEye, FaWhatsapp, FaEnvelope } from 'react-icons/fa';
-import type { ClientData } from '../types/ClientData';
+import type { ClientBasic } from '../types/ClientBasic';
+import { formatPhone } from '../utils/formatPhone';
+import '../styles/palette.css';
 
 interface ClientCardProps {
-    client: ClientData;
-    onView: (client: ClientData) => void;
-    onEdit: (client: ClientData) => void;
+    client: ClientBasic;
+    onView: (client: ClientBasic) => void;
+    onEdit: (client: ClientBasic) => void;
 }
 
 export default function ClientCard({
@@ -16,10 +18,27 @@ export default function ClientCard({
     onEdit,
 }: ClientCardProps) {
     return (
-        <div className={styles.card}>
+        <div
+            className={styles.card}
+            style={{
+                background: 'var(--color-bg-section)',
+                borderColor: 'var(--color-border)',
+            }}
+        >
             <div className={styles.infoRow}>
-                <span className={styles.label}>Nome:</span>
-                <span className={styles.value}>
+                <span
+                    className={styles.label}
+                    style={{
+                        color: 'var(--color-primary)',
+                        fontWeight: 'bold',
+                    }}
+                >
+                    Nome:
+                </span>
+                <span
+                    className={styles.value}
+                    style={{ color: 'var(--color-text)' }}
+                >
                     {client.first_name} {client.last_name}
                 </span>
                 <button
@@ -31,12 +50,27 @@ export default function ClientCard({
                 </button>
             </div>
             <div className={styles.infoRow}>
-                <span className={styles.label}>Tel:</span>
-                <span className={styles.value}>{client.phone}</span>
+                <span
+                    className={styles.label}
+                    style={{
+                        color: 'var(--color-primary)',
+                        fontWeight: 'bold',
+                    }}
+                >
+                    Tel:
+                </span>
+                <span
+                    className={styles.value}
+                    style={{ color: 'var(--color-text)' }}
+                >
+                    {formatPhone(client.phone)}
+                </span>
                 <a
                     className={styles.iconButton}
                     title='WhatsApp'
-                    href={`https://wa.me/${client.phone.replace(/\D/g, '')}`}
+                    href={`https://wa.me/${
+                        client.phone ? client.phone.replace(/\D/g, '') : ''
+                    }`}
                     target='_blank'
                     rel='noopener noreferrer'
                 >
@@ -44,8 +78,21 @@ export default function ClientCard({
                 </a>
             </div>
             <div className={styles.infoRow}>
-                <span className={styles.label}>E-mail:</span>
-                <span className={styles.value}>{client.email}</span>
+                <span
+                    className={styles.label}
+                    style={{
+                        color: 'var(--color-primary)',
+                        fontWeight: 'bold',
+                    }}
+                >
+                    E-mail:
+                </span>
+                <span
+                    className={styles.value}
+                    style={{ color: 'var(--color-text)' }}
+                >
+                    {client.email}
+                </span>
                 <a
                     className={styles.iconButton}
                     title='E-mail'
@@ -59,6 +106,10 @@ export default function ClientCard({
             <button
                 className={styles.editButton}
                 onClick={() => onEdit(client)}
+                style={{
+                    background: 'var(--color-primary)',
+                    color: 'var(--color-bg-section)',
+                }}
             >
                 Editar
             </button>

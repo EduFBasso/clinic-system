@@ -1,5 +1,6 @@
 // Máscara progressiva para telefone brasileiro (formato: (XX) XXXXX-XXXX ou (XX) XXXX-XXXX)
-export function formatPhone(value: string): string {
+export function formatPhone(value?: string | null): string {
+    if (!value) return '';
     const cleaned = value.replace(/\D/g, '');
     if (cleaned.length <= 2) {
         return cleaned;

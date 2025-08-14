@@ -17,7 +17,10 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
     const [otp, setOtp] = useState('');
     const [loadingOtp, setLoadingOtp] = useState(false);
     const [loggedProfessional, setLoggedProfessional] =
-        useState<ProfessionalBasic | null>(null);
+        useState<ProfessionalBasic | null>(() => {
+            const stored = localStorage.getItem('loggedProfessional');
+            return stored ? JSON.parse(stored) : null;
+        });
 
     const [professionalDropdownOpen, setProfessionalDropdownOpen] =
         useState(false);
@@ -47,6 +50,13 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
         document.addEventListener('mousedown', handleClickOutside);
         return () =>
             document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        const stored = localStorage.getItem('loggedProfessional');
+        if (stored) {
+            setLoggedProfessional(JSON.parse(stored));
+        }
     }, []);
 
     // Handler para abrir modal de novo cliente (integração futura)
@@ -128,14 +138,17 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
                                 : ''}
                         </span>
                         <button
-                            className={styles.loginButton}
-                            style={{ marginLeft: 12 }}
+                            className={
+                                styles.loginButton + ' ' + styles.logoutButton
+                            }
                             onClick={() => {
                                 localStorage.removeItem('accessToken');
+                                localStorage.removeItem('loggedProfessional');
                                 setLoggedProfessional(null);
                                 setSelectedProfessional('');
                                 setCodeSent(false);
                                 setOtp('');
+                                window.dispatchEvent(new Event('clearClients'));
                             }}
                         >
                             Sair
@@ -314,6 +327,15 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
                                                 setOtp('');
                                                 setLoggedProfessional(
                                                     data.professional,
+                                                );
+                                                localStorage.setItem(
+                                                    'loggedProfessional',
+                                                    JSON.stringify(
+                                                        data.professional,
+                                                    ),
+                                                );
+                                                window.dispatchEvent(
+                                                    new Event('updateClients'),
                                                 );
                                             } else {
                                                 setModalMessage(
