@@ -6,10 +6,16 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export default function InputField({ label, ...props }: InputProps) {
+    // Garante que value nunca seja null/undefined
+    const safeProps = {
+        ...props,
+        value:
+            typeof props.value === 'string' ? props.value : props.value ?? '',
+    };
     return (
         <div className={styles.inputGroup}>
             <label className={styles.label}>{label}</label>
-            <input className={styles.input} {...props} />
+            <input className={styles.input} {...safeProps} />
         </div>
     );
 }

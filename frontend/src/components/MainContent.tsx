@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import styles from '../styles/components/Main.module.css';
 import { useClients } from '../hooks/useClients';
 import ClientCard from './ClientCard';
+import { useNavigate } from 'react-router-dom';
 
 const MainContent = () => {
     const { clients, loading, error } = useClients();
@@ -14,6 +15,12 @@ const MainContent = () => {
             .toLowerCase()
             .includes(filter.toLowerCase()),
     );
+
+    const navigate = useNavigate();
+
+    function handleEdit(cliente: ClientBasic) {
+        navigate(`/clients/edit/${cliente.id}`);
+    }
 
     return (
         <main className={styles.main}>
@@ -38,7 +45,7 @@ const MainContent = () => {
                         key={client.id}
                         client={client}
                         onView={() => {}}
-                        onEdit={() => {}}
+                        onEdit={handleEdit}
                     />
                 ))}
             </div>

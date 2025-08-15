@@ -11,8 +11,8 @@ function App() {
             <Routes>
                 <Route path='/' element={<Home />} />
                 <Route path='/clients/new' element={<ClientFormPage />} />
+                <Route path='/clients/edit/:id' element={<ClientFormPage />} />
                 <Route path='/agenda' element={<AgendaPage />} />
-                {/* Futuramente: <Route path='/clients/:id/edit' element={<ClientFormPage />} /> */}
             </Routes>
         </Router>
     );

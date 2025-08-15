@@ -1,6 +1,15 @@
 // frontend\src\components\FormElements\FootwearUsedField.tsx
 import styles from './FootwearUsedField.module.css';
 import SectionTitle from './SectionTitle';
+const footwearOptions = [
+    'Tênis',
+    'Sapato baixo',
+    'Sapato alto',
+    'Sapato bico fino',
+    'Sandália',
+    'Chinelo',
+    'Outro',
+];
 
 interface OptionWithOtherFieldProps {
     name: string;
@@ -47,42 +56,34 @@ export function OptionWithOtherField({
                             value={option}
                             checked={
                                 option === 'Outro'
-                                    ? value === 'Outro' ||
-                                      value.startsWith('Calçado: ')
-                                    : value === option
+                                    ? (value ?? '') === 'Outro' ||
+                                      (value ?? '').startsWith('Calçado: ')
+                                    : (value ?? '') === option
                             }
                             onChange={handleRadioChange}
                         />
                         <span>{option}</span>
                     </label>
                 ))}
-                {(value === 'Outro' || value.startsWith('Calçado: ')) && (
+                {((value ?? '') === 'Outro' ||
+                    (value ?? '').startsWith('Calçado: ')) && (
                     <input
                         type='text'
                         name={name}
+                        placeholder={placeholder}
                         value={
-                            value.startsWith('Calçado: ') ? value.slice(9) : ''
+                            (value ?? '').startsWith('Calçado: ')
+                                ? (value ?? '').slice(9)
+                                : ''
                         }
                         onChange={handleOtherInputChange}
-                        placeholder={placeholder || 'Digite a opção'}
-                        className={styles.input}
+                        className='ml-2 px-2 py-1 border rounded'
                     />
                 )}
             </div>
         </div>
     );
 }
-
-// Componente específico para calçado, usando o reutilizável
-const footwearOptions = [
-    'Tênis',
-    'Sapato baixo',
-    'Sapato alto',
-    'Sapato bico fino',
-    'Sandália',
-    'Chinelo',
-    'Outro',
-];
 
 interface FootwearUsedFieldProps {
     value: string;

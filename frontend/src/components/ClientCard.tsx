@@ -103,16 +103,24 @@ export default function ClientCard({
                     <FaEnvelope />
                 </a>
             </div>
-            <button
-                className={styles.editButton}
-                onClick={() => onEdit(client)}
+            <div
                 style={{
-                    background: 'var(--color-primary)',
-                    color: 'var(--color-bg-section)',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    marginTop: '12px',
                 }}
             >
-                Editar
-            </button>
+                <button
+                    className={styles.editButton}
+                    onClick={() => onEdit(client)}
+                    style={{
+                        background: 'var(--color-primary)',
+                        color: 'var(--color-bg-section)',
+                    }}
+                >
+                    Editar
+                </button>
+            </div>
         </div>
     );
 }

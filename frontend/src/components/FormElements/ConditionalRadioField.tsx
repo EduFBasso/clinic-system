@@ -16,8 +16,8 @@ export default function ConditionalRadioField({
     onChange,
     className,
 }: ConditionalRadioFieldProps) {
-    const isYes = value.startsWith('Sim: ');
-    const explanation = isYes ? value.slice(5) : '';
+    const isYes = (value ?? '').startsWith('Sim: ');
+    const explanation = isYes ? (value ?? '').slice(5) : '';
 
     const handleRadioChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const selectedValue = event.target.value;

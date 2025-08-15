@@ -1,5 +1,6 @@
 // frontend\src\types\ClientData.ts
 export interface ClientData {
+    id?: number;
     first_name: string;
     last_name: string;
     email: string;

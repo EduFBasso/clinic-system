@@ -291,11 +291,11 @@ export default function ClientFormDesktop({
                         </h3>
                         <textarea
                             name='other_procedures'
-                            value={formData.other_procedures}
+                            value={formData.other_procedures ?? ''}
                             onChange={e =>
                                 setFormData(prev => ({
                                     ...prev,
-                                    other_procedures: e.target.value,
+                                    other_procedures: e.target.value ?? '',
                                 }))
                             }
                             rows={4}

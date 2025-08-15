@@ -3,8 +3,8 @@ from rest_framework import serializers
 from .models import Client
 
 class ClientSerializer(serializers.ModelSerializer):
-    takes_medication = serializers.BooleanField(required=False)
-    had_surgery = serializers.BooleanField(required=False)
+    takes_medication = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    had_surgery = serializers.CharField(required=False, allow_blank=True, max_length=255)
     is_pregnant = serializers.BooleanField(required=False)
     professional = serializers.PrimaryKeyRelatedField(read_only=True)
 
