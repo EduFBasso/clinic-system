@@ -1,3 +1,12 @@
+// Detecta se está em dispositivo mobile
+function isMobileDevice() {
+    return (
+        typeof window !== 'undefined' &&
+        /Mobi|Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
+            window.navigator.userAgent,
+        )
+    );
+}
 // frontend\src\components\NavBar.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useProfessionals } from '../hooks/useProfessionals';
@@ -8,9 +17,13 @@ import '../styles/modal-message.css';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
+    selectedClientId?: number | null;
 }
 
-const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
+const NavBar: React.FC<NavBarProps> = ({
+    openNewClientModal,
+    selectedClientId,
+}) => {
     const [selectedProfessional, setSelectedProfessional] =
         useState<string>('');
     const [codeSent, setCodeSent] = useState(false);
@@ -60,21 +73,49 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
     }, []);
 
     // Handler para abrir modal de novo cliente (integração futura)
+    // ...existing code...
+
     function handleNewClient() {
         setDropdownOpen(false);
-        if (openNewClientModal) {
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+            setModalMessage(
+                'Sua sessão expirou ou você não está autenticado.\nPor favor, faça login para acessar o cadastro de clientes.',
+            );
+            setModalOpen(true);
+            return;
+        }
+        if (isMobileDevice()) {
+            window.location.href = '/clients/new';
+        } else if (openNewClientModal) {
             openNewClientModal();
         } else {
-            // fallback: navega para /clients/new
-            window.location.href = '/clients/new';
+            window.open(
+                '/clients/new',
+                '_blank',
+                'width=900,height=700,toolbar=no,menubar=no,location=no',
+            );
         }
     }
 
     // Handler para editar cliente (integração futura)
+    // Função removida (duplicada)
+
     function handleEditClient() {
         setDropdownOpen(false);
-        // Aqui você pode navegar para a edição do cliente selecionado
-        alert('Abrir edição do cliente selecionado (implementar)');
+        if (selectedClientId) {
+            if (isMobileDevice()) {
+                window.location.href = `/clients/edit/${selectedClientId}`;
+            } else {
+                window.open(
+                    `/clients/edit/${selectedClientId}`,
+                    '_blank',
+                    'width=900,height=700,toolbar=no,menubar=no,location=no',
+                );
+            }
+        } else {
+            alert('Selecione um cliente antes de editar.');
+        }
     }
 
     return (
@@ -336,6 +377,10 @@ const NavBar: React.FC<NavBarProps> = ({ openNewClientModal }) => {
                                                 );
                                                 window.dispatchEvent(
                                                     new Event('updateClients'),
+                                                );
+                                                // Limpa erro de sessão expirada imediatamente
+                                                window.dispatchEvent(
+                                                    new Event('clearClients'),
                                                 );
                                             } else {
                                                 setModalMessage(

@@ -9,6 +9,21 @@
     background-color: #fff;
 }
 
+.filterRow {
+    margin-bottom: 1rem;
+}
+
+.filterLabel {
+    margin-right: 0.5rem;
+}
+
+.filterInput {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+}
+
 /* Smartphones (ex: iPhone 16 Plus) */
 @media screen and (max-width: 430px) {
     .main {

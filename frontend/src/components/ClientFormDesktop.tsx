@@ -26,6 +26,9 @@ interface Props {
     setFormData: React.Dispatch<React.SetStateAction<ClientData>>;
     handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleSubmit: (e: React.FormEvent) => void;
+    handleCancel: () => void;
+    handleDelete: () => void;
+    isEdit?: boolean; // Optional prop to indicate if this is an edit form
 }
 
 export default function ClientFormDesktop({
@@ -33,6 +36,9 @@ export default function ClientFormDesktop({
     setFormData,
     handleChange,
     handleSubmit,
+    handleCancel,
+    handleDelete,
+    isEdit,
 }: Props) {
     return (
         <form onSubmit={handleSubmit} className={styles.clientForm}>
@@ -387,10 +393,27 @@ export default function ClientFormDesktop({
                     </section>
                 </div>
             </div>
-            <div className={styles.formActions}>
-                <button type='submit' className={styles.submitButton}>
+            <div className='formActions'>
+                <button className={styles['btn-save']} type='submit'>
                     Salvar
                 </button>
+                <button
+                    className={styles['btn-cancel']}
+                    type='button'
+                    onClick={handleCancel}
+                >
+                    Cancelar
+                </button>
+
+                {isEdit && (
+                    <button
+                        className={styles['btn-delete']}
+                        type='button'
+                        onClick={handleDelete}
+                    >
+                        Apagar
+                    </button>
+                )}
             </div>
         </form>
     );

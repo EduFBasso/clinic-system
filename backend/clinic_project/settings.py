@@ -10,7 +10,7 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.0.108']
 
 INSTALLED_APPS = [
     'rest_framework',
@@ -40,6 +40,7 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite
     "http://127.0.0.1:5173",
+    "http://192.168.0.108:5173", # IP da máquina
 ]
 
 ROOT_URLCONF = 'clinic_project.urls'

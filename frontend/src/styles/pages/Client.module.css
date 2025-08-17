@@ -122,37 +122,108 @@ section {
 
 .formActions {
     display: flex;
+    flex-direction: row;
     justify-content: center;
-    margin-top: 1rem;
-    margin-bottom: 2rem;
+    align-items: center;
+    gap: 2.2rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0;
+    padding: 18px 0 24px 0;
+    z-index: 100;
+    position: sticky;
+    left: 0;
+    bottom: 0;
+    transform: none;
+    margin-left: auto;
+    margin-right: auto;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 -2px 16px 0 rgba(0, 0, 0, 0.1);
+    border-radius: 16px 16px 0 0;
+    width: auto;
+    min-width: 340px;
+    max-width: 95vw;
 }
 
-.formActions {
-    padding: 12px 0 12px 0;
-    margin: 0;
-    z-index: 100;
+.btn-save {
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 1.4rem;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    opacity: 0.95;
+    transition: background 0.2s, opacity 0.2s;
+}
+.btn-save:hover {
+    background: var(--color-secondary);
+    opacity: 1;
+}
+.btn-cancel {
+    background: var(--color-border);
+    color: var(--color-text);
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 1.4rem;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    opacity: 0.92;
+    transition: background 0.2s, opacity 0.2s;
+}
+.btn-cancel:hover {
+    background: var(--color-accent);
+    color: #fff;
+    opacity: 1;
+}
+.btn-delete {
+    background: var(--color-error);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 1.4rem;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    opacity: 0.9;
+    transition: background 0.2s, opacity 0.2s;
+}
+.btn-delete:hover {
+    background: #b71c1c;
+    opacity: 1;
+}
+
+.btn-save,
+.btn-cancel,
+.btn-delete {
+    margin: 0.6rem 1rem;
+    position: sticky;
 }
 
 /* Alteração para teste: breakpoint mobile de 1024px para 900px */
 @media (max-width: 900px) {
     .formActions {
-        display: flex;
-        justify-content: center;
+        position: static;
+        flex-direction: row;
+        gap: 0.7rem;
         background: transparent;
         box-shadow: none;
-        padding: 0;
+        border-radius: 0;
+        min-width: unset;
+        max-width: unset;
         margin: 0;
+        padding: 0;
     }
-    .submitButton {
-        position: fixed;
-        left: 50%;
-        bottom: 8px;
-        transform: translateX(-50%);
-        width: 160px;
-        max-width: 90vw;
+    .btn-save,
+    .btn-cancel,
+    .btn-delete {
+        width: 100%;
+        min-width: 0;
         font-size: 1rem;
-        padding: 8px 0;
-        z-index: 100;
+        padding: 0.6rem 0.8rem;
+        border-radius: 6px;
+        margin: 0;
     }
     .clientForm {
         padding-bottom: 70px !important; /* espaço extra para não cobrir campos pelo botão fixo */

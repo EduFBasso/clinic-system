@@ -27,12 +27,18 @@ interface Props {
         value: ClientData[keyof ClientData],
     ) => void;
     handleSubmit: (e: React.FormEvent) => void;
+    handleCancel: () => void;
+    handleDelete: () => void;
+    isEdit?: boolean;
 }
 
 export default function ClientFormMobile({
     formData,
     handleChange,
     handleSubmit,
+    handleCancel,
+    handleDelete,
+    isEdit = false,
 }: Props) {
     // Handler intermediário para radio fields (string)
     const handleRadioChange = (name: keyof ClientData) => (value: string) => {
@@ -283,10 +289,80 @@ export default function ClientFormMobile({
                     placeholder='Descreva outros procedimentos realizados ou observações...'
                 />
             </section>
-            <div className={styles.formActions}>
-                <button type='submit' className={styles.submitButton}>
+            <div
+                className='formActions'
+                style={{
+                    position: 'fixed',
+                    left: 0,
+                    bottom: 0,
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.98)',
+                    boxShadow: '0 -2px 12px rgba(0,0,0,0.10)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '1rem',
+                    padding: '1rem 0.5rem',
+                }}
+            >
+                <button
+                    className='btn-save'
+                    type='submit'
+                    style={{
+                        minWidth: 120,
+                        fontSize: '1.1rem',
+                        fontWeight: 'bold',
+                        background: '#1976d2',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '0.75rem 1.5rem',
+                        boxShadow: '0 2px 8px rgba(25,118,210,0.08)',
+                        cursor: 'pointer',
+                    }}
+                >
                     Salvar
                 </button>
+                <button
+                    className='btn-cancel'
+                    type='button'
+                    onClick={handleCancel}
+                    style={{
+                        minWidth: 120,
+                        fontSize: '1.1rem',
+                        fontWeight: 'bold',
+                        background: '#fff',
+                        color: '#1976d2',
+                        border: '2px solid #1976d2',
+                        borderRadius: 6,
+                        padding: '0.75rem 1.5rem',
+                        boxShadow: '0 2px 8px rgba(25,118,210,0.08)',
+                        cursor: 'pointer',
+                    }}
+                >
+                    Cancelar
+                </button>
+                {isEdit && (
+                    <button
+                        className='btn-delete'
+                        type='button'
+                        onClick={handleDelete}
+                        style={{
+                            minWidth: 120,
+                            fontSize: '1.1rem',
+                            fontWeight: 'bold',
+                            background: '#d32f2f',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '0.75rem 1.5rem',
+                            boxShadow: '0 2px 8px rgba(211,47,47,0.08)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Apagar
+                    </button>
+                )}
             </div>
         </form>
     );

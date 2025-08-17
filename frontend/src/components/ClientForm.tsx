@@ -1,9 +1,11 @@
 // frontend\src\components\ClientForm.tsx
+import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import type { ClientData } from '../types/ClientData';
 import ClientFormDesktop from './ClientFormDesktop';
 import ClientFormMobile from './ClientFormMobile';
 import useIsMobile from './useIsMobile';
+import { useNavigate } from 'react-router-dom';
 
 export default function ClientForm({
     cliente,
@@ -75,17 +77,84 @@ export default function ClientForm({
         }
     }
 
+    const [feedback, setFeedback] = useState<{
+        type: 'error' | 'success';
+        message: string;
+    } | null>(null);
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!cliente?.id) {
-            alert('ID do cliente não encontrado.');
-            return;
-        }
         const token = localStorage.getItem('accessToken');
         if (!token) {
-            alert('Usuário não autenticado.');
+            setFeedback({ type: 'error', message: 'Usuário não autenticado.' });
             return;
         }
+
+        // Cadastro (POST)
+        if (!cliente?.id) {
+            // Garante que email, cpf e phone sejam null se vazios
+            const dataToSend = {
+                ...formData,
+                email: formData.email?.trim() ? formData.email : null,
+                cpf: formData.cpf?.trim() ? formData.cpf : null,
+                phone: formData.phone?.trim() ? formData.phone : null,
+            };
+            fetch(`${API_BASE}/register/clients/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(dataToSend),
+            })
+                .then(async res => {
+                    if (!res.ok) {
+                        const errorData = await res.json();
+                        setFeedback({
+                            type: 'error',
+                            message:
+                                'Erro ao cadastrar cliente: ' +
+                                JSON.stringify(errorData),
+                        });
+                        // No mobile, exibe erro por 3s
+                        if (isMobile) {
+                            setTimeout(() => setFeedback(null), 3000);
+                        }
+                        throw new Error('Erro ao cadastrar cliente');
+                    }
+                    return res.json();
+                })
+                .then(() => {
+                    setFeedback({
+                        type: 'success',
+                        message: 'Cliente cadastrado com sucesso!',
+                    });
+                    if (isMobile) {
+                        // Exibe mensagem por 3s, depois redireciona
+                        setTimeout(() => {
+                            window.dispatchEvent(new Event('updateClients'));
+                            navigate('/');
+                        }, 3000);
+                    } else {
+                        setTimeout(() => {
+                            window.dispatchEvent(new Event('updateClients'));
+                            navigate('/clients');
+                        }, 1500);
+                    }
+                })
+                .catch(async err => {
+                    setFeedback({
+                        type: 'error',
+                        message: 'Erro ao cadastrar: ' + err.message,
+                    });
+                    // No mobile, exibe erro por 3s
+                    if (isMobile) {
+                        setTimeout(() => setFeedback(null), 3000);
+                    }
+                });
+            return;
+        }
+
+        // Edição (PATCH)
         // Monta o payload apenas com campos alterados
         const payload: Partial<ClientData> = {};
         Object.keys(formData).forEach(key => {
@@ -108,7 +177,7 @@ export default function ClientForm({
         if ('had_surgery' in payload) {
             payload.had_surgery = formData.had_surgery ?? '';
         }
-        fetch(`http://localhost:8000/register/clients/${cliente.id}/`, {
+        fetch(`${API_BASE}/register/clients/${cliente.id}/`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
@@ -119,44 +188,192 @@ export default function ClientForm({
             .then(async res => {
                 if (!res.ok) {
                     const errorData = await res.json();
-                    alert(
-                        'Erro ao salvar cliente: ' + JSON.stringify(errorData),
-                    );
+                    setFeedback({
+                        type: 'error',
+                        message:
+                            'Erro ao salvar cliente: ' +
+                            JSON.stringify(errorData),
+                    });
+                    // No mobile, exibe erro por 3s
+                    if (isMobile) {
+                        setTimeout(() => setFeedback(null), 3000);
+                    }
                     throw new Error('Erro ao salvar cliente');
                 }
                 return res.json();
             })
-            .then(data => {
-                alert('Cliente atualizado com sucesso!');
-                // Aqui pode redirecionar ou atualizar lista
+            .then(() => {
+                setFeedback({
+                    type: 'success',
+                    message: 'Cliente atualizado com sucesso!',
+                });
+                setTimeout(() => {
+                    if (window.opener) {
+                        window.opener.dispatchEvent(new Event('updateClients'));
+                        window.close();
+                    } else {
+                        window.dispatchEvent(new Event('updateClients'));
+                        if (isMobile) {
+                            navigate('/');
+                        } else {
+                            navigate('/clients');
+                        }
+                    }
+                }, 1500);
             })
             .catch(async err => {
                 if (err.response) {
                     const errorData = await err.response.json();
-                    alert('Erro ao salvar: ' + JSON.stringify(errorData));
+                    setFeedback({
+                        type: 'error',
+                        message: 'Erro ao salvar: ' + JSON.stringify(errorData),
+                    });
                 } else {
-                    alert('Erro ao salvar: ' + err.message);
+                    setFeedback({
+                        type: 'error',
+                        message: 'Erro ao salvar: ' + err.message,
+                    });
                 }
             });
     };
+
+    const navigate = useNavigate();
+
+    function handleCancel() {
+        // Se o formulário está em uma janela separada:
+        if (window.opener) {
+            window.close();
+        } else {
+            navigate('/clients');
+        }
+    }
+
+    function handleDelete() {
+        if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
+            const token = localStorage.getItem('accessToken');
+            if (!token) {
+                setFeedback({
+                    type: 'error',
+                    message: 'Usuário não autenticado.',
+                });
+                return;
+            }
+
+            fetch(`${API_BASE}/register/clients/${cliente?.id}/`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+                .then(res => {
+                    if (!res.ok) {
+                        setFeedback({
+                            type: 'error',
+                            message: 'Erro ao excluir cliente',
+                        });
+                        // No mobile, exibe erro por 3s
+                        if (isMobile) {
+                            setTimeout(() => setFeedback(null), 3000);
+                        }
+                        throw new Error('Erro ao excluir cliente');
+                    }
+                    setFeedback({
+                        type: 'success',
+                        message: 'Cliente excluído com sucesso!',
+                    });
+                    if (isMobile) {
+                        setTimeout(() => {
+                            window.dispatchEvent(new Event('updateClients'));
+                            navigate('/');
+                        }, 1500);
+                    } else {
+                        setTimeout(() => {
+                            window.dispatchEvent(new Event('updateClients'));
+                            navigate('/clients');
+                        }, 1500);
+                    }
+                    // Se estiver em popup, fecha
+                    if (window.opener) {
+                        window.opener.dispatchEvent(new Event('updateClients'));
+                        window.close();
+                    }
+                })
+                .catch(err => {
+                    setFeedback({
+                        type: 'error',
+                        message: 'Erro ao excluir cliente: ' + err.message,
+                    });
+                });
+        }
+    }
+
+    const isEdit = !!cliente?.id;
 
     const isMobile = useIsMobile();
 
     if (isMobile) {
         return (
-            <ClientFormMobile
-                formData={formData}
-                handleChange={handleChange}
-                handleSubmit={handleSubmit}
-            />
+            <>
+                {feedback && (
+                    <div
+                        style={{
+                            color: feedback.type === 'error' ? 'red' : 'green',
+                            background: '#f8f8f8',
+                            border: `1px solid ${
+                                feedback.type === 'error'
+                                    ? '#d32f2f'
+                                    : '#388e3c'
+                            }`,
+                            borderRadius: 6,
+                            padding: '0.75rem',
+                            marginBottom: '1rem',
+                            textAlign: 'center',
+                            fontWeight: 'bold',
+                        }}
+                    >
+                        {feedback.message}
+                    </div>
+                )}
+                <ClientFormMobile
+                    formData={formData}
+                    handleChange={handleChange}
+                    handleSubmit={handleSubmit}
+                    handleCancel={handleCancel}
+                    handleDelete={handleDelete}
+                    isEdit={isEdit}
+                />
+            </>
         );
     }
     return (
-        <ClientFormDesktop
-            formData={formData}
-            setFormData={setFormData}
-            handleChange={handleChange}
-            handleSubmit={handleSubmit}
-        />
+        <>
+            {feedback && (
+                <div
+                    style={{
+                        color: feedback.type === 'error' ? 'red' : 'green',
+                        background: '#f8f8f8',
+                        border: `1px solid ${
+                            feedback.type === 'error' ? '#d32f2f' : '#388e3c'
+                        }`,
+                        borderRadius: 6,
+                        padding: '0.75rem',
+                        marginBottom: '1rem',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                    }}
+                >
+                    {feedback.message}
+                </div>
+            )}
+            <ClientFormDesktop
+                formData={formData}
+                setFormData={setFormData}
+                handleChange={handleChange}
+                handleSubmit={handleSubmit}
+                handleCancel={handleCancel}
+                handleDelete={handleDelete}
+                isEdit={isEdit}
+            />
+        </>
     );
 }

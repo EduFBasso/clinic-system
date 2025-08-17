@@ -1,5 +1,5 @@
 // src/pages/Home.tsx
-import React from 'react';
+import React, { useState } from 'react';
 
 import Header from '../components/Header';
 import Faixa from '../components/Faixa';
@@ -9,6 +9,10 @@ import Footer from '../components/Footer';
 import styles from '../styles/pages/Home.module.css';
 
 export default function Home() {
+    const [selectedClientId, setSelectedClientId] = useState<number | null>(
+        null,
+    );
+
     // Função para abrir o cadastro em nova janela
     const handleAddClient = () => {
         window.open(
@@ -22,9 +26,14 @@ export default function Home() {
         <div className={styles.container}>
             <Header />
             <Faixa />
-            <NavBar openNewClientModal={handleAddClient} />
-            {/* Filtro dinâmico e lista de clientes serão implementados aqui */}
-            <MainContent />
+            <NavBar
+                openNewClientModal={handleAddClient}
+                selectedClientId={selectedClientId}
+            />
+            <MainContent
+                setSelectedClientId={setSelectedClientId}
+                selectedClientId={selectedClientId}
+            />
             <Footer />
         </div>
     );

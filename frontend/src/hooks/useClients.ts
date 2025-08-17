@@ -34,6 +34,10 @@ export function useClients() {
                 },
             })
                 .then(res => {
+                    if (res.status === 401)
+                        throw new Error(
+                            'Sessão expirada. É necessário fazer login novamente.',
+                        );
                     if (!res.ok) throw new Error('Erro ao buscar clientes');
                     return res.json();
                 })
@@ -51,11 +55,12 @@ export function useClients() {
         const handleClearClients = () => {
             setClients([]);
         };
-        window.addEventListener('clearClients', handleClearClients);
         // Handler para atualizar clientes após login
         const handleUpdateClients = () => {
+            console.log('Evento updateClients recebido!');
             fetchClients();
         };
+        window.addEventListener('clearClients', handleClearClients);
         window.addEventListener('updateClients', handleUpdateClients);
         return () => {
             window.removeEventListener('clearClients', handleClearClients);

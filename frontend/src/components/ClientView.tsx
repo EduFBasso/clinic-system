@@ -7,6 +7,7 @@ interface ClientViewProps {
 }
 
 const fieldLabels: Record<keyof ClientData, string> = {
+    id: 'ID',
     first_name: 'Nome',
     last_name: 'Sobrenome',
     email: 'E-mail',
@@ -40,7 +41,17 @@ const fieldLabels: Record<keyof ClientData, string> = {
 
 const ClientView: React.FC<ClientViewProps> = ({ client }) => {
     return (
-        <div className={styles.clientViewCard}>
+        <div
+            className={styles.clientViewCard}
+            style={{
+                background: 'var(--color-selected-bg)',
+                border: '2px solid var(--color-selected-border)',
+                boxShadow: '0 0 8px 2px var(--color-selected-border)',
+                borderRadius: '12px',
+                padding: '32px 24px',
+                transition: 'background 0.2s, border 0.2s, box-shadow 0.2s',
+            }}
+        >
             {Object.entries(fieldLabels).map(([key, label]) => (
                 <div className={styles.fieldRow} key={key}>
                     <span className={styles.fieldLabel}>{label}:</span>
