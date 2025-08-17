@@ -115,7 +115,6 @@ export default function ClientForm({
                                 'Erro ao cadastrar cliente: ' +
                                 JSON.stringify(errorData),
                         });
-                        // No mobile, exibe erro por 3s
                         if (isMobile) {
                             setTimeout(() => setFeedback(null), 3000);
                         }
@@ -128,25 +127,20 @@ export default function ClientForm({
                         type: 'success',
                         message: 'Cliente cadastrado com sucesso!',
                     });
-                    if (isMobile) {
-                        // Exibe mensagem por 3s, depois redireciona
-                        setTimeout(() => {
+                    // Redireciona para home em todos os casos
+                    setTimeout(
+                        () => {
                             window.dispatchEvent(new Event('updateClients'));
                             navigate('/');
-                        }, 3000);
-                    } else {
-                        setTimeout(() => {
-                            window.dispatchEvent(new Event('updateClients'));
-                            navigate('/clients');
-                        }, 1500);
-                    }
+                        },
+                        isMobile ? 3000 : 1500,
+                    );
                 })
                 .catch(async err => {
                     setFeedback({
                         type: 'error',
                         message: 'Erro ao cadastrar: ' + err.message,
                     });
-                    // No mobile, exibe erro por 3s
                     if (isMobile) {
                         setTimeout(() => setFeedback(null), 3000);
                     }
