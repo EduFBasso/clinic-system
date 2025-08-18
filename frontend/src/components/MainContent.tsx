@@ -6,7 +6,6 @@ import { useClients } from '../hooks/useClients';
 import ClientCard from './ClientCard';
 import type { ClientBasic } from '../types/ClientBasic';
 import AppModal from './Modal';
-import SuccessMessageBanner from './SuccessMessageBanner';
 import ClientView from './ClientView';
 import type { ClientData } from '../types/ClientData';
 
@@ -27,6 +26,7 @@ const MainContent: React.FC<MainContentProps> = ({
         null,
     );
     const [modalOpen, setModalOpen] = useState(false);
+    const cardRefs = React.useRef<{ [key: number]: HTMLDivElement | null }>({});
 
     // Seleciona automaticamente o novo cliente cadastrado assim que aparecer na lista
     React.useEffect(() => {
@@ -36,6 +36,16 @@ const MainContent: React.FC<MainContentProps> = ({
             localStorage.removeItem('newClientId');
         }
     }, [clients, setSelectedClientId]);
+
+    // Scroll para o cartão do cliente selecionado
+    React.useEffect(() => {
+        if (selectedClientId && cardRefs.current[selectedClientId]) {
+            cardRefs.current[selectedClientId]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
+        }
+    }, [selectedClientId]);
 
     // Filtra clientes por nome
     const filteredClients = clients.filter(client =>
@@ -75,7 +85,6 @@ const MainContent: React.FC<MainContentProps> = ({
 
     return (
         <main className={styles.main}>
-            <SuccessMessageBanner setSelectedClientId={setSelectedClientId} />
             <div className={styles.filterRow}>
                 <label htmlFor='client-filter' className={styles.filterLabel}>
                     Filtrar Cliente:
@@ -139,14 +148,20 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 ) : (
                     filteredClients.map(client => (
-                        <ClientCard
+                        <div
                             key={client.id}
-                            client={client}
-                            selected={selectedClientId === client.id}
-                            onSelect={() => setSelectedClientId(client.id)}
-                            onView={handleView}
-                            onEdit={handleEdit}
-                        />
+                            ref={el => {
+                                cardRefs.current[client.id] = el;
+                            }}
+                        >
+                            <ClientCard
+                                client={client}
+                                selected={selectedClientId === client.id}
+                                onSelect={() => setSelectedClientId(client.id)}
+                                onView={handleView}
+                                onEdit={handleEdit}
+                            />
+                        </div>
                     ))
                 )}
             </div>
