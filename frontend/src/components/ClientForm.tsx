@@ -122,11 +122,18 @@ export default function ClientForm({
                     }
                     return res.json();
                 })
-                .then(() => {
+                .then(createdClient => {
                     setFeedback({
                         type: 'success',
                         message: 'Cliente cadastrado com sucesso!',
                     });
+                    // Salva o id do novo cliente para seleção automática
+                    if (createdClient && createdClient.id) {
+                        localStorage.setItem(
+                            'newClientId',
+                            String(createdClient.id),
+                        );
+                    }
                     // Redireciona para home em todos os casos
                     setTimeout(
                         () => {

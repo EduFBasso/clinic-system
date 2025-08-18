@@ -26,8 +26,16 @@ const MainContent: React.FC<MainContentProps> = ({
     const [selectedClient, setSelectedClient] = useState<ClientData | null>(
         null,
     );
-
     const [modalOpen, setModalOpen] = useState(false);
+
+    // Seleciona automaticamente o novo cliente cadastrado assim que aparecer na lista
+    React.useEffect(() => {
+        const newClientId = localStorage.getItem('newClientId');
+        if (newClientId && clients.some(c => c.id === Number(newClientId))) {
+            setSelectedClientId(Number(newClientId));
+            localStorage.removeItem('newClientId');
+        }
+    }, [clients, setSelectedClientId]);
 
     // Filtra clientes por nome
     const filteredClients = clients.filter(client =>
