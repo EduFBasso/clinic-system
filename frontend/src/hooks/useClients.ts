@@ -60,11 +60,17 @@ export function useClients() {
             console.log('Evento updateClients recebido!');
             fetchClients();
         };
+        // Handler para atualizar clientes ao focar na janela
+        const handleFocus = () => {
+            fetchClients();
+        };
         window.addEventListener('clearClients', handleClearClients);
         window.addEventListener('updateClients', handleUpdateClients);
+        window.addEventListener('focus', handleFocus);
         return () => {
             window.removeEventListener('clearClients', handleClearClients);
             window.removeEventListener('updateClients', handleUpdateClients);
+            window.removeEventListener('focus', handleFocus);
         };
     }, []);
 

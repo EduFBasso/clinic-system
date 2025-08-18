@@ -2,6 +2,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import type { ClientData } from '../types/ClientData';
+import AppModal from './Modal';
 import ClientFormDesktop from './ClientFormDesktop';
 import ClientFormMobile from './ClientFormMobile';
 import useIsMobile from './useIsMobile';
@@ -45,6 +46,8 @@ export default function ClientForm({
         sensitivity_test: cliente?.sensitivity_test ?? '',
         other_procedures: cliente?.other_procedures ?? '',
     });
+
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     useEffect(() => {
         if (cliente) {
@@ -134,14 +137,8 @@ export default function ClientForm({
                             String(createdClient.id),
                         );
                     }
-                    // Redireciona para home em todos os casos
-                    setTimeout(
-                        () => {
-                            window.dispatchEvent(new Event('updateClients'));
-                            navigate('/');
-                        },
-                        isMobile ? 3000 : 1500,
-                    );
+                    setShowSuccessModal(true);
+                    window.dispatchEvent(new Event('updateClients'));
                 })
                 .catch(async err => {
                     setFeedback({
@@ -343,6 +340,41 @@ export default function ClientForm({
                     handleDelete={handleDelete}
                     isEdit={isEdit}
                 />
+                {/* Modal de sucesso após cadastro */}
+                {showSuccessModal && (
+                    <AppModal open={true} onClose={() => {}}>
+                        <div style={{ textAlign: 'center', padding: '2rem' }}>
+                            <h2 style={{ color: '#388e3c' }}>
+                                Cliente cadastrado com sucesso!
+                            </h2>
+                            <button
+                                style={{
+                                    marginTop: '2rem',
+                                    padding: '0.7rem 2.5rem',
+                                    fontSize: '1.1rem',
+                                    background: '#388e3c',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                }}
+                                onClick={() => {
+                                    setShowSuccessModal(false);
+                                    window.dispatchEvent(
+                                        new Event('updateClients'),
+                                    );
+                                    if (window.opener) {
+                                        window.close();
+                                    } else {
+                                        navigate('/');
+                                    }
+                                }}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </AppModal>
+                )}
             </>
         );
     }
@@ -375,6 +407,38 @@ export default function ClientForm({
                 handleDelete={handleDelete}
                 isEdit={isEdit}
             />
+            {/* Modal de sucesso após cadastro */}
+            {showSuccessModal && (
+                <AppModal open={true} onClose={() => {}}>
+                    <div style={{ textAlign: 'center', padding: '2rem' }}>
+                        <h2 style={{ color: '#388e3c' }}>
+                            Cliente cadastrado com sucesso!
+                        </h2>
+                        <button
+                            style={{
+                                marginTop: '2rem',
+                                padding: '0.7rem 2.5rem',
+                                fontSize: '1.1rem',
+                                background: '#388e3c',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                            }}
+                            onClick={() => {
+                                setShowSuccessModal(false);
+                                if (window.opener) {
+                                    window.close();
+                                } else {
+                                    navigate('/');
+                                }
+                            }}
+                        >
+                            OK
+                        </button>
+                    </div>
+                </AppModal>
+            )}
         </>
     );
 }
