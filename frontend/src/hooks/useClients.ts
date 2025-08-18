@@ -74,5 +74,5 @@ export function useClients() {
         };
     }, []);
 
-    return { clients, loading, error };
+    return { clients, loading, error, setError };
 }

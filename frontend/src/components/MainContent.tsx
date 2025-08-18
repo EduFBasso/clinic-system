@@ -20,7 +20,7 @@ const MainContent: React.FC<MainContentProps> = ({
     setSelectedClientId,
     // ...outros props...
 }) => {
-    const { clients, loading, error } = useClients();
+    const { clients, loading, error, setError } = useClients();
     const [filter, setFilter] = useState('');
     const [selectedClient, setSelectedClient] = useState<ClientData | null>(
         null,
@@ -100,7 +100,15 @@ const MainContent: React.FC<MainContentProps> = ({
             </div>
             {loading && <div>Carregando clientes...</div>}
             {error && error.includes('Sessão expirada') && (
-                <AppModal open={true} onClose={() => setModalOpen(false)}>
+                <AppModal
+                    open={true}
+                    onClose={() => {
+                        setError(null);
+                        localStorage.removeItem('accessToken');
+                        localStorage.removeItem('loggedProfessional');
+                        window.dispatchEvent(new Event('clearClients'));
+                    }}
+                >
                     <div style={{ textAlign: 'center', padding: '2rem' }}>
                         <h2 style={{ color: 'red' }}>Fazer login</h2>
                         <p>
@@ -109,7 +117,13 @@ const MainContent: React.FC<MainContentProps> = ({
                             Por favor, faça login para acessar os clientes.
                         </p>
                         <button
-                            onClick={() => setModalOpen(false)}
+                            onClick={() => {
+                                setError(null);
+                                localStorage.removeItem('accessToken');
+                                localStorage.removeItem('loggedProfessional');
+                                window.dispatchEvent(new Event('clearClients'));
+                                window.location.reload();
+                            }}
                             style={{
                                 marginTop: '1rem',
                                 padding: '0.5rem 1.5rem',
