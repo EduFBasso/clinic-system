@@ -106,7 +106,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(seconds=10),      # token de acesso válido por 12h
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),      # token de acesso válido por 12h
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),       # opcional, se quiser usar depois
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
@@ -120,4 +120,3 @@ EMAIL_HOST_USER = config("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool)
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL")
-
