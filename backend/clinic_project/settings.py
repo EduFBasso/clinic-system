@@ -8,9 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 
-DEBUG = True
+DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.0.108']
+ALLOWED_HOSTS = config("DJANGO_ALLOWED_HOSTS", default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(",")])
 
 INSTALLED_APPS = [
     'rest_framework',
@@ -38,10 +38,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite
-    "http://127.0.0.1:5173",
-    "http://192.168.0.108:5173", # IP da máquina
-]
+CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="http://localhost:5173,http://127.0.0.1:5173", cast=lambda v: [s.strip() for s in v.split(",")])
 
 ROOT_URLCONF = 'clinic_project.urls'
 
@@ -64,12 +61,12 @@ WSGI_APPLICATION = 'clinic_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql', 
+        'ENGINE': config("DB_ENGINE", default="django.db.backends.postgresql"),
         'NAME':  config("DB_NAME"),
         'USER':     config("DB_USER"),
         'PASSWORD': config("DB_PASSWORD"),
         'HOST': config("DB_HOST", default="localhost"),
-        'PORT':  config("DB_PORT", default="3306"),
+        'PORT':  config("DB_PORT", default="5432"),
     }
 }
 
@@ -91,10 +88,11 @@ AUTH_PASSWORD_VALIDATORS = [
 USE_I18N = True
 LOCALE_PATHS = [os.path.join(BASE_DIR, 'locale')]
 LANGUAGE_CODE = 'pt-br'
-TIME_ZONE = 'UTC'
+TIME_ZONE = config("TIME_ZONE", default="America/Sao_Paulo")
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
@@ -106,7 +104,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),      # token de acesso válido por 12h
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),      # token de acesso válido por 10h
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),       # opcional, se quiser usar depois
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
@@ -114,6 +112,7 @@ SIMPLE_JWT = {
 }
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = config("EMAIL_BACKEND", default='django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = config("EMAIL_HOST")
 EMAIL_PORT = config("EMAIL_PORT", cast=int)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER")
