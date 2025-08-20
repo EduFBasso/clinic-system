@@ -24,11 +24,20 @@ class RegisterConfig(AppConfig):
             return
 
         try:
+            # Use the project's user model. This project uses email as the USERNAME_FIELD,
+            # so pass email/password to create_superuser to avoid unexpected kwarg errors.
             from django.contrib.auth import get_user_model
             User = get_user_model()
-            if not User.objects.filter(is_superuser=True).exists():
+
+            # Defensive: if DB is not ready yet (migrations), any query may fail; handle gracefully.
+            try:
+                has_super = User.objects.filter(is_superuser=True).exists()
+            except Exception as e:
+                logger.warning('ONE_OFF_ADMIN: database not ready or inaccessible at startup: %s', e)
+                return
+
+            if not has_super:
                 User.objects.create_superuser(
-                    username=data.get('username', 'admin'),
                     email=data.get('email', 'admin@example.com'),
                     password=data.get('password', 'ChangeMe123!')
                 )
