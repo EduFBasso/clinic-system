@@ -8,6 +8,7 @@ import type { ClientBasic } from '../types/ClientBasic';
 import AppModal from './Modal';
 import ClientView from './ClientView';
 import type { ClientData } from '../types/ClientData';
+import SessionExpiredModal from './SessionExpiredModal';
 
 interface MainContentProps {
     selectedClientId: number | null;
@@ -100,45 +101,18 @@ const MainContent: React.FC<MainContentProps> = ({
             </div>
             {loading && <div>Carregando clientes...</div>}
             {error && error.includes('Sessão expirada') && (
-                <AppModal
+                <SessionExpiredModal
                     open={true}
                     onClose={() => {
                         setError(null);
                         localStorage.removeItem('accessToken');
                         localStorage.removeItem('loggedProfessional');
                         window.dispatchEvent(new Event('clearClients'));
+                        window.location.reload();
                     }}
-                >
-                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                        <h2 style={{ color: 'red' }}>Fazer login</h2>
-                        <p>
-                            Sua sessão expirou ou você não está autenticado.
-                            <br />
-                            Por favor, faça login para acessar os clientes.
-                        </p>
-                        <button
-                            onClick={() => {
-                                setError(null);
-                                localStorage.removeItem('accessToken');
-                                localStorage.removeItem('loggedProfessional');
-                                window.dispatchEvent(new Event('clearClients'));
-                                window.location.reload();
-                            }}
-                            style={{
-                                marginTop: '1rem',
-                                padding: '0.5rem 1.5rem',
-                                fontSize: '1.1rem',
-                                background: 'var(--color-primary)',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Fechar
-                        </button>
-                    </div>
-                </AppModal>
+                    message='Sua sessão expirou ou você não está autenticado. Por favor, faça login para acessar os clientes.'
+                    color='var(--color-error-light)'
+                />
             )}
             {error && !error.includes('Sessão expirada') && (
                 <div style={{ color: 'red' }}>{error}</div>
@@ -147,37 +121,22 @@ const MainContent: React.FC<MainContentProps> = ({
                 className={styles.cardsGrid}
                 style={{ display: 'grid', gap: '20px' }}
             >
-                {filteredClients.length === 0 && !loading && !error ? (
+                {filteredClients.map(client => (
                     <div
-                        style={{
-                            textAlign: 'center',
-                            color: '#1976d2',
-                            fontWeight: 'bold',
-                            padding: '2rem',
+                        key={client.id}
+                        ref={el => {
+                            cardRefs.current[client.id] = el;
                         }}
                     >
-                        Nenhum cliente cadastrado ainda.
-                        <br />
-                        Clique em "Novo" para adicionar o primeiro cliente.
+                        <ClientCard
+                            client={client}
+                            selected={selectedClientId === client.id}
+                            onSelect={() => setSelectedClientId(client.id)}
+                            onView={handleView}
+                            onEdit={handleEdit}
+                        />
                     </div>
-                ) : (
-                    filteredClients.map(client => (
-                        <div
-                            key={client.id}
-                            ref={el => {
-                                cardRefs.current[client.id] = el;
-                            }}
-                        >
-                            <ClientCard
-                                client={client}
-                                selected={selectedClientId === client.id}
-                                onSelect={() => setSelectedClientId(client.id)}
-                                onView={handleView}
-                                onEdit={handleEdit}
-                            />
-                        </div>
-                    ))
-                )}
+                ))}
             </div>
             <AppModal open={modalOpen} onClose={handleCloseModal}>
                 {selectedClient && <ClientView client={selectedClient} />}

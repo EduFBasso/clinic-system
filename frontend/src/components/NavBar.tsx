@@ -9,6 +9,7 @@ function isMobileDevice() {
 }
 // frontend\src\components\NavBar.tsx
 import React, { useState, useRef, useEffect } from 'react';
+import SessionExpiredModal from './SessionExpiredModal';
 import { useProfessionals } from '../hooks/useProfessionals';
 import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
@@ -50,6 +51,9 @@ const NavBar: React.FC<NavBarProps> = ({
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
 
+    // Estado para modal de sessão expirada
+    const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
+
     // Fecha dropdown ao clicar fora
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -79,10 +83,7 @@ const NavBar: React.FC<NavBarProps> = ({
         setDropdownOpen(false);
         const token = localStorage.getItem('accessToken');
         if (!token) {
-            setModalMessage(
-                'Sua sessão expirou ou você não está autenticado.\nPor favor, faça login para acessar o cadastro de clientes.',
-            );
-            setModalOpen(true);
+            setSessionExpiredOpen(true);
             return;
         }
         if (isMobileDevice()) {
@@ -124,7 +125,14 @@ const NavBar: React.FC<NavBarProps> = ({
                 <div className={styles.dropdownWrapper} ref={dropdownRef}>
                     <button
                         className={styles.menuButton}
-                        onClick={() => setDropdownOpen(open => !open)}
+                        onClick={() => {
+                            const token = localStorage.getItem('accessToken');
+                            if (!token) {
+                                setSessionExpiredOpen(true);
+                                return;
+                            }
+                            setDropdownOpen(open => !open);
+                        }}
                         aria-haspopup='true'
                         aria-expanded={dropdownOpen}
                     >
@@ -151,6 +159,11 @@ const NavBar: React.FC<NavBarProps> = ({
                 <button
                     className={styles.menuButton}
                     onClick={() => {
+                        const token = localStorage.getItem('accessToken');
+                        if (!token) {
+                            setSessionExpiredOpen(true);
+                            return;
+                        }
                         setModalMessage('Agenda: Falta implementar o Código');
                         setModalOpen(true);
                     }}
@@ -160,6 +173,11 @@ const NavBar: React.FC<NavBarProps> = ({
                 <button
                     className={styles.menuButton}
                     onClick={() => {
+                        const token = localStorage.getItem('accessToken');
+                        if (!token) {
+                            setSessionExpiredOpen(true);
+                            return;
+                        }
                         setModalMessage('Consulta: Falta implementar o Código');
                         setModalOpen(true);
                     }}
@@ -414,6 +432,18 @@ const NavBar: React.FC<NavBarProps> = ({
                     <button onClick={() => setModalOpen(false)}>Ok</button>
                 </div>
             </AppModal>
+
+            {/* Modal de sessão expirada */}
+            <SessionExpiredModal
+                open={sessionExpiredOpen}
+                onClose={() => {
+                    setSessionExpiredOpen(false);
+                    // Opcional: Limpar token e recarregar página
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('loggedProfessional');
+                    window.location.reload();
+                }}
+            />
         </div>
     );
 };

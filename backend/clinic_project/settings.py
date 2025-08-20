@@ -11,6 +11,7 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 DEBUG = config("DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = config("DJANGO_ALLOWED_HOSTS", default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(",")])
+# ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'rest_framework',
@@ -36,8 +37,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-
-CORS_ALLOWED_ORIGINS = [
 CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="http://localhost:5173,http://127.0.0.1:5173", cast=lambda v: [s.strip() for s in v.split(",")])
 
 ROOT_URLCONF = 'clinic_project.urls'
