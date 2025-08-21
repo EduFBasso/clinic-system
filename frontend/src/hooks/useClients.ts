@@ -1,5 +1,6 @@
 // frontend\src\hooks\useClients.ts
 import { useEffect, useState } from 'react';
+import { API_BASE } from '../config/api';
 
 export interface ClientBasic {
     id: number;
@@ -28,7 +29,9 @@ export function useClients() {
                 return;
             }
             setLoading(true);
-            fetch('/register/clients-basic/', {
+            const url = `${API_BASE}/register/clients-basic/`;
+            console.debug('[useClients] API_BASE =', API_BASE, 'fetching', url);
+            fetch(url, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },

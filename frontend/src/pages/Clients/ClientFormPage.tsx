@@ -5,6 +5,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import ClientForm from '../../components/ClientForm';
+import { API_BASE } from '../../config/api';
 
 export default function ClientFormPage() {
     const { id } = useParams();
@@ -17,7 +18,9 @@ export default function ClientFormPage() {
             setLoading(true);
             setError('');
             const token = localStorage.getItem('accessToken');
-            fetch(`/register/clients/${id}/`, {
+            const url = `${API_BASE}/register/clients/${id}/`;
+            console.debug('[ClientFormPage] fetching', url);
+            fetch(url, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
@@ -88,7 +91,8 @@ export default function ClientFormPage() {
                                 : ''}
                         </div>
                         <div>
-                            Endpoint usado: {'/register/clients/' + id + '/'}
+                            Endpoint usado:{' '}
+                            {API_BASE + '/register/clients/' + id + '/'}
                         </div>
                         <div>Token: {localStorage.getItem('accessToken')}</div>
                     </div>
