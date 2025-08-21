@@ -1,5 +1,7 @@
-@import '../../styles/palette.css';
-
+.conditionalWrapper {
+    display: flex;
+    gap: 0.5rem;
+}
 .fieldContainer {
     margin-bottom: 1.5rem;
 }

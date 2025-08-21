@@ -1,5 +1,3 @@
-@import '../../styles/palette.css';
-
 .container {
     composes: inputGroup from './FormElementsBase.module.css';
     margin-bottom: 1.5rem;

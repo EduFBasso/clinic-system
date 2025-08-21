@@ -1,6 +1,4 @@
 /* frontend\src\components\FormElements\FormElementsBase.module.css */
-@import '../../styles/palette.css';
-
 .formLabel {
     display: block;
     font-weight: 500;
