@@ -40,6 +40,13 @@ MIDDLEWARE = [
 ]
 CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="http://localhost:5173,http://127.0.0.1:5173", cast=lambda v: [s.strip() for s in v.split(",")])
 
+# Allow enabling a permissive CORS mode from environment for quick testing.
+# In production prefer setting `CORS_ALLOWED_ORIGINS` to a CSV of trusted origins.
+CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)
+
+# Optional: allow credentials via env var if needed (useful when cookies are used).
+CORS_ALLOW_CREDENTIALS = config("CORS_ALLOW_CREDENTIALS", default=False, cast=bool)
+
 ROOT_URLCONF = 'clinic_project.urls'
 
 TEMPLATES = [
