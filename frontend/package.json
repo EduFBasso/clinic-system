@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "VITE_API_BASE=$BASE_API_VITE tsc -b && vite build",
+        "build": "node -e \"process.env.VITE_API_BASE = process.env.BASE_API_VITE || ''; const { execSync } = require('child_process'); execSync('tsc -b && vite build', { stdio: 'inherit' });\"",
         "lint": "eslint .",
         "preview": "vite preview"
     },

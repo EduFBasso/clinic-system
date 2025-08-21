@@ -10,6 +10,7 @@ function isMobileDevice() {
 // frontend\src\components\NavBar.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import SessionExpiredModal from './SessionExpiredModal';
+import { API_BASE } from '../config/api';
 import { useProfessionals } from '../hooks/useProfessionals';
 import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
@@ -303,7 +304,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                     setLoadingOtp(true);
                                     try {
                                         const res = await fetch(
-                                            '/register/auth/request-code/',
+                                            `${API_BASE}/register/auth/request-code/`,
                                             {
                                                 method: 'POST',
                                                 headers: {
@@ -359,7 +360,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                         setLoadingOtp(true);
                                         try {
                                             const res = await fetch(
-                                                '/register/auth/verify-code/',
+                                                `${API_BASE}/register/auth/verify-code/`,
                                                 {
                                                     method: 'POST',
                                                     headers: {
