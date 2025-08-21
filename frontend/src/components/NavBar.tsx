@@ -303,6 +303,12 @@ const NavBar: React.FC<NavBarProps> = ({
                                 onClick={async () => {
                                     setLoadingOtp(true);
                                     try {
+                                        console.debug(
+                                            '[NavBar] API_BASE =',
+                                            API_BASE,
+                                            'fetch ->',
+                                            `${API_BASE}/register/auth/request-code/`,
+                                        );
                                         const res = await fetch(
                                             `${API_BASE}/register/auth/request-code/`,
                                             {
@@ -359,6 +365,12 @@ const NavBar: React.FC<NavBarProps> = ({
                                     onClick={async () => {
                                         setLoadingOtp(true);
                                         try {
+                                            console.debug(
+                                                '[NavBar] API_BASE =',
+                                                API_BASE,
+                                                'fetch ->',
+                                                `${API_BASE}/register/auth/verify-code/`,
+                                            );
                                             const res = await fetch(
                                                 `${API_BASE}/register/auth/verify-code/`,
                                                 {
