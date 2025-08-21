@@ -29,6 +29,10 @@ venv/
 backend/venv*/
 frontend/venv*/
 
+# Collected static files and python cache
+backend/staticfiles/
+**/__pycache__/
+
 # Logs
 logs
 *.log
