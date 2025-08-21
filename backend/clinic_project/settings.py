@@ -40,6 +40,11 @@ MIDDLEWARE = [
 ]
 CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="http://localhost:5173,http://127.0.0.1:5173", cast=lambda v: [s.strip() for s in v.split(",")])
 
+# Optional: allow regex origins via env var for preview deployments (e.g., Vercel)
+# Example: CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\.vercel\.app$
+_cors_regex_csv = config("CORS_ALLOWED_ORIGIN_REGEXES", default="", cast=str)
+CORS_ALLOWED_ORIGIN_REGEXES = [r.strip() for r in _cors_regex_csv.split(",") if r.strip()]
+
 # Allow enabling a permissive CORS mode from environment for quick testing.
 # In production prefer setting `CORS_ALLOWED_ORIGINS` to a CSV of trusted origins.
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)
@@ -108,6 +113,11 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     )
 }
+
+# CSRF trusted origins (only needed if using cookies/session auth or admin from another origin).
+# Example: CSRF_TRUSTED_ORIGINS=https://your-app.vercel.app,https://*.yourdomain.com
+_csrf_trusted_csv = config("CSRF_TRUSTED_ORIGINS", default="", cast=str)
+CSRF_TRUSTED_ORIGINS = [s.strip() for s in _csrf_trusted_csv.split(",") if s.strip()]
 
 from datetime import timedelta
 
