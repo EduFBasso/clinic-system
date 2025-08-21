@@ -1,5 +1,6 @@
 // Importa hooks do React para gerenciar estado e efeitos colaterais
 import { useEffect, useState } from 'react';
+import { API_BASE } from '../config/api';
 
 // Define o tipo dos dados básicos do profissional que serão recebidos do backend
 export interface ProfessionalBasic {
@@ -24,8 +25,13 @@ export function useProfessionals() {
     // useEffect executa o código ao montar o componente
     useEffect(() => {
         setLoading(true); // Inicia o carregamento
-        // Faz uma requisição GET para o endpoint do backend
-        fetch('/register/professionals-basic/')
+        const url = `${API_BASE}/register/professionals-basic/`;
+        // DEBUG: log the resolved API base and final URL so we can inspect in Prod
+        // (this will appear in the browser console)
+
+        console.log('[useProfessionals] API_BASE=', API_BASE, 'fetching', url);
+        // Faz uma requisição GET para o endpoint do backend (usa API_BASE configurável)
+        fetch(url)
             .then(res => {
                 // Se a resposta não for OK, lança erro
                 if (!res.ok) throw new Error('Erro ao buscar profissionais');
@@ -39,6 +45,13 @@ export function useProfessionals() {
             })
             .catch(err => {
                 // Em caso de erro, salva a mensagem de erro
+
+                console.error(
+                    '[useProfessionals] fetch error',
+                    err,
+                    'url=',
+                    url,
+                );
                 setError(err.message);
                 setLoading(false); // Finaliza o carregamento
             });
