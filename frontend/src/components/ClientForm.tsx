@@ -211,11 +211,8 @@ export default function ClientForm({
                         window.close();
                     } else {
                         window.dispatchEvent(new Event('updateClients'));
-                        if (isMobile) {
-                            navigate('/');
-                        } else {
-                            navigate('/clients');
-                        }
+                        // Não existe rota '/clients'; a home está em '/'
+                        navigate('/');
                     }
                 }, 1500);
             })
@@ -242,7 +239,8 @@ export default function ClientForm({
         if (window.opener) {
             window.close();
         } else {
-            navigate('/clients');
+            // Não existe rota '/clients'; a home está em '/'
+            navigate('/');
         }
     }
 
@@ -287,7 +285,8 @@ export default function ClientForm({
                     } else {
                         setTimeout(() => {
                             window.dispatchEvent(new Event('updateClients'));
-                            navigate('/clients');
+                            // Não existe rota '/clients'; a home está em '/'
+                            navigate('/');
                         }, 1500);
                     }
                     // Se estiver em popup, fecha
