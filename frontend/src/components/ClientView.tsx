@@ -12,7 +12,7 @@ const fieldLabels: Record<keyof ClientData, string> = {
     last_name: 'Sobrenome',
     email: 'E-mail',
     phone: 'Telefone',
-    cpf: 'CPF',
+    profession: 'Profissão',
     address_street: 'Rua',
     address_number: 'Número',
     city: 'Cidade',

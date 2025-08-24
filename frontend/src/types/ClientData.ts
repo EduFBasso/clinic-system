@@ -5,7 +5,7 @@ export interface ClientData {
     last_name: string;
     email: string;
     phone: string;
-    cpf: string; // CPF is a Brazilian individual taxpayer registry identification
+    profession: string; // Profissão do cliente
     address_street: string;
     address_number: string;
     city: string;

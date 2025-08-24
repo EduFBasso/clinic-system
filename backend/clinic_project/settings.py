@@ -129,6 +129,12 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+# Security toggles
+# Allows a temporary OTP fallback code ONLY when explicitly enabled via env.
+# In production, keep ALLOW_OTP_FALLBACK=False.
+ALLOW_OTP_FALLBACK = config("ALLOW_OTP_FALLBACK", default=False, cast=bool)
+OTP_FALLBACK_CODE = config("OTP_FALLBACK_CODE", default="")
+
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_BACKEND = config("EMAIL_BACKEND", default='django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = config("EMAIL_HOST")

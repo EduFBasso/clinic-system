@@ -78,7 +78,7 @@ class Client(models.Model):
     last_name = models.CharField("Sobrenome", max_length=255)
     email = models.EmailField("E-mail", unique=True, null=True, blank=True)
     phone = models.CharField("Telefone", max_length=20, null=True, blank=True)
-    cpf = models.CharField("CPF", max_length=14, unique=True, null=True, blank=True)
+    profession = models.CharField("Profissão", max_length=100, null=True, blank=True)
 
     # Endereço
     address_street = models.CharField("Rua", max_length=255, null=True, blank=True)

@@ -16,7 +16,7 @@ import NailChangesLeft from './FormElements/NailChangesLeft';
 import NailChangesRight from './FormElements/NailChangesRight';
 import DeformitiesLeft from './FormElements/DeformitiesLeft';
 import DeformitiesRight from './FormElements/DeformitiesRight';
-import { formatCpf, formatCep } from '../utils/formatCpf';
+import { formatCep } from '../utils/formatCep';
 import { formatPhone } from '../utils/formatPhone';
 import SensitivityTest from './FormElements/SensitivityTest';
 
@@ -83,14 +83,10 @@ export default function ClientFormMobile({
                     label={'E-mail'}
                 />
                 <InputField
-                    label='CPF'
-                    name='cpf'
-                    value={formData.cpf}
-                    onChange={e => {
-                        const raw = e.target.value.replace(/\D/g, '');
-                        const masked = formatCpf(raw);
-                        handleChange('cpf', masked);
-                    }}
+                    label='Profissão'
+                    name='profession'
+                    value={formData.profession}
+                    onChange={e => handleChange('profession', e.target.value)}
                 />
             </section>
             <section>

@@ -15,6 +15,7 @@ class ClientSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "email": {"required": False, "allow_null": True, "allow_blank": True},
             "phone": {"required": False, "allow_null": True, "allow_blank": True},
+            "profession": {"required": False, "allow_null": True, "allow_blank": True},
             "city": {"required": False, "allow_null": True, "allow_blank": True},
             "state": {"required": False, "allow_null": True, "allow_blank": True},
             "postal_code": {"required": False, "allow_null": True, "allow_blank": True},
@@ -32,6 +33,33 @@ class ClientSerializer(serializers.ModelSerializer):
             "professional_procedures": {"required": False, "allow_null": True, "allow_blank": True},
             # Continua com o restante dos campos clínicos…
         }
+
+    # Normalizações e validações leves
+    def validate_first_name(self, value):
+        v = (value or '').strip()
+        if not v:
+            raise serializers.ValidationError("Nome é obrigatório")
+        return v
+
+    def validate_last_name(self, value):
+        v = (value or '').strip()
+        if not v:
+            raise serializers.ValidationError("Sobrenome é obrigatório")
+        return v
+
+    def validate_email(self, value):
+        if value is None:
+            return None
+        v = value.strip()
+        return v.lower() if v else None
+
+    def validate_phone(self, value):
+        if value is None:
+            return None
+        v = value.strip()
+        return v or None
+
+    # cpf removido; profissão agora é um texto opcional
 
 
 class ClientBasicSerializer(serializers.ModelSerializer):

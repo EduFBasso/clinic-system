@@ -18,7 +18,7 @@ export default function ClientForm({
         last_name: cliente?.last_name ?? '',
         email: cliente?.email ?? '',
         phone: cliente?.phone ?? '',
-        cpf: cliente?.cpf ?? '',
+        profession: cliente?.profession ?? '',
         address_street: cliente?.address_street ?? '',
         address_number: cliente?.address_number ?? '',
         city: cliente?.city ?? '',
@@ -92,14 +92,36 @@ export default function ClientForm({
             return;
         }
 
+        // Validação mínima: Nome e Sobrenome são obrigatórios
+        let first = (formData.first_name || '').trim();
+        let last = (formData.last_name || '').trim();
+        // Se o usuário digitou nome completo em "Nome" e deixou "Sobrenome" vazio, divide automaticamente
+        if (!last && first.includes(' ')) {
+            const parts = first.split(/\s+/);
+            first = parts.shift() || '';
+            last = parts.join(' ');
+        }
+        if (!first || !last) {
+            setFeedback({
+                type: 'error',
+                message: 'Nome e Sobrenome são obrigatórios.',
+            });
+            return;
+        }
+
         // Cadastro (POST)
         if (!cliente?.id) {
-            // Garante que email, cpf e phone sejam null se vazios
+            // Garante que email, profession e phone sejam normalizados (trim) e null se vazios
+            const emailTrim = (formData.email || '').trim();
+            const professionTrim = (formData.profession || '').trim();
+            const phoneTrim = (formData.phone || '').trim();
             const dataToSend = {
                 ...formData,
-                email: formData.email?.trim() ? formData.email : null,
-                cpf: formData.cpf?.trim() ? formData.cpf : null,
-                phone: formData.phone?.trim() ? formData.phone : null,
+                first_name: first,
+                last_name: last,
+                email: emailTrim ? emailTrim.toLowerCase() : null,
+                profession: professionTrim ? professionTrim : null,
+                phone: phoneTrim ? phoneTrim : null,
             };
             fetch(`${API_BASE}/register/clients/`, {
                 method: 'POST',
@@ -111,12 +133,29 @@ export default function ClientForm({
             })
                 .then(async res => {
                     if (!res.ok) {
-                        const errorData = await res.json();
+                        // Tenta obter detalhes do erro para log/feedback
+                        let errorData: unknown = null;
+                        try {
+                            errorData = await res.json();
+                        } catch {
+                            try {
+                                errorData = await res.text();
+                            } catch {
+                                errorData = null;
+                            }
+                        }
+                        console.error('[ClientForm] create error', {
+                            status: res.status,
+                            error: errorData,
+                            payload: dataToSend,
+                        });
+                        const errorMsg =
+                            typeof errorData === 'string'
+                                ? errorData
+                                : JSON.stringify(errorData);
                         setFeedback({
                             type: 'error',
-                            message:
-                                'Erro ao cadastrar cliente: ' +
-                                JSON.stringify(errorData),
+                            message: 'Erro ao cadastrar cliente: ' + errorMsg,
                         });
                         if (isMobile) {
                             setTimeout(() => setFeedback(null), 3000);
@@ -175,13 +214,35 @@ export default function ClientForm({
         if ('had_surgery' in payload) {
             payload.had_surgery = formData.had_surgery ?? '';
         }
+
+        // Constrói o corpo com normalizações sem violar os tipos de payload
+        const body: Record<string, unknown> = { ...payload };
+        if ('first_name' in payload) {
+            body.first_name = (formData.first_name || '').trim();
+        }
+        if ('last_name' in payload) {
+            body.last_name = (formData.last_name || '').trim();
+        }
+        if ('email' in payload) {
+            const e = (formData.email || '').trim();
+            body.email = e ? e.toLowerCase() : null;
+        }
+        if ('profession' in payload) {
+            const p = (formData.profession || '').trim();
+            body.profession = p ? p : null;
+        }
+        if ('phone' in payload) {
+            const p = (formData.phone || '').trim();
+            body.phone = p ? p : null;
+        }
+
         fetch(`${API_BASE}/register/clients/${cliente.id}/`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(body),
         })
             .then(async res => {
                 if (!res.ok) {

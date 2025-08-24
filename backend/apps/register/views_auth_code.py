@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.register.services.validation_utils import is_valid_email
 from apps.register.services.otp_service import request_otp_code
 import logging
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,10 @@ def verify_code(request):
     code = request.data.get("code")
     fallback_pass = "0000" # Senha alternativa para testes
 
-    logger.info(f"[Verificação OTP] E-mail: {email} | Código: {code}")
+    # Redact sensitive data in logs
+    red_email = (email or "").split("@")[0] + "@***"
+    red_code = "****" if code else None
+    logger.info(f"[Verificação OTP] user=\"{red_email}\" code=\"{red_code}\"")
 
     try:
         professional = Professional.objects.get(email=email)
@@ -44,9 +48,9 @@ def verify_code(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 🔑 Fallback: senha alternativa (fase de testes)
-    if code == fallback_pass:
-        logger.info(f"[Fallback] Autenticado por senha alternativa: {professional.email}")
+    # 🔑 Fallback: senha alternativa (somente se habilitado via env)
+    if getattr(settings, 'ALLOW_OTP_FALLBACK', False) and settings.OTP_FALLBACK_CODE and code == settings.OTP_FALLBACK_CODE:
+        logger.info(f"[Fallback] OTP autorizado via fallback para user=\"{red_email}\"")
         refresh = RefreshToken.for_user(professional)
         return Response({
             "access": str(refresh.access_token),
@@ -87,7 +91,7 @@ def verify_code(request):
     access_token = str(refresh.access_token)
     refresh_token = str(refresh)
 
-    logger.info(f"[Código Validado] Profissional: {professional.email} | Código: {code}")
+    logger.info(f"[Código Validado] user=\"{red_email}\"")
 
     return Response({
         "access": access_token,

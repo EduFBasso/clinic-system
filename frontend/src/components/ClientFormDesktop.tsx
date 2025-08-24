@@ -17,7 +17,7 @@ import DeformitiesLeft from './FormElements/DeformitiesLeft';
 import DeformitiesRight from './FormElements/DeformitiesRight';
 import SensitivityTest from './FormElements/SensitivityTest';
 import type { ClientData } from '../types/ClientData';
-import { formatCpf, formatCep } from '../utils/formatCpf';
+import { formatCep } from '../utils/formatCep';
 import { formatPhone } from '../utils/formatPhone';
 import styles from '../styles/pages/Client.module.css';
 
@@ -84,14 +84,15 @@ export default function ClientFormDesktop({
                             label={'E-mail'}
                         />
                         <InputField
-                            label='CPF'
-                            name='cpf'
-                            value={formData.cpf}
-                            onChange={e => {
-                                const raw = e.target.value.replace(/\D/g, '');
-                                const masked = formatCpf(raw);
-                                setFormData(prev => ({ ...prev, cpf: masked }));
-                            }}
+                            label='Profissão'
+                            name='profession'
+                            value={formData.profession}
+                            onChange={e =>
+                                setFormData(prev => ({
+                                    ...prev,
+                                    profession: e.target.value,
+                                }))
+                            }
                         />
                     </section>
                     <section>
