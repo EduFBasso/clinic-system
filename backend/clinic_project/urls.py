@@ -12,6 +12,8 @@ urlpatterns = [
     path('', RedirectView.as_view(url='/admin/', permanent=False)),
     # Health check endpoint (public) for uptime monitors and warm-up
     path('health/', lambda request: JsonResponse({'status': 'ok'})),
+    # Accept /health without trailing slash as well
+    path('health', lambda request: JsonResponse({'status': 'ok'})),
     path('admin/', admin.site.urls),
     path('register/', include('apps.register.urls')),  # 🧩 Rotas do app clínico
 
