@@ -19,7 +19,7 @@ class ClientSerializer(serializers.ModelSerializer):
             "city": {"required": False, "allow_null": True, "allow_blank": True},
             "state": {"required": False, "allow_null": True, "allow_blank": True},
             "postal_code": {"required": False, "allow_null": True, "allow_blank": True},
-            "address_street": {"required": False, "allow_null": True, "allow_blank": True},
+            "address": {"required": False, "allow_null": True, "allow_blank": True},
             "address_number": {"required": False, "allow_null": True, "allow_blank": True},
             "medication_details": {"required": False, "allow_null": True, "allow_blank": True},
             "surgery_details": {"required": False, "allow_null": True, "allow_blank": True},
@@ -67,5 +67,5 @@ class ClientBasicSerializer(serializers.ModelSerializer):
         model = Client
         fields = [
             'id', 'first_name', 'last_name', 'phone', 'email',
-            'address_street', 'address_number', 'city', 'state'
+            'address', 'address_number', 'city', 'state'
         ]
