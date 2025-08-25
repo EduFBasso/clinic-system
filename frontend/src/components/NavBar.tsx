@@ -204,6 +204,7 @@ const NavBar: React.FC<NavBarProps> = ({
                             onClick={() => {
                                 localStorage.removeItem('accessToken');
                                 localStorage.removeItem('loggedProfessional');
+                                localStorage.removeItem('newClientId');
                                 setLoggedProfessional(null);
                                 setSelectedProfessional('');
                                 setCodeSent(false);

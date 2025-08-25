@@ -365,6 +365,27 @@ export default function ClientForm({
 
     const navigate = useNavigate();
 
+    // Fecha o modal de sucesso e retorna apropriado (fecha popup ou navega), notificando atualização
+    const closeSuccessAndExit = () => {
+        setShowSuccessModal(false);
+        try {
+            if (window.opener) {
+                window.opener.dispatchEvent(new Event('updateClients'));
+                window.opener.focus?.();
+            } else {
+                window.dispatchEvent(new Event('updateClients'));
+            }
+        } catch {
+            // noop
+        }
+        if (window.opener) {
+            window.close();
+        } else {
+            // Home está em '/'
+            navigate('/');
+        }
+    };
+
     function handleCancel() {
         // Se o formulário está em uma janela separada:
         if (window.opener) {
@@ -472,7 +493,7 @@ export default function ClientForm({
                 />
                 {/* Modal de sucesso após cadastro */}
                 {showSuccessModal && (
-                    <AppModal open={true} onClose={() => {}}>
+                    <AppModal open={true} onClose={closeSuccessAndExit}>
                         <div style={{ textAlign: 'center', padding: '2rem' }}>
                             <h2 style={{ color: '#388e3c' }}>
                                 Cliente cadastrado com sucesso!
@@ -488,28 +509,7 @@ export default function ClientForm({
                                     borderRadius: '6px',
                                     cursor: 'pointer',
                                 }}
-                                onClick={() => {
-                                    setShowSuccessModal(false);
-                                    if (window.opener) {
-                                        try {
-                                            window.opener.dispatchEvent(
-                                                new Event('updateClients'),
-                                            );
-                                            window.opener.focus?.();
-                                        } catch {
-                                            /* noop */
-                                        }
-                                    } else {
-                                        window.dispatchEvent(
-                                            new Event('updateClients'),
-                                        );
-                                    }
-                                    if (window.opener) {
-                                        window.close();
-                                    } else {
-                                        navigate('/');
-                                    }
-                                }}
+                                onClick={closeSuccessAndExit}
                             >
                                 OK
                             </button>
@@ -550,7 +550,7 @@ export default function ClientForm({
             />
             {/* Modal de sucesso após cadastro */}
             {showSuccessModal && (
-                <AppModal open={true} onClose={() => {}}>
+                <AppModal open={true} onClose={closeSuccessAndExit}>
                     <div style={{ textAlign: 'center', padding: '2rem' }}>
                         <h2 style={{ color: '#388e3c' }}>
                             Cliente cadastrado com sucesso!
@@ -566,14 +566,7 @@ export default function ClientForm({
                                 borderRadius: '6px',
                                 cursor: 'pointer',
                             }}
-                            onClick={() => {
-                                setShowSuccessModal(false);
-                                if (window.opener) {
-                                    window.close();
-                                } else {
-                                    navigate('/');
-                                }
-                            }}
+                            onClick={closeSuccessAndExit}
                         >
                             OK
                         </button>

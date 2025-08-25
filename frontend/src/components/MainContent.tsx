@@ -27,6 +27,16 @@ const MainContent: React.FC<MainContentProps> = ({
         null,
     );
     const [modalOpen, setModalOpen] = useState(false);
+    // Limpa UI imediatamente ao receber evento de logout/clearClients
+    React.useEffect(() => {
+        const handleClear = () => {
+            setFilter('');
+            setSelectedClient(null);
+            setModalOpen(false);
+        };
+        window.addEventListener('clearClients', handleClear);
+        return () => window.removeEventListener('clearClients', handleClear);
+    }, []);
     const cardRefs = React.useRef<{ [key: number]: HTMLDivElement | null }>({});
 
     // Seleciona automaticamente o novo cliente cadastrado assim que aparecer na lista

@@ -191,6 +191,7 @@ export default function ClientFormDesktop({
                                     takes_medication: val,
                                 }))
                             }
+                            textPlaceholder='Descrição do(s) medicamento(s)'
                         />
                         <ConditionalRadioField
                             label='Já fez cirurgia?'
@@ -201,6 +202,7 @@ export default function ClientFormDesktop({
                                     had_surgery: val,
                                 }))
                             }
+                            textPlaceholder='Descrição da cirurgia'
                         />
                         <BooleanRadioField
                             label='Está grávida?'

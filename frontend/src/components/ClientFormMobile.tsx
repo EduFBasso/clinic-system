@@ -153,11 +153,13 @@ export default function ClientFormMobile({
                     label='Toma medicação?'
                     value={formData.takes_medication}
                     onChange={handleRadioChange('takes_medication')}
+                    textPlaceholder='Descrição do(s) medicamento(s)'
                 />
                 <ConditionalRadioField
                     label='Já fez cirurgia?'
                     value={formData.had_surgery}
                     onChange={handleRadioChange('had_surgery')}
+                    textPlaceholder='Descrição da cirurgia'
                 />
                 <BooleanRadioField
                     label='Está grávida?'

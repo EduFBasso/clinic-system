@@ -52,14 +52,34 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                 transition: 'background 0.2s, border 0.2s, box-shadow 0.2s',
             }}
         >
-            {Object.entries(fieldLabels).map(([key, label]) => (
-                <div className={styles.fieldRow} key={key}>
-                    <span className={styles.fieldLabel}>{label}:</span>
-                    <span className={styles.fieldValue}>
-                        {String(client[key as keyof ClientData] ?? '-')}
-                    </span>
-                </div>
-            ))}
+            {Object.entries(fieldLabels).map(([key, label]) => {
+                const k = key as keyof ClientData;
+                const rawValue = client[k] as unknown;
+                // Formata valor para tipos especiais
+                const formattedValue = (() => {
+                    if (k === 'is_pregnant') {
+                        if (rawValue === true) return 'Sim';
+                        if (rawValue === false) return 'Não';
+                        return '-';
+                    }
+                    return String(rawValue ?? '-');
+                })();
+
+                // Para perguntas (labels com '?'), não adicionar ':' após o ponto de interrogação
+                const labelSuffix = label.trim().endsWith('?') ? '' : ':';
+
+                return (
+                    <div className={styles.fieldRow} key={key}>
+                        <span className={styles.fieldLabel}>
+                            {label}
+                            {labelSuffix}
+                        </span>
+                        <span className={styles.fieldValue}>
+                            {formattedValue}
+                        </span>
+                    </div>
+                );
+            })}
         </div>
     );
 };

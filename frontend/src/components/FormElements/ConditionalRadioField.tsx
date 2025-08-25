@@ -8,6 +8,7 @@ interface ConditionalRadioFieldProps {
     value: string;
     onChange: (value: string) => void;
     className?: string;
+    textPlaceholder?: string; // placeholder do input quando "Sim"
 }
 
 export default function ConditionalRadioField({
@@ -15,6 +16,7 @@ export default function ConditionalRadioField({
     value,
     onChange,
     className,
+    textPlaceholder,
 }: ConditionalRadioFieldProps) {
     const isYes = (value ?? '').startsWith('Sim: ');
     const explanation = isYes ? (value ?? '').slice(5) : '';
@@ -64,7 +66,7 @@ export default function ConditionalRadioField({
                 <input
                     type='text'
                     className={styles.textInput}
-                    placeholder='Descrição da atividade'
+                    placeholder={textPlaceholder || 'Descrição da atividade'}
                     value={explanation}
                     onChange={handleExplanationChange}
                 />
