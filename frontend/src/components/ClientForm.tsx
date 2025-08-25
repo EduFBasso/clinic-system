@@ -177,7 +177,21 @@ export default function ClientForm({
                         );
                     }
                     setShowSuccessModal(true);
-                    window.dispatchEvent(new Event('updateClients'));
+                    // Notifica a janela de origem (Home) para atualizar e focar no novo cartão
+                    if (window.opener) {
+                        try {
+                            window.opener.dispatchEvent(
+                                new Event('updateClients'),
+                            );
+                            // Tenta focar a janela principal para evidenciar o destaque do novo cartão
+                            // Pode falhar por políticas do navegador; ignore silenciosamente
+                            window.opener.focus?.();
+                        } catch {
+                            /* noop */
+                        }
+                    } else {
+                        window.dispatchEvent(new Event('updateClients'));
+                    }
                 })
                 .catch(async err => {
                     setFeedback({
@@ -420,9 +434,20 @@ export default function ClientForm({
                                 }}
                                 onClick={() => {
                                     setShowSuccessModal(false);
-                                    window.dispatchEvent(
-                                        new Event('updateClients'),
-                                    );
+                                    if (window.opener) {
+                                        try {
+                                            window.opener.dispatchEvent(
+                                                new Event('updateClients'),
+                                            );
+                                            window.opener.focus?.();
+                                        } catch {
+                                            /* noop */
+                                        }
+                                    } else {
+                                        window.dispatchEvent(
+                                            new Event('updateClients'),
+                                        );
+                                    }
                                     if (window.opener) {
                                         window.close();
                                     } else {
