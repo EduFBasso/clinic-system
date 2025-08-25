@@ -13,6 +13,58 @@ export default function ClientForm({
 }: {
     cliente?: Partial<ClientData>;
 }) {
+    // Converte erros do DRF/DB em mensagens amigáveis
+    function parseApiError(errorData: unknown, status?: number): string {
+        if (status === 401) {
+            return 'Sessão expirada. Faça login novamente.';
+        }
+        // String direta (ex.: UNIQUE constraint)
+        if (typeof errorData === 'string') {
+            const s = errorData;
+            if (/UNIQUE constraint failed|unique/i.test(s)) {
+                if (/email/i.test(s)) return 'E-mail já existe.';
+                return 'Registro duplicado: valor já existe.';
+            }
+            if (/credenciais|credentials|autentica/i.test(s)) {
+                return 'Sessão expirada. Faça login novamente.';
+            }
+            return s;
+        }
+        // Objeto de erros do DRF
+        if (errorData && typeof errorData === 'object') {
+            const obj = errorData as Record<string, unknown>;
+            if (typeof obj.detail === 'string') {
+                const d = obj.detail;
+                if (/credenciais|credentials|autentica/i.test(d)) {
+                    return 'Sessão expirada. Faça login novamente.';
+                }
+                return d;
+            }
+            const messages: string[] = [];
+            for (const [field, val] of Object.entries(obj)) {
+                const label =
+                    field === 'email'
+                        ? 'E-mail'
+                        : field === 'phone'
+                        ? 'Telefone'
+                        : field === 'profession'
+                        ? 'Profissão'
+                        : field.replace(/_/g, ' ');
+                const toText = (v: unknown) =>
+                    Array.isArray(v)
+                        ? v.map(x => String(x)).join(', ')
+                        : String(v ?? '');
+                const txt = toText(val);
+                if (/já existe|exists|unique/i.test(txt)) {
+                    messages.push(`${label} já existe.`);
+                } else if (txt) {
+                    messages.push(`${label}: ${txt}`);
+                }
+            }
+            if (messages.length) return messages.join(' ');
+        }
+        return 'Erro ao processar solicitação.';
+    }
     const [formData, setFormData] = useState<ClientData>({
         first_name: cliente?.first_name ?? '',
         last_name: cliente?.last_name ?? '',
@@ -149,13 +201,10 @@ export default function ClientForm({
                             error: errorData,
                             payload: dataToSend,
                         });
-                        const errorMsg =
-                            typeof errorData === 'string'
-                                ? errorData
-                                : JSON.stringify(errorData);
+                        const errorMsg = parseApiError(errorData, res.status);
                         setFeedback({
                             type: 'error',
-                            message: 'Erro ao cadastrar cliente: ' + errorMsg,
+                            message: errorMsg,
                         });
                         if (isMobile) {
                             setTimeout(() => setFeedback(null), 3000);
@@ -260,12 +309,19 @@ export default function ClientForm({
         })
             .then(async res => {
                 if (!res.ok) {
-                    const errorData = await res.json();
+                    let errorData: unknown = null;
+                    try {
+                        errorData = await res.json();
+                    } catch {
+                        try {
+                            errorData = await res.text();
+                        } catch {
+                            errorData = null;
+                        }
+                    }
                     setFeedback({
                         type: 'error',
-                        message:
-                            'Erro ao salvar cliente: ' +
-                            JSON.stringify(errorData),
+                        message: parseApiError(errorData, res.status),
                     });
                     // No mobile, exibe erro por 3s
                     if (isMobile) {
