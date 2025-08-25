@@ -394,7 +394,7 @@ export default function ClientFormDesktop({
                     </section>
                 </div>
             </div>
-            <div className='formActions'>
+            <div className={styles.formActions}>
                 <button className={styles['btn-save']} type='submit'>
                     Salvar
                 </button>
