@@ -82,7 +82,7 @@ class Client(models.Model):
 
     # Endereço
     address = models.CharField("Endereço", max_length=255, null=True, blank=True)
-    address_number = models.CharField("Número", max_length=10, null=True, blank=True)
+    neighborhood = models.CharField("Bairro", max_length=100, null=True, blank=True)
     city = models.CharField("Cidade", max_length=100, null=True, blank=True)
     state = models.CharField("Estado", max_length=2, null=True, blank=True)
     postal_code = models.CharField("CEP", max_length=20, null=True, blank=True)
