@@ -7,6 +7,7 @@ interface AppModalProps {
     open: boolean;
     onClose: () => void;
     children: React.ReactNode;
+    closeOnEnter?: boolean; // padrão: true – fecha ao pressionar Enter
 }
 
 const style = {
@@ -26,7 +27,33 @@ const style = {
     overflowY: 'auto',
 };
 
-export default function AppModal({ open, onClose, children }: AppModalProps) {
+export default function AppModal({
+    open,
+    onClose,
+    children,
+    closeOnEnter = true,
+}: AppModalProps) {
+    // Fecha modal ao pressionar Enter (padronização para modais de mensagem)
+    React.useEffect(() => {
+        if (!open || !closeOnEnter) return;
+        function onKeyDown(e: KeyboardEvent) {
+            // Ignora se o usuário estiver com Shift/Ctrl/Alt para evitar conflitos
+            if (
+                e.key === 'Enter' &&
+                !e.shiftKey &&
+                !e.ctrlKey &&
+                !e.altKey &&
+                !e.metaKey
+            ) {
+                // Evita submits acidentais ao pressionar Enter em formulários dentro do modal de mensagem
+                e.preventDefault();
+                onClose();
+            }
+        }
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [open, closeOnEnter, onClose]);
+
     return (
         <Modal open={open} onClose={onClose}>
             <Box sx={style}>{children}</Box>
