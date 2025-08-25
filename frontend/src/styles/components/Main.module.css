@@ -11,6 +11,9 @@
 
 .filterRow {
     margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .filterLabel {
@@ -24,6 +27,17 @@
     border-radius: 4px;
 }
 
+/* Grade dos cartões: sempre em uma coluna para evitar desalinhamentos em larguras intermediárias */
+.cardsGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+
+.cardsGrid > div {
+    width: 100%;
+}
+
 /* Smartphones (ex: iPhone 16 Plus) */
 @media screen and (max-width: 430px) {
     .main {
@@ -32,12 +46,10 @@
     }
 }
 
-/* Tablets (ex: iPad 10) */
+/* Tablets (ex: iPad 10) — manter coluna única para evitar desalinhamento */
 @media screen and (min-width: 768px) and (max-width: 1024px) {
     .main {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
+        display: block; /* não usar grid em 2 colunas aqui */
         padding: 1.5rem;
     }
 }

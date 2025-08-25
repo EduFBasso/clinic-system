@@ -117,10 +117,7 @@ const MainContent: React.FC<MainContentProps> = ({
             {error && !error.includes('Sessão expirada') && (
                 <div style={{ color: 'red' }}>{error}</div>
             )}
-            <div
-                className={styles.cardsGrid}
-                style={{ display: 'grid', gap: '20px' }}
-            >
+            <div className={styles.cardsGrid}>
                 {filteredClients.map(client => (
                     <div
                         key={client.id}
