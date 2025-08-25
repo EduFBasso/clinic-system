@@ -7,7 +7,13 @@ interface NailChangesLeftProps {
     onChange: (value: string) => void;
 }
 
-const options = ['Onicocriptose', 'Onicólise', 'Onicogrifose', 'Outros'];
+const options = [
+    'Onicocriptose',
+    'Onicólise',
+    'Onicogrifose',
+    'Onicomicose no hálux',
+    'Outros',
+];
 
 const NailChangesLeft: React.FC<NailChangesLeftProps> = ({
     value,
