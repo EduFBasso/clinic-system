@@ -92,20 +92,16 @@ export default function ClientFormMobile({
             <section>
                 <h3 className={styles.panelTitle}>Endereço</h3>
                 <InputField
-                    name='address_street'
-                    value={formData.address_street}
-                    onChange={e =>
-                        handleChange('address_street', e.target.value)
-                    }
-                    label={'Rua'}
+                    name='address'
+                    value={formData.address}
+                    onChange={e => handleChange('address', e.target.value)}
+                    label={'Rua / Av., nº'}
                 />
                 <InputField
-                    name='address_number'
-                    value={formData.address_number}
-                    onChange={e =>
-                        handleChange('address_number', e.target.value)
-                    }
-                    label={'Número'}
+                    name='neighborhood'
+                    value={formData.neighborhood}
+                    onChange={e => handleChange('neighborhood', e.target.value)}
+                    label={'Bairro'}
                 />
                 <InputField
                     name='city'

@@ -8,8 +8,8 @@ export interface ClientBasic {
     last_name: string;
     phone: string;
     email: string;
-    address_street?: string;
-    address_number?: string;
+    address?: string;
+    neighborhood?: string;
     city?: string;
     state?: string;
 }

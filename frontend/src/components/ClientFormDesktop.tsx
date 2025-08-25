@@ -143,16 +143,16 @@ export default function ClientFormDesktop({
                     <section>
                         <h3 className={styles.panelTitle}>Endereço</h3>
                         <InputField
-                            name='address_street'
-                            value={formData.address_street}
+                            name='address'
+                            value={formData.address}
                             onChange={handleChange}
-                            label={'Rua'}
+                            label={'Rua / Av., nº'}
                         />
                         <InputField
-                            name='address_number'
-                            value={formData.address_number}
+                            name='neighborhood'
+                            value={formData.neighborhood}
                             onChange={handleChange}
-                            label={'Número'}
+                            label={'Bairro'}
                         />
                         <InputField
                             name='city'

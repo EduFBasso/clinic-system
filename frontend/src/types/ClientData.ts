@@ -6,8 +6,8 @@ export interface ClientData {
     email: string;
     phone: string;
     profession: string; // Profissão do cliente
-    address_street: string;
-    address_number: string;
+    address: string;
+    neighborhood: string;
     city: string;
     state: string;
     postal_code: string;
