@@ -144,7 +144,7 @@ export default function ClientForm({
             return;
         }
 
-        // Validação mínima: Nome e Sobrenome são obrigatórios
+        // Validação mínima: Nome, Sobrenome e Telefone são obrigatórios
         let first = (formData.first_name || '').trim();
         let last = (formData.last_name || '').trim();
         // Se o usuário digitou nome completo em "Nome" e deixou "Sobrenome" vazio, divide automaticamente
@@ -153,10 +153,11 @@ export default function ClientForm({
             first = parts.shift() || '';
             last = parts.join(' ');
         }
-        if (!first || !last) {
+        const phone = (formData.phone || '').trim();
+        if (!first || !last || !phone) {
             setFeedback({
                 type: 'error',
-                message: 'Nome e Sobrenome são obrigatórios.',
+                message: 'Nome, Sobrenome e Telefone são obrigatórios.',
             });
             return;
         }
@@ -167,13 +168,15 @@ export default function ClientForm({
             const emailTrim = (formData.email || '').trim();
             const professionTrim = (formData.profession || '').trim();
             const phoneTrim = (formData.phone || '').trim();
+            // Normaliza para dígitos, mantendo compatível com backend
+            const phoneDigits = phoneTrim.replace(/\D/g, '');
             const dataToSend = {
                 ...formData,
                 first_name: first,
                 last_name: last,
                 email: emailTrim ? emailTrim.toLowerCase() : null,
                 profession: professionTrim ? professionTrim : null,
-                phone: phoneTrim ? phoneTrim : null,
+                phone: phoneDigits,
             };
             fetch(`${API_BASE}/register/clients/`, {
                 method: 'POST',
@@ -296,7 +299,7 @@ export default function ClientForm({
         }
         if ('phone' in payload) {
             const p = (formData.phone || '').trim();
-            body.phone = p ? p : null;
+            body.phone = p ? p.replace(/\D/g, '') : null;
         }
 
         fetch(`${API_BASE}/register/clients/${cliente.id}/`, {

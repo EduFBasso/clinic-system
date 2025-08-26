@@ -14,7 +14,8 @@ class ClientSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at']
         extra_kwargs = {
             "email": {"required": False, "allow_null": True, "allow_blank": True},
-            "phone": {"required": False, "allow_null": True, "allow_blank": True},
+            # Telefone obrigatório e único (modelo aplica unique)
+            "phone": {"required": True, "allow_null": False, "allow_blank": False},
             "profession": {"required": False, "allow_null": True, "allow_blank": True},
             "city": {"required": False, "allow_null": True, "allow_blank": True},
             "state": {"required": False, "allow_null": True, "allow_blank": True},
@@ -54,10 +55,16 @@ class ClientSerializer(serializers.ModelSerializer):
         return v.lower() if v else None
 
     def validate_phone(self, value):
-        if value is None:
-            return None
-        v = value.strip()
-        return v or None
+        v = (value or '').strip()
+        if not v:
+            raise serializers.ValidationError("Telefone é obrigatório")
+        # Normaliza para apenas dígitos; aceita 10 (fixo) ou 11 (celular) no BR
+        digits = ''.join(ch for ch in v if ch.isdigit())
+        if len(digits) not in (10, 11):
+            raise serializers.ValidationError(
+                "Telefone inválido. Use DDD + número (10 ou 11 dígitos)."
+            )
+        return digits
 
     # cpf removido; profissão agora é um texto opcional
 
