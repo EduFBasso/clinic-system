@@ -20,6 +20,6 @@
     .header {
         width: 100%;
         max-width: 1045px;
-        margin: 0; /* alinhado à esquerda */
+        margin: 0 auto; /* centralizar no desktop */
     }
 }

@@ -6,7 +6,7 @@
         100vh - 128px
     ); /* altura da viewport - header/faixa/footer */
     padding: 1rem;
-    background-color: #fff;
+    /* background-color: #fff; */
 }
 
 .filterContainer {
@@ -71,6 +71,6 @@
 @media screen and (min-width: 1025px) {
     .main {
         max-width: 1045px;
-        margin: 0; /* manter alinhado à esquerda, sem centralizar */
+        margin: 0 auto; /* centralizar no desktop */
     }
 }
