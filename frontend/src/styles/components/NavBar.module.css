@@ -72,7 +72,7 @@
     justify-content: space-between;
     align-items: center;
     background-color: var(--color-primary-light);
-    padding: 0.8rem 2rem;
+    padding: 0.8rem 1rem; /* alinhado com padding do .main */
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -170,5 +170,13 @@
         flex-direction: row;
         justify-content: space-between;
         align-items: stretch;
+    }
+}
+
+/* Desktop: limitar largura e manter alinhado à esquerda */
+@media screen and (min-width: 1025px) {
+    .navBar {
+        max-width: 1045px;
+        margin: 0; /* alinhado à esquerda */
     }
 }

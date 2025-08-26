@@ -14,3 +14,12 @@
     font-size: 2rem;
     font-weight: 700;
 }
+
+/* Desktop: limitar largura do header e manter alinhado à esquerda */
+@media screen and (min-width: 1025px) {
+    .header {
+        width: 100%;
+        max-width: 1045px;
+        margin: 0; /* alinhado à esquerda */
+    }
+}
