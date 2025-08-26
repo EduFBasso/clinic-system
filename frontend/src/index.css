@@ -33,6 +33,6 @@
 body {
     font-family: 'Roboto', sans-serif;
     font-weight: 400;
-    background-color: var(--color-screenoff);
+    background-color: var(--color-bg-section);
     color: var(--color-text);
 }
