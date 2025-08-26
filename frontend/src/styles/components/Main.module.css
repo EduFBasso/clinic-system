@@ -9,16 +9,6 @@
     background-color: #fff;
 }
 
-.filterBar {
-    position: sticky;
-    top: 88px; /* 80px header + 8px faixa */
-    z-index: 90; /* abaixo do header/faixa (z=100), acima dos cards */
-    background: #fff;
-    border-bottom: 1px solid var(--color-border);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-    padding: 0.5rem 0;
-}
-
 .filterRow {
     margin: 0 auto 1rem auto;
     display: flex;
