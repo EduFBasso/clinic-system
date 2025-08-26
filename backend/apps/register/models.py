@@ -100,8 +100,8 @@ class Client(models.Model):
     academic_activity = models.CharField("Atividade acadêmica", max_length=50, null=True, blank=True)
 
     # Anamnese médica
-    takes_medication = models.CharField("Toma medicação", max_length=50, null=True, blank=True)
-    had_surgery = models.CharField("Já fez cirurgia", max_length=50, null=True, blank=True)
+    takes_medication = models.CharField("Toma medicação", max_length=255, null=True, blank=True)
+    had_surgery = models.CharField("Já fez cirurgia", max_length=255, null=True, blank=True)
     is_pregnant = models.BooleanField("Está grávida", null=True, blank=True)
 
     pain_sensitivity = models.CharField("Sensibilidade à dor", max_length=50, null=True, blank=True)

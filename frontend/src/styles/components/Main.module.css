@@ -9,11 +9,23 @@
     background-color: #fff;
 }
 
+.filterBar {
+    position: sticky;
+    top: 88px; /* 80px header + 8px faixa */
+    z-index: 90; /* abaixo do header/faixa (z=100), acima dos cards */
+    background: #fff;
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+    padding: 0.5rem 0;
+}
+
 .filterRow {
-    margin-bottom: 1rem;
+    margin: 0 auto 1rem auto;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    max-width: 640px; /* não ocupar 100% em telas largas */
+    padding: 0 1rem;
 }
 
 .filterLabel {
@@ -25,6 +37,7 @@
     padding: 0.5rem;
     border: 1px solid var(--color-border);
     border-radius: 4px;
+    min-width: 180px;
 }
 
 /* Grade dos cartões: sempre em uma coluna para evitar desalinhamentos em larguras intermediárias */
@@ -43,6 +56,10 @@
     .main {
         padding: 1rem;
         flex-direction: column;
+    }
+    .filterRow {
+        max-width: 100%;
+        padding: 0 0.5rem;
     }
 }
 

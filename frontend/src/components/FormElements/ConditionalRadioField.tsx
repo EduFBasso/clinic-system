@@ -63,13 +63,18 @@ export default function ConditionalRadioField({
             </div>
 
             {isYes && (
-                <input
-                    type='text'
-                    className={styles.textInput}
-                    placeholder={textPlaceholder || 'Descrição da atividade'}
-                    value={explanation}
-                    onChange={handleExplanationChange}
-                />
+                <>
+                    <input
+                        type='text'
+                        className={styles.textInput}
+                        placeholder={
+                            textPlaceholder || 'Descrição da atividade'
+                        }
+                        value={explanation}
+                        onChange={handleExplanationChange}
+                        maxLength={255 - 5} // considera prefixo 'Sim: '
+                    />
+                </>
             )}
         </div>
     );
