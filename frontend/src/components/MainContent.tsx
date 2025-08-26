@@ -96,18 +96,23 @@ const MainContent: React.FC<MainContentProps> = ({
 
     return (
         <main className={styles.main}>
-            <div className={styles.filterRow}>
-                <label htmlFor='client-filter' className={styles.filterLabel}>
-                    Filtrar Cliente:
-                </label>
-                <input
-                    id='client-filter'
-                    type='text'
-                    className={styles.filterInput}
-                    placeholder='Digite o nome do cliente...'
-                    value={filter}
-                    onChange={e => setFilter(e.target.value)}
-                />
+            <div className={styles.filterContainer}>
+                <div className={styles.filterRow}>
+                    <label
+                        htmlFor='client-filter'
+                        className={styles.filterLabel}
+                    >
+                        Filtrar Cliente:
+                    </label>
+                    <input
+                        id='client-filter'
+                        type='text'
+                        className={styles.filterInput}
+                        placeholder='Digite o nome do cliente...'
+                        value={filter}
+                        onChange={e => setFilter(e.target.value)}
+                    />
+                </div>
             </div>
             {loading && <div>Carregando clientes...</div>}
             {error && error.includes('Sessão expirada') && (

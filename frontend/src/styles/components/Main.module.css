@@ -9,8 +9,12 @@
     background-color: #fff;
 }
 
+.filterContainer {
+    margin: 0 0 2rem 0; /* iguala o espaçamento inferior ao padding-top do .main (2rem) */
+}
+
 .filterRow {
-    margin: 0 auto 1rem auto;
+    margin: 0 auto 0 auto; /* removido bottom extra; container controla o espaçamento */
     display: flex;
     align-items: center;
     gap: 0.5rem;
