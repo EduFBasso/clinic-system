@@ -5,25 +5,27 @@
     min-height: calc(
         100vh - 128px
     ); /* altura da viewport - header/faixa/footer */
-    padding: 2rem;
+    padding: 1rem;
     background-color: #fff;
 }
 
 .filterContainer {
-    margin: 0 0 2rem 0; /* iguala o espaçamento inferior ao padding-top do .main (2rem) */
+    margin: 0 0 1rem 0; /* reduzido para 1rem conforme solicitado */
 }
 
 .filterRow {
-    margin: 0 auto 0 auto; /* removido bottom extra; container controla o espaçamento */
+    margin: 0; /* alinhado à esquerda no desktop */
     display: flex;
     align-items: center;
     gap: 0.5rem;
     max-width: 640px; /* não ocupar 100% em telas largas */
-    padding: 0 1rem;
+    padding: 0; /* acompanha o padding do .main para alinhamento à esquerda */
 }
 
 .filterLabel {
     margin-right: 0.5rem;
+    font-weight: 700; /* destacar o texto 'Filtrar Cliente' */
+    color: var(--color-primary);
 }
 
 .filterInput {
