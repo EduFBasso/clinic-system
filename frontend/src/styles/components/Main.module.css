@@ -6,7 +6,7 @@
         100vh - 128px
     ); /* altura da viewport - header/faixa/footer */
     padding: 1rem;
-    /* background-color: #fff; */
+    background-color: var(--color-bg);
 }
 
 .filterContainer {
