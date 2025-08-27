@@ -13,6 +13,11 @@ export default function ClientForm({
 }: {
     cliente?: Partial<ClientData>;
 }) {
+    // Marca erros já tratados para não sobrescrever mensagens específicas em catch
+    type HandledError = Error & { handled?: boolean };
+    function isHandledError(e: unknown): e is HandledError {
+        return typeof e === 'object' && e !== null && 'handled' in e;
+    }
     // Converte erros do DRF/DB em mensagens amigáveis
     function parseApiError(errorData: unknown, status?: number): string {
         if (status === 401) {
@@ -21,8 +26,16 @@ export default function ClientForm({
         // String direta (ex.: UNIQUE constraint)
         if (typeof errorData === 'string') {
             const s = errorData;
-            if (/UNIQUE constraint failed|unique/i.test(s)) {
+            if (
+                /UNIQUE constraint failed|duplicate key value|unique/i.test(s)
+            ) {
+                // Se mencionar phone/telefone ou índice/constraint de phone, exibe a mensagem solicitada
                 if (/email/i.test(s)) return 'E-mail já existe.';
+                if (
+                    /phone|telefone|register_client_phone|phone_digits/i.test(s)
+                ) {
+                    return 'Este telefone já cadastrado';
+                }
                 return 'Registro duplicado: valor já existe.';
             }
             if (/credenciais|credentials|autentica/i.test(s)) {
@@ -55,8 +68,12 @@ export default function ClientForm({
                         ? v.map(x => String(x)).join(', ')
                         : String(v ?? '');
                 const txt = toText(val);
-                if (/já existe|exists|unique/i.test(txt)) {
-                    messages.push(`${label} já existe.`);
+                if (/já existe|exists|unique|duplicate/i.test(txt)) {
+                    if (field === 'phone' || /phone|telefone/i.test(txt)) {
+                        messages.push('Este telefone já cadastrado');
+                    } else {
+                        messages.push(`${label} já existe.`);
+                    }
                 } else if (txt) {
                     messages.push(`${label}: ${txt}`);
                 }
@@ -212,7 +229,11 @@ export default function ClientForm({
                         if (isMobile) {
                             setTimeout(() => setFeedback(null), 3000);
                         }
-                        throw new Error('Erro ao cadastrar cliente');
+                        const err: HandledError = new Error(
+                            errorMsg,
+                        ) as HandledError;
+                        err.handled = true;
+                        throw err;
                     }
                     return res.json();
                 })
@@ -246,9 +267,11 @@ export default function ClientForm({
                     }
                 })
                 .catch(async err => {
+                    // Se já tratamos acima, não sobrescreve a mensagem específica
+                    if (isHandledError(err) && err.handled) return;
                     setFeedback({
                         type: 'error',
-                        message: 'Erro ao cadastrar: ' + err.message,
+                        message: 'Erro ao cadastrar: ' + (err?.message || ''),
                     });
                     if (isMobile) {
                         setTimeout(() => setFeedback(null), 3000);
@@ -322,15 +345,20 @@ export default function ClientForm({
                             errorData = null;
                         }
                     }
+                    const errorMsg = parseApiError(errorData, res.status);
                     setFeedback({
                         type: 'error',
-                        message: parseApiError(errorData, res.status),
+                        message: errorMsg,
                     });
                     // No mobile, exibe erro por 3s
                     if (isMobile) {
                         setTimeout(() => setFeedback(null), 3000);
                     }
-                    throw new Error('Erro ao salvar cliente');
+                    const err: HandledError = new Error(
+                        errorMsg,
+                    ) as HandledError;
+                    err.handled = true;
+                    throw err;
                 }
                 return res.json();
             })
@@ -351,8 +379,19 @@ export default function ClientForm({
                 }, 1500);
             })
             .catch(async err => {
-                if (err.response) {
-                    const errorData = await err.response.json();
+                if (isHandledError(err) && err.handled) {
+                    return;
+                }
+                if (
+                    typeof err === 'object' &&
+                    err !== null &&
+                    'response' in err
+                ) {
+                    const errorData = await (
+                        err as unknown as {
+                            response: { json: () => Promise<unknown> };
+                        }
+                    ).response.json();
                     setFeedback({
                         type: 'error',
                         message: 'Erro ao salvar: ' + JSON.stringify(errorData),
