@@ -20,39 +20,52 @@ export default function ClientForm({
     }
     // Converte erros do DRF/DB em mensagens amigáveis
     function parseApiError(errorData: unknown, status?: number): string {
-        if (status === 401) {
-            return 'Sessão expirada. Faça login novamente.';
-        }
+        if (status === 401) return 'Sessão expirada. Faça login novamente.';
+
         // String direta (ex.: UNIQUE constraint)
         if (typeof errorData === 'string') {
             const s = errorData;
             if (
-                /UNIQUE constraint failed|duplicate key value|unique/i.test(s)
+                /UNIQUE constraint failed|duplicate key value|violates unique constraint|unique|já\s*cadastr/i.test(
+                    s,
+                )
             ) {
-                // Se mencionar phone/telefone ou índice/constraint de phone, exibe a mensagem solicitada
                 if (/email/i.test(s)) return 'E-mail já existe.';
                 if (
                     /phone|telefone|register_client_phone|phone_digits/i.test(s)
-                ) {
+                )
                     return 'Este telefone já cadastrado';
-                }
                 return 'Registro duplicado: valor já existe.';
             }
-            if (/credenciais|credentials|autentica/i.test(s)) {
+            if (/credenciais|credentials|autentica/i.test(s))
                 return 'Sessão expirada. Faça login novamente.';
-            }
             return s;
         }
+
         // Objeto de erros do DRF
         if (errorData && typeof errorData === 'object') {
             const obj = errorData as Record<string, unknown>;
             if (typeof obj.detail === 'string') {
                 const d = obj.detail;
-                if (/credenciais|credentials|autentica/i.test(d)) {
-                    return 'Sessão expirada. Faça login novamente.';
+                if (
+                    /UNIQUE constraint failed|duplicate key value|violates unique constraint|unique|já\s*cadastr/i.test(
+                        d,
+                    )
+                ) {
+                    if (/email/i.test(d)) return 'E-mail já existe.';
+                    if (
+                        /phone|telefone|register_client_phone|phone_digits/i.test(
+                            d,
+                        )
+                    )
+                        return 'Este telefone já cadastrado';
+                    return 'Registro duplicado: valor já existe.';
                 }
+                if (/credenciais|credentials|autentica/i.test(d))
+                    return 'Sessão expirada. Faça login novamente.';
                 return d;
             }
+
             const messages: string[] = [];
             for (const [field, val] of Object.entries(obj)) {
                 const label =
@@ -68,7 +81,11 @@ export default function ClientForm({
                         ? v.map(x => String(x)).join(', ')
                         : String(v ?? '');
                 const txt = toText(val);
-                if (/já existe|exists|unique|duplicate/i.test(txt)) {
+                if (
+                    /já existe|exists|unique|duplicate|violates unique constraint|já\s*cadastr/i.test(
+                        txt,
+                    )
+                ) {
                     if (field === 'phone' || /phone|telefone/i.test(txt)) {
                         messages.push('Este telefone já cadastrado');
                     } else {
@@ -80,6 +97,7 @@ export default function ClientForm({
             }
             if (messages.length) return messages.join(' ');
         }
+
         return 'Erro ao processar solicitação.';
     }
     const [formData, setFormData] = useState<ClientData>({
