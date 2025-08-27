@@ -1,5 +1,7 @@
 # backend\apps\register\client_views.py
 from rest_framework import filters
+from rest_framework.exceptions import ValidationError
+from django.db import IntegrityError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
 from .models import Client
@@ -22,7 +24,22 @@ class ClientViewSet(ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(professional=self.request.user)
+        try:
+            serializer.save(professional=self.request.user)
+        except IntegrityError as e:
+            msg = str(e).lower()
+            if 'phone' in msg or 'phone_digits' in msg or 'register_client_phone' in msg:
+                raise ValidationError({'phone': ['Este telefone já cadastrado']})
+            raise
+
+    def perform_update(self, serializer):
+        try:
+            serializer.save()
+        except IntegrityError as e:
+            msg = str(e).lower()
+            if 'phone' in msg or 'phone_digits' in msg or 'register_client_phone' in msg:
+                raise ValidationError({'phone': ['Este telefone já cadastrado']})
+            raise
 
 
 from django.db.models import Q
