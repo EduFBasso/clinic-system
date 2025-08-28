@@ -82,6 +82,19 @@ DATABASES = {
     }
 }
 
+# Safety: avoid using remote DB while DEBUG=True unless explicitly allowed.
+ALLOW_REMOTE_DB_IN_DEBUG = config("ALLOW_REMOTE_DB_IN_DEBUG", default=False, cast=bool)
+if DEBUG and not ALLOW_REMOTE_DB_IN_DEBUG:
+    try:
+        _db_host = DATABASES['default'].get('HOST') or ''
+    except Exception:
+        _db_host = ''
+    if _db_host not in ("localhost", "127.0.0.1", ""):
+        raise RuntimeError(
+            "DEBUG=True com DB_HOST não local ('%s'). Evitando conexão acidental ao banco remoto. "
+            "Defina ALLOW_REMOTE_DB_IN_DEBUG=True no .env apenas se tiver certeza." % _db_host
+        )
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
