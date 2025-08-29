@@ -2,6 +2,7 @@
 from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.utils import timezone
 
 class ProfessionalManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -140,3 +141,39 @@ class AccessCode(models.Model):
     def __str__(self):
         return f"{self.professional.email} — Código {self.code}"
  
+
+class DeviceSession(models.Model):
+    """Sessão de dispositivo por profissional para auditoria e controle de limite.
+
+    - device_id: um identificador persistente gerado no frontend (UUID/string curta).
+    - is_active: ativa enquanto a sessão estiver em uso; ao sair, marcar inativa e registrar terminated_at.
+    - last_seen_at: atualizado quando o dispositivo interage (pode ser via heartbeat/requests autenticadas).
+    """
+
+    professional = models.ForeignKey(Professional, on_delete=models.CASCADE, related_name="sessions")
+    device_id = models.CharField(max_length=64)
+    user_agent = models.CharField(max_length=255, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    terminated_at = models.DateTimeField(null=True, blank=True)
+    termination_reason = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        unique_together = ("professional", "device_id")
+        indexes = [
+            models.Index(fields=["professional", "is_active"]),
+            models.Index(fields=["professional", "device_id"]),
+        ]
+
+    def __str__(self):
+        status = "ativa" if self.is_active else "inativa"
+        return f"{self.professional.email} — {self.device_id} ({status})"
+
+    def terminate(self, reason: str = "logout"):
+        self.is_active = False
+        self.terminated_at = timezone.now()
+        self.termination_reason = reason[:32]
+        self.save(update_fields=["is_active", "terminated_at", "termination_reason"])
+

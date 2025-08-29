@@ -21,14 +21,16 @@ export default function SessionExpiredModal({
                 style={{
                     textAlign: 'center',
                     padding: '2rem',
-                    background: 'var(--color-error-light)',
+                    background: color,
                     border: '2px solid var(--color-error-border)',
                     borderRadius: '10px',
                     color: 'var(--color-error)',
                     boxShadow: '0 2px 16px 0 rgba(211,47,47,0.12)',
                 }}
             >
-                <h2 style={{ color: 'var(--color-error-dark)' }}>Sessão expirada</h2>
+                <h2 style={{ color: 'var(--color-error-dark)' }}>
+                    Sessão expirada
+                </h2>
                 <p style={{ color: 'var(--color-error)' }}>{message}</p>
                 <button
                     onClick={onClose}

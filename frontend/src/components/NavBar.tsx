@@ -11,11 +11,21 @@ function isMobileDevice() {
 import React, { useState, useRef, useEffect } from 'react';
 import SessionExpiredModal from './SessionExpiredModal';
 import { API_BASE } from '../config/api';
+import { getOrCreateDeviceId } from '../utils/device';
+type VerifyResponse = {
+    access?: string;
+    refresh?: string;
+    professional?: ProfessionalBasic;
+    active_sessions_count?: number;
+    device_id?: string;
+    message?: string;
+};
 import { useProfessionals } from '../hooks/useProfessionals';
 import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
 import AppModal from './Modal';
 import '../styles/modal-message.css';
+import { isTokenExpired } from '../utils/jwt';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
@@ -51,6 +61,8 @@ const NavBar: React.FC<NavBarProps> = ({
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
+    // Quando true após solicitar OTP com sucesso, só revela o campo após clicar em OK no modal
+    const [otpSentConfirmPending, setOtpSentConfirmPending] = useState(false);
 
     // Estado para modal de sessão expirada
     const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
@@ -71,9 +83,15 @@ const NavBar: React.FC<NavBarProps> = ({
     }, []);
 
     useEffect(() => {
-        const stored = localStorage.getItem('loggedProfessional');
-        if (stored) {
-            setLoggedProfessional(JSON.parse(stored));
+        // On mount: if token is missing/expired, clear any logged state to avoid showing logged UI
+        const token = localStorage.getItem('accessToken');
+        if (isTokenExpired(token)) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('loggedProfessional');
+            setLoggedProfessional(null);
+        } else {
+            const stored = localStorage.getItem('loggedProfessional');
+            if (stored) setLoggedProfessional(JSON.parse(stored));
         }
     }, []);
 
@@ -328,20 +346,22 @@ const NavBar: React.FC<NavBarProps> = ({
                                         if (data.message && res.ok) {
                                             setModalMessage(data.message);
                                             setModalOpen(true);
-                                            setCodeSent(true);
-                                            console.log('codeSent ativado');
+                                            // Aguarda confirmação do usuário para revelar o campo de OTP
+                                            setOtpSentConfirmPending(true);
                                         } else {
                                             setModalMessage(
                                                 data.message ||
                                                     'Erro ao enviar código',
                                             );
                                             setModalOpen(true);
+                                            setOtpSentConfirmPending(false);
                                         }
                                     } catch {
                                         setModalMessage(
                                             'Erro ao enviar código',
                                         );
                                         setModalOpen(true);
+                                        setOtpSentConfirmPending(false);
                                     }
                                     setLoadingOtp(false);
                                 }}
@@ -372,6 +392,12 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 'fetch ->',
                                                 `${API_BASE}/register/auth/verify-code/`,
                                             );
+                                            // Ensure device_id exists and send it for device session tracking
+                                            const deviceIdKey = 'device_id';
+                                            const deviceId =
+                                                getOrCreateDeviceId(
+                                                    deviceIdKey,
+                                                );
                                             const res = await fetch(
                                                 `${API_BASE}/register/auth/verify-code/`,
                                                 {
@@ -383,15 +409,30 @@ const NavBar: React.FC<NavBarProps> = ({
                                                     body: JSON.stringify({
                                                         email: selectedProfessional,
                                                         code: otp,
+                                                        device_id: deviceId,
                                                     }),
                                                 },
                                             );
-                                            const data = await res.json();
+                                            let data: VerifyResponse = {};
+                                            try {
+                                                data = await res.json();
+                                            } catch {
+                                                data = {
+                                                    message:
+                                                        'Falha ao interpretar resposta do servidor',
+                                                };
+                                            }
                                             // Substitui alert por modal para validação do código
                                             if (res.ok && data.access) {
-                                                setModalMessage(
-                                                    'Login realizado! Dados dos clientes liberados.',
-                                                );
+                                                let successMsg =
+                                                    'Login realizado! Dados dos clientes liberados.';
+                                                if (
+                                                    typeof data.active_sessions_count ===
+                                                    'number'
+                                                ) {
+                                                    successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
+                                                }
+                                                setModalMessage(successMsg);
                                                 setModalOpen(true);
                                                 localStorage.setItem(
                                                     'accessToken',
@@ -399,7 +440,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 );
                                                 setOtp('');
                                                 setLoggedProfessional(
-                                                    data.professional,
+                                                    data.professional || null,
                                                 );
                                                 localStorage.setItem(
                                                     'loggedProfessional',
@@ -407,6 +448,12 @@ const NavBar: React.FC<NavBarProps> = ({
                                                         data.professional,
                                                     ),
                                                 );
+                                                if (data.device_id) {
+                                                    localStorage.setItem(
+                                                        deviceIdKey,
+                                                        String(data.device_id),
+                                                    );
+                                                }
                                                 window.dispatchEvent(
                                                     new Event('updateClients'),
                                                 );
@@ -416,8 +463,10 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 );
                                             } else {
                                                 setModalMessage(
-                                                    data.message ||
-                                                        'Código inválido',
+                                                    String(
+                                                        data.message ||
+                                                            'Código inválido',
+                                                    ),
                                                 );
                                                 setModalOpen(true);
                                             }
@@ -440,10 +489,29 @@ const NavBar: React.FC<NavBarProps> = ({
             </div>
 
             {/* Modal padrão para mensagens */}
-            <AppModal open={modalOpen} onClose={() => setModalOpen(false)}>
+            <AppModal
+                open={modalOpen}
+                onClose={() => {
+                    if (otpSentConfirmPending) {
+                        setCodeSent(true);
+                        setOtpSentConfirmPending(false);
+                    }
+                    setModalOpen(false);
+                }}
+            >
                 <div className='modal-message'>
                     <h3>{modalMessage}</h3>
-                    <button onClick={() => setModalOpen(false)}>Ok</button>
+                    <button
+                        onClick={() => {
+                            if (otpSentConfirmPending) {
+                                setCodeSent(true);
+                                setOtpSentConfirmPending(false);
+                            }
+                            setModalOpen(false);
+                        }}
+                    >
+                        Ok
+                    </button>
                 </div>
             </AppModal>
 

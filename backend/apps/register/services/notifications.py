@@ -6,13 +6,13 @@ from apps.register.models import Professional
 
 logger = logging.getLogger(__name__)
 
-def send_code_email(professional: Professional, code: str) -> None:
+def send_code_email(professional: Professional, code: str) -> bool:
     """
     Envia o código OTP por e-mail para o profissional especificado.
     """
     if not professional.email:
         logger.warning(f"Profissional sem e-mail: {professional}")
-        return
+        return False
 
     subject = "📌 Seu código de acesso"
     message = f"""
@@ -27,16 +27,21 @@ Equipe Clínica
 """.strip()
 
     try:
-        send_mail(
+        sent = send_mail(
             subject=subject,
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[professional.email],
             fail_silently=False
         )
-        logger.info(f"E-mail enviado com sucesso para {professional.email}: código {code}")
+        if sent:
+            logger.info(f"E-mail enviado com sucesso para {professional.email}: código {code}")
+            return True
+        logger.error(f"send_mail retornou 0 envios para {professional.email}")
+        return False
     except Exception as e:
         logger.error(f"Erro ao enviar e-mail para {professional.email}: {str(e)}")
+        return False
 
 
 

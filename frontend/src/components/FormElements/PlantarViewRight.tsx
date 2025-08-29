@@ -47,7 +47,7 @@ export default function PlantarViewRight({
             arr.push(`Outros: ${otherInput.trim()}`);
         }
         onChange(arr.join(', '));
-    }, [checked, otherInput]);
+    }, [checked, otherInput, onChange]);
 
     const handleCheckboxChange = (option: string) => {
         setChecked(prev =>

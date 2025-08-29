@@ -9,7 +9,6 @@ import '../styles/palette.css';
 interface ClientCardProps {
     client: ClientBasic;
     onView: (client: ClientBasic) => void;
-    onEdit: (client: ClientBasic) => void;
     selected?: boolean;
     onSelect?: () => void;
 }
@@ -17,7 +16,6 @@ interface ClientCardProps {
 export default function ClientCard({
     client,
     onView,
-    onEdit,
     selected,
     onSelect,
 }: ClientCardProps) {

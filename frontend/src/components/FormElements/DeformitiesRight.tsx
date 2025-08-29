@@ -44,7 +44,7 @@ const DeformitiesRight: React.FC<DeformitiesRightProps> = ({
             arr.push(`Outros: ${outros.trim()}`);
         }
         onChange(arr.join(', '));
-    }, [checked, outros]);
+    }, [checked, outros, onChange]);
 
     const handleCheckbox = (option: string) => {
         setChecked(prev =>

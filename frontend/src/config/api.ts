@@ -22,7 +22,7 @@ function runtimeResolveApiBase(): string {
     }
 
     // Final fallback to local dev machine address used in development.
-    return (BUILD_API || 'http://192.168.0.108:8000').replace(/\/+$/, '');
+    return (BUILD_API || 'http://192.168.0.129:8000').replace(/\/+$/, '');
 }
 
 export const API_BASE = runtimeResolveApiBase();
