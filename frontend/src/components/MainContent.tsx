@@ -216,7 +216,7 @@ const MainContent: React.FC<MainContentProps> = ({
         requestAnimationFrame(() => {
             const targetRect = el.getBoundingClientRect();
             const filterRect = filterEl?.getBoundingClientRect();
-            const desiredTop = (filterRect ? filterRect.bottom : 0) + 12;
+            const desiredTop = (filterRect ? filterRect.bottom : 0) + 24;
             const delta = targetRect.top - desiredTop;
             if (Math.abs(delta) > 1) {
                 const container = document.body.classList.contains(
@@ -312,7 +312,7 @@ const MainContent: React.FC<MainContentProps> = ({
             requestAnimationFrame(() => {
                 const targetRect = el.getBoundingClientRect();
                 const filterRect = filterEl?.getBoundingClientRect();
-                const desiredTop = (filterRect ? filterRect.bottom : 0) + 12; // um pouco mais de respiro
+                const desiredTop = (filterRect ? filterRect.bottom : 0) + 24; // respiro maior para não ficar sob o filtro
                 const delta = targetRect.top - desiredTop;
                 if (Math.abs(delta) > 1) {
                     const container = document.body.classList.contains(

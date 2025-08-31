@@ -51,7 +51,7 @@
     gap: 20px;
     /* Ao usar rolagem programática (ex: scrollIntoView), garanta offset do cabeçalho + filtro */
     scroll-padding-top: calc(
-        var(--header-h) + var(--faixa-h) + var(--navbar-h) + 64px
+        var(--header-h) + var(--faixa-h) + var(--navbar-h) + 96px
     );
 }
 
@@ -59,7 +59,7 @@
     width: 100%;
     /* Quando um cartão receber foco/scrollIntoView, pare abaixo do header+filtro */
     scroll-margin-top: calc(
-        var(--header-h) + var(--faixa-h) + var(--navbar-h) + 64px
+        var(--header-h) + var(--faixa-h) + var(--navbar-h) + 96px
     );
 }
 
@@ -78,12 +78,12 @@
     }
     .cardsGrid {
         scroll-padding-top: calc(
-            var(--header-h) + var(--faixa-h) + var(--navbar-h-mobile) + 64px
+            var(--header-h) + var(--faixa-h) + var(--navbar-h-mobile) + 96px
         );
     }
     .cardsGrid > div {
         scroll-margin-top: calc(
-            var(--header-h) + var(--faixa-h) + var(--navbar-h-mobile) + 64px
+            var(--header-h) + var(--faixa-h) + var(--navbar-h-mobile) + 96px
         );
     }
     .filterRow {

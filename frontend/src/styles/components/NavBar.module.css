@@ -222,12 +222,9 @@
         ); /* não deixar ocupar largura exagerada no mobile */
     }
 
-    /* Truncar nome longo do profissional para não empurrar os menus */
+    /* Truncar com mais flexibilidade: por padrão, permitir quebra e limitar por bloco */
     .loggedInfo span {
         max-width: 100%;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
         font-size: 0.95rem; /* ligeiro ajuste para caber melhor */
     }
 
@@ -240,7 +237,7 @@
         min-width: 0; /* permitir truncamento funcionar */
     }
 
-    /* Mobile: nome e CRM/COP em duas linhas, com truncamento seguro */
+    /* Mobile: nome e CRM/COP empilhados; nome pode ocupar até 2 linhas */
     .proNameBlock {
         display: flex;
         flex-direction: column;
@@ -248,13 +245,23 @@
         gap: var(--name-crm-gap); /* espaço maior entre Nome e CRM/COP */
         max-width: 100%;
     }
-    .nameLine,
+    .nameLine {
+        max-width: 100%;
+        display: -webkit-box;
+        -webkit-line-clamp: 2; /* até 2 linhas */
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        white-space: normal;
+        line-height: 1.15;
+        text-align: right;
+    }
     .idLine {
         max-width: 100%;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         line-height: 1.1;
+        text-align: right;
     }
 
     .loginInput,
