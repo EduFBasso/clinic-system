@@ -1,6 +1,7 @@
 // frontend\src\hooks\useClients.ts
 import { useEffect, useState } from 'react';
 import { API_BASE } from '../config/api';
+import { isTokenExpired } from '../utils/jwt';
 
 export interface ClientBasic {
     id: number;
@@ -22,7 +23,10 @@ export function useClients() {
     useEffect(() => {
         const fetchClients = () => {
             const token = localStorage.getItem('accessToken');
-            if (!token) {
+            if (isTokenExpired(token)) {
+                // Clear immediately so UI shows login instead of a stale logged state
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('loggedProfessional');
                 setClients([]);
                 setLoading(false);
                 setError(null);

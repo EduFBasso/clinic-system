@@ -12,6 +12,9 @@ class ProfessionalViewSet(ModelViewSet):
 
 
 class ProfessionalBasicViewSet(ModelViewSet):
-    queryset = Professional.objects.all()
     serializer_class = ProfessionalBasicSerializer
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        # Oculta superusuários da lista pública de profissionais (não exibir no menu de login)
+        return Professional.objects.filter(is_superuser=False, is_active=True)

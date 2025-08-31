@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "node -e \"process.env.VITE_API_BASE = process.env.BASE_API_VITE || ''; const { execSync } = require('child_process'); execSync('tsc -b && vite build', { stdio: 'inherit' });\"",
+        "build": "node -e \"if(process.env.VERCEL_ENV==='production'&&process.env.VERCEL_GIT_COMMIT_REF!=='main'){console.error('Blocked production build: non-main branch');process.exit(1)}\" && node -e \"process.env.VITE_API_BASE = process.env.BASE_API_VITE || ''; const { execSync } = require('child_process'); execSync('tsc -b && vite build', { stdio: 'inherit' });\"",
         "lint": "eslint .",
         "preview": "vite preview"
     },

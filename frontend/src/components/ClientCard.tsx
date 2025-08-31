@@ -9,7 +9,6 @@ import '../styles/palette.css';
 interface ClientCardProps {
     client: ClientBasic;
     onView: (client: ClientBasic) => void;
-    onEdit: (client: ClientBasic) => void;
     selected?: boolean;
     onSelect?: () => void;
 }
@@ -17,7 +16,6 @@ interface ClientCardProps {
 export default function ClientCard({
     client,
     onView,
-    onEdit,
     selected,
     onSelect,
 }: ClientCardProps) {
@@ -27,12 +25,12 @@ export default function ClientCard({
             style={{
                 background: selected
                     ? 'var(--color-selected-bg)'
-                    : 'var(--color-bg-section)',
+                    : 'var(--card-bg)',
                 border: selected
                     ? '2px solid var(--color-selected-border)'
                     : '1px solid var(--color-border)',
                 boxShadow: selected
-                    ? '0 0 8px 2px var(--color-selected-border)'
+                    ? '0 0 0 2px var(--color-selected-border), 0 2px 6px rgba(0,0,0,0.08)'
                     : '0 1px 4px rgba(0,0,0,0.08)',
                 transition: 'background 0.2s, border 0.2s, box-shadow 0.2s',
                 cursor: 'pointer',

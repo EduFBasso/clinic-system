@@ -1,7 +1,9 @@
 # backend\clinic_project\settings.py
-from decouple import config
-from pathlib import Path
 import os
+from datetime import timedelta
+from pathlib import Path
+
+from decouple import config
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,7 +12,11 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 
 DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = config("DJANGO_ALLOWED_HOSTS", default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(",")])
+ALLOWED_HOSTS = config(
+    "DJANGO_ALLOWED_HOSTS",
+    default="localhost,127.0.0.1",
+    cast=lambda v: [s.strip() for s in v.split(",")],
+)
 # ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
@@ -31,14 +37,22 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware', 
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="http://localhost:5173,http://127.0.0.1:5173", cast=lambda v: [s.strip() for s in v.split(",")])
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default=(
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173,"
+        "http://192.168.0.129:5173"
+    ),
+    cast=lambda v: [s.strip() for s in v.split(",")],
+)
 
 # Optional: allow regex origins via env var for preview deployments (e.g., Vercel)
 # Example: CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\.vercel\.app$
@@ -74,13 +88,43 @@ WSGI_APPLICATION = 'clinic_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': config("DB_ENGINE", default="django.db.backends.postgresql"),
-        'NAME':  config("DB_NAME"),
-        'USER':     config("DB_USER"),
+    'NAME': config("DB_NAME"),
+    'USER': config("DB_USER"),
         'PASSWORD': config("DB_PASSWORD"),
         'HOST': config("DB_HOST", default="localhost"),
-        'PORT':  config("DB_PORT", default="5432"),
+    'PORT': config("DB_PORT", default="5432"),
     }
 }
+
+# Prefer psycopg3 on Windows to avoid legacy encoding issues with psycopg2.
+try:
+    _engine = DATABASES['default'].get('ENGINE', '')
+    if _engine.endswith('postgresql'):
+        # Switch to the psycopg (v3) backend name if available
+        try:
+            import psycopg  # noqa: F401
+            DATABASES['default']['ENGINE'] = 'django.db.backends.postgresql'
+            DATABASES['default'].setdefault('OPTIONS', {})
+            DATABASES['default']['OPTIONS'].setdefault('options', '-c client_encoding=UTF8')
+        except Exception:
+            # Fallback: still ensure UTF8 option for older driver
+            DATABASES['default'].setdefault('OPTIONS', {})
+            DATABASES['default']['OPTIONS'].setdefault('options', '-c client_encoding=UTF8')
+except Exception:
+    pass
+
+# Safety: avoid using remote DB while DEBUG=True unless explicitly allowed.
+ALLOW_REMOTE_DB_IN_DEBUG = config("ALLOW_REMOTE_DB_IN_DEBUG", default=False, cast=bool)
+if DEBUG and not ALLOW_REMOTE_DB_IN_DEBUG:
+    try:
+        _db_host = DATABASES['default'].get('HOST') or ''
+    except Exception:
+        _db_host = ''
+    if _db_host not in ("localhost", "127.0.0.1", ""):
+        raise RuntimeError(
+            "DEBUG=True com DB_HOST não local ('%s'). Evitando conexão acidental ao banco remoto. "
+            "Defina ALLOW_REMOTE_DB_IN_DEBUG=True no .env apenas se tiver certeza." % _db_host
+        )
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -97,7 +141,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-USE_I18N = True
 LOCALE_PATHS = [os.path.join(BASE_DIR, 'locale')]
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = config("TIME_ZONE", default="America/Sao_Paulo")
@@ -119,8 +162,6 @@ REST_FRAMEWORK = {
 _csrf_trusted_csv = config("CSRF_TRUSTED_ORIGINS", default="", cast=str)
 CSRF_TRUSTED_ORIGINS = [s.strip() for s in _csrf_trusted_csv.split(",") if s.strip()]
 
-from datetime import timedelta
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),      # token de acesso válido por 10h
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),       # opcional, se quiser usar depois
@@ -135,11 +176,30 @@ SIMPLE_JWT = {
 ALLOW_OTP_FALLBACK = config("ALLOW_OTP_FALLBACK", default=False, cast=bool)
 OTP_FALLBACK_CODE = config("OTP_FALLBACK_CODE", default="")
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_BACKEND = config("EMAIL_BACKEND", default='django.core.mail.backends.smtp.EmailBackend')
-EMAIL_HOST = config("EMAIL_HOST")
-EMAIL_PORT = config("EMAIL_PORT", cast=int)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
-EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool)
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL")
+# Device sessions policy
+MAX_ACTIVE_DEVICE_SESSIONS = config("MAX_ACTIVE_DEVICE_SESSIONS", default=2, cast=int)
+
+_configured_email_backend = config("EMAIL_BACKEND", default="")
+# Em desenvolvimento, use o backend de console por padrão para evitar falhas de SMTP.
+# Pode desativar esse comportamento com USE_CONSOLE_EMAIL_IN_DEBUG=False se quiser testar SMTP localmente.
+USE_CONSOLE_EMAIL_IN_DEBUG = config("USE_CONSOLE_EMAIL_IN_DEBUG", default=True, cast=bool)
+if DEBUG and USE_CONSOLE_EMAIL_IN_DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = _configured_email_backend or 'django.core.mail.backends.smtp.EmailBackend'
+
+## Notes: operational/how-to content moved to docs (see scripts/db/README.md) to keep settings lean.
+
+# --- Production security hardening (active when DEBUG=False) ---
+if not DEBUG:
+    # Trust proxy header so Django knows requests are HTTPS behind Render's proxy
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # Redirect all HTTP to HTTPS
+    SECURE_SSL_REDIRECT = True
+    # Secure cookies
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # HSTS to enforce HTTPS in browsers
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

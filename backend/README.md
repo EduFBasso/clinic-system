@@ -1,3 +1,5 @@
+<!-- backend\README.md -->
+
 # Clinic System Backend
 
 Este diretório contém o backend do sistema de gerenciamento de clínica de podologia.
@@ -16,13 +18,21 @@ Este diretório contém o backend do sistema de gerenciamento de clínica de pod
    pip install -r requirements.txt
    ```
 
-2. Execute as migrações:
+2. Configure o ambiente:
+
+   - Copie `backend/.env.example` para `backend/.env` e ajuste as variáveis.
+   - (Opcional) Suba um Postgres local: `docker compose -f docker-compose.local.yml up -d`
+     - Windows: se tiver o serviço PostgreSQL do Windows ativo (porta 5432), o container usa a porta 55432 no host.
+       Garanta que no `backend/.env` esteja `DB_HOST=127.0.0.1` e `DB_PORT=55432`.
+       Se preferir 5432, pare o serviço do Windows primeiro.
+
+3. Execute as migrações:
 
    ```
    python manage.py migrate
    ```
 
-3. Inicie o servidor:
+4. Inicie o servidor:
    ```
    python manage.py runserver
    ```

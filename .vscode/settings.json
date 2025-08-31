@@ -57,5 +57,26 @@
   },
   "[html]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  },
+
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // ⚖️ ESLint – reduzir ruído sem desligar qualidade
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+  // Rebaixa regras mais barulhentas para "warn" no Problems
+  "eslint.rules.customizations": [
+    { "rule": "@typescript-eslint/no-unused-vars", "severity": "warn" },
+    { "rule": "react-hooks/exhaustive-deps", "severity": "warn" }
+  ],
+  // Monorepo: direcione o ESLint para a pasta do frontend
+  "eslint.workingDirectories": [
+    { "directory": "./frontend", "changeProcessCWD": true }
+  ]
 }

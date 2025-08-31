@@ -29,6 +29,8 @@ interface Props {
     handleCancel: () => void;
     handleDelete: () => void;
     isEdit?: boolean; // Optional prop to indicate if this is an edit form
+    onQuickSubmit?: () => void;
+    formRef?: React.Ref<HTMLFormElement>;
 }
 
 export default function ClientFormDesktop({
@@ -39,9 +41,15 @@ export default function ClientFormDesktop({
     handleCancel,
     handleDelete,
     isEdit,
+    onQuickSubmit,
+    formRef,
 }: Props) {
     return (
-        <form onSubmit={handleSubmit} className={styles.clientForm}>
+        <form
+            onSubmit={handleSubmit}
+            ref={formRef}
+            className={styles.clientForm}
+        >
             <h2 className={styles.formTitle}>Cadastro de Cliente</h2>
             <div className={styles.formPanels}>
                 {/* Pares de campos alinhados por linha */}
@@ -397,6 +405,16 @@ export default function ClientFormDesktop({
                 </div>
             </div>
             <div className={styles.formActions}>
+                {!isEdit && (
+                    <button
+                        className={styles['btn-save']}
+                        type='submit'
+                        onMouseDown={onQuickSubmit}
+                        title='Ctrl+Enter'
+                    >
+                        Salvar e novo
+                    </button>
+                )}
                 <button className={styles['btn-save']} type='submit'>
                     Salvar
                 </button>

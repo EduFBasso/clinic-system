@@ -41,16 +41,19 @@ export default function PlantarViewLeft({
         }
     }, [value]);
 
+    // Atualiza o valor externo apenas quando a string composta muda de fato
     useEffect(() => {
         let arr = [...checked];
-        // Se 'Outros' está marcado e há texto, adiciona 'Outros: texto' ao resultado
         if (checked.includes('Outros') && otherInput.trim()) {
             arr = arr.filter(opt => opt !== 'Outros');
             arr.push(`Outros: ${otherInput.trim()}`);
         }
-        onChange(arr.join(', '));
-        // eslint-disable-next-line
-    }, [checked, otherInput]);
+        const next = arr.join(', ');
+        if (next !== value) {
+            onChange(next);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [checked, otherInput, value]);
 
     const handleCheckboxChange = (option: string) => {
         setChecked(prev =>
