@@ -40,14 +40,20 @@ export default function PlantarViewRight({
         }
     }, [value]);
 
+    // Atualiza o valor externo apenas quando a string composta muda de fato
+    // Evita loop: não dependemos de onChange (que muda a cada render no pai)
     useEffect(() => {
         let arr = [...checked];
         if (checked.includes('Outros') && otherInput.trim()) {
             arr = arr.filter(opt => opt !== 'Outros');
             arr.push(`Outros: ${otherInput.trim()}`);
         }
-        onChange(arr.join(', '));
-    }, [checked, otherInput, onChange]);
+        const next = arr.join(', ');
+        if (next !== value) {
+            onChange(next);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [checked, otherInput, value]);
 
     const handleCheckboxChange = (option: string) => {
         setChecked(prev =>

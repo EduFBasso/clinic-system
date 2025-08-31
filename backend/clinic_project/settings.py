@@ -180,10 +180,26 @@ OTP_FALLBACK_CODE = config("OTP_FALLBACK_CODE", default="")
 MAX_ACTIVE_DEVICE_SESSIONS = config("MAX_ACTIVE_DEVICE_SESSIONS", default=2, cast=int)
 
 _configured_email_backend = config("EMAIL_BACKEND", default="")
-if DEBUG and not _configured_email_backend:
-    # Em desenvolvimento, se não configurar BACKEND explícito, usa console para facilitar debug
+# Em desenvolvimento, use o backend de console por padrão para evitar falhas de SMTP.
+# Pode desativar esse comportamento com USE_CONSOLE_EMAIL_IN_DEBUG=False se quiser testar SMTP localmente.
+USE_CONSOLE_EMAIL_IN_DEBUG = config("USE_CONSOLE_EMAIL_IN_DEBUG", default=True, cast=bool)
+if DEBUG and USE_CONSOLE_EMAIL_IN_DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
     EMAIL_BACKEND = _configured_email_backend or 'django.core.mail.backends.smtp.EmailBackend'
 
 ## Notes: operational/how-to content moved to docs (see scripts/db/README.md) to keep settings lean.
+
+# --- Production security hardening (active when DEBUG=False) ---
+if not DEBUG:
+    # Trust proxy header so Django knows requests are HTTPS behind Render's proxy
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # Redirect all HTTP to HTTPS
+    SECURE_SSL_REDIRECT = True
+    # Secure cookies
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # HSTS to enforce HTTPS in browsers
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

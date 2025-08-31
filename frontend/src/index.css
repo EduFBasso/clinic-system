@@ -1,23 +1,11 @@
 /* src/index.css */
-/* Palette variables inlined to ensure bundling into main CSS and avoid runtime /styles/palette.css requests */
+/* Paleta centralizada em src/styles/palette.css; sem variáveis de cor aqui para evitar override. */
+/* Variáveis globais de layout (altura dos elementos fixos) para calcular offsets sticky com precisão. */
 :root {
-    --color-primary: #004aad;
-    --color-primary-light: #e6f0fa;
-    --color-secondary: #007bff;
-    --color-accent: #ffb300;
-    --color-bg: #f9f9f9;
-    --color-bg-section: #fff;
-    --color-border: #e0e0e0;
-    --color-border-focus: #007bff;
-    --color-shadow: rgba(0, 0, 0, 0.06);
-    --color-text: #222;
-    --color-text-light: #333;
-    --color-error: #d32f2f;
-    --color-error-light: #ffeaea;
-    --color-error-dark: #a31515;
-    --color-error-border: #a31515;
-    --color-selected-bg: #e0f7fa;
-    --color-selected-border: #00838f;
+    --header-h: 80px;
+    --faixa-h: 8px;
+    --navbar-h: 63px; /* ajuste para desktop */
+    --navbar-h-mobile: 138px; /* ajuste para mobile (soma resulta em ~196px) */
 }
 
 @tailwind base;
@@ -35,4 +23,15 @@ body {
     font-weight: 400;
     background-color: var(--color-bg-section);
     color: var(--color-text);
+}
+
+/* Evita que o iOS "encolha" a área visível e desloque o conteúdo de forma abrupta */
+@media (max-width: 430px) {
+    body.keyboardOpen {
+        overscroll-behavior-y: contain; /* reduz panning agressivo */
+        position: fixed; /* impede a página de se mover por trás do teclado */
+        width: 100%;
+        height: 100%;
+        overflow: hidden; /* rolagem fica no painel principal (.main) */
+    }
 }

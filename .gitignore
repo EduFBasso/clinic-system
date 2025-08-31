@@ -47,6 +47,21 @@ dist
 dist-ssr
 *.local
 
+# Vercel local project files
+.vercel
+frontend/.vercel
+
+# Local databases and dumps
+*.sqlite3
+db.sqlite3
+backend/db.sqlite3
+
+# Local backup artifacts
+scripts/db/backups/
+scripts/db/backups/**/*.csv
+scripts/db/backups/**/*.sql
+scripts/db/backups/**/*.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

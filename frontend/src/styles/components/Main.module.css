@@ -10,7 +10,15 @@
 }
 
 .filterContainer {
-    margin: 0 0 1rem 0; /* reduzido para 1rem conforme solicitado */
+    margin: 0 0 1.5rem 0; /* mais espaço para evitar sobreposição visual com os cartões */
+    position: sticky;
+    top: calc(
+        var(--header-h) + var(--faixa-h) + var(--navbar-h)
+    ); /* desktop: 80 + 8 + 56 = 144px */
+    z-index: 90; /* abaixo do header/faixa (100) */
+    background: var(--color-bg);
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem; /* cria um buffer sob o filtro quando estiver grudado */
 }
 
 .filterRow {
@@ -41,10 +49,18 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 20px;
+    /* Ao usar rolagem programática (ex: scrollIntoView), garanta offset do cabeçalho + filtro */
+    scroll-padding-top: calc(
+        var(--header-h) + var(--faixa-h) + var(--navbar-h) + 64px
+    );
 }
 
 .cardsGrid > div {
     width: 100%;
+    /* Quando um cartão receber foco/scrollIntoView, pare abaixo do header+filtro */
+    scroll-margin-top: calc(
+        var(--header-h) + var(--faixa-h) + var(--navbar-h) + 64px
+    );
 }
 
 /* Smartphones (ex: iPhone 16 Plus) */
@@ -52,6 +68,23 @@
     .main {
         padding: 1rem;
         flex-direction: column;
+    }
+    /* Em telas pequenas, a navbar fica mais alta (layout em coluna),
+       então aumentamos o offset para manter o filtro visível abaixo dela */
+    .filterContainer {
+        top: calc(
+            var(--header-h) + var(--faixa-h) + var(--navbar-h-mobile)
+        ); /* mobile: 80 + 8 + 108 = 196px */
+    }
+    .cardsGrid {
+        scroll-padding-top: calc(
+            var(--header-h) + var(--faixa-h) + var(--navbar-h-mobile) + 64px
+        );
+    }
+    .cardsGrid > div {
+        scroll-margin-top: calc(
+            var(--header-h) + var(--faixa-h) + var(--navbar-h-mobile) + 64px
+        );
     }
     .filterRow {
         max-width: 100%;
@@ -67,10 +100,66 @@
     }
 }
 
-/* Desktop: limitar largura máxima do conteúdo e manter alinhado à esquerda */
-@media screen and (min-width: 1025px) {
-    .main {
-        max-width: 1045px;
-        margin: 0 auto; /* centralizar no desktop */
+/* Desktop: limitar a largura máxima do input do filtro a 35% da página */
+@media screen and (min-width: 665px) {
+    .filterInput {
+        flex: 0 1 35vw; /* não cresce além de 35% da página */
+        max-width: 35vw; /* teto absoluto */
+        width: auto; /* evita esticar a 100% do container */
     }
+}
+
+/* Removido limite fixo de largura em desktop para ocupar 100% */
+
+/* Modo especial para quando o teclado virtual estiver aberto (iOS/Android):
+   mantemos o filtro visível no topo da viewport e evitamos que os cartões fiquem ocultos. */
+.keyboardOpen .filterContainer {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 1rem 1rem; /* dobra a altura efetiva do filtro */
+    --filter-h: 120px; /* altura efetiva usada para calcular a área do conteúdo */
+    z-index: 110; /* acima da navbar e conteúdo */
+    isolation: isolate; /* evita interferência de camadas inferiores no caret */
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+.keyboardOpen .cardsGrid {
+    /* reserva altura para o filtro fixo, evitando sobreposição dos cartões */
+    padding-top: 120px; /* altura maior para evitar que o iPhone "pule" o conteúdo sob a câmera */
+    padding-bottom: var(--kb-h, 0px); /* reserva área para o teclado virtual */
+    gap: 12px; /* compacta a lista para manter mais cartões visíveis com teclado aberto */
+}
+
+.keyboardOpen .cardsGrid > div {
+    scroll-margin-top: 120px; /* acompanha a altura maior do filtro */
+    scroll-margin-bottom: var(
+        --kb-h,
+        0px
+    ); /* evita ficar escondido pelo teclado */
+}
+
+/* Evita zoom no iOS ao focar o input e estabiliza o caret */
+.keyboardOpen .filterInput {
+    font-size: 16px; /* iOS não aplica zoom com >=16px */
+    -webkit-text-size-adjust: 100%;
+    will-change: transform; /* ajuda renderização do caret em camadas fixas */
+}
+
+/* Com teclado aberto, transformamos o conteúdo principal em um painel fixo e rolável
+   logo abaixo do filtro, para evitar que o Safari faça pan da página inteira. */
+.keyboardOpen .main {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + var(--filter-h, 120px));
+    left: 0;
+    right: 0;
+    bottom: var(--kb-h, 0px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--color-bg);
 }

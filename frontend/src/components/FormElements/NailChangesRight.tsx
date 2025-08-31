@@ -50,9 +50,12 @@ const NailChangesRight: React.FC<NailChangesRightProps> = ({
             arr = arr.filter(opt => opt !== 'Outros');
             arr.push(`Outros: ${outros.trim()}`);
         }
-        onChange(arr.join(', '));
-        // eslint-disable-next-line
-    }, [checked, outros]);
+        const next = arr.join(', ');
+        if (next !== value) {
+            onChange(next);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [checked, outros, value]);
 
     const handleCheckbox = (option: string) => {
         setChecked(prev =>

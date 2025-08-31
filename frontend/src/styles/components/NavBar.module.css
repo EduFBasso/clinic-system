@@ -65,20 +65,42 @@
 }
 /* frontend\src\styles\components\NavBar.module.css */
 .navBar {
+    /* Variáveis para tunar layout de forma centralizada */
+    --navbar-pad-y: 0.8rem;
+    --navbar-pad-x: 1rem;
+    --menu-gap: 1rem;
+    --navbar-mobile-pad-y: 0.6rem;
+    --navbar-mobile-pad-x: 0.8rem;
+    --navbar-mobile-gap: 0.6rem;
+    /* Colunas (mobile) */
+    --menus-col-fr: 4fr; /* coluna esquerda (menus) */
+    --logged-col-fr: 2fr; /* coluna direita (profissional) */
+    --right-col-min: 160px; /* largura mínima da coluna direita */
+    --right-col-max-vw: 60vw; /* limite máximo de largura da coluna direita */
+    /* Detalhes de texto/espaçamento */
+    --name-crm-gap: 0.25rem; /* espaço entre Nome e CRM/COP */
+    /* Botão sair (mobile) */
+    --logout-width-mobile: 60%;
+    --logout-min-width: 140px;
+    --logout-max-width: 360px;
+
     position: sticky;
-    top: 88px; /* Ajuste conforme necessário */
+    top: calc(
+        var(--header-h) + var(--faixa-h)
+    ); /* cola logo abaixo do header+faixa */
     width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
     background-color: var(--color-primary-light);
-    padding: 0.8rem 1rem; /* alinhado com padding do .main */
+    padding: var(--navbar-pad-y) var(--navbar-pad-x); /* alinhado com padding do .main */
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 95; /* abaixo do header (100)/faixa (99) e acima do conteúdo */
 }
 
 .menuContainer {
     display: flex;
-    gap: 1rem;
+    gap: var(--menu-gap);
 }
 
 .menuButton {
@@ -118,14 +140,37 @@
 }
 
 .logoutButton {
-    margin-left: 12px;
+    margin-left: 0; /* espaçamento controlado pelo gap do .loggedInfo */
 }
 
-@media screen and (max-width: 480px) {
+/* Desktop: alinhar nome/CRM e botão Sair em linha com espaçamento */
+.loggedInfo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+/* Desktop: nome e CRM/COP lado a lado com pequeno espaçamento */
+.proNameBlock {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--name-crm-gap, 0.5rem);
+}
+
+@media screen and (max-width: 600px) {
     .logoutButton {
         margin-left: 0;
-        margin-top: 12px;
-        width: 100%;
+        margin-top: 8px;
+        width: var(
+            --logout-width-mobile
+        ); /* ocupar ~60% da largura da coluna direita para melhor toque */
+        min-width: var(
+            --logout-min-width
+        ); /* garantir área clicável confortável */
+        max-width: var(
+            --logout-max-width
+        ); /* limita em telas um pouco maiores dentro do breakpoint */
     }
 }
 
@@ -133,50 +178,94 @@
     background-color: var(--color-secondary);
 }
 
-@media screen and (max-width: 480px) {
+@media screen and (max-width: 600px) {
+    /* Layout em duas colunas: esquerda empilhado (menus), direita compacto (profissionais) */
     .navBar {
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: minmax(0, var(--menus-col-fr)) minmax(
+                var(--right-col-min),
+                var(--logged-col-fr)
+            ); /* dá mais espaço à esquerda e limita direita */
+        align-items: start;
+        justify-content: space-between;
+        padding: var(--navbar-mobile-pad-y) var(--navbar-mobile-pad-x); /* mais compacto */
+        gap: var(--navbar-mobile-gap);
+    }
+
+    .menuContainer {
+        display: flex;
+        flex-direction: column; /* empilhado à esquerda */
         align-items: stretch;
-        padding: 1rem;
-        gap: 0.75rem;
-    }
-
-    .menuContainer,
-    .loginContainer {
-        width: 100%;
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .loginInput {
-        width: 100%;
-    }
-
-    .loginButton {
-        width: 100%;
-        /* background-color: #555;
-        border: none;
-        border-radius: 8px;
-        padding: 0.6rem; */
+        gap: 0.4rem;
+        min-width: 0; /* permite coluna encolher sem forçar quebra */
     }
 
     .menuButton {
         width: 100%;
         text-align: left;
-        padding: 0.5rem 1rem;
+        padding: 0.4rem 0.6rem;
+        display: flex; /* evita quebra de linha entre ícone e texto */
+        align-items: center;
+        gap: 0.4rem;
+        white-space: nowrap; /* mantém em uma linha */
     }
 
-    .navBar {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: stretch;
+    .loginContainer {
+        display: flex;
+        flex-direction: column; /* itens do lado direito em coluna, compactos */
+        align-items: flex-end;
+        gap: 0.4rem;
+        min-width: 0; /* evita empurrar a coluna esquerda */
+        justify-self: end; /* mantém colada à direita */
+        max-width: var(
+            --right-col-max-vw
+        ); /* não deixar ocupar largura exagerada no mobile */
+    }
+
+    /* Truncar nome longo do profissional para não empurrar os menus */
+    .loggedInfo span {
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 0.95rem; /* ligeiro ajuste para caber melhor */
+    }
+
+    /* Quando logado: empilhar nome (com CRM/COP) e botão abaixo */
+    .loggedInfo {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.4rem;
+        min-width: 0; /* permitir truncamento funcionar */
+    }
+
+    /* Mobile: nome e CRM/COP em duas linhas, com truncamento seguro */
+    .proNameBlock {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--name-crm-gap); /* espaço maior entre Nome e CRM/COP */
+        max-width: 100%;
+    }
+    .nameLine,
+    .idLine {
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.1;
+    }
+
+    .loginInput,
+    .loginButton {
+        width: auto; /* não esticar toda a coluna */
+    }
+
+    .loginButton {
+        padding: 0.4rem 0.6rem; /* mais compacto para caber melhor */
+        font-size: 0.95rem;
     }
 }
 
-/* Desktop: limitar largura e manter alinhado à esquerda */
-@media screen and (min-width: 1025px) {
-    .navBar {
-        max-width: 1045px;
-        margin: 0 auto; /* centralizar no desktop */
-    }
-}
+/* Removido limite de largura em desktop para ocupar 100% */

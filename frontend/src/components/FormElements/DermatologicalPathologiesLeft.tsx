@@ -43,9 +43,12 @@ export default function DermatologicalPathologiesLeft({
             arr = arr.filter(opt => opt !== 'Outros');
             arr.push(`Outros: ${otherInput.trim()}`);
         }
-        onChange(arr.join(', '));
-        // eslint-disable-next-line
-    }, [checked, otherInput]);
+        const next = arr.join(', ');
+        if (next !== value) {
+            onChange(next);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [checked, otherInput, value]);
 
     const handleCheckboxChange = (option: string) => {
         setChecked(prev =>

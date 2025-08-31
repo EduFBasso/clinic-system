@@ -44,7 +44,7 @@ export default function MedicalHistoryField({
     }, []);
 
     useEffect(() => {
-        const values = [...selected];
+        const values = [...selected].filter(v => !v.startsWith('Outros:'));
         if (selected.includes('Outros') && otherInput.trim()) {
             values.push(`Outros: ${otherInput.trim()}`);
         }
@@ -52,8 +52,8 @@ export default function MedicalHistoryField({
         if (newValue !== value) {
             onChange(newValue);
         }
-        // eslint-disable-next-line
-    }, [selected, otherInput]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selected, otherInput, value]);
 
     const handleCheckboxChange = (option: string) => {
         setSelected(prev =>

@@ -208,13 +208,18 @@ const NavBar: React.FC<NavBarProps> = ({
             <div className={styles.loginContainer}>
                 {loggedProfessional ? (
                     <div className={styles.loggedInfo}>
-                        <span>
-                            Olá Dr(a) {loggedProfessional.first_name}{' '}
-                            {loggedProfessional.last_name}
-                            {loggedProfessional.register_number
-                                ? ` CRM/COP: ${loggedProfessional.register_number}`
-                                : ''}
-                        </span>
+                        <div className={styles.proNameBlock}>
+                            <span className={styles.nameLine}>
+                                Dr(a) {loggedProfessional.first_name}{' '}
+                                {loggedProfessional.last_name}
+                            </span>
+                            {loggedProfessional.register_number ? (
+                                <span className={styles.idLine}>
+                                    CRM/COP:{' '}
+                                    {loggedProfessional.register_number}
+                                </span>
+                            ) : null}
+                        </div>
                         <button
                             className={
                                 styles.loginButton + ' ' + styles.logoutButton

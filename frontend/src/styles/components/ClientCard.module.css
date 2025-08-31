@@ -1,10 +1,10 @@
 /* frontend\src\styles\components\ClientCard.module.css */
 .card {
-    background-color: #fff;
-    border: 1px solid #ddd;
+    background-color: var(--card-bg);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 1rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px var(--color-shadow);
     width: 100%;
 }
 
@@ -22,14 +22,14 @@
 
 .value {
     flex: 1;
-    color: #333;
+    color: var(--color-text);
 }
 
 .iconButton {
     background: none;
     border: none;
     cursor: pointer;
-    color: #007bff;
+    color: var(--color-secondary);
     font-size: 1.2rem;
     margin-left: 0.5rem;
 }
@@ -37,8 +37,8 @@
 .editButton {
     margin-top: 1rem;
     padding: 0.5rem 1rem;
-    background-color: #007bff;
-    color: white;
+    background-color: var(--color-secondary);
+    color: var(--color-bg-section);
     border: none;
     border-radius: 4px;
     cursor: pointer;

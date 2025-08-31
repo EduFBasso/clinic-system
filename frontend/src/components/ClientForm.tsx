@@ -1,6 +1,6 @@
 // frontend\src\components\ClientForm.tsx
 import { API_BASE } from '../config/api';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ClientData } from '../types/ClientData';
 import AppModal from './Modal';
 import ClientFormDesktop from './ClientFormDesktop';
@@ -135,6 +135,12 @@ export default function ClientForm({
     });
 
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    // "Salvar e novo" (entrada rápida): quando true, após criar não navega; reseta formulário e foca o primeiro campo
+    const quickModeRef = useRef(false);
+    const formRef = useRef<HTMLFormElement | null>(null);
+    const onQuickSubmit = () => {
+        quickModeRef.current = true; // será consumido em handleSubmit
+    };
 
     useEffect(() => {
         if (cliente) {
@@ -267,22 +273,73 @@ export default function ClientForm({
                             String(createdClient.id),
                         );
                     }
-                    setShowSuccessModal(true);
-                    // Notifica a janela de origem (Home) para atualizar e focar no novo cartão
-                    if (window.opener) {
-                        try {
+                    // Atualiza lista e destaca novo cartão
+                    try {
+                        if (window.opener) {
                             window.opener.dispatchEvent(
                                 new Event('updateClients'),
                             );
-                            // Tenta focar a janela principal para evidenciar o destaque do novo cartão
-                            // Pode falhar por políticas do navegador; ignore silenciosamente
                             window.opener.focus?.();
-                        } catch {
-                            /* noop */
+                        } else {
+                            window.dispatchEvent(new Event('updateClients'));
                         }
-                    } else {
-                        window.dispatchEvent(new Event('updateClients'));
+                    } catch {
+                        /* noop */
                     }
+
+                    // Se for fluxo rápido (Salvar e novo), apenas limpa o formulário e mantém no cadastro
+                    if (quickModeRef.current) {
+                        quickModeRef.current = false;
+                        // Reseta campos para novo cadastro
+                        setFormData({
+                            first_name: '',
+                            last_name: '',
+                            email: '',
+                            phone: '',
+                            profession: '',
+                            address: '',
+                            neighborhood: '',
+                            city: '',
+                            state: '',
+                            postal_code: '',
+                            sport_activity: '',
+                            academic_activity: '',
+                            footwear_used: '',
+                            sock_used: '',
+                            takes_medication: 'Não',
+                            had_surgery: 'Não',
+                            is_pregnant: false,
+                            pain_sensitivity: '',
+                            clinical_history: '',
+                            plantar_view_left: '',
+                            plantar_view_right: '',
+                            dermatological_pathologies_left: '',
+                            dermatological_pathologies_right: '',
+                            nail_changes_left: '',
+                            nail_changes_right: '',
+                            deformities_left: '',
+                            deformities_right: '',
+                            sensitivity_test: '',
+                            other_procedures: '',
+                        });
+                        // Foca no primeiro campo (Nome)
+                        setTimeout(() => {
+                            try {
+                                const first = formRef.current?.querySelector(
+                                    'input[name="first_name"]',
+                                ) as HTMLInputElement | null;
+                                first?.focus();
+                                first?.select?.();
+                            } catch {
+                                /* noop */
+                            }
+                        }, 0);
+                        // Mantém na página, sem modal
+                        return;
+                    }
+
+                    // Fluxo normal: mostra modal de sucesso e depois sai
+                    setShowSuccessModal(true);
                 })
                 .catch(async err => {
                     // Se já tratamos acima, não sobrescreve a mensagem específica
@@ -425,6 +482,20 @@ export default function ClientForm({
 
     const navigate = useNavigate();
 
+    // Atalho de teclado: Ctrl+Enter / Cmd+Enter para salvar e novo (desktop)
+    useEffect(() => {
+        const h = (e: KeyboardEvent) => {
+            const ctrlOrCmd = e.ctrlKey || e.metaKey;
+            if (ctrlOrCmd && e.key === 'Enter') {
+                onQuickSubmit();
+                formRef.current?.requestSubmit?.();
+                e.preventDefault();
+            }
+        };
+        window.addEventListener('keydown', h);
+        return () => window.removeEventListener('keydown', h);
+    }, []);
+
     // Fecha o modal de sucesso e retorna apropriado (fecha popup ou navega), notificando atualização
     const closeSuccessAndExit = () => {
         setShowSuccessModal(false);
@@ -458,6 +529,14 @@ export default function ClientForm({
 
     function handleDelete() {
         if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
+            // Antes de excluir, remove foco e locks que podem congelar a rolagem no iPhone
+            try {
+                (document.activeElement as HTMLElement | null)?.blur?.();
+                document.body.classList.remove('keyboardOpen');
+            } catch {
+                /* noop */
+            }
+
             const token = localStorage.getItem('accessToken');
             if (!token) {
                 setFeedback({
@@ -485,26 +564,52 @@ export default function ClientForm({
                         }
                         throw new Error('Erro ao excluir cliente');
                     }
-                    setFeedback({
-                        type: 'success',
-                        message: 'Cliente excluído com sucesso!',
-                    });
-                    if (isMobile) {
-                        setTimeout(() => {
-                            window.dispatchEvent(new Event('updateClients'));
-                            navigate('/');
-                        }, 1500);
-                    } else {
-                        setTimeout(() => {
-                            window.dispatchEvent(new Event('updateClients'));
-                            // Não existe rota '/clients'; a home está em '/'
-                            navigate('/');
-                        }, 1500);
+                    // Sucesso: sai imediatamente da tela de edição e atualiza a lista
+                    try {
+                        // Sinaliza para a lista limpar o filtro e não exibir o modal de "nenhum resultado" uma vez
+                        localStorage.setItem('postDeleteAction', 'clearFilter');
+                    } catch {
+                        /* noop: storage indisponível */
                     }
-                    // Se estiver em popup, fecha
+
+                    // Dispara atualização da lista imediatamente
+                    try {
+                        if (window.opener) {
+                            // Limpa filtro dinâmico e atualiza a lista na tela principal
+                            window.opener.dispatchEvent(
+                                new Event('clearClients'),
+                            );
+                            window.opener.dispatchEvent(
+                                new Event('updateClients'),
+                            );
+                        } else {
+                            window.dispatchEvent(new Event('updateClients'));
+                        }
+                    } catch {
+                        /* noop: sem suporte a eventos */
+                    }
+
+                    // Fecha popup ou navega para a lista sem esperar
                     if (window.opener) {
-                        window.opener.dispatchEvent(new Event('updateClients'));
-                        window.close();
+                        try {
+                            window.close();
+                        } catch {
+                            /* noop: janela já fechada */
+                        }
+                    } else {
+                        // Remove locks e faz reload limpo para evitar travamento pós-exclusão
+                        try {
+                            document.body.classList.remove('keyboardOpen');
+                        } catch {
+                            /* noop */
+                        }
+                        // Garante limpeza do filtro dinâmico imediatamente
+                        try {
+                            window.dispatchEvent(new Event('clearClients'));
+                        } catch {
+                            /* noop */
+                        }
+                        window.location.assign('/');
                     }
                 })
                 .catch(err => {
@@ -607,6 +712,8 @@ export default function ClientForm({
                 handleCancel={handleCancel}
                 handleDelete={handleDelete}
                 isEdit={isEdit}
+                onQuickSubmit={onQuickSubmit}
+                formRef={formRef}
             />
             {/* Modal de sucesso após cadastro */}
             {showSuccessModal && (
