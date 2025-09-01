@@ -273,6 +273,24 @@
         padding: 0.4rem 0.6rem; /* mais compacto para caber melhor */
         font-size: 0.95rem;
     }
+
+    /* Pré-login (lado direito): permitir que o nome do profissional quebre em até 2 linhas
+       no botão de seleção, sem afetar os botões do menu à esquerda */
+    .loginContainer .dropdownWrapper .menuButton {
+        white-space: normal; /* sobrescreve nowrap do .menuButton (mobile) */
+        align-items: flex-start;
+        max-width: var(--right-col-max-vw);
+    }
+    .loginContainer .dropdownWrapper .menuButton span:nth-child(2) {
+        max-width: 100%;
+        display: -webkit-box;
+        -webkit-line-clamp: 2; /* até 2 linhas */
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        white-space: normal;
+        line-height: 1.15;
+        text-align: left;
+    }
 }
 
 /* Removido limite de largura em desktop para ocupar 100% */
