@@ -1,10 +1,11 @@
 // frontend\src\components\ClientCard.tsx
 import React from 'react';
 import styles from '../styles/components/ClientCard.module.css';
-import { FaEye, FaWhatsapp, FaEnvelope } from 'react-icons/fa';
+import { FaEye, FaWhatsapp, FaEnvelope, FaPlusCircle, FaCalendarAlt } from 'react-icons/fa';
 import type { ClientBasic } from '../types/ClientBasic';
 import { formatPhone } from '../utils/formatPhone';
 import '../styles/palette.css';
+import { useNextAppointment, formatDateTime } from '../hooks/useNextAppointment';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -19,6 +20,9 @@ export default function ClientCard({
     selected,
     onSelect,
 }: ClientCardProps) {
+    const { data: nextAppt, loading: loadingAppt } = useNextAppointment(
+        client.id,
+    );
     return (
         <div
             className={styles.card}
@@ -121,6 +125,28 @@ export default function ClientCard({
                 </a>
             </div>
             {/* Botão Editar removido para liberar espaço e priorizar seleção */}
+            <div className={styles.infoRow} style={{ marginTop: '0.5rem' }}>
+                <span
+                    className={styles.label}
+                    style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}
+                >
+                    <FaCalendarAlt style={{ marginRight: 6 }} /> Próximo:
+                </span>
+                <span className={styles.value} style={{ color: 'var(--color-text)' }}>
+                    {loadingAppt ? 'Carregando…' : nextAppt ? `${formatDateTime(nextAppt.start_at)} — ${nextAppt.title}` : '—'}
+                </span>
+                <button
+                    className={styles.iconButton}
+                    title='Agendar novo'
+                    onClick={e => {
+                        e.stopPropagation();
+                        // TODO: abrir modal de agendamento; por enquanto navega para /agenda
+                        window.location.href = '/agenda';
+                    }}
+                >
+                    <FaPlusCircle />
+                </button>
+            </div>
         </div>
     );
 }

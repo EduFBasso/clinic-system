@@ -16,6 +16,7 @@ urlpatterns = [
     path('health', lambda request: JsonResponse({'status': 'ok'})),
     path('admin/', admin.site.urls),
     path('register/', include('apps.register.urls')),  # 🧩 Rotas do app clínico
+    path('agenda/', include('apps.agenda.urls')),
 
     # 🔐 JWT endpoints
     path('token/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
