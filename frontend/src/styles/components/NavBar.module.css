@@ -206,7 +206,8 @@
         padding: 0.4rem 0.6rem;
         display: flex; /* evita quebra de linha entre ícone e texto */
         align-items: center;
-        gap: 0.4rem;-
+        gap: 0.4rem;
+        white-space: nowrap; /* mantém em uma linha */
     }
 
     .loginContainer {
