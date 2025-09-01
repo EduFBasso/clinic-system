@@ -1,11 +1,20 @@
 // frontend\src\components\ClientCard.tsx
 import React from 'react';
 import styles from '../styles/components/ClientCard.module.css';
-import { FaEye, FaWhatsapp, FaEnvelope, FaPlusCircle, FaCalendarAlt } from 'react-icons/fa';
+import {
+    FaEye,
+    FaWhatsapp,
+    FaEnvelope,
+    FaPlusCircle,
+    FaCalendarAlt,
+} from 'react-icons/fa';
 import type { ClientBasic } from '../types/ClientBasic';
 import { formatPhone } from '../utils/formatPhone';
 import '../styles/palette.css';
-import { useNextAppointment, formatDateTime } from '../hooks/useNextAppointment';
+import {
+    useNextAppointment,
+    formatDateTime,
+} from '../hooks/useNextAppointment';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -128,20 +137,36 @@ export default function ClientCard({
             <div className={styles.infoRow} style={{ marginTop: '0.5rem' }}>
                 <span
                     className={styles.label}
-                    style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}
+                    style={{
+                        color: 'var(--color-primary)',
+                        fontWeight: 'bold',
+                    }}
                 >
                     <FaCalendarAlt style={{ marginRight: 6 }} /> Próximo:
                 </span>
-                <span className={styles.value} style={{ color: 'var(--color-text)' }}>
-                    {loadingAppt ? 'Carregando…' : nextAppt ? `${formatDateTime(nextAppt.start_at)} — ${nextAppt.title}` : '—'}
+                <span
+                    className={styles.value}
+                    style={{ color: 'var(--color-text)' }}
+                >
+                    {loadingAppt
+                        ? 'Carregando…'
+                        : nextAppt
+                        ? `${formatDateTime(nextAppt.start_at)} — ${
+                              nextAppt.title
+                          }`
+                        : '—'}
                 </span>
                 <button
                     className={styles.iconButton}
                     title='Agendar novo'
                     onClick={e => {
                         e.stopPropagation();
-                        // TODO: abrir modal de agendamento; por enquanto navega para /agenda
-                        window.location.href = '/agenda';
+                        // Redireciona para a agenda já com o cliente selecionado
+                        const today = new Date();
+                        const y = today.getFullYear();
+                        const m = String(today.getMonth() + 1).padStart(2, '0');
+                        const d = String(today.getDate()).padStart(2, '0');
+                        window.location.href = `/agenda?client=${client.id}&date=${y}-${m}-${d}`;
                     }}
                 >
                     <FaPlusCircle />
