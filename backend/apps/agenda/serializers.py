@@ -46,6 +46,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"end_at": "Fim deve ser após o início."})
 
         professional = attrs.get("professional", getattr(self.instance, "professional", None))
+        client = attrs.get("client", getattr(self.instance, "client", None))
         if professional and start and end:
             # conflito simples
             inst = self.instance if getattr(self, "instance", None) else None
@@ -60,4 +61,17 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 conflict = conflict.exclude(pk=inst.pk)
             if conflict.exists():
                 raise serializers.ValidationError("Conflito de horário para o profissional.")
+
+        # Regra: um agendamento por cliente por dia (ignora cancelados)
+        if client and start:
+            inst = self.instance if getattr(self, "instance", None) else None
+            same_day = Appointment.objects.filter(client=client)
+            same_day = same_day.exclude(status=Appointment.Status.CANCELED)
+            same_day = same_day.filter(start_at__date=start.date())
+            if inst is not None:
+                same_day = same_day.exclude(pk=inst.pk)
+            if same_day.exists():
+                raise serializers.ValidationError(
+                    {"client": "Cada cliente só pode ter um agendamento por dia."}
+                )
         return attrs

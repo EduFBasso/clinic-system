@@ -177,3 +177,37 @@ class DeviceSession(models.Model):
         self.termination_reason = reason[:32]
         self.save(update_fields=["is_active", "terminated_at", "termination_reason"])
 
+
+class ProfessionalSettings(models.Model):
+    """Configurações por profissional para a agenda e comunicação.
+
+    - work_start_hour: hora de início padrão da agenda (0..23)
+    - work_end_hour: hora de fim padrão (1..24)
+    - slot_minutes: duração dos slots (ex.: 15, 30, 60)
+    - confirm_message_enabled: ativa envio de confirmação (futuro)
+    - confirm_message_template: template opcional da mensagem
+    """
+
+    professional = models.OneToOneField(
+        Professional,
+        on_delete=models.CASCADE,
+        related_name="settings",
+        verbose_name="Profissional",
+    )
+    work_start_hour = models.PositiveSmallIntegerField(default=8)
+    work_end_hour = models.PositiveSmallIntegerField(default=18)
+    slot_minutes = models.PositiveSmallIntegerField(default=30)
+
+    confirm_message_enabled = models.BooleanField(default=False)
+    confirm_message_template = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuração do Profissional"
+        verbose_name_plural = "Configurações de Profissionais"
+
+    def __str__(self):
+        return f"Config {self.professional.email} ({self.work_start_hour}-{self.work_end_hour}/{self.slot_minutes}m)"
+

@@ -6,6 +6,8 @@ export interface Appointment {
     id: number;
     professional: number;
     client: number;
+    professional_name?: string;
+    client_name?: string;
     title: string;
     visit_type: 'avaliacao' | 'retorno' | 'procedimento' | 'outro';
     start_at: string;
@@ -21,13 +23,19 @@ function dayRangeISO(d: Date) {
     return { startISO: start.toISOString(), endISO: end.toISOString() };
 }
 
-export function useAppointments(day: Date, clientId?: number) {
+export function useAppointmentsRange(
+    startDate: Date,
+    endDate: Date,
+    clientId?: number,
+) {
     const [items, setItems] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { startISO, endISO } = useMemo(() => {
-        return dayRangeISO(day);
-    }, [day]);
+        const s = new Date(startDate);
+        const e = new Date(endDate);
+        return { startISO: s.toISOString(), endISO: e.toISOString() };
+    }, [startDate, endDate]);
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
@@ -61,4 +69,11 @@ export function useAppointments(day: Date, clientId?: number) {
     }, [startISO, endISO, clientId]);
 
     return { items, loading, error };
+}
+
+export function useAppointments(day: Date, clientId?: number) {
+    const { startISO, endISO } = useMemo(() => dayRangeISO(day), [day]);
+    const start = useMemo(() => new Date(startISO), [startISO]);
+    const end = useMemo(() => new Date(endISO), [endISO]);
+    return useAppointmentsRange(start, end, clientId);
 }

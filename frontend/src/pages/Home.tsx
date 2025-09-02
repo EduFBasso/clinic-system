@@ -1,5 +1,5 @@
 // src/pages/Home.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import Header from '../components/Header';
 import Faixa from '../components/Faixa';
@@ -12,6 +12,17 @@ export default function Home() {
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
         null,
     );
+
+    // Seleciona o cliente se ?client=ID estiver na URL
+    useEffect(() => {
+        try {
+            const url = new URL(window.location.href);
+            const cid = url.searchParams.get('client');
+            if (cid) setSelectedClientId(Number(cid));
+        } catch {
+            // ignore
+        }
+    }, []);
 
     // Função para abrir o cadastro em nova janela
     const handleAddClient = () => {

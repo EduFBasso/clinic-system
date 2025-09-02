@@ -84,3 +84,41 @@ def test_overlap_is_blocked():
     res = c.post("/agenda/appointments/", payload, format="json")
     assert res.status_code == 400
     assert "Conflito" in str(res.data)
+
+
+def test_one_appointment_per_client_per_day():
+    pro = make_professional("pro3@example.com")
+    cli = make_client(pro, 3)
+    c = auth_client(pro)
+
+    base = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    # Primeiro agendamento no dia
+    res1 = c.post(
+        "/agenda/appointments/",
+        {
+            "professional": pro.id,
+            "client": cli.id,
+            "title": "Sessão manhã",
+            "visit_type": "avaliacao",
+            "start_at": base.isoformat(),
+            "end_at": (base + dt.timedelta(minutes=30)).isoformat(),
+        },
+        format="json",
+    )
+    assert res1.status_code == 201, res1.data
+
+    # Segundo no mesmo dia deve falhar
+    res2 = c.post(
+        "/agenda/appointments/",
+        {
+            "professional": pro.id,
+            "client": cli.id,
+            "title": "Sessão tarde",
+            "visit_type": "retorno",
+            "start_at": (base.replace(hour=15)).isoformat(),
+            "end_at": (base.replace(hour=15) + dt.timedelta(minutes=30)).isoformat(),
+        },
+        format="json",
+    )
+    assert res2.status_code == 400
+    assert "um agendamento por dia" in str(res2.data).lower()

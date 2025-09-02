@@ -57,6 +57,9 @@ const NavBar: React.FC<NavBarProps> = ({
     // Dropdown state
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    // Agenda dropdown state
+    const [agendaDropdownOpen, setAgendaDropdownOpen] = useState(false);
+    const agendaDropdownRef = useRef<HTMLDivElement>(null);
 
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
@@ -70,11 +73,15 @@ const NavBar: React.FC<NavBarProps> = ({
     // Fecha dropdown ao clicar fora
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
-            if (
-                dropdownRef.current &&
-                !dropdownRef.current.contains(event.target as Node)
-            ) {
+            const target = event.target as Node;
+            if (dropdownRef.current && !dropdownRef.current.contains(target)) {
                 setDropdownOpen(false);
+            }
+            if (
+                agendaDropdownRef.current &&
+                !agendaDropdownRef.current.contains(target)
+            ) {
+                setAgendaDropdownOpen(false);
             }
         }
         document.addEventListener('mousedown', handleClickOutside);
@@ -175,20 +182,119 @@ const NavBar: React.FC<NavBarProps> = ({
                         </div>
                     )}
                 </div>
-                <button
-                    className={styles.menuButton}
-                    onClick={() => {
-                        const token = localStorage.getItem('accessToken');
-                        if (!token) {
-                            setSessionExpiredOpen(true);
-                            return;
-                        }
-                        setModalMessage('Agenda: Falta implementar o Código');
-                        setModalOpen(true);
-                    }}
-                >
-                    📅 Agenda
-                </button>
+                <div className={styles.dropdownWrapper} ref={agendaDropdownRef}>
+                    <button
+                        className={styles.menuButton}
+                        onClick={() => {
+                            const token = localStorage.getItem('accessToken');
+                            if (!token) {
+                                setSessionExpiredOpen(true);
+                                return;
+                            }
+                            setAgendaDropdownOpen(open => !open);
+                        }}
+                        aria-haspopup='true'
+                        aria-expanded={agendaDropdownOpen}
+                    >
+                        📅 Agenda{' '}
+                        <span style={{ marginLeft: 6, fontSize: 14 }}>▼</span>
+                    </button>
+                    {agendaDropdownOpen && (
+                        <div className={styles.dropdownMenu}>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setAgendaDropdownOpen(false);
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
+                                    }
+                                    const now = new Date();
+                                    const y = now.getFullYear();
+                                    const m = String(
+                                        now.getMonth() + 1,
+                                    ).padStart(2, '0');
+                                    const d = String(now.getDate()).padStart(
+                                        2,
+                                        '0',
+                                    );
+                                    const url = `/agenda?date=${y}-${m}-${d}${
+                                        selectedClientId
+                                            ? `&client=${selectedClientId}`
+                                            : ''
+                                    }`;
+                                    if (isMobileDevice()) {
+                                        window.location.href = url;
+                                    } else {
+                                        window.open(url, '_self');
+                                    }
+                                }}
+                            >
+                                Abrir
+                            </button>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setAgendaDropdownOpen(false);
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
+                                    }
+                                    const now = new Date();
+                                    const y = now.getFullYear();
+                                    const m = String(
+                                        now.getMonth() + 1,
+                                    ).padStart(2, '0');
+                                    const d = String(now.getDate()).padStart(
+                                        2,
+                                        '0',
+                                    );
+                                    const url = `/agenda/details?date=${y}-${m}-${d}&mode=day`;
+                                    if (isMobileDevice()) {
+                                        window.location.href = url;
+                                    } else {
+                                        window.open(url, '_self');
+                                    }
+                                }}
+                            >
+                                Detalhes (Dia)
+                            </button>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setAgendaDropdownOpen(false);
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
+                                    }
+                                    const now = new Date();
+                                    const y = now.getFullYear();
+                                    const m = String(
+                                        now.getMonth() + 1,
+                                    ).padStart(2, '0');
+                                    const d = String(now.getDate()).padStart(
+                                        2,
+                                        '0',
+                                    );
+                                    const url = `/agenda/details?date=${y}-${m}-${d}&mode=week`;
+                                    if (isMobileDevice()) {
+                                        window.location.href = url;
+                                    } else {
+                                        window.open(url, '_self');
+                                    }
+                                }}
+                            >
+                                Detalhes (Semana)
+                            </button>
+                        </div>
+                    )}
+                </div>
                 <button
                     className={styles.menuButton}
                     onClick={() => {
