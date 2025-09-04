@@ -169,6 +169,33 @@ export default function Home() {
         );
     };
 
+    // Aberturas diretas dos modais da Agenda (novo fluxo vindo do NavBar)
+    const openSchedule = async (clientId: number, date?: Date) => {
+        const c = await ensureClientBasic(clientId);
+        setRouteClient(c);
+        setRouteDefaultDate(date);
+        setScheduleOpen(true);
+        setMonthlyOpen(false);
+        setWeeklyOpen(false);
+    };
+
+    const openMonthly = async (clientId: number, date?: Date) => {
+        const c = await ensureClientBasic(clientId);
+        setRouteClient(c);
+        setRouteInitialMonth(date);
+        setMonthlyOpen(true);
+        setScheduleOpen(false);
+        setWeeklyOpen(false);
+    };
+
+    const openWeekly = (_date?: Date) => {
+        void _date;
+        // WeeklyPreviewModal atual não usa data; reservado para evolução
+        setWeeklyOpen(true);
+        setScheduleOpen(false);
+        setMonthlyOpen(false);
+    };
+
     return (
         <div className={styles.container}>
             <Header />
@@ -176,6 +203,11 @@ export default function Home() {
             <NavBar
                 openNewClientModal={handleAddClient}
                 selectedClientId={selectedClientId}
+                agendaOpeners={{
+                    openSchedule,
+                    openMonthly,
+                    openWeekly,
+                }}
             />
             <MainContent
                 setSelectedClientId={setSelectedClientId}

@@ -30,11 +30,17 @@ import { isTokenExpired } from '../utils/jwt';
 interface NavBarProps {
     openNewClientModal?: () => void;
     selectedClientId?: number | null;
+    agendaOpeners?: {
+        openSchedule: (clientId: number, date?: Date) => void | Promise<void>;
+        openMonthly: (clientId: number, date?: Date) => void | Promise<void>;
+        openWeekly: (date?: Date) => void | Promise<void>;
+    };
 }
 
 const NavBar: React.FC<NavBarProps> = ({
     openNewClientModal,
     selectedClientId,
+    agendaOpeners,
 }) => {
     const [selectedProfessional, setSelectedProfessional] =
         useState<string>('');
@@ -205,8 +211,20 @@ const NavBar: React.FC<NavBarProps> = ({
             setModalOpen(true);
             return;
         }
-        // Abre Agenda no dia do compromisso para facilitar a edição
-        goAgendaDay(nextAppt.start_at, selectedClientId);
+        // Desktop: abrir modal mensal direto se disponível; Mobile: navega
+        if (agendaOpeners && !isMobileDevice()) {
+            try {
+                await agendaOpeners.openMonthly(
+                    selectedClientId,
+                    new Date(nextAppt.start_at),
+                );
+            } catch {
+                // fallback se algo falhar
+                goAgendaDay(nextAppt.start_at, selectedClientId);
+            }
+        } else {
+            goAgendaDay(nextAppt.start_at, selectedClientId);
+        }
     }
 
     async function handleAgendaNew() {
@@ -245,6 +263,14 @@ const NavBar: React.FC<NavBarProps> = ({
         }
         const nextAppt = await fetchNextScheduledAppointment(selectedClientId);
         if (!nextAppt) {
+            if (agendaOpeners && !isMobileDevice()) {
+                try {
+                    await agendaOpeners.openSchedule(selectedClientId, now);
+                    return;
+                } catch {
+                    // fallback
+                }
+            }
             const url = `${baseUrl}&client=${selectedClientId}`;
             if (isMobileDevice()) window.location.href = url;
             else window.open(url, '_self');
@@ -336,19 +362,22 @@ const NavBar: React.FC<NavBarProps> = ({
                                         return;
                                     }
                                     const now = new Date();
-                                    const y = now.getFullYear();
-                                    const m = String(
-                                        now.getMonth() + 1,
-                                    ).padStart(2, '0');
-                                    const d = String(now.getDate()).padStart(
-                                        2,
-                                        '0',
-                                    );
-                                    const url = `/agenda?date=${y}-${m}-${d}&mode=week`;
-                                    if (isMobileDevice()) {
-                                        window.location.href = url;
+                                    if (agendaOpeners && !isMobileDevice()) {
+                                        agendaOpeners.openWeekly(now);
                                     } else {
-                                        window.open(url, '_self');
+                                        const y = now.getFullYear();
+                                        const m = String(
+                                            now.getMonth() + 1,
+                                        ).padStart(2, '0');
+                                        const d = String(
+                                            now.getDate(),
+                                        ).padStart(2, '0');
+                                        const url = `/agenda?date=${y}-${m}-${d}&mode=week`;
+                                        if (isMobileDevice()) {
+                                            window.location.href = url;
+                                        } else {
+                                            window.open(url, '_self');
+                                        }
                                     }
                                 }}
                             >
