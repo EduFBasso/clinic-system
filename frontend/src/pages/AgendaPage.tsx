@@ -8,7 +8,8 @@ import {
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import '../styles/palette.css';
-
+// AgendaPage foi descontinuada e substituída por fluxos via modais (MiniScheduler/MonthlyAgendaModal) na Home.
+export {};
 function toISODate(d: Date) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');

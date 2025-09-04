@@ -3,7 +3,6 @@
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Home from '../src/pages/Home';
 import ClientFormPage from './pages/Clients/ClientFormPage';
-import AgendaPage from './pages/AgendaPage';
 import AgendaSettingsPage from './pages/AgendaSettingsPage';
 
 function App() {
@@ -13,7 +12,8 @@ function App() {
                 <Route path='/' element={<Home />} />
                 <Route path='/clients/new' element={<ClientFormPage />} />
                 <Route path='/clients/edit/:id' element={<ClientFormPage />} />
-                <Route path='/agenda' element={<AgendaPage />} />
+                {/* AgendaPage removida: consolidamos em modais no Home */}
+                <Route path='/agenda' element={<Home />} />
                 <Route
                     path='/agenda/settings'
                     element={<AgendaSettingsPage />}

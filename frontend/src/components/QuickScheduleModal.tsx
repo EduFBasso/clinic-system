@@ -3,7 +3,8 @@ import AppModal from './Modal';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import { useNow } from '../hooks/useNow';
-
+// Removed legacy QuickScheduleModal component during agenda consolidation.
+export {};
 function startOfDay(d: Date) {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
