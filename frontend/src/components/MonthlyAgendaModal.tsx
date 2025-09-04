@@ -299,7 +299,37 @@ export default function MonthlyAgendaModal({
                                                                         a.start_at,
                                                                     ),
                                                                 );
-                                                            // Keep using /agenda with params; Home opens the proper modal
+                                                            // Desktop: pedir para Home abrir o ScheduleModal em modo edição;
+                                                            // Mobile: manter navegação por URL.
+                                                            const isMobile =
+                                                                /Mobi|Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
+                                                                    window
+                                                                        .navigator
+                                                                        .userAgent,
+                                                                );
+                                                            if (!isMobile) {
+                                                                try {
+                                                                    window.dispatchEvent(
+                                                                        new CustomEvent(
+                                                                            'openScheduleEdit',
+                                                                            {
+                                                                                detail: {
+                                                                                    client,
+                                                                                    date: new Date(
+                                                                                        dayIso +
+                                                                                            'T00:00:00',
+                                                                                    ),
+                                                                                    appointment:
+                                                                                        a,
+                                                                                },
+                                                                            },
+                                                                        ),
+                                                                    );
+                                                                    return;
+                                                                } catch {
+                                                                    /* fall through */
+                                                                }
+                                                            }
                                                             window.location.href = `/agenda?date=${dayIso}&client=${client.id}&edit=${a.id}`;
                                                         }}
                                                         style={{

@@ -50,11 +50,13 @@ export default function ScheduleModal({
     onClose,
     client,
     defaultDate,
+    editAppointment,
 }: {
     open: boolean;
     onClose: () => void;
     client: ClientBasic;
     defaultDate?: Date;
+    editAppointment?: Appointment | null;
 }) {
     const TITLE_GREEN = '#065f46';
     const ARROW_HOVER = '#064e3b';
@@ -119,6 +121,7 @@ export default function ScheduleModal({
     const [offerReplace, setOfferReplace] = React.useState(false);
     const [conflicts, setConflicts] = React.useState<Appointment[]>([]);
     const [notes, setNotes] = React.useState<string>('');
+    const [editingId, setEditingId] = React.useState<number | null>(null);
     // UI interaction states
     const [prevHover, setPrevHover] = React.useState(false);
     const [prevActive, setPrevActive] = React.useState(false);
@@ -146,6 +149,34 @@ export default function ScheduleModal({
             /* ignore */
         }
     }
+
+    // When entering edit mode, prefill fields from the appointment
+    React.useEffect(() => {
+        if (!open) return;
+        if (editAppointment && editAppointment.id) {
+            const s = new Date(editAppointment.start_at);
+            const e = new Date(editAppointment.end_at);
+            persistSelectedDay(startOfDay(s));
+            setHour(s.getHours());
+            setMinute(s.getMinutes());
+            const diffMin = Math.max(
+                5,
+                Math.round((e.getTime() - s.getTime()) / 60000),
+            );
+            const closest: DurationOption = (
+                [60, 90, 120, 150] as DurationOption[]
+            ).reduce((prev, cur) =>
+                Math.abs(cur - diffMin) < Math.abs(prev - diffMin) ? cur : prev,
+            );
+            setDuration(closest);
+            setNotes(editAppointment.notes || '');
+            setEditingId(editAppointment.id);
+        } else {
+            // creating new
+            setEditingId(null);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, editAppointment?.id]);
 
     // Busy blocks with buffer (scheduled/done busy, canceled ignored)
     const busy = React.useMemo(() => {
@@ -246,21 +277,34 @@ export default function ScheduleModal({
         ).toISOString();
         setSaving(true);
         try {
-            const r = await fetch(`${API_BASE}/agenda/appointments/`, {
-                method: 'POST',
+            const isEdit = !!editingId;
+            const url = isEdit
+                ? `${API_BASE}/agenda/appointments/${editingId}/`
+                : `${API_BASE}/agenda/appointments/`;
+            const method = isEdit ? 'PATCH' : 'POST';
+            const payload = isEdit
+                ? {
+                      // Only fields we allow to change in edit mode
+                      start_at: startISO,
+                      end_at: endISO,
+                      notes,
+                  }
+                : {
+                      client: client.id,
+                      title: 'Consulta',
+                      visit_type: 'outro',
+                      start_at: startISO,
+                      end_at: endISO,
+                      status: 'scheduled',
+                      notes,
+                  };
+            const r = await fetch(url, {
+                method,
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({
-                    client: client.id,
-                    title: 'Consulta',
-                    visit_type: 'outro',
-                    start_at: startISO,
-                    end_at: endISO,
-                    status: 'scheduled',
-                    notes,
-                }),
+                body: JSON.stringify(payload),
             });
             if (!r.ok) {
                 const txt = await r.text();
@@ -838,7 +882,7 @@ export default function ScheduleModal({
                                             : 'pointer',
                                 }}
                             >
-                                Agendar
+                                {editingId ? 'Salvar' : 'Agendar'}
                             </button>
                         ) : (
                             <button

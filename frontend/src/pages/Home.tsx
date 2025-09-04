@@ -13,6 +13,7 @@ import WeeklyPreviewModal from '../components/WeeklyPreviewModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
+import type { Appointment } from '../hooks/useAppointments';
 
 export default function Home() {
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
@@ -25,6 +26,9 @@ export default function Home() {
     const [routeClient, setRouteClient] = useState<ClientBasic | null>(null);
     const [routeDefaultDate, setRouteDefaultDate] = useState<Date | undefined>(
         undefined,
+    );
+    const [routeEditAppt, setRouteEditAppt] = useState<Appointment | null>(
+        null,
     );
     const [routeInitialMonth, setRouteInitialMonth] = useState<
         Date | undefined
@@ -170,10 +174,15 @@ export default function Home() {
     };
 
     // Aberturas diretas dos modais da Agenda (novo fluxo vindo do NavBar)
-    const openSchedule = async (clientId: number, date?: Date) => {
+    const openSchedule = async (
+        clientId: number,
+        date?: Date,
+        edit?: Appointment | null,
+    ) => {
         const c = await ensureClientBasic(clientId);
         setRouteClient(c);
         setRouteDefaultDate(date);
+        setRouteEditAppt(edit ?? null);
         setScheduleOpen(true);
         setMonthlyOpen(false);
         setWeeklyOpen(false);
@@ -183,6 +192,7 @@ export default function Home() {
         const c = await ensureClientBasic(clientId);
         setRouteClient(c);
         setRouteInitialMonth(date);
+        setRouteEditAppt(null);
         setMonthlyOpen(true);
         setScheduleOpen(false);
         setWeeklyOpen(false);
@@ -191,10 +201,37 @@ export default function Home() {
     const openWeekly = (_date?: Date) => {
         void _date;
         // WeeklyPreviewModal atual não usa data; reservado para evolução
+        setRouteEditAppt(null);
         setWeeklyOpen(true);
         setScheduleOpen(false);
         setMonthlyOpen(false);
     };
+
+    // Event bridge: abrir edição direta do ScheduleModal a partir do Monthly
+    useEffect(() => {
+        function onOpenScheduleEdit(e: CustomEvent) {
+            const det = (e && (e as CustomEvent).detail) || {};
+            const c = det.client as ClientBasic | undefined;
+            const d = det.date as Date | undefined;
+            const a = det.appointment as Appointment | undefined;
+            if (!c || !c.id) return;
+            setRouteClient(c);
+            setRouteDefaultDate(d);
+            setRouteEditAppt(a ?? null);
+            setScheduleOpen(true);
+            setMonthlyOpen(false);
+            setWeeklyOpen(false);
+        }
+        window.addEventListener(
+            'openScheduleEdit',
+            onOpenScheduleEdit as EventListener,
+        );
+        return () =>
+            window.removeEventListener(
+                'openScheduleEdit',
+                onOpenScheduleEdit as EventListener,
+            );
+    }, []);
 
     return (
         <div className={styles.container}>
@@ -220,6 +257,7 @@ export default function Home() {
                     onClose={() => setScheduleOpen(false)}
                     client={routeClient}
                     defaultDate={routeDefaultDate}
+                    editAppointment={routeEditAppt}
                 />
             )}
             {routeClient && (
