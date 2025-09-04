@@ -21,6 +21,7 @@ type VerifyResponse = {
     message?: string;
 };
 import { useProfessionals } from '../hooks/useProfessionals';
+import type { Appointment } from '../hooks/useAppointments';
 import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
 import AppModal from './Modal';
@@ -31,7 +32,11 @@ interface NavBarProps {
     openNewClientModal?: () => void;
     selectedClientId?: number | null;
     agendaOpeners?: {
-        openSchedule: (clientId: number, date?: Date) => void | Promise<void>;
+        openSchedule: (
+            clientId: number,
+            date?: Date,
+            edit?: Appointment | null,
+        ) => void | Promise<void>;
         openMonthly: (clientId: number, date?: Date) => void | Promise<void>;
         openWeekly: (date?: Date) => void | Promise<void>;
     };
@@ -211,20 +216,20 @@ const NavBar: React.FC<NavBarProps> = ({
             setModalOpen(true);
             return;
         }
-        // Desktop: abrir modal mensal direto se disponível; Mobile: navega
+        // Desktop: abrir ScheduleModal em modo edição; Mobile: navegar
         if (agendaOpeners && !isMobileDevice()) {
             try {
-                await agendaOpeners.openMonthly(
+                await agendaOpeners.openSchedule(
                     selectedClientId,
                     new Date(nextAppt.start_at),
+                    nextAppt as unknown as Appointment,
                 );
+                return;
             } catch {
-                // fallback se algo falhar
-                goAgendaDay(nextAppt.start_at, selectedClientId);
+                /* fallback abaixo */
             }
-        } else {
-            goAgendaDay(nextAppt.start_at, selectedClientId);
         }
+        goAgendaDay(nextAppt.start_at, selectedClientId);
     }
 
     async function handleAgendaNew() {
@@ -344,12 +349,14 @@ const NavBar: React.FC<NavBarProps> = ({
                                 Novo Compromisso
                             </button>
 
-                            <button
-                                className={styles.dropdownItem}
-                                onClick={handleAgendaEditLast}
-                            >
-                                Editar Último
-                            </button>
+                            {selectedClientId ? (
+                                <button
+                                    className={styles.dropdownItem}
+                                    onClick={handleAgendaEditLast}
+                                >
+                                    Editar
+                                </button>
+                            ) : null}
 
                             <button
                                 className={styles.dropdownItem}
