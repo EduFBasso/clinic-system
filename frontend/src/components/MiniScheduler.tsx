@@ -44,7 +44,7 @@ function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
     return aStart < bEnd && aEnd > bStart; // [start,end)
 }
 
-export default function MiniScheduler({
+export default function ScheduleModal({
     open,
     onClose,
     client,
@@ -61,7 +61,7 @@ export default function MiniScheduler({
     const [selectedDay, setSelectedDay] = React.useState<Date>(() => {
         // Try to restore last selected day for this client
         try {
-            const key = `miniScheduler:lastDay:${client.id}`;
+            const key = `schedule:lastDay:${client.id}`;
             const saved = localStorage.getItem(key);
             if (saved) {
                 const d = new Date(saved);
@@ -75,7 +75,7 @@ export default function MiniScheduler({
     // When client changes, refresh from their last saved day or defaultDate
     React.useEffect(() => {
         try {
-            const key = `miniScheduler:lastDay:${client.id}`;
+            const key = `schedule:lastDay:${client.id}`;
             const saved = localStorage.getItem(key);
             if (saved) {
                 const d = new Date(saved);
@@ -92,7 +92,7 @@ export default function MiniScheduler({
     // Persist selection per client
     React.useEffect(() => {
         try {
-            const key = `miniScheduler:lastDay:${client.id}`;
+            const key = `schedule:lastDay:${client.id}`;
             localStorage.setItem(key, selectedDay.toISOString());
         } catch {
             /* ignore */
@@ -139,7 +139,7 @@ export default function MiniScheduler({
     function persistSelectedDay(nd: Date) {
         setSelectedDay(nd);
         try {
-            const key = `miniScheduler:lastDay:${client.id}`;
+            const key = `schedule:lastDay:${client.id}`;
             localStorage.setItem(key, nd.toISOString());
         } catch {
             /* ignore */

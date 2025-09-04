@@ -15,7 +15,7 @@ import '../styles/palette.css';
 // no direct date-time formatting import needed here
 import MonthlyAgendaModal from './MonthlyAgendaModal';
 import WeeklyPreviewModal from './WeeklyPreviewModal';
-import MiniScheduler from './MiniScheduler';
+import ScheduleModal from './ScheduleModal';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -371,7 +371,7 @@ export default function ClientCard({
                 />
             )}
             {showMini && (
-                <MiniScheduler
+                <ScheduleModal
                     open={showMini}
                     onClose={() => setShowMini(false)}
                     client={client}
