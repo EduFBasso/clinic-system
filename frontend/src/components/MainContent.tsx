@@ -576,7 +576,7 @@ const MainContent: React.FC<MainContentProps> = ({
                                 const ret =
                                     returnUrl ||
                                     localStorage.getItem('agenda.returnUrl') ||
-                                    '/agenda';
+                                    '/agenda'; // kept: Home handles /agenda via modals
                                 try {
                                     const u = new URL(
                                         ret,
@@ -586,7 +586,7 @@ const MainContent: React.FC<MainContentProps> = ({
                                     window.location.href =
                                         u.pathname + (u.search || '');
                                 } catch {
-                                    window.location.href = '/agenda';
+                                    window.location.href = '/agenda'; // triggers Home route which opens modals
                                 }
                             }}
                             style={{
@@ -611,7 +611,7 @@ const MainContent: React.FC<MainContentProps> = ({
                                 const ret =
                                     returnUrl ||
                                     localStorage.getItem('agenda.returnUrl') ||
-                                    '/agenda';
+                                    '/agenda'; // kept for compatibility
                                 const sep = ret.includes('?') ? '&' : '?';
                                 window.location.href = `${ret}${sep}client=${confirmClient.id}`;
                             }}

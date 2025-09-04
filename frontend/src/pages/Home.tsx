@@ -7,18 +7,141 @@ import NavBar from '../components/NavBar';
 import MainContent from '../components/MainContent';
 import Footer from '../components/Footer';
 import styles from '../styles/pages/Home.module.css';
+import ScheduleModal from '../components/ScheduleModal';
+import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
+import WeeklyPreviewModal from '../components/WeeklyPreviewModal';
+import type { ClientBasic } from '../types/ClientBasic';
+import { API_BASE } from '../config/api';
+import { isTokenExpired } from '../utils/jwt';
 
 export default function Home() {
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
         null,
     );
+    // Route-driven agenda modal states
+    const [scheduleOpen, setScheduleOpen] = useState(false);
+    const [monthlyOpen, setMonthlyOpen] = useState(false);
+    const [weeklyOpen, setWeeklyOpen] = useState(false);
+    const [routeClient, setRouteClient] = useState<ClientBasic | null>(null);
+    const [routeDefaultDate, setRouteDefaultDate] = useState<Date | undefined>(
+        undefined,
+    );
+    const [routeInitialMonth, setRouteInitialMonth] = useState<
+        Date | undefined
+    >(undefined);
 
-    // Seleciona o cliente se ?client=ID estiver na URL
+    // Aux: carrega nome básico do cliente dado um ID (cache localStorage se possível)
+    async function ensureClientBasic(id: number): Promise<ClientBasic> {
+        const cached = localStorage.getItem(`client.name.${id}`);
+        if (cached) {
+            const [first_name, ...rest] = cached.split(' ');
+            const last_name = rest.join(' ');
+            return {
+                id,
+                first_name,
+                last_name,
+                phone: '',
+                email: '',
+            } as ClientBasic;
+        }
+        const token = localStorage.getItem('accessToken');
+        if (isTokenExpired(token))
+            return {
+                id,
+                first_name: 'Cliente',
+                last_name: String(id),
+                phone: '',
+                email: '',
+            } as ClientBasic;
+        try {
+            const res = await fetch(`${API_BASE}/register/clients/${id}/`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const cb: ClientBasic = {
+                    id: data.id,
+                    first_name: data.first_name || 'Cliente',
+                    last_name: data.last_name || '',
+                    phone: data.phone || '',
+                    email: data.email || '',
+                };
+                try {
+                    localStorage.setItem(
+                        `client.name.${id}`,
+                        `${cb.first_name} ${cb.last_name}`.trim(),
+                    );
+                } catch {
+                    /* noop */
+                }
+                return cb;
+            }
+        } catch {
+            /* noop */
+        }
+        return {
+            id,
+            first_name: 'Cliente',
+            last_name: String(id),
+            phone: '',
+            email: '',
+        } as ClientBasic;
+    }
+
+    // Seleciona o cliente via ?client=ID e abre modais conforme params (?new, ?edit, ?mode)
     useEffect(() => {
         try {
             const url = new URL(window.location.href);
             const cid = url.searchParams.get('client');
+            const dateStr = url.searchParams.get('date'); // yyyy-mm-dd
+            const isNew = url.searchParams.get('new') === '1';
+            const editId = url.searchParams.get('edit');
+            const mode = url.searchParams.get('mode');
+
             if (cid) setSelectedClientId(Number(cid));
+
+            // Parse date if provided
+            const parsedDate = dateStr
+                ? new Date(dateStr + 'T00:00:00')
+                : undefined;
+            if (parsedDate && !Number.isNaN(parsedDate.getTime())) {
+                setRouteDefaultDate(parsedDate);
+                setRouteInitialMonth(parsedDate);
+            } else {
+                setRouteDefaultDate(undefined);
+                setRouteInitialMonth(undefined);
+            }
+
+            // Week mode: abre preview semanal simples
+            if (mode === 'week') {
+                setWeeklyOpen(true);
+            }
+
+            // Edit: abrir visão mensal do cliente para localizar/avaliar
+            if (editId && cid) {
+                ensureClientBasic(Number(cid)).then(c => {
+                    setRouteClient(c);
+                    setMonthlyOpen(true);
+                });
+                return; // prioriza edição
+            }
+
+            // New: abrir ScheduleModal já com cliente/data
+            if (isNew && cid) {
+                ensureClientBasic(Number(cid)).then(c => {
+                    setRouteClient(c);
+                    setScheduleOpen(true);
+                });
+                return;
+            }
+
+            // Se só houver client+date, abre visão mensal para inspecionar
+            if (cid && dateStr) {
+                ensureClientBasic(Number(cid)).then(c => {
+                    setRouteClient(c);
+                    setMonthlyOpen(true);
+                });
+            }
         } catch {
             // ignore
         }
@@ -57,6 +180,27 @@ export default function Home() {
             <MainContent
                 setSelectedClientId={setSelectedClientId}
                 selectedClientId={selectedClientId}
+            />
+            {/* Route-driven Agenda modals */}
+            {routeClient && (
+                <ScheduleModal
+                    open={scheduleOpen}
+                    onClose={() => setScheduleOpen(false)}
+                    client={routeClient}
+                    defaultDate={routeDefaultDate}
+                />
+            )}
+            {routeClient && (
+                <MonthlyAgendaModal
+                    open={monthlyOpen}
+                    onClose={() => setMonthlyOpen(false)}
+                    client={routeClient}
+                    initialMonth={routeInitialMonth}
+                />
+            )}
+            <WeeklyPreviewModal
+                open={weeklyOpen}
+                onClose={() => setWeeklyOpen(false)}
             />
             <Footer />
         </div>

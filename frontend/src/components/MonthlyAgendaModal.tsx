@@ -299,6 +299,7 @@ export default function MonthlyAgendaModal({
                                                                         a.start_at,
                                                                     ),
                                                                 );
+                                                            // Keep using /agenda with params; Home opens the proper modal
                                                             window.location.href = `/agenda?date=${dayIso}&client=${client.id}&edit=${a.id}`;
                                                         }}
                                                         style={{
