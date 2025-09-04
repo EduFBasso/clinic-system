@@ -13,6 +13,20 @@ export interface ClientBasic {
     neighborhood?: string;
     city?: string;
     state?: string;
+    next_appointment_start_at?: string | null; // Added for next appointment details
+    next_appointment_title?: string | null; // Added for next appointment details
+    next_appointment_visit_type?:
+        | 'avaliacao'
+        | 'retorno'
+        | 'procedimento'
+        | 'outro'
+        | null; // Added for next appointment details
+    next_appointment_notes?: string | null; // Added for next appointment notes
+    next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null; // Added for next appointment status
+    last_appointment_start_at?: string | null;
+    last_appointment_title?: string | null;
+    last_appointment_notes?: string | null;
+    last_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;
 }
 
 export function useClients() {

@@ -55,6 +55,18 @@ END $$;
 '''
 
 
+def _run_clean(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(SQL_CLEAN_DUPLICATE_UNIQUE)
+
+
+def _run_restore(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(SQL_RESTORE_IF_MISSING)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ('register', '0026_ensure_unique_phone'),
@@ -63,5 +75,5 @@ class Migration(migrations.Migration):
     atomic = False
 
     operations = [
-        migrations.RunSQL(SQL_CLEAN_DUPLICATE_UNIQUE, reverse_sql=SQL_RESTORE_IF_MISSING),
+        migrations.RunPython(_run_clean, reverse_code=_run_restore),
     ]

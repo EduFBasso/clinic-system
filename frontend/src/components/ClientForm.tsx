@@ -521,8 +521,19 @@ export default function ClientForm({
         // Se o formulário está em uma janela separada:
         if (window.opener) {
             window.close();
-        } else {
-            // Não existe rota '/clients'; a home está em '/'
+            return;
+        }
+        // Em mobile (iPhone), garantir que saímos do modo edição limpando foco/locks
+        try {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+            document.body.classList.remove('keyboardOpen');
+        } catch {
+            /* noop */
+        }
+        // Força navegação limpa para a Home e evita voltar ao formulário no histórico
+        try {
+            window.location.replace('/');
+        } catch {
             navigate('/');
         }
     }

@@ -4,6 +4,8 @@ from .models import Appointment
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
+    # Garante que 'professional' não seja exigido no POST e seja somente leitura
+    professional = serializers.PrimaryKeyRelatedField(read_only=True)
     professional_name = serializers.SerializerMethodField(read_only=True)
     client_name = serializers.SerializerMethodField(read_only=True)
 
@@ -25,7 +27,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["created_at", "updated_at"]
+    read_only_fields = ["created_at", "updated_at", "professional"]
 
     def get_professional_name(self, obj):
         p = obj.professional
@@ -45,7 +47,13 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if start and end and end <= start:
             raise serializers.ValidationError({"end_at": "Fim deve ser após o início."})
 
+        # Tenta obter o profissional do payload; se ausente, usa o usuário autenticado
         professional = attrs.get("professional", getattr(self.instance, "professional", None))
+        if professional is None:
+            req = self.context.get("request") if hasattr(self, "context") else None
+            user = getattr(req, "user", None) if req else None
+            if getattr(user, "id", None):
+                professional = user
         client = attrs.get("client", getattr(self.instance, "client", None))
         if professional and start and end:
             # conflito simples
@@ -62,16 +70,4 @@ class AppointmentSerializer(serializers.ModelSerializer):
             if conflict.exists():
                 raise serializers.ValidationError("Conflito de horário para o profissional.")
 
-        # Regra: um agendamento por cliente por dia (ignora cancelados)
-        if client and start:
-            inst = self.instance if getattr(self, "instance", None) else None
-            same_day = Appointment.objects.filter(client=client)
-            same_day = same_day.exclude(status=Appointment.Status.CANCELED)
-            same_day = same_day.filter(start_at__date=start.date())
-            if inst is not None:
-                same_day = same_day.exclude(pk=inst.pk)
-            if same_day.exists():
-                raise serializers.ValidationError(
-                    {"client": "Cada cliente só pode ter um agendamento por dia."}
-                )
         return attrs

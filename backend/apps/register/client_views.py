@@ -42,7 +42,9 @@ class ClientViewSet(ModelViewSet):
             raise
 
 
-from django.db.models import Q
+from django.db.models import Q, OuterRef, Subquery, DateTimeField, CharField
+from django.utils import timezone
+from apps.agenda.models import Appointment
 
 class ClientBasicViewSet(ModelViewSet):
     serializer_class = ClientBasicSerializer
@@ -50,12 +52,63 @@ class ClientBasicViewSet(ModelViewSet):
 
     def get_queryset(self):
         nome = self.request.query_params.get('nome', '').strip()
-        queryset = Client.objects.filter(professional=self.request.user)
+        base_qs = Client.objects.filter(professional=self.request.user)
+
+        # Enriquecimento: próximo compromisso ativo (em andamento ou futuro), exclui cancelados
+        now = timezone.now()
+        appt_qs = (
+            Appointment.objects.filter(
+                professional=self.request.user,
+                client_id=OuterRef('pk'),
+            )
+            .exclude(status=Appointment.Status.CANCELED)
+            .filter(end_at__gt=now)
+            .order_by('start_at')
+        )
+        last_appt_qs = (
+            Appointment.objects.filter(
+                professional=self.request.user,
+                client_id=OuterRef('pk'),
+            )
+            .exclude(status=Appointment.Status.CANCELED)
+            .filter(start_at__lt=now)
+            .order_by('-start_at')
+        )
+
+        queryset = base_qs.annotate(
+            next_appointment_start_at=Subquery(
+                appt_qs.values('start_at')[:1], output_field=DateTimeField()
+            ),
+            next_appointment_end_at=Subquery(
+                appt_qs.values('end_at')[:1], output_field=DateTimeField()
+            ),
+            next_appointment_title=Subquery(
+                appt_qs.values('title')[:1], output_field=CharField()
+            ),
+            next_appointment_status=Subquery(
+                appt_qs.values('status')[:1], output_field=CharField()
+            ),
+                next_appointment_notes=Subquery(
+                    appt_qs.values('notes')[:1], output_field=CharField()
+                ),
+            last_appointment_start_at=Subquery(
+                last_appt_qs.values('start_at')[:1], output_field=DateTimeField()
+            ),
+            last_appointment_title=Subquery(
+                last_appt_qs.values('title')[:1], output_field=CharField()
+            ),
+            last_appointment_status=Subquery(
+                last_appt_qs.values('status')[:1], output_field=CharField()
+            ),
+            last_appointment_notes=Subquery(
+                last_appt_qs.values('notes')[:1], output_field=CharField()
+            ),
+        )
 
         if nome:
             queryset = queryset.filter(
                 Q(first_name__istartswith=nome) |
                 Q(last_name__istartswith=nome)
             )
-        
+
         return queryset.order_by('first_name')

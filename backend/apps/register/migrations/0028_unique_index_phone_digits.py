@@ -15,6 +15,18 @@ DROP INDEX IF EXISTS register_client_phone_digits_uniq;
 '''
 
 
+def _create_idx(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(SQL_CREATE_UNIQUE_IDX)
+
+
+def _drop_idx(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(SQL_DROP_UNIQUE_IDX)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ('register', '0027_cleanup_unique_phone_constraint'),
@@ -24,8 +36,5 @@ class Migration(migrations.Migration):
     atomic = False
 
     operations = [
-        migrations.RunSQL(
-            sql=SQL_CREATE_UNIQUE_IDX,
-            reverse_sql=SQL_DROP_UNIQUE_IDX,
-        ),
+        migrations.RunPython(_create_idx, reverse_code=_drop_idx),
     ]

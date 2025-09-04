@@ -12,6 +12,7 @@ interface AppModalProps {
     showCloseButton?: boolean; // padrão: true – mostra botão X
     disableBackdropClose?: boolean; // se true, clicar fora não fecha
     disableEscapeKeyDown?: boolean; // se true, ESC do MUI não fecha
+    fullScreen?: boolean; // se true, ocupa a tela inteira
 }
 
 const style = {
@@ -40,6 +41,7 @@ export default function AppModal({
     showCloseButton = true,
     disableBackdropClose = false,
     disableEscapeKeyDown = false,
+    fullScreen = false,
 }: AppModalProps) {
     // Fecha modal ao pressionar Enter (padronização para modais de mensagem)
     React.useEffect(() => {
@@ -101,7 +103,28 @@ export default function AppModal({
             onClose={handleMuiClose}
             disableEscapeKeyDown={disableEscapeKeyDown || !closeOnEscape}
         >
-            <Box sx={{ ...style, position: 'absolute' }}>
+            <Box
+                sx={
+                    fullScreen
+                        ? {
+                              position: 'fixed',
+                              top: 0,
+                              left: 0,
+                              transform: 'none',
+                              bgcolor: 'background.paper',
+                              borderRadius: 0,
+                              boxShadow: 24,
+                              p: 2,
+                              pb: 2,
+                              width: '100vw',
+                              maxWidth: '100vw',
+                              height: '100vh',
+                              maxHeight: '100vh',
+                              overflowY: 'auto',
+                          }
+                        : { ...style, position: 'absolute' as const }
+                }
+            >
                 {showCloseButton && (
                     <button
                         aria-label='Fechar'

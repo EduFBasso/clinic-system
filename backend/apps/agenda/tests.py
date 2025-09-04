@@ -86,7 +86,7 @@ def test_overlap_is_blocked():
     assert "Conflito" in str(res.data)
 
 
-def test_one_appointment_per_client_per_day():
+def test_multiple_same_day_allowed_if_no_overlap():
     pro = make_professional("pro3@example.com")
     cli = make_client(pro, 3)
     c = auth_client(pro)
@@ -107,7 +107,7 @@ def test_one_appointment_per_client_per_day():
     )
     assert res1.status_code == 201, res1.data
 
-    # Segundo no mesmo dia deve falhar
+    # Segundo no mesmo dia, horário diferente (sem sobreposição), deve passar
     res2 = c.post(
         "/agenda/appointments/",
         {
@@ -115,10 +115,9 @@ def test_one_appointment_per_client_per_day():
             "client": cli.id,
             "title": "Sessão tarde",
             "visit_type": "retorno",
-            "start_at": (base.replace(hour=15)).isoformat(),
-            "end_at": (base.replace(hour=15) + dt.timedelta(minutes=30)).isoformat(),
+        "start_at": (base.replace(hour=10)).isoformat(),
+        "end_at": (base.replace(hour=10) + dt.timedelta(minutes=30)).isoformat(),
         },
         format="json",
     )
-    assert res2.status_code == 400
-    assert "um agendamento por dia" in str(res2.data).lower()
+    assert res2.status_code == 201, res2.data

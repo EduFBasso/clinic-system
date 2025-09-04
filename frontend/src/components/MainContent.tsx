@@ -37,6 +37,13 @@ const MainContent: React.FC<MainContentProps> = ({
     );
     const [modalOpen, setModalOpen] = useState(false);
     const [noResultsOpen, setNoResultsOpen] = useState(false);
+    // Agenda selection mode state
+    const [selectMode, setSelectMode] = useState(false);
+    const [returnUrl, setReturnUrl] = useState<string | null>(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmClient, setConfirmClient] = useState<ClientBasic | null>(
+        null,
+    );
     const lastNotifiedFilterRef = React.useRef<string>('');
     // Limpa UI imediatamente ao receber evento de logout/clearClients
     React.useEffect(() => {
@@ -206,33 +213,67 @@ const MainContent: React.FC<MainContentProps> = ({
         return () => window.clearTimeout(t);
     }, [refreshAndUnlock]);
 
-    // Scroll para o cartão do cliente selecionado, alinhando abaixo do filtro visível
+    // Modo seleção vindo da Agenda: se URL tiver selectClientFor=agenda, foca filtro e aplica retorno
     React.useEffect(() => {
-        const el = selectedClientId ? cardRefs.current[selectedClientId] : null;
-        if (!el) return;
-        const filterEl = document.querySelector(
-            `.${styles.filterContainer}`,
-        ) as HTMLElement | null;
-        requestAnimationFrame(() => {
-            const targetRect = el.getBoundingClientRect();
-            const filterRect = filterEl?.getBoundingClientRect();
-            const desiredTop = (filterRect ? filterRect.bottom : 0) + 24;
-            const delta = targetRect.top - desiredTop;
-            if (Math.abs(delta) > 1) {
-                const container = document.body.classList.contains(
-                    'keyboardOpen',
-                )
-                    ? (document.querySelector(
-                          'main.' + styles.main,
-                      ) as HTMLElement | null)
-                    : null;
-                if (container) {
-                    container.scrollBy({ top: delta, behavior: 'smooth' });
-                } else {
-                    window.scrollBy({ top: delta, behavior: 'smooth' });
+        try {
+            const url = new URL(window.location.href);
+            const mode = url.searchParams.get('selectClientFor');
+            const ret = url.searchParams.get('return');
+            if (mode === 'agenda') {
+                // Foca no filtro para o usuário digitar
+                const input = document.getElementById(
+                    'client-filter',
+                ) as HTMLInputElement | null;
+                input?.focus?.();
+                // Guarda return para uso no clique de cartão
+                if (ret) {
+                    localStorage.setItem('agenda.returnUrl', ret);
+                    setReturnUrl(ret);
                 }
+                setSelectMode(true);
             }
-        });
+        } catch {
+            /* noop */
+        }
+    }, []);
+
+    // Integra com NavBar: foco no cartão selecionado ou solicitar seleção
+    React.useEffect(() => {
+        function onFocusSelectedClientCard() {
+            if (!selectedClientId) return;
+            const el = cardRefs.current[selectedClientId];
+            if (el) {
+                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                // Tenta focar um elemento interativo dentro do cartão
+                (
+                    el.querySelector('button, [tabindex]') as HTMLElement | null
+                )?.focus?.();
+            }
+        }
+        function onNeedClientSelectionForAgenda() {
+            const input = document.getElementById(
+                'client-filter',
+            ) as HTMLInputElement | null;
+            input?.focus?.();
+        }
+        window.addEventListener(
+            'focusSelectedClientCard',
+            onFocusSelectedClientCard,
+        );
+        window.addEventListener(
+            'needClientSelectionForAgenda',
+            onNeedClientSelectionForAgenda,
+        );
+        return () => {
+            window.removeEventListener(
+                'focusSelectedClientCard',
+                onFocusSelectedClientCard,
+            );
+            window.removeEventListener(
+                'needClientSelectionForAgenda',
+                onNeedClientSelectionForAgenda,
+            );
+        };
     }, [selectedClientId]);
 
     // Filtra clientes por nome (acentos/maiúsculas ignorados)
@@ -447,6 +488,22 @@ const MainContent: React.FC<MainContentProps> = ({
             {error && !error.includes('Sessão expirada') && (
                 <div style={{ color: 'red' }}>{error}</div>
             )}
+            {/* Friendly selection banner for Agenda flow */}
+            {selectMode && (
+                <div
+                    style={{
+                        margin: '8px 0 12px',
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #f59e0b33',
+                        background: '#fffbeb', // amber-50
+                        color: '#b45309', // amber-700
+                        fontWeight: 600,
+                    }}
+                >
+                    Selecione um cliente para agendar
+                </div>
+            )}
             <div className={styles.cardsGrid}>
                 {filteredClients.map(client => (
                     <div
@@ -458,7 +515,21 @@ const MainContent: React.FC<MainContentProps> = ({
                         <ClientCard
                             client={client}
                             selected={selectedClientId === client.id}
-                            onSelect={() => setSelectedClientId(client.id)}
+                            onSelect={() => {
+                                setSelectedClientId(client.id);
+                                // Se estamos em modo seleção para agenda, abre modal de confirmação customizado
+                                try {
+                                    const url = new URL(window.location.href);
+                                    const mode =
+                                        url.searchParams.get('selectClientFor');
+                                    if (mode === 'agenda') {
+                                        setConfirmClient(client);
+                                        setConfirmOpen(true);
+                                    }
+                                } catch {
+                                    /* noop */
+                                }
+                            }}
                             onView={handleView}
                         />
                     </div>
@@ -470,6 +541,92 @@ const MainContent: React.FC<MainContentProps> = ({
                 showCloseButton
             >
                 {selectedClient && <ClientView client={selectedClient} />}
+            </AppModal>
+
+            {/* Confirmation modal for Agenda selection */}
+            <AppModal
+                open={confirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                showCloseButton={false}
+                closeOnEscape
+                disableBackdropClose
+            >
+                <div style={{ display: 'grid', gap: 12 }}>
+                    <h3 style={{ margin: 0 }}>Confirmar agendamento</h3>
+                    <div>
+                        Usar o cliente{' '}
+                        <strong>
+                            {confirmClient
+                                ? `${confirmClient.first_name} ${confirmClient.last_name}`.trim()
+                                : ''}
+                        </strong>{' '}
+                        para um novo compromisso?
+                    </div>
+                    <div
+                        style={{
+                            display: 'flex',
+                            gap: 8,
+                            justifyContent: 'flex-end',
+                            marginTop: 4,
+                        }}
+                    >
+                        <button
+                            onClick={() => {
+                                // Cancelar Agendamento: sair do fluxo e retornar à Agenda (sem new=1)
+                                const ret =
+                                    returnUrl ||
+                                    localStorage.getItem('agenda.returnUrl') ||
+                                    '/agenda';
+                                try {
+                                    const u = new URL(
+                                        ret,
+                                        window.location.origin,
+                                    );
+                                    u.searchParams.delete('new');
+                                    window.location.href =
+                                        u.pathname + (u.search || '');
+                                } catch {
+                                    window.location.href = '/agenda';
+                                }
+                            }}
+                            style={{
+                                padding: '8px 12px',
+                                borderRadius: 8,
+                                border: '1px solid #e5e7eb',
+                                background: '#fff',
+                            }}
+                        >
+                            Cancelar Agendamento
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (!confirmClient) return;
+                                // Confirm: continuar fluxo, voltar à Agenda com client
+                                const label =
+                                    `${confirmClient.first_name} ${confirmClient.last_name}`.trim();
+                                localStorage.setItem(
+                                    `client.name.${confirmClient.id}`,
+                                    label,
+                                );
+                                const ret =
+                                    returnUrl ||
+                                    localStorage.getItem('agenda.returnUrl') ||
+                                    '/agenda';
+                                const sep = ret.includes('?') ? '&' : '?';
+                                window.location.href = `${ret}${sep}client=${confirmClient.id}`;
+                            }}
+                            style={{
+                                padding: '8px 12px',
+                                borderRadius: 8,
+                                border: '1px solid #059669',
+                                background: '#10b981',
+                                color: '#fff',
+                            }}
+                        >
+                            Confirmar
+                        </button>
+                    </div>
+                </div>
             </AppModal>
 
             {/* Modal de nenhum resultado encontrado */}

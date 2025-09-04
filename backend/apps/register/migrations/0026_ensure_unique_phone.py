@@ -32,6 +32,18 @@ END $$;
 '''
 
 
+def _run_add_unique(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(SQL_ADD_UNIQUE)
+
+
+def _run_drop_unique(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(SQL_DROP_UNIQUE)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ('register', '0025_alter_client_phone'),
@@ -41,5 +53,5 @@ class Migration(migrations.Migration):
     atomic = False
 
     operations = [
-        migrations.RunSQL(SQL_ADD_UNIQUE, reverse_sql=SQL_DROP_UNIQUE),
+        migrations.RunPython(_run_add_unique, reverse_code=_run_drop_unique),
     ]

@@ -178,6 +178,149 @@ export default function AgendaSettingsPage() {
                         {saving ? 'Salvando…' : 'Salvar'}
                     </button>
                 </div>
+
+                {import.meta.env.DEV && (
+                    <div
+                        style={{
+                            marginTop: 16,
+                            paddingTop: 12,
+                            borderTop: '1px solid #e5e7eb',
+                            display: 'grid',
+                            gap: 8,
+                        }}
+                    >
+                        <h3 style={{ margin: 0, color: '#b91c1c' }}>
+                            Área de testes (DEV)
+                        </h3>
+                        <button
+                            onClick={async () => {
+                                const token =
+                                    localStorage.getItem('accessToken');
+                                if (!token) {
+                                    alert('Sem sessão.');
+                                    return;
+                                }
+                                if (
+                                    !confirm(
+                                        'Limpar TODOS os compromissos deste profissional?',
+                                    )
+                                )
+                                    return;
+                                try {
+                                    const res = await fetch(
+                                        `${API_BASE}/agenda/appointments/purge/`,
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type':
+                                                    'application/json',
+                                                Authorization: `Bearer ${token}`,
+                                            },
+                                            body: JSON.stringify({}),
+                                        },
+                                    );
+                                    const data = await res
+                                        .json()
+                                        .catch(() => ({}));
+                                    if (!res.ok) {
+                                        alert(
+                                            'Falha ao limpar: ' +
+                                                JSON.stringify(data),
+                                        );
+                                        return;
+                                    }
+                                    alert(
+                                        'Limpeza concluída: ' +
+                                            JSON.stringify(data),
+                                    );
+                                } catch {
+                                    alert('Erro de rede na limpeza');
+                                }
+                            }}
+                            style={{
+                                padding: '6px 10px',
+                                borderRadius: 8,
+                                border: '1px solid #e5e7eb',
+                                background: '#fff0f0',
+                            }}
+                        >
+                            🧹 Limpar todos (DEV)
+                        </button>
+
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 8,
+                                alignItems: 'center',
+                            }}
+                        >
+                            <span>Limpar por dia:</span>
+                            <input id='purge-day-input' type='date' />
+                            <button
+                                onClick={async () => {
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        alert('Sem sessão.');
+                                        return;
+                                    }
+                                    const input = document.getElementById(
+                                        'purge-day-input',
+                                    ) as HTMLInputElement | null;
+                                    const val = input?.value;
+                                    if (!val) {
+                                        alert('Selecione uma data.');
+                                        return;
+                                    }
+                                    const start = new Date(`${val}T00:00:00`);
+                                    const end = new Date(start);
+                                    end.setDate(end.getDate() + 1);
+                                    try {
+                                        const res = await fetch(
+                                            `${API_BASE}/agenda/appointments/purge/`,
+                                            {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type':
+                                                        'application/json',
+                                                    Authorization: `Bearer ${token}`,
+                                                },
+                                                body: JSON.stringify({
+                                                    start: start.toISOString(),
+                                                    end: end.toISOString(),
+                                                }),
+                                            },
+                                        );
+                                        const data = await res
+                                            .json()
+                                            .catch(() => ({}));
+                                        if (!res.ok) {
+                                            alert(
+                                                'Falha ao limpar dia: ' +
+                                                    JSON.stringify(data),
+                                            );
+                                            return;
+                                        }
+                                        alert(
+                                            'Dia limpo: ' +
+                                                JSON.stringify(data),
+                                        );
+                                    } catch {
+                                        alert('Erro de rede na limpeza (dia)');
+                                    }
+                                }}
+                                style={{
+                                    padding: '6px 10px',
+                                    borderRadius: 8,
+                                    border: '1px solid #e5e7eb',
+                                    background: '#fffdf0',
+                                }}
+                            >
+                                🗑️ Limpar dia (DEV)
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

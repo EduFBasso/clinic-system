@@ -12,6 +12,8 @@ export interface Appointment {
     visit_type: 'avaliacao' | 'retorno' | 'procedimento' | 'outro';
     start_at: string;
     end_at: string;
+    notes?: string;
+    location?: string;
     status: 'scheduled' | 'done' | 'canceled';
 }
 
@@ -27,6 +29,7 @@ export function useAppointmentsRange(
     startDate: Date,
     endDate: Date,
     clientId?: number,
+    reloadKey?: number,
 ) {
     const [items, setItems] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(false);
@@ -66,7 +69,7 @@ export function useAppointmentsRange(
                 setError(err.message);
                 setLoading(false);
             });
-    }, [startISO, endISO, clientId]);
+    }, [startISO, endISO, clientId, reloadKey]);
 
     return { items, loading, error };
 }

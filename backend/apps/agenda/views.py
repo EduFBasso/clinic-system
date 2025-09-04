@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.conf import settings
 from django.utils import timezone
 
 from .models import Appointment
@@ -24,6 +25,12 @@ class IsProfessionalOrReadOnly(permissions.BasePermission):
 class AppointmentViewSet(viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     permission_classes = [IsProfessionalOrReadOnly]
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        # garante request no contexto para validação que depende do usuário
+        ctx["request"] = getattr(self, "request", None)
+        return ctx
 
     def get_queryset(self):
         qs = Appointment.objects.all()
@@ -52,6 +59,39 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         if status_val:
             qs = qs.filter(status=status_val)
         return qs.select_related("professional", "client")
+
+    def perform_create(self, serializer):
+        # profissional sempre é o usuário autenticado
+        user = getattr(self.request, "user", None)
+        serializer.save(professional=user)
+
+    @action(detail=False, methods=["post"], url_path="purge")
+    def purge(self, request):
+        """Apaga compromissos do profissional autenticado (DEV-only).
+
+        Aceita JSON opcional {start: ISO, end: ISO} para limitar por intervalo.
+        Somente disponível com settings.DEBUG=True para evitar uso em produção.
+        """
+        if not settings.DEBUG:
+            return Response({"detail": "forbidden"}, status=403)
+        user = getattr(request, "user", None)
+        if not (user and getattr(user, "id", None)):
+            return Response({"detail": "unauthorized"}, status=401)
+
+        qs = Appointment.objects.filter(professional_id=user.id)
+        start = request.data.get("start")
+        end = request.data.get("end")
+        try:
+            if start:
+                qs = qs.filter(start_at__gte=start)
+            if end:
+                qs = qs.filter(end_at__lte=end)
+        except Exception:
+            # Se datas inválidas forem passadas, ignore filtros e apague tudo do profissional
+            pass
+
+        deleted, _ = qs.delete()
+        return Response({"deleted": deleted})
 
     @action(detail=False, methods=["get"], url_path="next")
     def next_for_client(self, request):

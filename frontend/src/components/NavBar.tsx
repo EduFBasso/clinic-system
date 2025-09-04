@@ -64,6 +64,14 @@ const NavBar: React.FC<NavBarProps> = ({
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
+    // Modal de decisão para Novo Compromisso quando já existe um ativo
+    const [agendaDecisionOpen, setAgendaDecisionOpen] = useState(false);
+    const [agendaDecisionAppt, setAgendaDecisionAppt] = useState<{
+        id: number;
+        start_at: string;
+        client: number;
+        title?: string;
+    } | null>(null);
     // Quando true após solicitar OTP com sucesso, só revela o campo após clicar em OK no modal
     const [otpSentConfirmPending, setOtpSentConfirmPending] = useState(false);
 
@@ -145,6 +153,108 @@ const NavBar: React.FC<NavBarProps> = ({
         }
     }
 
+    // Helpers Agenda
+    async function fetchNextScheduledAppointment(clientId: number) {
+        const token = localStorage.getItem('accessToken');
+        if (isTokenExpired(token)) return null;
+        try {
+            const url = `${API_BASE}/agenda/appointments/?client=${clientId}&start=${encodeURIComponent(
+                new Date().toISOString(),
+            )}&status=scheduled`;
+            const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) return null;
+            const list = await res.json();
+            return Array.isArray(list) && list.length ? list[0] : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function goAgendaDay(dateISO: string, clientId?: number) {
+        const d = new Date(dateISO);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const url = `/agenda?date=${y}-${m}-${day}${
+            clientId ? `&client=${clientId}` : ''
+        }`;
+        if (isMobileDevice()) {
+            window.location.href = url;
+        } else {
+            window.open(url, '_self');
+        }
+    }
+
+    async function handleAgendaEditLast() {
+        setAgendaDropdownOpen(false);
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+            setSessionExpiredOpen(true);
+            return;
+        }
+        if (!selectedClientId) {
+            setModalMessage('Selecione um cliente para editar o compromisso.');
+            setModalOpen(true);
+            return;
+        }
+        const nextAppt = await fetchNextScheduledAppointment(selectedClientId);
+        if (!nextAppt) {
+            setModalMessage('Não há compromisso agendado para este cliente.');
+            setModalOpen(true);
+            return;
+        }
+        // Abre Agenda no dia do compromisso para facilitar a edição
+        goAgendaDay(nextAppt.start_at, selectedClientId);
+    }
+
+    async function handleAgendaNew() {
+        setAgendaDropdownOpen(false);
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+            setSessionExpiredOpen(true);
+            return;
+        }
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const baseUrl = `/agenda?date=${y}-${m}-${d}&new=1`;
+        // Se não houver cliente selecionado, exige seleção e foca na lista
+        if (!selectedClientId) {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('needClientSelectionForAgenda'),
+                );
+            } catch {
+                /* noop */
+            }
+            setModalMessage(
+                'Selecione um cliente antes de criar um compromisso.',
+            );
+            setModalOpen(true);
+            return;
+        }
+        // Há cliente selecionado: verifica se já possui compromisso agendado (próximo)
+        try {
+            // Pede ao painel de clientes para focar o cartão selecionado, mesmo que esteja fora de visão
+            window.dispatchEvent(new CustomEvent('focusSelectedClientCard'));
+        } catch {
+            /* noop */
+        }
+        const nextAppt = await fetchNextScheduledAppointment(selectedClientId);
+        if (!nextAppt) {
+            const url = `${baseUrl}&client=${selectedClientId}`;
+            if (isMobileDevice()) window.location.href = url;
+            else window.open(url, '_self');
+            return;
+        }
+        // Existe compromisso: pergunta se quer criar novo ou editar o último (próximo agendado)
+        setAgendaDecisionAppt(nextAppt);
+        setAgendaDecisionOpen(true);
+    }
+
     return (
         <div className={styles.navBar}>
             <div className={styles.menuContainer}>
@@ -203,37 +313,18 @@ const NavBar: React.FC<NavBarProps> = ({
                         <div className={styles.dropdownMenu}>
                             <button
                                 className={styles.dropdownItem}
-                                onClick={() => {
-                                    setAgendaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
-                                        return;
-                                    }
-                                    const now = new Date();
-                                    const y = now.getFullYear();
-                                    const m = String(
-                                        now.getMonth() + 1,
-                                    ).padStart(2, '0');
-                                    const d = String(now.getDate()).padStart(
-                                        2,
-                                        '0',
-                                    );
-                                    const url = `/agenda?date=${y}-${m}-${d}${
-                                        selectedClientId
-                                            ? `&client=${selectedClientId}`
-                                            : ''
-                                    }`;
-                                    if (isMobileDevice()) {
-                                        window.location.href = url;
-                                    } else {
-                                        window.open(url, '_self');
-                                    }
-                                }}
+                                onClick={handleAgendaNew}
                             >
-                                Abrir
+                                Novo Compromisso
                             </button>
+
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={handleAgendaEditLast}
+                            >
+                                Editar Último
+                            </button>
+
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
@@ -253,7 +344,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                         2,
                                         '0',
                                     );
-                                    const url = `/agenda/details?date=${y}-${m}-${d}&mode=day`;
+                                    const url = `/agenda?date=${y}-${m}-${d}&mode=week`;
                                     if (isMobileDevice()) {
                                         window.location.href = url;
                                     } else {
@@ -261,36 +352,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                     }
                                 }}
                             >
-                                Detalhes (Dia)
-                            </button>
-                            <button
-                                className={styles.dropdownItem}
-                                onClick={() => {
-                                    setAgendaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
-                                        return;
-                                    }
-                                    const now = new Date();
-                                    const y = now.getFullYear();
-                                    const m = String(
-                                        now.getMonth() + 1,
-                                    ).padStart(2, '0');
-                                    const d = String(now.getDate()).padStart(
-                                        2,
-                                        '0',
-                                    );
-                                    const url = `/agenda/details?date=${y}-${m}-${d}&mode=week`;
-                                    if (isMobileDevice()) {
-                                        window.location.href = url;
-                                    } else {
-                                        window.open(url, '_self');
-                                    }
-                                }}
-                            >
-                                Detalhes (Semana)
+                                Compromissos
                             </button>
                         </div>
                     )}
@@ -310,6 +372,84 @@ const NavBar: React.FC<NavBarProps> = ({
                     🩺 Consulta
                 </button>
             </div>
+
+            {/* Modal de decisão para Novo Compromisso */}
+            <AppModal
+                open={agendaDecisionOpen}
+                onClose={() => setAgendaDecisionOpen(false)}
+                closeOnEnter={false}
+            >
+                <div style={{ display: 'grid', gap: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>
+                        Já existe um compromisso agendado para este cliente.
+                    </div>
+                    {agendaDecisionAppt && (
+                        <div style={{ color: '#374151', fontSize: 14 }}>
+                            Próximo:{' '}
+                            {new Date(
+                                agendaDecisionAppt.start_at,
+                            ).toLocaleString('pt-BR')}
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        <button
+                            className={styles.loginButton}
+                            onClick={() => {
+                                // Criar novo
+                                setAgendaDecisionOpen(false);
+                                const now = new Date();
+                                const y = now.getFullYear();
+                                const m = String(now.getMonth() + 1).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const d = String(now.getDate()).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const url = `/agenda?date=${y}-${m}-${d}&client=${
+                                    selectedClientId ?? ''
+                                }&new=1`;
+                                if (isMobileDevice())
+                                    window.location.href = url;
+                                else window.open(url, '_self');
+                            }}
+                        >
+                            Criar novo
+                        </button>
+                        <button
+                            className={styles.loginButton}
+                            onClick={() => {
+                                // Editar último (próximo agendado)
+                                if (!agendaDecisionAppt) return;
+                                setAgendaDecisionOpen(false);
+                                const d = new Date(agendaDecisionAppt.start_at);
+                                const y = d.getFullYear();
+                                const m = String(d.getMonth() + 1).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const day = String(d.getDate()).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const url = `/agenda?date=${y}-${m}-${day}&client=${agendaDecisionAppt.client}&edit=${agendaDecisionAppt.id}`;
+                                if (isMobileDevice())
+                                    window.location.href = url;
+                                else window.open(url, '_self');
+                            }}
+                        >
+                            Editar último
+                        </button>
+                        <button
+                            className={styles.loginButton}
+                            onClick={() => setAgendaDecisionOpen(false)}
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </AppModal>
 
             <div className={styles.loginContainer}>
                 {loggedProfessional ? (

@@ -70,9 +70,21 @@ class ClientSerializer(serializers.ModelSerializer):
 
 
 class ClientBasicSerializer(serializers.ModelSerializer):
+    next_appointment_start_at = serializers.DateTimeField(read_only=True)
+    next_appointment_end_at = serializers.DateTimeField(read_only=True)
+    next_appointment_title = serializers.CharField(read_only=True)
+    next_appointment_visit_type = serializers.CharField(read_only=True)
+    next_appointment_notes = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    next_appointment_status = serializers.CharField(read_only=True)
+    last_appointment_start_at = serializers.DateTimeField(read_only=True)
+    last_appointment_title = serializers.CharField(read_only=True)
+    last_appointment_status = serializers.CharField(read_only=True)
+    last_appointment_notes = serializers.CharField(read_only=True)
     class Meta:
         model = Client
         fields = [
             'id', 'first_name', 'last_name', 'phone', 'email',
-            'address', 'neighborhood', 'city', 'state'
+            'address', 'neighborhood', 'city', 'state',
+            'next_appointment_start_at', 'next_appointment_end_at', 'next_appointment_title', 'next_appointment_visit_type', 'next_appointment_notes', 'next_appointment_status',
+            'last_appointment_start_at', 'last_appointment_title', 'last_appointment_notes', 'last_appointment_status'
         ]

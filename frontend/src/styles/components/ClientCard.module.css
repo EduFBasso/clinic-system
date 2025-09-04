@@ -23,6 +23,7 @@
 .value {
     flex: 1;
     color: var(--color-text);
+    word-break: break-word;
 }
 
 .iconButton {
@@ -32,6 +33,12 @@
     color: var(--color-secondary);
     font-size: 1.2rem;
     margin-left: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
 }
 
 .editButton {
@@ -42,4 +49,29 @@
     border: none;
     border-radius: 4px;
     cursor: pointer;
+}
+
+.clamp1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+}
+
+.notesText {
+    display: -webkit-box;
+    -webkit-line-clamp: 3; /* allow up to 3 lines before truncation */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal; /* allow wrapping */
+    word-break: break-word; /* avoid horizontal overflow */
+}
+
+.rowBaseline {
+    display: flex;
+    align-items: baseline;
+    flex: 1;
 }

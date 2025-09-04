@@ -24,6 +24,19 @@ export default function Home() {
         }
     }, []);
 
+    // Mensagem ao voltar da Agenda sem cliente selecionado
+    useEffect(() => {
+        try {
+            const msg = localStorage.getItem('agenda.promptSelectClient');
+            if (msg) {
+                alert(msg);
+                localStorage.removeItem('agenda.promptSelectClient');
+            }
+        } catch {
+            // ignore
+        }
+    }, []);
+
     // Função para abrir o cadastro em nova janela
     const handleAddClient = () => {
         window.open(
