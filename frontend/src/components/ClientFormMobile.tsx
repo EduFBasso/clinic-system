@@ -102,6 +102,17 @@ export default function ClientFormMobile({
                     onChange={e => handleChange('address', e.target.value)}
                     label={'Rua / Av., nº'}
                 />
+                {/* CEP imediatamente abaixo da Rua */}
+                <InputField
+                    name='postal_code'
+                    value={formData.postal_code}
+                    onChange={e => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        const masked = formatCep(raw);
+                        handleChange('postal_code', masked);
+                    }}
+                    label={'CEP'}
+                />
                 <InputField
                     name='neighborhood'
                     value={formData.neighborhood}
@@ -126,7 +137,7 @@ export default function ClientFormMobile({
                         }}
                         style={{
                             width: '100%',
-                            background: 'var(--color-bg-section)',
+                            background: 'var(--color-primary-light)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 4,
                             padding: '8px',
@@ -157,7 +168,7 @@ export default function ClientFormMobile({
                         onChange={e => handleChange('city', e.target.value)}
                         style={{
                             width: '100%',
-                            background: 'var(--color-bg-section)',
+                            background: 'var(--color-primary-light)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 4,
                             padding: '8px',
@@ -182,16 +193,6 @@ export default function ClientFormMobile({
                         )}
                     </select>
                 </div>
-                <InputField
-                    name='postal_code'
-                    value={formData.postal_code}
-                    onChange={e => {
-                        const raw = e.target.value.replace(/\D/g, '');
-                        const masked = formatCep(raw);
-                        handleChange('postal_code', masked);
-                    }}
-                    label={'CEP'}
-                />
             </section>
             <section>
                 <h3 className={styles.panelTitle}>Atividades e Calçados</h3>

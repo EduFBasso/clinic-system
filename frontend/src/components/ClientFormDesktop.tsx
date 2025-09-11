@@ -161,6 +161,20 @@ export default function ClientFormDesktop({
                             onChange={handleChange}
                             label={'Rua / Av., nº'}
                         />
+                        {/* CEP imediatamente abaixo da Rua */}
+                        <InputField
+                            label='CEP'
+                            name='postal_code'
+                            value={formData.postal_code}
+                            onChange={e => {
+                                const raw = e.target.value.replace(/\D/g, '');
+                                const masked = formatCep(raw);
+                                setFormData(prev => ({
+                                    ...prev,
+                                    postal_code: masked,
+                                }));
+                            }}
+                        />
                         <InputField
                             name='neighborhood'
                             value={formData.neighborhood}
@@ -168,7 +182,10 @@ export default function ClientFormDesktop({
                             label={'Bairro'}
                         />
                         {/* Estado (UF) antes de Cidade */}
-                        <div className={styles.formRow}>
+                        <div
+                            className={styles.formRow}
+                            style={{ marginBottom: 12 }}
+                        >
                             <label
                                 htmlFor='state'
                                 style={{ display: 'block', marginBottom: 4 }}
@@ -188,7 +205,7 @@ export default function ClientFormDesktop({
                                 }
                                 style={{
                                     width: '100%',
-                                    background: 'var(--color-bg-section)',
+                                    background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
                                     padding: '8px',
@@ -224,7 +241,7 @@ export default function ClientFormDesktop({
                                 }
                                 style={{
                                     width: '100%',
-                                    background: 'var(--color-bg-section)',
+                                    background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
                                     padding: '8px',
@@ -252,19 +269,6 @@ export default function ClientFormDesktop({
                             </select>
                         </div>
                         {/* state already rendered above */}
-                        <InputField
-                            label='CEP'
-                            name='postal_code'
-                            value={formData.postal_code}
-                            onChange={e => {
-                                const raw = e.target.value.replace(/\D/g, '');
-                                const masked = formatCep(raw);
-                                setFormData(prev => ({
-                                    ...prev,
-                                    postal_code: masked,
-                                }));
-                            }}
-                        />
                     </section>
                     <section>
                         <h3 className={styles.panelTitle}>Anamnese</h3>
