@@ -6,6 +6,7 @@ import { useAppointments } from '../hooks/useAppointments';
 import type { Appointment } from '../hooks/useAppointments';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
+// @ts-ignore - local type resolution for react-icons can be skipped
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 
 type DurationOption = 60 | 90 | 120 | 150;

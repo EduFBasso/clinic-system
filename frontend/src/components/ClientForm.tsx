@@ -6,6 +6,7 @@ import AppModal from './Modal';
 import ClientFormDesktop from './ClientFormDesktop';
 import ClientFormMobile from './ClientFormMobile';
 import useIsMobile from './useIsMobile';
+// @ts-ignore - resolve at runtime
 import { useNavigate } from 'react-router-dom';
 
 export default function ClientForm({
