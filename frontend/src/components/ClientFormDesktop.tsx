@@ -181,8 +181,8 @@ export default function ClientFormDesktop({
                             onChange={handleChange}
                             label={'Bairro'}
                         />
-                        {/* Spacer to normalize gap (Bairro -> Estado) to 10px total */}
-                        <div style={{ height: 2 }} />
+                        {/* Spacer ajustado: +3px para aumentar respiro entre Bairro e Estado */}
+                        <div style={{ height: 5 }} />
                         {/* Estado (UF) antes de Cidade */}
                         <div
                             className={styles.formRow}
