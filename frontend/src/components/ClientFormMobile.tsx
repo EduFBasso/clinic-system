@@ -20,6 +20,7 @@ import { formatCep } from '../utils/formatCep';
 import { formatPhone } from '../utils/formatPhone';
 import SensitivityTest from './FormElements/SensitivityTest';
 import { BR_UFS } from '../data/br-ufs';
+import { useCitiesByUF } from '../hooks/useCitiesByUF';
 
 interface Props {
     formData: ClientData;
@@ -51,6 +52,9 @@ export default function ClientFormMobile({
             handleChange(name, value);
         };
 
+    const { names: cityNames, loading: citiesLoading } = useCitiesByUF(
+        formData.state,
+    );
     return (
         <form onSubmit={handleSubmit} className={styles.clientForm}>
             <h2 className={styles.formTitle}>Cadastro de Cliente</h2>
@@ -104,12 +108,7 @@ export default function ClientFormMobile({
                     onChange={e => handleChange('neighborhood', e.target.value)}
                     label={'Bairro'}
                 />
-                <InputField
-                    name='city'
-                    value={formData.city}
-                    onChange={e => handleChange('city', e.target.value)}
-                    label={'Cidade'}
-                />
+                {/* Estado (UF) antes de Cidade */}
                 <div className={styles.formRow}>
                     <label
                         htmlFor='state'
@@ -121,7 +120,10 @@ export default function ClientFormMobile({
                         id='state'
                         name='state'
                         value={formData.state}
-                        onChange={e => handleChange('state', e.target.value)}
+                        onChange={e => {
+                            handleChange('state', e.target.value);
+                            handleChange('city', '');
+                        }}
                         style={{
                             width: '100%',
                             background: 'var(--color-bg-section)',
@@ -137,6 +139,45 @@ export default function ClientFormMobile({
                                 {uf.name} ({uf.code})
                             </option>
                         ))}
+                    </select>
+                </div>
+                {/* Cidade dependente */}
+                <div className={styles.formRow}>
+                    <label
+                        htmlFor='city'
+                        style={{ display: 'block', marginBottom: 4 }}
+                    >
+                        Cidade
+                    </label>
+                    <select
+                        id='city'
+                        name='city'
+                        disabled={!formData.state || citiesLoading}
+                        value={formData.city}
+                        onChange={e => handleChange('city', e.target.value)}
+                        style={{
+                            width: '100%',
+                            background: 'var(--color-bg-section)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 4,
+                            padding: '8px',
+                            color: 'var(--color-text)',
+                        }}
+                    >
+                        {!formData.state ? (
+                            <option value=''>Selecione o estado primeiro</option>
+                        ) : citiesLoading ? (
+                            <option value=''>Carregando cidades…</option>
+                        ) : (
+                            <>
+                                <option value=''>Selecione</option>
+                                {cityNames.map(name => (
+                                    <option key={name} value={name}>
+                                        {name}
+                                    </option>
+                                ))}
+                            </>
+                        )}
                     </select>
                 </div>
                 <InputField

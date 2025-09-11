@@ -21,6 +21,7 @@ import { formatCep } from '../utils/formatCep';
 import { formatPhone } from '../utils/formatPhone';
 import styles from '../styles/pages/Client.module.css';
 import { BR_UFS } from '../data/br-ufs';
+import { useCitiesByUF } from '../hooks/useCitiesByUF';
 
 interface Props {
     formData: ClientData;
@@ -45,6 +46,9 @@ export default function ClientFormDesktop({
     onQuickSubmit,
     formRef,
 }: Props) {
+    const { names: cityNames, loading: citiesLoading } = useCitiesByUF(
+        formData.state,
+    );
     return (
         <form
             onSubmit={handleSubmit}
@@ -163,18 +167,9 @@ export default function ClientFormDesktop({
                             onChange={handleChange}
                             label={'Bairro'}
                         />
-                        <InputField
-                            name='city'
-                            value={formData.city}
-                            onChange={handleChange}
-                            label={'Cidade'}
-                        />
-                        {/* UF dropdown to avoid invalid inputs */}
+                        {/* Estado (UF) antes de Cidade */}
                         <div className={styles.formRow}>
-                            <label
-                                htmlFor='state'
-                                style={{ display: 'block', marginBottom: 4 }}
-                            >
+                            <label htmlFor='state' style={{ display: 'block', marginBottom: 4 }}>
                                 Estado (UF)
                             </label>
                             <select
@@ -185,6 +180,7 @@ export default function ClientFormDesktop({
                                     setFormData(prev => ({
                                         ...prev,
                                         state: e.target.value,
+                                        city: '', // reset city on state change
                                     }))
                                 }
                                 style={{
@@ -204,6 +200,48 @@ export default function ClientFormDesktop({
                                 ))}
                             </select>
                         </div>
+                        {/* Cidade dependente do UF selecionado */}
+                        <div className={styles.formRow}>
+                            <label htmlFor='city' style={{ display: 'block', marginBottom: 4 }}>
+                                Cidade
+                            </label>
+                            <select
+                                id='city'
+                                name='city'
+                                disabled={!formData.state || citiesLoading}
+                                value={formData.city}
+                                onChange={e =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        city: e.target.value,
+                                    }))
+                                }
+                                style={{
+                                    width: '100%',
+                                    background: 'var(--color-bg-section)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: 4,
+                                    padding: '8px',
+                                    color: 'var(--color-text)',
+                                }}
+                            >
+                                {!formData.state ? (
+                                    <option value=''>Selecione o estado primeiro</option>
+                                ) : citiesLoading ? (
+                                    <option value=''>Carregando cidades…</option>
+                                ) : (
+                                    <>
+                                        <option value=''>Selecione</option>
+                                        {cityNames.map(name => (
+                                            <option key={name} value={name}>
+                                                {name}
+                                            </option>
+                                        ))}
+                                    </>
+                                )}
+                            </select>
+                        </div>
+                        {/* state already rendered above */}
                         <InputField
                             label='CEP'
                             name='postal_code'
