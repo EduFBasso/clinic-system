@@ -165,7 +165,9 @@ export default function ClientFormMobile({
                         }}
                     >
                         {!formData.state ? (
-                            <option value=''>Selecione o estado primeiro</option>
+                            <option value=''>
+                                Selecione o estado primeiro
+                            </option>
                         ) : citiesLoading ? (
                             <option value=''>Carregando cidades…</option>
                         ) : (

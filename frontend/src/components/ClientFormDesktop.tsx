@@ -169,7 +169,10 @@ export default function ClientFormDesktop({
                         />
                         {/* Estado (UF) antes de Cidade */}
                         <div className={styles.formRow}>
-                            <label htmlFor='state' style={{ display: 'block', marginBottom: 4 }}>
+                            <label
+                                htmlFor='state'
+                                style={{ display: 'block', marginBottom: 4 }}
+                            >
                                 Estado (UF)
                             </label>
                             <select
@@ -202,7 +205,10 @@ export default function ClientFormDesktop({
                         </div>
                         {/* Cidade dependente do UF selecionado */}
                         <div className={styles.formRow}>
-                            <label htmlFor='city' style={{ display: 'block', marginBottom: 4 }}>
+                            <label
+                                htmlFor='city'
+                                style={{ display: 'block', marginBottom: 4 }}
+                            >
                                 Cidade
                             </label>
                             <select
@@ -226,9 +232,13 @@ export default function ClientFormDesktop({
                                 }}
                             >
                                 {!formData.state ? (
-                                    <option value=''>Selecione o estado primeiro</option>
+                                    <option value=''>
+                                        Selecione o estado primeiro
+                                    </option>
                                 ) : citiesLoading ? (
-                                    <option value=''>Carregando cidades…</option>
+                                    <option value=''>
+                                        Carregando cidades…
+                                    </option>
                                 ) : (
                                     <>
                                         <option value=''>Selecione</option>
