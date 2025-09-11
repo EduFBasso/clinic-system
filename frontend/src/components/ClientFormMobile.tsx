@@ -120,10 +120,10 @@ export default function ClientFormMobile({
                     label={'Bairro'}
                 />
                 {/* Estado (UF) antes de Cidade */}
-                <div className={styles.formRow}>
+                <div className={styles.formRow} style={{ marginBottom: 24 }}>
                     <label
                         htmlFor='state'
-                        style={{ display: 'block', marginBottom: 4 }}
+                        style={{ display: 'block', marginBottom: 8 }}
                     >
                         Estado (UF)
                     </label>
@@ -142,6 +142,7 @@ export default function ClientFormMobile({
                             borderRadius: 4,
                             padding: '8px',
                             color: 'var(--color-text)',
+                            marginBottom: 0,
                         }}
                     >
                         <option value=''>Selecione</option>
@@ -156,7 +157,7 @@ export default function ClientFormMobile({
                 <div className={styles.formRow}>
                     <label
                         htmlFor='city'
-                        style={{ display: 'block', marginBottom: 4 }}
+                        style={{ display: 'block', marginBottom: 8 }}
                     >
                         Cidade
                     </label>
