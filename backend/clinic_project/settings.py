@@ -11,6 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 
 DEBUG = config("DEBUG", default=False, cast=bool)
+APP_VERSION = config("APP_VERSION", default="dev")
 
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",
@@ -37,6 +38,8 @@ AUTH_USER_MODEL = 'register.Professional'
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    # Slow query logger (added after security/whitenoise for realistic timings)
+    'clinic_project.middleware.QueryTimingMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -96,6 +99,14 @@ DATABASES = {
     'PORT': config("DB_PORT", default="5432"),
     }
 }
+
+# Durante testes (pytest) podemos usar SQLite em memória para acelerar e isolar ambiente
+import os as _os
+if _os.environ.get('PYTEST_CURRENT_TEST') and config('TEST_USE_SQLITE', default=True, cast=bool):
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+    }
 
 # Garante transações automáticas por requisição (evita estados parciais em exceptions)
 ATOMIC_REQUESTS = True
@@ -253,5 +264,10 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'performance': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        }
     }
 }
