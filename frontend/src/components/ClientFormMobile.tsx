@@ -119,8 +119,10 @@ export default function ClientFormMobile({
                     onChange={e => handleChange('neighborhood', e.target.value)}
                     label={'Bairro'}
                 />
+                {/* Spacer to normalize gap (Bairro -> Estado) to 12px total */}
+                <div style={{ height: 4 }} />
                 {/* Estado (UF) antes de Cidade */}
-                <div className={styles.formRow} style={{ marginBottom: 18 }}>
+                <div className={styles.formRow} style={{ marginBottom: 12 }}>
                     <label
                         htmlFor='state'
                         style={{ display: 'block', marginBottom: 8 }}
