@@ -153,7 +153,7 @@ export default function ClientFormDesktop({
                     </section>
                 </div>
                 <div className={styles.rightPanel}>
-                    <section style={{ marginBottom: 30 }}>
+                    <section style={{ marginBottom: 28 }}>
                         <h3 className={styles.panelTitle}>Endereço</h3>
                         <InputField
                             name='address'
