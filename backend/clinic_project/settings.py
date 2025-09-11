@@ -97,6 +97,9 @@ DATABASES = {
     }
 }
 
+# Garante transações automáticas por requisição (evita estados parciais em exceptions)
+ATOMIC_REQUESTS = True
+
 # Prefer psycopg3 on Windows to avoid legacy encoding issues with psycopg2.
 try:
     _engine = DATABASES['default'].get('ENGINE', '')
@@ -155,7 +158,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    # Em produção removemos o BrowsableAPI para performance/segurança mínima
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ] if not DEBUG else [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
 }
 
 # CSRF trusted origins (only needed if using cookies/session auth or admin from another origin).
@@ -214,3 +224,34 @@ EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=False, cast=bool)
 # Default sender
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER or "webmaster@localhost")
+
+# Logging básico para capturar erros não tratados e avisos importantes.
+LOG_LEVEL = 'DEBUG' if DEBUG else 'INFO'
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '[%(asctime)s] %(levelname)s %(name)s: %(message)s'
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+            'level': LOG_LEVEL,
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django.db.backends': {
+            'handlers': ['console'],
+            # Mude para DEBUG temporariamente se quiser ver SQL.
+            'level': 'INFO',
+            'propagate': False,
+        },
+    }
+}
