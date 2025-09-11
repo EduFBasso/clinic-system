@@ -210,7 +210,7 @@ export default function ClientFormDesktop({
                                     background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
-                                    padding: '9px 8px', // +2px height overall
+                                    padding: '10px 8px', // increased +2px total vs previous
                                     color: 'var(--color-text)',
                                 }}
                             >
@@ -246,7 +246,7 @@ export default function ClientFormDesktop({
                                     background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
-                                    padding: '9px 8px', // +2px height overall
+                                    padding: '10px 8px', // increased +2px total vs previous
                                     color: 'var(--color-text)',
                                 }}
                             >
