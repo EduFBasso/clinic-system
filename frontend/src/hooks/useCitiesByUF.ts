@@ -25,7 +25,7 @@ export function useCitiesByUF(uf: string | undefined) {
             return;
         }
 
-        // Try memory cache
+        // Memory cache
         if (memCache[ufCode]) {
             setCities(memCache[ufCode]);
             setLoading(false);
@@ -33,42 +33,40 @@ export function useCitiesByUF(uf: string | undefined) {
             return;
         }
 
-        // Try localStorage cache
+        // localStorage cache (TTL 7d)
         try {
             const raw = localStorage.getItem(cacheKey(ufCode));
             if (raw) {
                 const parsed = JSON.parse(raw) as { ts: number; data: City[] };
-                // TTL 7 days
                 const age = Date.now() - parsed.ts;
+                if (age < 7 * 24 * 60 * 60 * 1000) {
+                    memCache[ufCode] = parsed.data;
+                    setCities(parsed.data);
+                    setLoading(false);
+                    setError(null);
+                    return;
+                }
+            }
+        } catch {
+            // ignore storage or JSON errors
+        }
 
         let aborted = false;
         setLoading(true);
-            .catch(e => {
+        setError(null);
 
-                // Try fallback dataset
-                const fallback = BR_CITIES_FALLBACK[ufCode];
-                if (fallback && fallback.length) {
-                    const data = fallback.map((name, i) => ({
-                        id: i + 1,
-                        name,
-                    }));
-                    memCache[ufCode] = data;
-                    setCities(data);
-                    setError(null);
-                } else {
-                    setError(e?.message || 'Falha ao carregar cidades');
-                }
         const url = `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${encodeURIComponent(
             ufCode,
         )}/municipios?orderBy=nome`;
+
         fetch(url)
             .then(async res => {
                 if (!res.ok) throw new Error(`IBGE ${res.status}`);
                 return res.json();
             })
             .then((arr: unknown) => {
-                const list = Array.isArray(arr) ? (arr as IbgeCity[]) : [];
                 if (aborted) return;
+                const list = Array.isArray(arr) ? (arr as IbgeCity[]) : [];
                 const data: City[] = list
                     .filter(
                         x =>
@@ -84,22 +82,25 @@ export function useCitiesByUF(uf: string | undefined) {
                     );
                 } catch {
                     // ignore storage quota errors
-                                // Try fallback
-                                const fallback = BR_CITIES_FALLBACK[ufCode];
-                                if (fallback && fallback.length) {
-                                    const data = fallback.map((name, i) => ({ id: i + 1, name }));
-                                    memCache[ufCode] = data;
-                                    setCities(data);
-                                    setError(null);
-                                } else {
-                                    setError(e?.message || 'Falha ao carregar cidades');
-                                }
-                                setLoading(false);
+                }
+                setCities(data);
                 setLoading(false);
             })
-            .catch(e => {
+            .catch(err => {
                 if (aborted) return;
-                setError(e?.message || 'Falha ao carregar cidades');
+                const fallback = BR_CITIES_FALLBACK[ufCode];
+                if (fallback && fallback.length) {
+                    const data = fallback.map((name, i) => ({
+                        id: i + 1,
+                        name,
+                    }));
+                    memCache[ufCode] = data;
+                    setCities(data);
+                    setError(null);
+                } else {
+                    setError(err?.message || 'Falha ao carregar cidades');
+                    setCities([]);
+                }
                 setLoading(false);
             });
 
