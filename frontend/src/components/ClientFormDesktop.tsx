@@ -186,7 +186,7 @@ export default function ClientFormDesktop({
                         {/* Estado (UF) antes de Cidade */}
                         <div
                             className={styles.formRow}
-                            style={{ marginBottom: 10 }}
+                            style={{ marginBottom: 12 }}
                         >
                             <label
                                 htmlFor='state'
@@ -210,7 +210,7 @@ export default function ClientFormDesktop({
                                     background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
-                                    padding: '10px 8px', // increased +2px total vs previous
+                                    padding: '10px 8px 11px', // +1px effective height (bottom only)
                                     color: 'var(--color-text)',
                                 }}
                             >
@@ -246,7 +246,7 @@ export default function ClientFormDesktop({
                                     background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
-                                    padding: '10px 8px', // increased +2px total vs previous
+                                    padding: '10px 8px 11px', // keep slight extra height
                                     color: 'var(--color-text)',
                                 }}
                             >

@@ -122,7 +122,7 @@ export default function ClientFormMobile({
                 {/* Spacer ajustado: +3px para aumentar respiro entre Bairro e Estado */}
                 <div style={{ height: 7 }} />
                 {/* Estado (UF) antes de Cidade */}
-                <div className={styles.formRow} style={{ marginBottom: 12 }}>
+                <div className={styles.formRow} style={{ marginBottom: 14 }}>
                     <label
                         htmlFor='state'
                         style={{ display: 'block', marginBottom: 8 }}
@@ -142,7 +142,7 @@ export default function ClientFormMobile({
                             background: 'var(--color-primary-light)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 4,
-                            padding: '10px 8px', // increased +2px total vs previous
+                            padding: '10px 8px 11px', // +1px bottom for subtle increase
                             color: 'var(--color-text)',
                             marginBottom: 0,
                         }}
@@ -174,7 +174,7 @@ export default function ClientFormMobile({
                             background: 'var(--color-primary-light)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 4,
-                            padding: '10px 8px', // increased +2px total vs previous
+                            padding: '10px 8px 11px', // match state select height tweak
                             color: 'var(--color-text)',
                         }}
                     >
