@@ -120,7 +120,7 @@ export default function ClientFormMobile({
                     label={'Bairro'}
                 />
                 {/* Estado (UF) antes de Cidade */}
-                <div className={styles.formRow} style={{ marginBottom: 24 }}>
+                <div className={styles.formRow} style={{ marginBottom: 18 }}>
                     <label
                         htmlFor='state'
                         style={{ display: 'block', marginBottom: 8 }}
