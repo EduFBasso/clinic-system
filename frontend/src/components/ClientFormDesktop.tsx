@@ -153,7 +153,7 @@ export default function ClientFormDesktop({
                     </section>
                 </div>
                 <div className={styles.rightPanel}>
-                    <section style={{ marginBottom: 32 }}>
+                    <section style={{ marginBottom: 30 }}>
                         <h3 className={styles.panelTitle}>Endereço</h3>
                         <InputField
                             name='address'
@@ -271,7 +271,7 @@ export default function ClientFormDesktop({
                             </select>
                         </div>
                         {/* Espaço extra interno para igualar altura ao cartão Dados Pessoais (ajuste fino) */}
-                        <div style={{ height: 6 }} />
+                        <div style={{ height: 7 }} />
                         {/* state already rendered above */}
                     </section>
                     <section>
