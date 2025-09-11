@@ -1,10 +1,22 @@
-// frontend\src\components\ClientCard.tsx
+// frontend/src/components/ClientCard.tsx
 import React from 'react';
+import { useNow } from '../hooks/useNow';
 import styles from '../styles/components/ClientCard.module.css';
-import { FaEye, FaWhatsapp, FaEnvelope } from 'react-icons/fa';
+import {
+    FaEye,
+    FaWhatsapp,
+    FaEnvelope,
+    FaCalendarAlt,
+    FaEdit,
+} from 'react-icons/fa';
 import type { ClientBasic } from '../types/ClientBasic';
 import { formatPhone } from '../utils/formatPhone';
 import '../styles/palette.css';
+import MonthlyAgendaModal from './MonthlyAgendaModal';
+import WeeklyPreviewModal from './WeeklyPreviewModal';
+import ScheduleModal from './ScheduleModal';
+import { API_BASE } from '../config/api';
+import type { Appointment } from '../hooks/useAppointments';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -19,40 +31,105 @@ export default function ClientCard({
     selected,
     onSelect,
 }: ClientCardProps) {
+    const [showMonthly, setShowMonthly] = React.useState(false);
+    const [showWeekly, setShowWeekly] = React.useState(false);
+    const [showMini, setShowMini] = React.useState(false);
+    const [pressed, setPressed] = React.useState(false);
+    // Refresh time-based UI every 30s while visible (lightweight)
+    const now = useNow(30000);
+    const start = client.next_appointment_start_at
+        ? new Date(client.next_appointment_start_at)
+        : null;
+    const end = client.next_appointment_end_at
+        ? new Date(client.next_appointment_end_at)
+        : start
+        ? new Date(start.getTime() + 60 * 60 * 1000)
+        : null; // fallback 1h if backend missing end
+    const isScheduled = client.next_appointment_status === 'scheduled';
+    const isOngoing =
+        isScheduled &&
+        !!start &&
+        !!end &&
+        start.getTime() <= now.getTime() &&
+        now.getTime() < end.getTime();
+    const amber = '#b45309'; // amber-700 (darker)
+    const amberBg = '#fffbeb'; // amber-50 (lighter bg)
+    const labelColor = isOngoing ? amber : 'var(--color-primary)';
+    const iconColor = isOngoing ? amber : 'var(--color-secondary)';
+    // Thicken border when ongoing and either pressed or selected
+    const borderWidth = isOngoing && (pressed || selected) ? 2 : 1;
+    const cardBorder = isOngoing
+        ? `${borderWidth}px solid ${amber}`
+        : selected
+        ? '2px solid var(--color-selected-border)'
+        : '1px solid var(--color-border)';
+    const cardBg = isOngoing
+        ? amberBg
+        : selected
+        ? 'var(--color-selected-bg)'
+        : 'var(--card-bg)';
+    const leftStripeColor = isOngoing ? amber : 'transparent';
+    // title display moved into the agenda section below when scheduled
     return (
         <div
             className={styles.card}
             style={{
-                background: selected
-                    ? 'var(--color-selected-bg)'
-                    : 'var(--card-bg)',
-                border: selected
-                    ? '2px solid var(--color-selected-border)'
-                    : '1px solid var(--color-border)',
+                background: cardBg,
+                border: cardBorder,
+                position: 'relative',
                 boxShadow: selected
-                    ? '0 0 0 2px var(--color-selected-border), 0 2px 6px rgba(0,0,0,0.08)'
+                    ? isOngoing
+                        ? `0 0 0 2px ${amber}, 0 2px 6px rgba(0,0,0,0.08)`
+                        : '0 0 0 2px var(--color-selected-border), 0 2px 6px rgba(0,0,0,0.08)'
                     : '0 1px 4px rgba(0,0,0,0.08)',
                 transition: 'background 0.2s, border 0.2s, box-shadow 0.2s',
                 cursor: 'pointer',
             }}
             onClick={onSelect}
+            onMouseDown={() => setPressed(true)}
+            onMouseUp={() => setPressed(false)}
+            onMouseLeave={() => setPressed(false)}
+            onTouchStart={() => setPressed(true)}
+            onTouchEnd={() => setPressed(false)}
         >
-            <div className={styles.infoRow}>
-                <span
-                    className={styles.label}
+            {isOngoing && (
+                <div
+                    aria-hidden
                     style={{
-                        color: 'var(--color-primary)',
-                        fontWeight: 'bold',
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 4,
+                        background: leftStripeColor,
+                        borderTopLeftRadius: 12,
+                        borderBottomLeftRadius: 12,
                     }}
-                >
-                    Nome:
-                </span>
-                <span
-                    className={styles.value}
-                    style={{ color: 'var(--color-text)' }}
-                >
-                    {client.first_name} {client.last_name}
-                </span>
+                />
+            )}
+            <div className={styles.infoRow}>
+                <div className={styles.rowBaseline}>
+                    <span
+                        className={styles.label}
+                        style={{
+                            color: labelColor,
+                            fontWeight: 'bold',
+                            minWidth: 56,
+                        }}
+                    >
+                        Nome:
+                    </span>
+                    <span
+                        className={styles.value}
+                        style={{
+                            color: isOngoing ? amber : 'var(--color-text)',
+                            lineHeight: 1.3,
+                            fontWeight: isOngoing ? 600 : undefined,
+                        }}
+                    >
+                        {client.first_name} {client.last_name}
+                    </span>
+                </div>
                 <button
                     className={styles.iconButton}
                     title='Visualizar detalhes'
@@ -61,14 +138,15 @@ export default function ClientCard({
                         onView(client);
                     }}
                 >
-                    <FaEye />
+                    <FaEye color={iconColor} />
                 </button>
             </div>
+
             <div className={styles.infoRow}>
                 <span
                     className={styles.label}
                     style={{
-                        color: 'var(--color-primary)',
+                        color: labelColor,
                         fontWeight: 'bold',
                     }}
                 >
@@ -76,7 +154,10 @@ export default function ClientCard({
                 </span>
                 <span
                     className={styles.value}
-                    style={{ color: 'var(--color-text)' }}
+                    style={{
+                        color: isOngoing ? amber : 'var(--color-text)',
+                        fontWeight: isOngoing ? 600 : undefined,
+                    }}
                 >
                     {formatPhone(client.phone)}
                 </span>
@@ -90,14 +171,15 @@ export default function ClientCard({
                     rel='noopener noreferrer'
                     onClick={e => e.stopPropagation()}
                 >
-                    <FaWhatsapp />
+                    <FaWhatsapp color={iconColor} />
                 </a>
             </div>
+
             <div className={styles.infoRow}>
                 <span
                     className={styles.label}
                     style={{
-                        color: 'var(--color-primary)',
+                        color: labelColor,
                         fontWeight: 'bold',
                     }}
                 >
@@ -105,7 +187,10 @@ export default function ClientCard({
                 </span>
                 <span
                     className={styles.value}
-                    style={{ color: 'var(--color-text)' }}
+                    style={{
+                        color: isOngoing ? amber : 'var(--color-text)',
+                        fontWeight: isOngoing ? 600 : undefined,
+                    }}
                 >
                     {client.email}
                 </span>
@@ -117,10 +202,248 @@ export default function ClientCard({
                     rel='noopener noreferrer'
                     onClick={e => e.stopPropagation()}
                 >
-                    <FaEnvelope />
+                    <FaEnvelope color={iconColor} />
                 </a>
             </div>
-            {/* Botão Editar removido para liberar espaço e priorizar seleção */}
+
+            {/* Separator between personal data and agenda info (increased spacing) */}
+            {isScheduled && (
+                <div
+                    aria-hidden
+                    style={{
+                        height: 1,
+                        background: labelColor,
+                        opacity: 0.5,
+                        margin: '12px 0 12px',
+                        borderRadius: 1,
+                    }}
+                />
+            )}
+
+            {/* Agenda section below E-mail, visible only when there is an active appointment */}
+            {isScheduled && (
+                <>
+                    <div className={styles.infoRow}>
+                        <span
+                            className={styles.label}
+                            style={{ color: labelColor, fontWeight: 'bold' }}
+                        >
+                            Agenda (tipo):
+                        </span>
+                        <span
+                            className={styles.value}
+                            style={{
+                                color: isOngoing ? amber : 'var(--color-text)',
+                                fontWeight: isOngoing ? 600 : undefined,
+                            }}
+                        >
+                            {client.next_appointment_title || 'Consulta'}
+                        </span>
+                        <button
+                            className={styles.iconButton}
+                            title='Agendar rápido'
+                            onClick={e => {
+                                e.stopPropagation();
+                                setShowMonthly(true);
+                            }}
+                        >
+                            <FaCalendarAlt color={iconColor} />
+                        </button>
+                    </div>
+                    <div className={styles.infoRow}>
+                        <span
+                            className={styles.label}
+                            style={{ color: labelColor, fontWeight: 'bold' }}
+                        >
+                            Data:
+                        </span>
+                        <span
+                            className={styles.value}
+                            style={{
+                                color: isOngoing ? amber : 'var(--color-text)',
+                                fontWeight: isOngoing ? 600 : undefined,
+                            }}
+                        >
+                            {(() => {
+                                const s = client.next_appointment_start_at
+                                    ? new Date(client.next_appointment_start_at)
+                                    : null;
+                                const e = client.next_appointment_end_at
+                                    ? new Date(client.next_appointment_end_at)
+                                    : s
+                                    ? new Date(s.getTime() + 60 * 60 * 1000)
+                                    : null;
+                                const wd = s
+                                    ? s
+                                          .toLocaleDateString('pt-BR', {
+                                              weekday: 'short',
+                                          })
+                                          .replace('.', '')
+                                          .replace(/\b(\w)/, c =>
+                                              c.toUpperCase(),
+                                          )
+                                    : '--';
+                                const dd = s
+                                    ? String(s.getDate()).padStart(2, '0')
+                                    : '--';
+                                const mm = s
+                                    ? String(s.getMonth() + 1).padStart(2, '0')
+                                    : '--';
+                                const fmt = (d: Date | null) =>
+                                    d
+                                        ? d.toLocaleTimeString('pt-BR', {
+                                              hour: '2-digit',
+                                              minute: '2-digit',
+                                          })
+                                        : '--:--';
+                                return `${wd} ${dd}/${mm}, ${fmt(s)} - ${fmt(
+                                    e,
+                                )}`;
+                            })()}
+                        </span>
+                        <button
+                            className={styles.iconButton}
+                            title='Editar'
+                            onClick={async () => {
+                                // Sempre que possível, abrir diretamente o editor já no compromisso correto
+                                const appt =
+                                    await fetchNextScheduledAppointment(
+                                        client.id,
+                                    );
+                                if (appt) {
+                                    const dayIso = new Date(appt.start_at)
+                                        .toISOString()
+                                        .slice(0, 10);
+                                    const detail = {
+                                        client, // objeto do cliente do cartão
+                                        date: new Date(`${dayIso}T00:00:00`), // ancora o dia
+                                        appointment: appt as Appointment, // compromisso para modo edição
+                                    };
+                                    try {
+                                        window.dispatchEvent(
+                                            new CustomEvent(
+                                                'openScheduleEdit',
+                                                { detail },
+                                            ),
+                                        );
+                                        return;
+                                    } catch {
+                                        // fallback por URL se não houver bridge
+                                    }
+                                    window.location.href = `/agenda?date=${dayIso}&client=${client.id}&edit=${appt.id}`;
+                                    return;
+                                }
+
+                                // Sem próximo agendamento: abrir mensal posicionado no último dia usado ou hoje
+                                const lastRaw = localStorage.getItem(
+                                    `schedule:lastDay:${client.id}`,
+                                );
+                                const ref = lastRaw
+                                    ? new Date(lastRaw)
+                                    : new Date();
+                                const y = ref.getFullYear();
+                                const m = String(ref.getMonth() + 1).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const d = String(ref.getDate()).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const url = `/agenda?date=${y}-${m}-${d}&client=${client.id}`;
+                                window.location.href = url;
+                            }}
+                        >
+                            <FaEdit color={iconColor} />
+                        </button>
+                    </div>
+                    {/* Observações: label on one line, text below */}
+                    <div className={styles.infoRow}>
+                        <div
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                flex: 1,
+                            }}
+                        >
+                            <span
+                                className={styles.label}
+                                style={{
+                                    color: labelColor,
+                                    fontWeight: 'bold',
+                                    marginBottom: 4,
+                                }}
+                            >
+                                Observações:
+                            </span>
+                            <span
+                                className={styles.value}
+                                style={{
+                                    color: isOngoing
+                                        ? amber
+                                        : 'var(--color-text)',
+                                    fontWeight: isOngoing ? 600 : undefined,
+                                }}
+                            >
+                                {client.next_appointment_notes?.trim() ? (
+                                    <span className={styles.notesText}>
+                                        {client.next_appointment_notes.trim()}
+                                    </span>
+                                ) : (
+                                    '—'
+                                )}
+                            </span>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Notas do próximo agendamento removidas conforme solicitação */}
+
+            {/* Linha inferior de atalhos substituída pela seção "Opções da agenda" acima */}
+
+            {showMonthly && (
+                <MonthlyAgendaModal
+                    open={showMonthly}
+                    onClose={() => setShowMonthly(false)}
+                    client={client}
+                />
+            )}
+            {showWeekly && (
+                <WeeklyPreviewModal
+                    open={showWeekly}
+                    onClose={() => setShowWeekly(false)}
+                />
+            )}
+            {showMini && (
+                <ScheduleModal
+                    open={showMini}
+                    onClose={() => setShowMini(false)}
+                    client={client}
+                    defaultDate={start ?? undefined}
+                />
+            )}
         </div>
     );
+}
+
+// Helper local: busca o próximo compromisso agendado (server como fonte da verdade)
+async function fetchNextScheduledAppointment(
+    clientId: number,
+): Promise<Appointment | null> {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return null;
+    try {
+        const url = `${API_BASE}/agenda/appointments/?client=${clientId}&start=${encodeURIComponent(
+            new Date().toISOString(),
+        )}&status=scheduled`;
+        const res = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return null;
+        const list = await res.json();
+        return Array.isArray(list) && list.length ? list[0] : null;
+    } catch {
+        return null;
+    }
 }
