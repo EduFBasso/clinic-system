@@ -204,6 +204,111 @@ export default function ScheduleModal({
         }
         return merged;
     }, [effectiveItems]);
+
+    // Raw (no BUFFER) busy blocks for suggestion computation
+    const rawBusy = React.useMemo(() => {
+        return effectiveItems
+            .filter(a => a.status !== 'canceled')
+            .map(a => ({
+                start: new Date(a.start_at),
+                end: new Date(a.end_at),
+            }))
+            .sort((a, b) => a.start.getTime() - b.start.getTime());
+    }, [effectiveItems]);
+
+    interface FreeSeg {
+        start: Date;
+        end: Date;
+        lengthMin: number;
+    }
+    function windowFreeSegments(
+        day: Date,
+        windowStartH: number,
+        windowEndH: number,
+    ): FreeSeg[] {
+        const ws = new Date(day);
+        ws.setHours(windowStartH, 0, 0, 0);
+        const we = new Date(day);
+        we.setHours(windowEndH, 0, 0, 0);
+        const segs: FreeSeg[] = [];
+        let cursor = ws;
+        for (const b of rawBusy) {
+            if (b.end <= ws || b.start >= we) continue; // outside window
+            const bs = b.start < ws ? ws : b.start;
+            const be = b.end > we ? we : b.end;
+            if (bs > cursor) {
+                const len = (bs.getTime() - cursor.getTime()) / 60000;
+                if (len >= 15)
+                    segs.push({
+                        start: new Date(cursor),
+                        end: new Date(bs),
+                        lengthMin: len,
+                    });
+            }
+            if (be > cursor) cursor = new Date(be);
+            if (cursor >= we) break;
+        }
+        if (cursor < we) {
+            const len = (we.getTime() - cursor.getTime()) / 60000;
+            if (len >= 15)
+                segs.push({
+                    start: new Date(cursor),
+                    end: new Date(we),
+                    lengthMin: len,
+                });
+        }
+        return segs.sort((a, b) => b.lengthMin - a.lengthMin);
+    }
+
+    const morningFree = React.useMemo(
+        () => windowFreeSegments(selectedDay, 8, 12),
+        [selectedDay, rawBusy],
+    );
+    const afternoonFree = React.useMemo(
+        () => windowFreeSegments(selectedDay, 13, 18),
+        [selectedDay, rawBusy],
+    );
+
+    function fmtHM(d: Date) {
+        return d.toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    }
+    function describeWindow(free: FreeSeg[], label: string) {
+        if (!free.length) return `${label}: sem espaço livre`;
+        const top = free[0];
+        const second = free[1];
+        const main = `${fmtHM(top.start)} - ${fmtHM(top.end)} (${Math.round(
+            top.lengthMin,
+        )} min)`;
+        if (second) {
+            return `${label}: ${main} • outra: ${fmtHM(second.start)} - ${fmtHM(
+                second.end,
+            )}`;
+        }
+        return `${label}: ${main}`;
+    }
+
+    const suggestions = React.useMemo(
+        () => [
+            {
+                key: 'morning',
+                label: describeWindow(morningFree, 'Manhã'),
+                seg: morningFree[0],
+                color: '#ecfdf5',
+                border: '#059669',
+            },
+            {
+                key: 'afternoon',
+                label: describeWindow(afternoonFree, 'Tarde'),
+                seg: afternoonFree[0],
+                color: '#fffbeb',
+                border: '#b45309',
+            },
+        ],
+        [morningFree, afternoonFree],
+    );
     const startCandidate = React.useMemo(
         () => parseHM(hour, minute),
         [hour, minute],
@@ -407,6 +512,58 @@ export default function ScheduleModal({
                     }}
                 >
                     Agendar / Editar
+                </div>
+                {/* Availability suggestion cards */}
+                <div
+                    style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                >
+                    {suggestions.map(s => (
+                        <button
+                            key={s.key}
+                            type='button'
+                            disabled={!s.seg}
+                            onClick={() => {
+                                if (!s.seg) return;
+                                setHour(s.seg.start.getHours());
+                                setMinute(s.seg.start.getMinutes());
+                            }}
+                            style={{
+                                textAlign: 'left',
+                                background: s.color,
+                                border: `1px solid ${s.border}`,
+                                borderRadius: 10,
+                                padding: '10px 12px',
+                                cursor: s.seg ? 'pointer' : 'not-allowed',
+                                opacity: s.seg ? 1 : 0.5,
+                                fontSize: 13,
+                                lineHeight: 1.3,
+                                display: 'flex',
+                                gap: 8,
+                                alignItems: 'flex-start',
+                            }}
+                            title={
+                                s.seg
+                                    ? 'Clique para preencher horário inicial'
+                                    : 'Sem disponibilidade'
+                            }
+                        >
+                            <span
+                                style={{
+                                    fontWeight: 700,
+                                    minWidth: 64,
+                                    color: s.border,
+                                    fontSize: 12,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 0.5,
+                                }}
+                            >
+                                {s.key === 'morning' ? 'Manhã' : 'Tarde'}
+                            </span>
+                            <span style={{ flex: 1, color: '#111827' }}>
+                                {s.label}
+                            </span>
+                        </button>
+                    ))}
                 </div>
                 {/* Date controls: prev, date picker, next */}
                 <div
