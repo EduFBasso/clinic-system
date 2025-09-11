@@ -73,6 +73,12 @@ export default function ClientForm({
                         ? 'E-mail'
                         : field === 'phone'
                         ? 'Telefone'
+                        : field === 'state'
+                        ? 'Estado'
+                        : field === 'city'
+                        ? 'Cidade'
+                        : field === 'postal_code'
+                        ? 'CEP'
                         : field === 'profession'
                         ? 'Profissão'
                         : field.replace(/_/g, ' ');

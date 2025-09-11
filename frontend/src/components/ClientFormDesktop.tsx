@@ -20,6 +20,7 @@ import type { ClientData } from '../types/ClientData';
 import { formatCep } from '../utils/formatCep';
 import { formatPhone } from '../utils/formatPhone';
 import styles from '../styles/pages/Client.module.css';
+import { BR_UFS } from '../data/br-ufs';
 
 interface Props {
     formData: ClientData;
@@ -168,12 +169,41 @@ export default function ClientFormDesktop({
                             onChange={handleChange}
                             label={'Cidade'}
                         />
-                        <InputField
-                            name='state'
-                            value={formData.state}
-                            onChange={handleChange}
-                            label={'Estado'}
-                        />
+                        {/* UF dropdown to avoid invalid inputs */}
+                        <div className={styles.formRow}>
+                            <label
+                                htmlFor='state'
+                                style={{ display: 'block', marginBottom: 4 }}
+                            >
+                                Estado (UF)
+                            </label>
+                            <select
+                                id='state'
+                                name='state'
+                                value={formData.state}
+                                onChange={e =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        state: e.target.value,
+                                    }))
+                                }
+                                style={{
+                                    width: '100%',
+                                    background: 'var(--color-bg-section)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: 4,
+                                    padding: '8px',
+                                    color: 'var(--color-text)',
+                                }}
+                            >
+                                <option value=''>Selecione</option>
+                                {BR_UFS.map(uf => (
+                                    <option key={uf.code} value={uf.code}>
+                                        {uf.name} ({uf.code})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <InputField
                             label='CEP'
                             name='postal_code'

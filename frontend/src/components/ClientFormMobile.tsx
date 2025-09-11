@@ -19,6 +19,7 @@ import DeformitiesRight from './FormElements/DeformitiesRight';
 import { formatCep } from '../utils/formatCep';
 import { formatPhone } from '../utils/formatPhone';
 import SensitivityTest from './FormElements/SensitivityTest';
+import { BR_UFS } from '../data/br-ufs';
 
 interface Props {
     formData: ClientData;
@@ -109,12 +110,35 @@ export default function ClientFormMobile({
                     onChange={e => handleChange('city', e.target.value)}
                     label={'Cidade'}
                 />
-                <InputField
-                    name='state'
-                    value={formData.state}
-                    onChange={e => handleChange('state', e.target.value)}
-                    label={'Estado'}
-                />
+                <div className={styles.formRow}>
+                    <label
+                        htmlFor='state'
+                        style={{ display: 'block', marginBottom: 4 }}
+                    >
+                        Estado (UF)
+                    </label>
+                    <select
+                        id='state'
+                        name='state'
+                        value={formData.state}
+                        onChange={e => handleChange('state', e.target.value)}
+                        style={{
+                            width: '100%',
+                            background: 'var(--color-bg-section)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 4,
+                            padding: '8px',
+                            color: 'var(--color-text)',
+                        }}
+                    >
+                        <option value=''>Selecione</option>
+                        {BR_UFS.map(uf => (
+                            <option key={uf.code} value={uf.code}>
+                                {uf.name} ({uf.code})
+                            </option>
+                        ))}
+                    </select>
+                </div>
                 <InputField
                     name='postal_code'
                     value={formData.postal_code}
