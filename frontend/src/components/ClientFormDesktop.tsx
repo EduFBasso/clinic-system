@@ -210,7 +210,7 @@ export default function ClientFormDesktop({
                                     background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
-                                    padding: '10px 8px 12px', // +2px vs original, +1px extra now
+                                    padding: '10px 8px 13px', // +1px extra height
                                     color: 'var(--color-text)',
                                 }}
                             >
@@ -246,7 +246,7 @@ export default function ClientFormDesktop({
                                     background: 'var(--color-primary-light)',
                                     border: '1px solid var(--color-border)',
                                     borderRadius: 4,
-                                    padding: '10px 8px 12px', // sync with state select height
+                                    padding: '10px 8px 13px', // sync with state select height (+1px)
                                     color: 'var(--color-text)',
                                 }}
                             >

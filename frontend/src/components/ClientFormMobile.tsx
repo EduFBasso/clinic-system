@@ -142,7 +142,7 @@ export default function ClientFormMobile({
                             background: 'var(--color-primary-light)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 4,
-                            padding: '10px 8px 12px', // +1px extra bottom
+                            padding: '10px 8px 13px', // +1px extra bottom
                             color: 'var(--color-text)',
                             marginBottom: 0,
                         }}
@@ -174,7 +174,7 @@ export default function ClientFormMobile({
                             background: 'var(--color-primary-light)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 4,
-                            padding: '10px 8px 12px', // match updated state select height
+                            padding: '10px 8px 13px', // match updated state select height (+1px)
                             color: 'var(--color-text)',
                         }}
                     >
