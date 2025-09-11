@@ -270,6 +270,8 @@ export default function ClientFormDesktop({
                                 )}
                             </select>
                         </div>
+                        {/* Espaço extra interno para igualar altura ao cartão Dados Pessoais (ajuste fino) */}
+                        <div style={{ height: 6 }} />
                         {/* state already rendered above */}
                     </section>
                     <section>
