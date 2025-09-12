@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 
 from .models import Appointment
 
@@ -46,6 +47,28 @@ class AppointmentSerializer(serializers.ModelSerializer):
         end = attrs.get("end_at", getattr(self.instance, "end_at", None))
         if start and end and end <= start:
             raise serializers.ValidationError({"end_at": "Fim deve ser após o início."})
+
+        now = timezone.now()
+
+        # Criação: não permitir agendamento no passado
+        if self.instance is None and start and start < now:
+            raise serializers.ValidationError({"start_at": "Não é permitido agendar no passado."})
+
+        # Atualização: bloquear qualquer edição de agendamento que já começou (passado ou em andamento)
+        # Requisito de negócio: registros históricos são somente leitura (somente ação dedicada p/ cancelar)
+        if self.instance is not None:
+            inst_start = getattr(self.instance, "start_at", None)
+            inst_end = getattr(self.instance, "end_at", None)
+            if inst_end and inst_end < now:
+                raise serializers.ValidationError({"detail": "Agendamentos passados não podem ser editados."})
+            # Se já iniciou (start_at <= now < end_at) também não permitir alterações para evitar inconsistências
+            if inst_start and inst_start <= now and (inst_end is None or inst_end > now):
+                raise serializers.ValidationError({"detail": "Agendamentos em andamento não podem ser editados."})
+
+        # Cliente não pode ser alterado após criação do agendamento
+        if self.instance is not None and "client" in attrs:
+            if attrs["client"].id != self.instance.client.id:
+                raise serializers.ValidationError({"client": "Cliente não pode ser alterado após criação."})
 
         # Tenta obter o profissional do payload; se ausente, usa o usuário autenticado
         professional = attrs.get("professional", getattr(self.instance, "professional", None))

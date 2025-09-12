@@ -9,12 +9,28 @@ from .serializers import (
 )
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework import status
 
 
 class ProfessionalViewSet(ModelViewSet):
     queryset = Professional.objects.all()
     serializer_class = ProfessionalSerializer
     permission_classes = [IsAuthenticated]
+
+    def perform_destroy(self, instance: Professional):
+        # Soft delete: mark as inactive/deactivated instead of removing rows
+        instance.deactivate("desativado via API")
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({"detail": "Profissional desativado."}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="reativar")
+    def reactivate(self, request, pk=None):
+        prof = self.get_object()
+        prof.reactivate()
+        return Response({"detail": "Profissional reativado."})
 
     @action(detail=False, methods=["get", "patch"], url_path="settings")
     def professional_settings(self, request):

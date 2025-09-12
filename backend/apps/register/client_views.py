@@ -54,7 +54,8 @@ class ClientBasicViewSet(ModelViewSet):
         nome = self.request.query_params.get('nome', '').strip()
         base_qs = Client.objects.filter(professional=self.request.user)
 
-        # Enriquecimento: próximo compromisso ativo (em andamento ou futuro), exclui cancelados
+        # Enriquecimento: próximo compromisso futuro (não inclui passado nem em andamento), exclui cancelados.
+        # Requisito de negócio: mini card mostra apenas compromissos ainda não iniciados.
         now = timezone.now()
         appt_qs = (
             Appointment.objects.filter(
@@ -62,7 +63,7 @@ class ClientBasicViewSet(ModelViewSet):
                 client_id=OuterRef('pk'),
             )
             .exclude(status=Appointment.Status.CANCELED)
-            .filter(end_at__gt=now)
+            .filter(start_at__gte=now)
             .order_by('start_at')
         )
         last_appt_qs = (
@@ -91,6 +92,9 @@ class ClientBasicViewSet(ModelViewSet):
                 next_appointment_notes=Subquery(
                     appt_qs.values('notes')[:1], output_field=CharField()
                 ),
+            next_appointment_id=Subquery(
+                appt_qs.values('id')[:1]
+            ),
             last_appointment_start_at=Subquery(
                 last_appt_qs.values('start_at')[:1], output_field=DateTimeField()
             ),

@@ -91,7 +91,10 @@ def test_multiple_same_day_allowed_if_no_overlap():
     cli = make_client(pro, 3)
     c = auth_client(pro)
 
+    # Garantir que o horário base esteja no futuro (se execução ocorrer após 09:00 no mesmo dia)
     base = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    if base <= timezone.now():
+        base = base + dt.timedelta(days=1)
     # Primeiro agendamento no dia
     res1 = c.post(
         "/agenda/appointments/",

@@ -2,23 +2,18 @@
 import React from 'react';
 import { useNow } from '../hooks/useNow';
 import styles from '../styles/components/ClientCard.module.css';
-// @ts-ignore - type resolution may fail in this editor, runtime is fine
-// Import icons via the barrel to avoid path resolution issues
-// @ts-ignore - type inference for icons is not required
-import {
-    FaEye,
-    FaWhatsapp,
-    FaEnvelope,
-    FaCalendarAlt,
-    FaEdit,
-} from 'react-icons/fa';
+import { FaEye, FaWhatsapp, FaEnvelope, FaCalendarAlt } from 'react-icons/fa';
+import { API_BASE } from '../config/api';
+import type { Appointment } from '../hooks/useAppointments';
+import ScheduleModal from './ScheduleModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { formatPhone } from '../utils/formatPhone';
+import { FaEdit } from 'react-icons/fa';
 import '../styles/palette.css';
-// no direct date-time formatting import needed here
 import MonthlyAgendaModal from './MonthlyAgendaModal';
 import WeeklyPreviewModal from './WeeklyPreviewModal';
-import ScheduleModal from './ScheduleModal';
+// Inline editor desativado temporariamente para isolar atraso no botão
+// import InlineAppointmentEditor from './InlineAppointmentEditor';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -35,9 +30,15 @@ export default function ClientCard({
 }: ClientCardProps) {
     const [showMonthly, setShowMonthly] = React.useState(false);
     const [showWeekly, setShowWeekly] = React.useState(false);
-    const [showMini, setShowMini] = React.useState(false);
+    const [showSchedule, setShowSchedule] = React.useState(false);
+    const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
+        null,
+    );
     const [pressed, setPressed] = React.useState(false);
     // Refresh time-based UI every 30s while visible (lightweight)
+    {
+        /** Botão responsivo: alterna entre 'Editar' e 'Sair' conforme estado inlineEdit */
+    }
     const now = useNow(30000);
     const start = client.next_appointment_start_at
         ? new Date(client.next_appointment_start_at)
@@ -46,7 +47,7 @@ export default function ClientCard({
         ? new Date(client.next_appointment_end_at)
         : start
         ? new Date(start.getTime() + 60 * 60 * 1000)
-        : null; // fallback 1h if backend missing end
+        : null;
     const isScheduled = client.next_appointment_status === 'scheduled';
     const isOngoing =
         isScheduled &&
@@ -56,8 +57,13 @@ export default function ClientCard({
         now.getTime() < end.getTime();
     const amber = '#b45309'; // amber-700 (darker)
     const amberBg = '#fffbeb'; // amber-50 (lighter bg)
-    const labelColor = isOngoing ? amber : 'var(--color-primary)';
-    const iconColor = isOngoing ? amber : 'var(--color-secondary)';
+    // Padronização solicitada: títulos sempre no mesmo azul dos ícones
+    const labelColor = 'var(--color-primary)';
+    const iconColor = 'var(--color-primary)';
+    const cardRef = React.useRef<HTMLDivElement | null>(null);
+
+    // Fechar modo edição ao clicar fora do card
+    // Efeito de clique fora removido enquanto editor inline está desativado
     // Thicken border when ongoing and either pressed or selected
     const borderWidth = isOngoing && (pressed || selected) ? 2 : 1;
     const cardBorder = isOngoing
@@ -74,6 +80,7 @@ export default function ClientCard({
     // title display moved into the agenda section below when scheduled
     return (
         <div
+            ref={cardRef}
             className={styles.card}
             style={{
                 background: cardBg,
@@ -147,10 +154,7 @@ export default function ClientCard({
             <div className={styles.infoRow}>
                 <span
                     className={styles.label}
-                    style={{
-                        color: labelColor,
-                        fontWeight: 'bold',
-                    }}
+                    style={{ color: labelColor, fontWeight: 'bold' }}
                 >
                     Tel:
                 </span>
@@ -176,7 +180,6 @@ export default function ClientCard({
                     <FaWhatsapp color={iconColor} />
                 </a>
             </div>
-
             <div className={styles.infoRow}>
                 <span
                     className={styles.label}
@@ -243,7 +246,7 @@ export default function ClientCard({
                         </span>
                         <button
                             className={styles.iconButton}
-                            title='Agendar rápido'
+                            title='Agenda mensal'
                             onClick={e => {
                                 e.stopPropagation();
                                 setShowMonthly(true);
@@ -255,7 +258,10 @@ export default function ClientCard({
                     <div className={styles.infoRow}>
                         <span
                             className={styles.label}
-                            style={{ color: labelColor, fontWeight: 'bold' }}
+                            style={{
+                                color: labelColor,
+                                fontWeight: 'bold',
+                            }}
                         >
                             Data:
                         </span>
@@ -305,18 +311,45 @@ export default function ClientCard({
                         </span>
                         <button
                             className={styles.iconButton}
-                            title='Editar'
+                            title='Editar agendamento'
                             onClick={e => {
                                 e.stopPropagation();
-                                // Abrir agendamento rápido como fluxo principal
-                                setShowMini(true);
+                                if (client.next_appointment_id) {
+                                    // Fetch the appointment detail before opening modal
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    fetch(
+                                        `${API_BASE}/agenda/appointments/${client.next_appointment_id}/`,
+                                        {
+                                            headers: {
+                                                Authorization: token
+                                                    ? `Bearer ${token}`
+                                                    : '',
+                                            },
+                                        },
+                                    )
+                                        .then(r => (r.ok ? r.json() : null))
+                                        .then(data => {
+                                            setEditingAppt(data);
+                                            setShowSchedule(true);
+                                        })
+                                        .catch(() => {
+                                            setEditingAppt(null);
+                                            setShowSchedule(true);
+                                        });
+                                } else {
+                                    setEditingAppt(null);
+                                    setShowSchedule(true);
+                                }
                             }}
                         >
                             <FaEdit color={iconColor} />
                         </button>
                     </div>
-                    {/* Observações: label on one line, text below */}
-                    <div className={styles.infoRow}>
+                    <div
+                        className={styles.infoRow}
+                        style={{ cursor: 'default' }}
+                    >
                         <div
                             style={{
                                 display: 'flex',
@@ -356,6 +389,34 @@ export default function ClientCard({
                 </>
             )}
 
+            {!isScheduled && (
+                <div className={styles.infoRow}>
+                    <span
+                        className={styles.label}
+                        style={{ color: labelColor, fontWeight: 'bold' }}
+                    >
+                        Data:
+                    </span>
+                    <span
+                        className={styles.value}
+                        style={{ color: 'var(--color-text)' }}
+                    >
+                        Sem agendamento
+                    </span>
+                    <button
+                        className={styles.iconButton}
+                        title='Agendar'
+                        onClick={e => {
+                            e.stopPropagation();
+                            setEditingAppt(null);
+                            setShowSchedule(true);
+                        }}
+                    >
+                        <FaEdit color={iconColor} />
+                    </button>
+                </div>
+            )}
+
             {/* Notas do próximo agendamento removidas conforme solicitação */}
 
             {/* Linha inferior de atalhos substituída pela seção "Opções da agenda" acima */}
@@ -373,12 +434,13 @@ export default function ClientCard({
                     onClose={() => setShowWeekly(false)}
                 />
             )}
-            {showMini && (
+            {showSchedule && (
                 <ScheduleModal
-                    open={showMini}
-                    onClose={() => setShowMini(false)}
+                    open={showSchedule}
+                    onClose={() => setShowSchedule(false)}
                     client={client}
-                    defaultDate={start ?? undefined}
+                    defaultDate={start || undefined}
+                    editAppointment={editingAppt}
                 />
             )}
         </div>

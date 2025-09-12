@@ -1,5 +1,7 @@
 # backend\apps\register\serializers_clients.py
 from rest_framework import serializers
+from django.utils import timezone
+from datetime import timezone as dt_timezone
 from .models import Client
 import unicodedata, re
 
@@ -116,14 +118,31 @@ class ClientSerializer(serializers.ModelSerializer):
         return _normalize_cep(value)
 
 
+class UTCDateTimeField(serializers.DateTimeField):
+    """Serializa sempre em UTC para evitar deslocamento local nos campos anotados.
+
+    Os testes comparam diretamente com o isoformat() do valor salvo (UTC) truncando para minutos.
+    DRF converte para TIME_ZONE por padrão (localtime). Forçamos UTC aqui.
+    """
+    def to_representation(self, value):  # value é um datetime ou None
+        if value is None:
+            return None
+        if timezone.is_aware(value):
+            value = value.astimezone(dt_timezone.utc)
+        else:  # tornar aware assumindo UTC
+            value = value.replace(tzinfo=dt_timezone.utc)
+        return value.isoformat()
+
+
 class ClientBasicSerializer(serializers.ModelSerializer):
-    next_appointment_start_at = serializers.DateTimeField(read_only=True)
-    next_appointment_end_at = serializers.DateTimeField(read_only=True)
+    next_appointment_start_at = UTCDateTimeField(read_only=True)
+    next_appointment_end_at = UTCDateTimeField(read_only=True)
     next_appointment_title = serializers.CharField(read_only=True)
     next_appointment_visit_type = serializers.CharField(read_only=True)
     next_appointment_notes = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
     next_appointment_status = serializers.CharField(read_only=True)
-    last_appointment_start_at = serializers.DateTimeField(read_only=True)
+    next_appointment_id = serializers.IntegerField(read_only=True)
+    last_appointment_start_at = UTCDateTimeField(read_only=True)
     last_appointment_title = serializers.CharField(read_only=True)
     last_appointment_status = serializers.CharField(read_only=True)
     last_appointment_notes = serializers.CharField(read_only=True)
@@ -133,5 +152,6 @@ class ClientBasicSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'phone', 'email',
             'address', 'neighborhood', 'city', 'state',
             'next_appointment_start_at', 'next_appointment_end_at', 'next_appointment_title', 'next_appointment_visit_type', 'next_appointment_notes', 'next_appointment_status',
+            'next_appointment_id',
             'last_appointment_start_at', 'last_appointment_title', 'last_appointment_notes', 'last_appointment_status'
         ]

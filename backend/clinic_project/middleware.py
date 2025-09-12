@@ -21,3 +21,18 @@ class QueryTimingMiddleware:
         if elapsed_ms > self.threshold_ms:
             logger.info("SLOW %sms %s %s", int(elapsed_ms), request.method, request.path)
         return response
+
+
+class VersionHeaderMiddleware:
+    """Anexa o cabeçalho X-App-Version em todas as respostas para facilitar
+    depuração entre frontend e backend, especialmente em ambientes de staging.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        version = getattr(settings, 'APP_VERSION', 'dev')
+        response.headers["X-App-Version"] = version
+        return response

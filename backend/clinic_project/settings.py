@@ -40,6 +40,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     # Slow query logger (added after security/whitenoise for realistic timings)
     'clinic_project.middleware.QueryTimingMiddleware',
+    'clinic_project.middleware.VersionHeaderMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',

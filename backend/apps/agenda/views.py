@@ -65,6 +65,22 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         serializer.save(professional=user)
 
+    # Impede exclusão: histórico deve ser preservado. Fornecemos ação de cancelamento.
+    def destroy(self, request, *args, **kwargs):
+        return Response({"detail": "Exclusão não permitida. Cancele o agendamento."}, status=405)
+
+    @action(detail=True, methods=["post"], url_path="cancel")
+    def cancel(self, request, pk=None):
+        obj = self.get_object()
+        # Apenas profissional dono pode cancelar (permission_classes já cobre update, mas reforçamos)
+        if getattr(request.user, "id", None) != getattr(obj.professional, "id", None):
+            return Response({"detail": "forbidden"}, status=403)
+        if obj.status == Appointment.Status.CANCELED:
+            return Response({"detail": "já cancelado"}, status=200)
+        obj.status = Appointment.Status.CANCELED
+        obj.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(obj).data, status=200)
+
     @action(detail=False, methods=["post"], url_path="purge")
     def purge(self, request):
         """Apaga compromissos do profissional autenticado (DEV-only).

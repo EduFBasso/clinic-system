@@ -56,6 +56,10 @@ class Professional(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=True)
     is_active = models.BooleanField("Ativo", default=True)
     created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    deactivated_at = models.DateTimeField("Desativado em", null=True, blank=True)
+    deactivation_reason = models.CharField(
+        "Motivo desativação", max_length=120, blank=True
+    )
 
     objects = ProfessionalManager()
 
@@ -64,6 +68,22 @@ class Professional(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} — {self.register_number}"
+
+    # Soft delete helper
+    def deactivate(self, reason: str = ""):
+        from django.utils import timezone
+        if not self.deactivated_at:
+            self.deactivated_at = timezone.now()
+        if reason:
+            self.deactivation_reason = reason[:120]
+        self.is_active = False
+        self.save(update_fields=["deactivated_at", "deactivation_reason", "is_active"])
+
+    def reactivate(self):
+        self.is_active = True
+        self.deactivated_at = None
+        self.deactivation_reason = ""
+        self.save(update_fields=["is_active", "deactivated_at", "deactivation_reason"])
 
 
 class Client(models.Model):
