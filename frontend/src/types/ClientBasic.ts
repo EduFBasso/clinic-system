@@ -5,9 +5,11 @@ export interface ClientBasic {
     phone: string;
     email: string;
     address?: string;
+    address_number?: string;
     neighborhood?: string;
     city?: string;
     state?: string;
+    date_of_birth?: string | null; // ISO yyyy-mm-dd
     next_appointment_start_at?: string | null;
     next_appointment_end_at?: string | null; // Added for next appointment details
     next_appointment_title?: string | null;
@@ -16,6 +18,7 @@ export interface ClientBasic {
         | 'retorno'
         | 'procedimento'
         | 'outro'
+        | 'consulta'
         | null;
     next_appointment_notes?: string | null;
     next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;

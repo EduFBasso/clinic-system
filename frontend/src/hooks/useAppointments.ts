@@ -9,7 +9,7 @@ export interface Appointment {
     professional_name?: string;
     client_name?: string;
     title: string;
-    visit_type: 'avaliacao' | 'retorno' | 'procedimento' | 'outro';
+    visit_type: 'avaliacao' | 'retorno' | 'procedimento' | 'outro' | 'consulta';
     start_at: string;
     end_at: string;
     notes?: string;

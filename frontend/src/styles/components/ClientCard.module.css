@@ -8,6 +8,67 @@
     width: 100%;
 }
 
+.cardSelected {
+    background-color: var(--color-selected-bg);
+    border: 2px solid var(--color-selected-border);
+    box-shadow: 0 0 0 2px var(--color-selected-border),
+        0 4px 10px rgba(0, 0, 0, 0.18);
+    transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+}
+
+.flashBorder {
+    animation: flashBorderGlow 2s ease-in-out 1;
+}
+
+@keyframes flashBorderGlow {
+    0% {
+        box-shadow: 0 0 0 2px var(--color-selected-border),
+            0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+    25% {
+        box-shadow: 0 0 0 4px var(--color-selected-border),
+            0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+    50% {
+        box-shadow: 0 0 0 2px var(--color-selected-border),
+            0 3px 10px rgba(0, 0, 0, 0.18);
+    }
+    75% {
+        box-shadow: 0 0 0 4px var(--color-selected-border),
+            0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+    100% {
+        box-shadow: 0 0 0 2px var(--color-selected-border),
+            0 2px 6px rgba(0, 0, 0, 0.12);
+    }
+}
+
+.highlightPulse {
+    position: relative;
+    animation: cardHighlight 2.6s ease-in-out 1;
+    box-shadow: 0 0 0 2px var(--color-selected-border),
+        0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes cardHighlight {
+    0% {
+        box-shadow: 0 0 0 0 var(--color-selected-border),
+            0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+    20% {
+        box-shadow: 0 0 0 4px var(--color-selected-border),
+            0 4px 14px rgba(0, 0, 0, 0.2);
+    }
+    55% {
+        box-shadow: 0 0 0 4px var(--color-selected-border),
+            0 4px 14px rgba(0, 0, 0, 0.2);
+    }
+    100% {
+        box-shadow: 0 0 0 0 var(--color-selected-border),
+            0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+}
+
 .infoRow {
     display: flex;
     align-items: center;

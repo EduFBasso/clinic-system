@@ -1,15 +1,53 @@
 import React from 'react';
 import type { ClientData } from '../types/ClientData';
 import styles from '../styles/components/ClientView.module.css';
+import { formatPhone } from '../utils/formatPhone';
+import { formatDOBWithAge } from '../utils/dateOfBirth';
 
 interface ClientViewProps {
-    client: ClientData;
+    client: ClientData & {
+        address_number?: string | null;
+        date_of_birth?: string | null; // pode vir ISO ou dd/mm/YYYY
+    };
 }
 
-const fieldLabels: Record<keyof ClientData, string> = {
-    id: 'ID',
+// Definimos uma lista ordenada e labels; campos com render customizado tratados adiante
+// Nota: ID (código) exibido manualmente antes desta lista para permitir label customizado "Código".
+const fieldOrder: Array<keyof ClientData> = [
+    'first_name',
+    'last_name',
+    'date_of_birth',
+    'phone',
+    'email',
+    'profession',
+    'address',
+    'neighborhood',
+    'city',
+    'state',
+    'postal_code',
+    'sport_activity',
+    'academic_activity',
+    'takes_medication',
+    'had_surgery',
+    'is_pregnant',
+    'pain_sensitivity',
+    'clinical_history',
+    'plantar_view_left',
+    'plantar_view_right',
+    'dermatological_pathologies_left',
+    'dermatological_pathologies_right',
+    'nail_changes_left',
+    'nail_changes_right',
+    'deformities_left',
+    'deformities_right',
+    'sensitivity_test',
+    'other_procedures',
+];
+
+const fieldLabels: Partial<Record<keyof ClientData, string>> = {
     first_name: 'Nome',
     last_name: 'Sobrenome',
+    date_of_birth: 'Data de Nascimento',
     email: 'E-mail',
     phone: 'Telefone',
     profession: 'Profissão',
@@ -18,8 +56,6 @@ const fieldLabels: Record<keyof ClientData, string> = {
     city: 'Cidade',
     state: 'Estado',
     postal_code: 'CEP',
-    footwear_used: 'Calçado usado',
-    sock_used: 'Meia usada',
     sport_activity: 'Pratica esportes?',
     academic_activity: 'Pratica academia?',
     takes_medication: 'Toma medicação?',
@@ -39,6 +75,19 @@ const fieldLabels: Record<keyof ClientData, string> = {
     other_procedures: 'Outros procedimentos / Observações',
 };
 
+function formatBirthAndAge(raw?: string | null): string {
+    const formatted = formatDOBWithAge(raw);
+    return formatted || '-';
+}
+
+function formatAddress(address?: string, number?: string): string {
+    const a = (address || '').trim();
+    const n = (number || '').trim();
+    if (!a && !n) return '-';
+    if (a && n) return `${a}, Nº ${n}`;
+    return a || `Nº ${n}`;
+}
+
 const ClientView: React.FC<ClientViewProps> = ({ client }) => {
     return (
         <div
@@ -52,31 +101,41 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                 transition: 'background 0.2s, border 0.2s, box-shadow 0.2s',
             }}
         >
-            {Object.entries(fieldLabels).map(([key, label]) => {
-                const k = key as keyof ClientData;
-                const rawValue = client[k] as unknown;
-                // Formata valor para tipos especiais
-                const formattedValue = (() => {
-                    if (k === 'is_pregnant') {
-                        if (rawValue === true) return 'Sim';
-                        if (rawValue === false) return 'Não';
-                        return '-';
-                    }
-                    return String(rawValue ?? '-');
-                })();
-
-                // Para perguntas (labels com '?'), não adicionar ':' após o ponto de interrogação
+            <div className={styles.fieldRow}>
+                <span className={styles.fieldLabel}>Código:</span>
+                <span className={styles.fieldValue}>{client.id}</span>
+            </div>
+            {fieldOrder.map(k => {
+                const label = fieldLabels[k];
+                if (!label) return null; // segurança
+                let value: string;
+                if (k === 'date_of_birth') {
+                    value = formatBirthAndAge(
+                        client.date_of_birth || undefined,
+                    );
+                } else if (k === 'address') {
+                    // Endereço + número
+                    value = formatAddress(
+                        client.address,
+                        client.address_number || undefined,
+                    );
+                } else if (k === 'is_pregnant') {
+                    const v = client.is_pregnant;
+                    value = v === true ? 'Sim' : v === false ? 'Não' : '-';
+                } else if (k === 'phone') {
+                    const raw = (client.phone || '').toString();
+                    value = raw ? formatPhone(raw) : '-';
+                } else {
+                    value = String((client[k] as unknown) ?? '-');
+                }
                 const labelSuffix = label.trim().endsWith('?') ? '' : ':';
-
                 return (
-                    <div className={styles.fieldRow} key={key}>
+                    <div className={styles.fieldRow} key={k}>
                         <span className={styles.fieldLabel}>
                             {label}
                             {labelSuffix}
                         </span>
-                        <span className={styles.fieldValue}>
-                            {formattedValue}
-                        </span>
+                        <span className={styles.fieldValue}>{value}</span>
                     </div>
                 );
             })}

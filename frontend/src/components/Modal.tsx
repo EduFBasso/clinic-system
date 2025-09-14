@@ -1,5 +1,12 @@
 // frontend\src\components\Modal.tsx
 import React from 'react';
+
+// Augmenta Window global (deve estar em nível de módulo)
+declare global {
+    interface Window {
+        __ensureScrollUnlockInstalled?: boolean;
+    }
+}
 import Modal from '@mui/material/Modal';
 import Box from '@mui/material/Box';
 
@@ -43,6 +50,49 @@ export default function AppModal({
     disableEscapeKeyDown = false,
     fullScreen = false,
 }: AppModalProps) {
+    // Detecta iOS (Safari principalmente). Heurística simples suficiente para fallback de scroll.
+    const isIOS = React.useMemo(() => {
+        if (typeof navigator === 'undefined') return false;
+        const ua = navigator.userAgent;
+        const platform = navigator.platform;
+        // Alguns navegadores expõem maxTouchPoints (Safari iPad em modo desktop) sem definir tipo em TS lib alvo
+        const maxTouchPoints =
+            (navigator as unknown as { maxTouchPoints?: number })
+                .maxTouchPoints || 0;
+        return (
+            /iP(ad|hone|od)/.test(ua) ||
+            (platform === 'MacIntel' && maxTouchPoints > 1)
+        );
+    }, []);
+
+    // Armazena scroll anterior para restauração após fechar modal (iOS lock fix)
+    const prevScrollRef = React.useRef<number | null>(null);
+
+    // Ao abrir: capturamos posição de scroll e (em iOS) aplicamos um lock leve baseado em position:fixed.
+    React.useEffect(() => {
+        if (!open) return;
+        // Captura scroll atual
+        prevScrollRef.current =
+            window.scrollY ||
+            document.documentElement.scrollTop ||
+            document.body.scrollTop ||
+            0;
+        if (isIOS) {
+            // Aplica lock manual para evitar "rubber band" mantendo o conteúdo congelado.
+            const body = document.body as HTMLBodyElement;
+            // Evita reaplicar se já travado manualmente.
+            if (!body.dataset.appliedIosLock) {
+                body.dataset.appliedIosLock = '1';
+                body.style.position = 'fixed';
+                body.style.top = `-${prevScrollRef.current}px`;
+                body.style.left = '0';
+                body.style.right = '0';
+                body.style.width = '100%';
+                // overflow hidden ajuda, mas Safari às vezes ignora; mantemos mesmo assim.
+                body.style.overflow = 'hidden';
+            }
+        }
+    }, [open, isIOS]);
     // Fecha modal ao pressionar Enter (padronização para modais de mensagem)
     React.useEffect(() => {
         if (!open || !closeOnEnter) return;
@@ -96,6 +146,129 @@ export default function AppModal({
             return;
         onClose();
     };
+
+    // Task #35 + Task #52: Defensive restoration de scroll + instrumentação.
+    // Observado: em alguns fluxos (cancelar edição via mini-card) a página fica "travada".
+    // Hipótese: corrida onde MUI remove classes após nosso efeito checar, ou restore abortado
+    // porque detectou (falsamente) outro modal. Adicionamos:
+    // 1. restore() mais resiliente (não aborta se só sobrou body.class 'MuiModal-open').
+    // 2. Fallback global (window.ensureScrollUnlocked) disparado em vários eventos.
+    // 3. Export implícita via evento custom 'ensureScrollUnlocked'.
+    React.useEffect(() => {
+        if (open) return; // Só atua no fechamento
+
+        // Função de restauração idempotente (múltiplas tentativas em timers diferentes)
+        const restore = (source?: string) => {
+            try {
+                const body = document.body as HTMLBodyElement;
+                const html = document.documentElement as HTMLElement;
+                const activeModals = Array.from(
+                    document.querySelectorAll(
+                        '[role="presentation"][aria-hidden="false"]',
+                    ),
+                ).filter(el => el instanceof HTMLElement);
+                // Se ainda há um modal aberto, não restaurar (a menos que pareça um falso positivo)
+                if (activeModals.length > 0) {
+                    // Falso positivo heurístico: elementos sem filhos visíveis (width/height 0) – possivelmente já desmontados.
+                    const anyVisible = activeModals.some(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 2 && r.height > 2;
+                    });
+                    if (anyVisible) return; // existe de fato outro modal
+                }
+
+                // Limpa estilos de lock (seja do MUI ou do nosso)
+                body.style.overflow = '';
+                body.style.position = '';
+                body.style.top = '';
+                body.style.left = '';
+                body.style.right = '';
+                body.style.width = '';
+                html.style.overflow = '';
+                body.classList.remove('MuiModal-open');
+                html.classList.remove('MuiModal-open');
+                if (body.dataset.appliedIosLock)
+                    delete body.dataset.appliedIosLock;
+
+                // Reflow para garantir aplicação das mudanças de estilo
+                void body.offsetHeight;
+
+                // Restaura posição de scroll (iOS precisa várias tentativas às vezes)
+                if (prevScrollRef.current != null) {
+                    try {
+                        window.scrollTo({
+                            top: prevScrollRef.current,
+                            behavior: 'instant' as ScrollBehavior,
+                        });
+                    } catch {
+                        /* noop */
+                    }
+                }
+                if (source) {
+                    // Instrumentação leve (não spam)
+                    console.debug('[AppModal] restore scroll', { source });
+                }
+            } catch {
+                /* noop */
+            }
+        };
+
+        // Dispara diversas tentativas para contornar race conditions (Safari/iOS e possíveis delays do MUI)
+        const timeouts = [0, 30, 60, 120, 250, 400].map(ms =>
+            setTimeout(() => restore('close-timeout-' + ms), ms),
+        );
+
+        // Registrar fallback listeners uma única vez (singleton)
+        if (!window.__ensureScrollUnlockInstalled) {
+            window.__ensureScrollUnlockInstalled = true;
+            const handler = (ev?: Event) => {
+                const body = document.body as HTMLBodyElement;
+                if (
+                    body.classList.contains('MuiModal-open') ||
+                    body.style.position === 'fixed' ||
+                    body.style.overflow === 'hidden'
+                ) {
+                    // Tentativa adicional (não depende do estado local de 'open').
+                    restore(ev?.type ? 'global-' + ev.type : 'global-manual');
+                }
+            };
+            [
+                'click',
+                'focus',
+                'scroll',
+                'touchstart',
+                'ensureScrollUnlocked',
+            ].forEach(evt =>
+                window.addEventListener(evt, handler, {
+                    passive: true,
+                }),
+            );
+        }
+        return () => timeouts.forEach(t => clearTimeout(t));
+    }, [open]);
+
+    // Restauração imediata também no ciclo de desmontagem (caso o componente seja removido rapidamente)
+    React.useEffect(() => {
+        return () => {
+            try {
+                if (!open) {
+                    const body = document.body as HTMLBodyElement;
+                    const html = document.documentElement as HTMLElement;
+                    body.style.overflow = '';
+                    body.style.position = '';
+                    body.style.top = '';
+                    body.style.left = '';
+                    body.style.right = '';
+                    body.style.width = '';
+                    html.style.overflow = '';
+                    body.classList.remove('MuiModal-open');
+                    html.classList.remove('MuiModal-open');
+                }
+            } catch {
+                /* noop */
+            }
+        };
+    }, [open]);
 
     return (
         <Modal

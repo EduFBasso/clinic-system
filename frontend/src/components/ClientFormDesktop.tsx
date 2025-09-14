@@ -74,6 +74,28 @@ export default function ClientFormDesktop({
                             label={'Sobrenome'}
                         />
                         <InputField
+                            name='date_of_birth'
+                            value={formData.date_of_birth || ''}
+                            onChange={e => {
+                                let v = e.target.value.replace(/[^0-9]/g, '');
+                                if (v.length > 8) v = v.slice(0, 8);
+                                // dd/mm/YYYY
+                                if (v.length >= 5) {
+                                    v = `${v.slice(0, 2)}/${v.slice(
+                                        2,
+                                        4,
+                                    )}/${v.slice(4)}`;
+                                } else if (v.length >= 3) {
+                                    v = `${v.slice(0, 2)}/${v.slice(2)}`;
+                                }
+                                setFormData(prev => ({
+                                    ...prev,
+                                    date_of_birth: v,
+                                }));
+                            }}
+                            label={'Data de Nascimento'}
+                        />
+                        <InputField
                             name='phone'
                             value={formData.phone}
                             onChange={e => {
@@ -159,7 +181,21 @@ export default function ClientFormDesktop({
                             name='address'
                             value={formData.address}
                             onChange={handleChange}
-                            label={'Rua / Av., nº'}
+                            label={'Rua'}
+                        />
+                        <InputField
+                            name='address_number'
+                            value={formData.address_number || ''}
+                            onChange={e => {
+                                const digits = e.target.value
+                                    .replace(/\D/g, '')
+                                    .slice(0, 10);
+                                setFormData(prev => ({
+                                    ...prev,
+                                    address_number: digits,
+                                }));
+                            }}
+                            label={'Número'}
                         />
                         {/* CEP imediatamente abaixo da Rua */}
                         <InputField

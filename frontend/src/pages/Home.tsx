@@ -1,5 +1,7 @@
 // src/pages/Home.tsx
 import React, { useEffect, useState } from 'react';
+import { on } from '../events/bus';
+import type { OpenDailyAgendaPayload } from '../events/bus';
 
 import Header from '../components/Header';
 import Faixa from '../components/Faixa';
@@ -10,6 +12,9 @@ import styles from '../styles/pages/Home.module.css';
 import ScheduleModal from '../components/ScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
 import WeeklyPreviewModal from '../components/WeeklyPreviewModal';
+import SystemMessageModal from '../components/SystemMessageModal';
+import DailyAgendaModal from '../components/DailyAgendaModal';
+import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
@@ -23,16 +28,29 @@ export default function Home() {
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [monthlyOpen, setMonthlyOpen] = useState(false);
     const [weeklyOpen, setWeeklyOpen] = useState(false);
-    const [routeClient, setRouteClient] = useState<ClientBasic | null>(null);
+    const [routeClient, setRouteClient] = useState<ClientBasic | undefined>(
+        undefined,
+    );
     const [routeDefaultDate, setRouteDefaultDate] = useState<Date | undefined>(
         undefined,
     );
     const [routeEditAppt, setRouteEditAppt] = useState<Appointment | null>(
         null,
     );
+    const [dailyOpen, setDailyOpen] = useState(false);
+    const [dailyDate, setDailyDate] = useState<Date>(new Date());
+    const [dailyFocusId, setDailyFocusId] = useState<number | undefined>(
+        undefined,
+    );
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [detailsAppt, setDetailsAppt] = useState<Appointment | null>(null);
     const [routeInitialMonth, setRouteInitialMonth] = useState<
         Date | undefined
     >(undefined);
+    const [sysMsg, setSysMsg] = useState<{
+        text: string;
+        type: 'success' | 'error' | 'info';
+    } | null>(null);
 
     // Aux: carrega nome básico do cliente dado um ID (cache localStorage se possível)
     async function ensureClientBasic(id: number): Promise<ClientBasic> {
@@ -94,61 +112,95 @@ export default function Home() {
 
     // Seleciona o cliente via ?client=ID e abre modais conforme params (?new, ?edit, ?mode)
     useEffect(() => {
-        try {
-            const url = new URL(window.location.href);
-            const cid = url.searchParams.get('client');
-            const dateStr = url.searchParams.get('date'); // yyyy-mm-dd
-            const isNew = url.searchParams.get('new') === '1';
-            const editId = url.searchParams.get('edit');
-            const mode = url.searchParams.get('mode');
+        (async () => {
+            try {
+                const url = new URL(window.location.href);
+                const cid = url.searchParams.get('client');
+                const dateStr = url.searchParams.get('date'); // yyyy-mm-dd
+                const isNew = url.searchParams.get('new') === '1';
+                const editId = url.searchParams.get('edit');
+                const mode = url.searchParams.get('mode');
 
-            if (cid) setSelectedClientId(Number(cid));
+                if (cid) setSelectedClientId(Number(cid));
 
-            // Parse date if provided
-            const parsedDate = dateStr
-                ? new Date(dateStr + 'T00:00:00')
-                : undefined;
-            if (parsedDate && !Number.isNaN(parsedDate.getTime())) {
-                setRouteDefaultDate(parsedDate);
-                setRouteInitialMonth(parsedDate);
-            } else {
-                setRouteDefaultDate(undefined);
-                setRouteInitialMonth(undefined);
-            }
+                const parsedDate = dateStr
+                    ? new Date(dateStr + 'T00:00:00')
+                    : undefined;
+                if (parsedDate && !Number.isNaN(parsedDate.getTime())) {
+                    setRouteDefaultDate(parsedDate);
+                    setRouteInitialMonth(parsedDate);
+                } else {
+                    setRouteDefaultDate(undefined);
+                    setRouteInitialMonth(undefined);
+                }
 
-            // Week mode: abre preview semanal simples
-            if (mode === 'week') {
-                setWeeklyOpen(true);
-            }
+                if (mode === 'week') {
+                    setWeeklyOpen(true);
+                }
 
-            // Edit: abrir visão mensal do cliente para localizar/avaliar
-            if (editId && cid) {
-                ensureClientBasic(Number(cid)).then(c => {
-                    setRouteClient(c);
-                    setMonthlyOpen(true);
-                });
-                return; // prioriza edição
-            }
-
-            // New: abrir ScheduleModal já com cliente/data
-            if (isNew && cid) {
-                ensureClientBasic(Number(cid)).then(c => {
-                    setRouteClient(c);
+                if (editId && cid) {
+                    // Carrega cliente e compromisso para abrir direto em edição (ScheduleModal)
+                    const clientBasic = await ensureClientBasic(Number(cid));
+                    setRouteClient(clientBasic);
+                    try {
+                        const token = localStorage.getItem('accessToken');
+                        let appt: Appointment | null = null;
+                        if (token) {
+                            const res = await fetch(
+                                `${API_BASE}/agenda/appointments/${editId}/`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${token}`,
+                                    },
+                                },
+                            );
+                            if (res.ok) {
+                                appt = (await res.json()) as Appointment;
+                            }
+                        }
+                        if (appt) setRouteEditAppt(appt);
+                    } catch {
+                        /* ignore fetch error */
+                    }
                     setScheduleOpen(true);
-                });
-                return;
-            }
+                    return;
+                }
 
-            // Se só houver client+date, abre visão mensal para inspecionar
-            if (cid && dateStr) {
-                ensureClientBasic(Number(cid)).then(c => {
-                    setRouteClient(c);
+                if (isNew && cid) {
+                    const clientBasic = await ensureClientBasic(Number(cid));
+                    setRouteClient(clientBasic);
+                    setScheduleOpen(true);
+                    return;
+                }
+
+                if (cid && dateStr) {
+                    const clientBasic = await ensureClientBasic(Number(cid));
+                    setRouteClient(clientBasic);
                     setMonthlyOpen(true);
-                });
+                }
+            } catch {
+                // ignore
             }
-        } catch {
-            // ignore
+        })();
+    }, []);
+
+    // Listener global para mensagens do sistema
+    useEffect(() => {
+        function onSystemMessage(e: Event) {
+            const det = (e as CustomEvent).detail || {};
+            if (det && det.text) {
+                setSysMsg({ text: String(det.text), type: det.type || 'info' });
+            }
         }
+        window.addEventListener(
+            'systemMessage',
+            onSystemMessage as EventListener,
+        );
+        return () =>
+            window.removeEventListener(
+                'systemMessage',
+                onSystemMessage as EventListener,
+            );
     }, []);
 
     // Mensagem ao voltar da Agenda sem cliente selecionado
@@ -175,12 +227,17 @@ export default function Home() {
 
     // Aberturas diretas dos modais da Agenda (novo fluxo vindo do NavBar)
     const openSchedule = async (
-        clientId: number,
+        clientId?: number | null,
         date?: Date,
         edit?: Appointment | null,
     ) => {
-        const c = await ensureClientBasic(clientId);
-        setRouteClient(c);
+        // Permitir abrir sem cliente; quando houver clientId, garantir dados básicos carregados
+        if (clientId) {
+            const c = await ensureClientBasic(clientId);
+            setRouteClient(c);
+        } else {
+            setRouteClient(undefined);
+        }
         setRouteDefaultDate(date);
         setRouteEditAppt(edit ?? null);
         setScheduleOpen(true);
@@ -207,6 +264,31 @@ export default function Home() {
         setMonthlyOpen(false);
     };
 
+    // Abrir visão diária (sem exigir cliente específico)
+    function openDaily(date: Date, focusId?: number) {
+        setDailyDate(date);
+        setDailyFocusId(focusId);
+        setDailyOpen(true);
+    }
+
+    // Remove parâmetros que forçam reabertura de modais (/agenda?new=1&edit=ID&mode=week)
+    function clearAgendaRouteFlags() {
+        try {
+            const url = new URL(window.location.href);
+            ['new', 'edit', 'mode', 'date'].forEach(k =>
+                url.searchParams.delete(k),
+            );
+            const params = url.searchParams.toString();
+            window.history.replaceState(
+                {},
+                '',
+                url.pathname + (params ? `?${params}` : ''),
+            );
+        } catch {
+            /* noop */
+        }
+    }
+
     // Event bridge: abrir edição direta do ScheduleModal a partir do Monthly
     useEffect(() => {
         function onOpenScheduleEdit(e: CustomEvent) {
@@ -226,11 +308,34 @@ export default function Home() {
             'openScheduleEdit',
             onOpenScheduleEdit as EventListener,
         );
-        return () =>
+        const disposeDaily = on('openDailyAgenda', det => {
+            const ext = det as OpenDailyAgendaPayload & {
+                focusAppointmentId?: number;
+            };
+            const dateIso = ext && ext.date; // backward compat
+            const focusAppointmentId = ext.focusAppointmentId;
+            if (dateIso) {
+                const d = new Date(dateIso);
+                if (!isNaN(d.getTime())) openDaily(d, focusAppointmentId);
+            } else openDaily(new Date(), focusAppointmentId);
+        });
+        const disposeDetails = on('openAppointmentDetails', det => {
+            const appt: Appointment | undefined = (
+                det as { appointment?: Appointment }
+            ).appointment;
+            if (appt) {
+                setDetailsAppt(appt);
+                setDetailsOpen(true);
+            }
+        });
+        return () => {
             window.removeEventListener(
                 'openScheduleEdit',
                 onOpenScheduleEdit as EventListener,
             );
+            disposeDaily();
+            disposeDetails();
+        };
     }, []);
 
     return (
@@ -251,28 +356,77 @@ export default function Home() {
                 selectedClientId={selectedClientId}
             />
             {/* Route-driven Agenda modals */}
-            {routeClient && (
-                <ScheduleModal
-                    open={scheduleOpen}
-                    onClose={() => setScheduleOpen(false)}
-                    client={routeClient}
-                    defaultDate={routeDefaultDate}
-                    editAppointment={routeEditAppt}
-                />
-            )}
+            <ScheduleModal
+                open={scheduleOpen}
+                onClose={() => {
+                    setScheduleOpen(false);
+                    clearAgendaRouteFlags();
+                }}
+                client={routeClient}
+                defaultDate={routeDefaultDate}
+                editAppointment={routeEditAppt}
+            />
             {routeClient && (
                 <MonthlyAgendaModal
                     open={monthlyOpen}
-                    onClose={() => setMonthlyOpen(false)}
+                    onClose={() => {
+                        setMonthlyOpen(false);
+                        clearAgendaRouteFlags();
+                    }}
                     client={routeClient}
                     initialMonth={routeInitialMonth}
                 />
             )}
             <WeeklyPreviewModal
                 open={weeklyOpen}
-                onClose={() => setWeeklyOpen(false)}
+                onClose={() => {
+                    setWeeklyOpen(false);
+                    clearAgendaRouteFlags();
+                }}
+            />
+            <DailyAgendaModal
+                open={dailyOpen}
+                date={dailyDate}
+                focusAppointmentId={dailyFocusId}
+                onClose={() => setDailyOpen(false)}
+                onEditAppointment={appt => {
+                    if (!appt) return;
+                    const apptAny = appt as unknown as {
+                        client?: { id?: number };
+                    };
+                    const clientId = apptAny.client && apptAny.client.id;
+                    const proceed = (cid?: number) => {
+                        if (cid) {
+                            ensureClientBasic(cid).then(c => {
+                                setRouteClient(c);
+                                setRouteEditAppt(appt);
+                                setRouteDefaultDate(new Date(appt.start_at));
+                                setScheduleOpen(true);
+                                setDailyOpen(false);
+                            });
+                        } else {
+                            setRouteEditAppt(appt);
+                            setRouteDefaultDate(new Date(appt.start_at));
+                            setScheduleOpen(true);
+                            setDailyOpen(false);
+                        }
+                    };
+                    proceed(clientId);
+                }}
             />
             <Footer />
+            <SystemMessageModal
+                open={!!sysMsg}
+                message={sysMsg?.text || null}
+                type={sysMsg?.type || 'info'}
+                onClose={() => setSysMsg(null)}
+                autoCloseMs={3000}
+            />
+            <AppointmentDetailsModal
+                open={detailsOpen}
+                appointment={detailsAppt}
+                onClose={() => setDetailsOpen(false)}
+            />
         </div>
     );
 }
