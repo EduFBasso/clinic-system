@@ -22,6 +22,7 @@ class Appointment(models.Model):
         RETORNO = "retorno", "Retorno"
         PROCEDIMENTO = "procedimento", "Procedimento"
         OUTRO = "outro", "Outro"
+        CONSULTA = "consulta", "Consulta"
 
     class Status(models.TextChoices):
         SCHEDULED = "scheduled", "Agendado"
@@ -42,11 +43,12 @@ class Appointment(models.Model):
     )
 
     title = models.CharField("Título", max_length=80)
+    # NOTE: default alterado para CONSULTA (antes AVALIACAO). Gerar migração correspondente.
     visit_type = models.CharField(
         "Tipo de consulta",
         max_length=20,
         choices=VisitType.choices,
-        default=VisitType.AVALIACAO,
+        default=VisitType.CONSULTA,
     )
 
     start_at = models.DateTimeField("Início")

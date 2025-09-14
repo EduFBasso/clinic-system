@@ -72,6 +72,8 @@ class ClientSerializer(serializers.ModelSerializer):
             "clinical_history_other": {"required": False, "allow_null": True, "allow_blank": True},
             "professional_procedures": {"required": False, "allow_null": True, "allow_blank": True},
             # Continua com o restante dos campos clínicos…
+            "date_of_birth": {"required": False, "allow_null": True},
+            "address_number": {"required": False, "allow_null": True, "allow_blank": True},
         }
 
     # Normalizações e validações leves
@@ -150,7 +152,7 @@ class ClientBasicSerializer(serializers.ModelSerializer):
         model = Client
         fields = [
             'id', 'first_name', 'last_name', 'phone', 'email',
-            'address', 'neighborhood', 'city', 'state',
+            'address', 'address_number', 'neighborhood', 'city', 'state', 'date_of_birth',
             'next_appointment_start_at', 'next_appointment_end_at', 'next_appointment_title', 'next_appointment_visit_type', 'next_appointment_notes', 'next_appointment_status',
             'next_appointment_id',
             'last_appointment_start_at', 'last_appointment_title', 'last_appointment_notes', 'last_appointment_status'
