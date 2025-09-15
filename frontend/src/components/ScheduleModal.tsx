@@ -6,7 +6,6 @@ import { useAppointments } from '../hooks/useAppointments';
 import type { Appointment } from '../hooks/useAppointments';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
-// @ts-ignore - local type resolution for react-icons can be skipped
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 
 type DurationOption = 60 | 90 | 120 | 150;
@@ -55,7 +54,7 @@ export default function ScheduleModal({
 }: {
     open: boolean;
     onClose: () => void;
-    client: ClientBasic;
+    client?: ClientBasic; // agora opcional para permitir criação sem cartão selecionado
     defaultDate?: Date;
     editAppointment?: Appointment | null;
 }) {
@@ -63,45 +62,31 @@ export default function ScheduleModal({
     const ARROW_HOVER = '#064e3b';
     const ARROW_ACTIVE = '#052e22';
     const [selectedDay, setSelectedDay] = React.useState<Date>(() => {
-        // Try to restore last selected day for this client
-        try {
-            const key = `schedule:lastDay:${client.id}`;
-            const saved = localStorage.getItem(key);
-            if (saved) {
-                const d = new Date(saved);
-                if (!Number.isNaN(d.getTime())) return startOfDay(d);
-            }
-        } catch {
-            /* ignore */
-        }
-        return startOfDay(defaultDate ? new Date(defaultDate) : new Date());
-    });
-    // When client changes, refresh from their last saved day or defaultDate
-    React.useEffect(() => {
-        try {
-            const key = `schedule:lastDay:${client.id}`;
-            const saved = localStorage.getItem(key);
-            if (saved) {
-                const d = new Date(saved);
-                if (!Number.isNaN(d.getTime())) {
-                    setSelectedDay(startOfDay(d));
-                    return;
+        if (client) {
+            try {
+                const key = `schedule:lastDay:${client.id}`;
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    const d = startOfDay(new Date(stored));
+                    if (!isNaN(d.getTime())) return d;
                 }
+            } catch {
+                /* ignore */
             }
-        } catch {
-            /* ignore */
         }
-        if (defaultDate) setSelectedDay(startOfDay(defaultDate));
-    }, [client.id, defaultDate]);
+        if (defaultDate) return startOfDay(defaultDate);
+        return startOfDay(new Date());
+    });
     // Persist selection per client
     React.useEffect(() => {
+        if (!client) return;
         try {
             const key = `schedule:lastDay:${client.id}`;
             localStorage.setItem(key, selectedDay.toISOString());
         } catch {
             /* ignore */
         }
-    }, [client.id, selectedDay]);
+    }, [client, selectedDay]);
     const dayISO = toISODate(selectedDay);
     const { items, loading } = useAppointments(selectedDay);
     // Keep last stable items to avoid UI flicker while fetching new day
@@ -121,6 +106,27 @@ export default function ScheduleModal({
     const [error, setError] = React.useState<string | null>(null);
     const [offerReplace, setOfferReplace] = React.useState(false);
     const [conflicts, setConflicts] = React.useState<Appointment[]>([]);
+    // Tipos de visita (sincronizado com QuickScheduleModal)
+    const [visitType, setVisitType] = React.useState<
+        'consulta' | 'avaliacao' | 'retorno' | 'procedimento' | 'outro'
+    >((): 'consulta' | 'avaliacao' | 'retorno' | 'procedimento' | 'outro' => {
+        const raw = localStorage.getItem('defaultVisitType');
+        if (
+            raw === 'consulta' ||
+            raw === 'avaliacao' ||
+            raw === 'retorno' ||
+            raw === 'procedimento' ||
+            raw === 'outro'
+        )
+            return raw;
+        try {
+            localStorage.setItem('defaultVisitType', 'consulta');
+        } catch {
+            /* noop */
+        }
+        return 'consulta';
+    });
+    const [setDefaultVisitType, setSetDefaultVisitType] = React.useState(false);
     const [notes, setNotes] = React.useState<string>('');
     const [editingId, setEditingId] = React.useState<number | null>(null);
     // UI interaction states
@@ -129,6 +135,7 @@ export default function ScheduleModal({
     const [nextHover, setNextHover] = React.useState(false);
     const [nextActive, setNextActive] = React.useState(false);
     const [dateFocused, setDateFocused] = React.useState(false);
+    // Modo leitura removido (simplificação) — mantemos layout compacto fixo
 
     const prevColor = prevActive
         ? ARROW_ACTIVE
@@ -143,6 +150,7 @@ export default function ScheduleModal({
 
     function persistSelectedDay(nd: Date) {
         setSelectedDay(nd);
+        if (!client) return;
         try {
             const key = `schedule:lastDay:${client.id}`;
             localStorage.setItem(key, nd.toISOString());
@@ -221,21 +229,39 @@ export default function ScheduleModal({
         end: Date;
         lengthMin: number;
     }
-    function windowFreeSegments(
-        day: Date,
-        windowStartH: number,
-        windowEndH: number,
-    ): FreeSeg[] {
-        const ws = new Date(day);
-        ws.setHours(windowStartH, 0, 0, 0);
-        const we = new Date(day);
-        we.setHours(windowEndH, 0, 0, 0);
+    // windowFreeSegments removido (simplificação) — usamos apenas cálculo unificado do dia
+
+    // Lê horário inicial e final do expediente das configurações salvas
+    function readWorkTimes() {
+        const ws = localStorage.getItem('agenda.workStart') || '06:00';
+        const we = localStorage.getItem('agenda.workEnd') || '21:00';
+        const [sh, sm] = ws.split(':').map(n => parseInt(n, 10));
+        const [eh, em] = we.split(':').map(n => parseInt(n, 10));
+        return {
+            startHour: isNaN(sh) ? 6 : sh,
+            startMin: isNaN(sm) ? 0 : sm,
+            endHour: isNaN(eh) ? 21 : eh,
+            endMin: isNaN(em) ? 0 : em,
+        };
+    }
+    const workTimes = React.useMemo(readWorkTimes, []);
+    // Cortes fixos apenas para colorir (manhã / tarde / noite)
+    const cutNoon = 12; // meio-dia
+    const cutEvening = 18; // início noite
+
+    // ---------- Intervalos livres do dia inteiro (unificado) ----------
+    const dayFreeSegments = React.useMemo(() => {
+        // limita aos horários configurados de expediente, incluindo minutos
+        const start = new Date(selectedDay);
+        start.setHours(workTimes.startHour, workTimes.startMin, 0, 0);
+        const end = new Date(selectedDay);
+        end.setHours(workTimes.endHour, workTimes.endMin, 0, 0);
         const segs: FreeSeg[] = [];
-        let cursor = ws;
+        let cursor = start;
         for (const b of rawBusy) {
-            if (b.end <= ws || b.start >= we) continue; // outside window
-            const bs = b.start < ws ? ws : b.start;
-            const be = b.end > we ? we : b.end;
+            if (b.end <= start || b.start >= end) continue; // fora do expediente
+            const bs = b.start < start ? start : b.start;
+            const be = b.end > end ? end : b.end;
             if (bs > cursor) {
                 const len = (bs.getTime() - cursor.getTime()) / 60000;
                 if (len >= 15)
@@ -246,28 +272,27 @@ export default function ScheduleModal({
                     });
             }
             if (be > cursor) cursor = new Date(be);
-            if (cursor >= we) break;
+            if (cursor >= end) break;
         }
-        if (cursor < we) {
-            const len = (we.getTime() - cursor.getTime()) / 60000;
+        if (cursor < end) {
+            const len = (end.getTime() - cursor.getTime()) / 60000;
             if (len >= 15)
                 segs.push({
                     start: new Date(cursor),
-                    end: new Date(we),
+                    end: new Date(end),
                     lengthMin: len,
                 });
         }
-        return segs.sort((a, b) => b.lengthMin - a.lengthMin);
-    }
-
-    const morningFree = React.useMemo(
-        () => windowFreeSegments(selectedDay, 8, 12),
-        [selectedDay, rawBusy],
-    );
-    const afternoonFree = React.useMemo(
-        () => windowFreeSegments(selectedDay, 13, 18),
-        [selectedDay, rawBusy],
-    );
+        // ordenar cronologicamente (já está, mas por garantia)
+        return segs.sort((a, b) => a.start.getTime() - b.start.getTime());
+    }, [
+        rawBusy,
+        selectedDay,
+        workTimes.startHour,
+        workTimes.startMin,
+        workTimes.endHour,
+        workTimes.endMin,
+    ]);
 
     function fmtHM(d: Date) {
         return d.toLocaleTimeString('pt-BR', {
@@ -275,40 +300,7 @@ export default function ScheduleModal({
             minute: '2-digit',
         });
     }
-    function describeWindow(free: FreeSeg[], label: string) {
-        if (!free.length) return `${label}: sem espaço livre`;
-        const top = free[0];
-        const second = free[1];
-        const main = `${fmtHM(top.start)} - ${fmtHM(top.end)} (${Math.round(
-            top.lengthMin,
-        )} min)`;
-        if (second) {
-            return `${label}: ${main} • outra: ${fmtHM(second.start)} - ${fmtHM(
-                second.end,
-            )}`;
-        }
-        return `${label}: ${main}`;
-    }
-
-    const suggestions = React.useMemo(
-        () => [
-            {
-                key: 'morning',
-                label: describeWindow(morningFree, 'Manhã'),
-                seg: morningFree[0],
-                color: '#ecfdf5',
-                border: '#059669',
-            },
-            {
-                key: 'afternoon',
-                label: describeWindow(afternoonFree, 'Tarde'),
-                seg: afternoonFree[0],
-                color: '#fffbeb',
-                border: '#b45309',
-            },
-        ],
-        [morningFree, afternoonFree],
-    );
+    // Lógica de sugestões macro removida — focamos apenas na lista granular de intervalos livres
     const startCandidate = React.useMemo(
         () => parseHM(hour, minute),
         [hour, minute],
@@ -388,22 +380,34 @@ export default function ScheduleModal({
                 ? `${API_BASE}/agenda/appointments/${editingId}/`
                 : `${API_BASE}/agenda/appointments/`;
             const method = isEdit ? 'PATCH' : 'POST';
+            if (!client) {
+                setError('Selecione um cliente antes de salvar.');
+                setSaving(false);
+                return;
+            }
             const payload = isEdit
                 ? {
-                      // Only fields we allow to change in edit mode
                       start_at: startISO,
                       end_at: endISO,
                       notes,
+                      visit_type: visitType, // permitir alterar tipo na edição longa
                   }
                 : {
                       client: client.id,
                       title: 'Consulta',
-                      visit_type: 'outro',
+                      visit_type: visitType,
                       start_at: startISO,
                       end_at: endISO,
                       status: 'scheduled',
                       notes,
                   };
+            if (setDefaultVisitType) {
+                try {
+                    localStorage.setItem('defaultVisitType', visitType);
+                } catch {
+                    /* noop */
+                }
+            }
             const r = await fetch(url, {
                 method,
                 headers: {
@@ -441,6 +445,33 @@ export default function ScheduleModal({
             }
             try {
                 void window.dispatchEvent(new Event('updateClients'));
+                void window.dispatchEvent(
+                    new CustomEvent('appointments:changed', { detail: {} }),
+                );
+                // pequena defasagem para garantir atualização antes do scroll / highlight
+                setTimeout(() => {
+                    try {
+                        if (client) {
+                            window.dispatchEvent(
+                                new CustomEvent('scrollToClientCard', {
+                                    detail: { clientId: client.id },
+                                }),
+                            );
+                        }
+                        window.dispatchEvent(
+                            new CustomEvent('systemMessage', {
+                                detail: {
+                                    type: 'success',
+                                    message: editingId
+                                        ? 'Agendamento atualizado com sucesso'
+                                        : 'Agendamento criado com sucesso',
+                                },
+                            }),
+                        );
+                    } catch (e) {
+                        void e;
+                    }
+                }, 50);
             } catch (err) {
                 void err;
             }
@@ -489,6 +520,7 @@ export default function ScheduleModal({
                 });
             }
             await submitCreate(true);
+            // submitCreate já dispara eventos; caso falhe antes, cairá no catch abaixo
         } catch (e: unknown) {
             setError(
                 e instanceof Error
@@ -504,66 +536,132 @@ export default function ScheduleModal({
         <AppModal open={open} onClose={onClose} closeOnEnter={false}>
             <div style={{ display: 'grid', gap: 12, minWidth: 280 }}>
                 <div
-                    style={{
-                        fontWeight: 800,
-                        fontSize: 26,
-                        textAlign: 'center',
-                        color: '#065f46',
-                    }}
+                    style={{ fontWeight: 800, fontSize: 20, color: '#111827' }}
                 >
-                    Agendar / Editar
+                    {editingId ? 'Editar compromisso' : 'Agendar compromisso'}
                 </div>
-                {/* Availability suggestion cards */}
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            Tipo
+                        </span>
+                        <select
+                            value={visitType}
+                            onChange={e =>
+                                setVisitType(e.target.value as typeof visitType)
+                            }
+                            style={{ padding: '6px 8px', minWidth: 140 }}
+                        >
+                            <option value='consulta'>Consulta</option>
+                            <option value='avaliacao'>Avaliação</option>
+                            <option value='retorno'>Retorno</option>
+                            <option value='procedimento'>Procedimento</option>
+                            <option value='outro'>Outro</option>
+                        </select>
+                    </label>
+                    <label
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            marginTop: 18,
+                        }}
+                    >
+                        <input
+                            type='checkbox'
+                            checked={setDefaultVisitType}
+                            onChange={e =>
+                                setSetDefaultVisitType(e.target.checked)
+                            }
+                        />
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            Definir como padrão
+                        </span>
+                    </label>
+                </div>
+                {/* Intervalos livres (granular) */}
                 <div
                     style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
                 >
-                    {suggestions.map(s => (
-                        <button
-                            key={s.key}
-                            type='button'
-                            disabled={!s.seg}
-                            onClick={() => {
-                                if (!s.seg) return;
-                                setHour(s.seg.start.getHours());
-                                setMinute(s.seg.start.getMinutes());
-                            }}
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            marginTop: 4,
+                        }}
+                    >
+                        <div
                             style={{
-                                textAlign: 'left',
-                                background: s.color,
-                                border: `1px solid ${s.border}`,
-                                borderRadius: 10,
-                                padding: '10px 12px',
-                                cursor: s.seg ? 'pointer' : 'not-allowed',
-                                opacity: s.seg ? 1 : 0.5,
-                                fontSize: 13,
-                                lineHeight: 1.3,
-                                display: 'flex',
-                                gap: 8,
-                                alignItems: 'flex-start',
+                                fontSize: 16,
+                                color: '#6b7280',
+                                marginBottom: 4,
+                                fontWeight: 600,
                             }}
-                            title={
-                                s.seg
-                                    ? 'Clique para preencher horário inicial'
-                                    : 'Sem disponibilidade'
-                            }
                         >
-                            <span
-                                style={{
-                                    fontWeight: 700,
-                                    minWidth: 64,
-                                    color: s.border,
-                                    fontSize: 12,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: 0.5,
-                                }}
-                            >
-                                {s.key === 'morning' ? 'Manhã' : 'Tarde'}
-                            </span>
-                            <span style={{ flex: 1, color: '#111827' }}>
-                                {s.label}
-                            </span>
-                        </button>
-                    ))}
+                            Intervalos livres
+                        </div>
+                        {/* Resumo (removido conforme simplificação solicitada) */}
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 6,
+                                flexWrap: 'wrap',
+                            }}
+                        >
+                            {dayFreeSegments.map((seg, idx) => {
+                                // Determina cor conforme período de início
+                                const h = seg.start.getHours();
+                                let bg = '#ecfdf5';
+                                let border = '#059669';
+                                if (h >= cutNoon && h < cutEvening) {
+                                    bg = '#fffbeb';
+                                    border = '#b45309';
+                                } else if (h >= cutEvening) {
+                                    bg = '#f5f3ff';
+                                    border = '#7c3aed';
+                                }
+                                const clickable = true;
+                                return (
+                                    <button
+                                        key={idx}
+                                        style={{
+                                            padding: '6px 10px',
+                                            borderRadius: 999,
+                                            background: bg,
+                                            border: `1px solid ${border}`,
+                                            cursor: clickable
+                                                ? 'pointer'
+                                                : 'default',
+                                            fontSize: 14,
+                                            lineHeight: 1.25,
+                                            display: 'flex',
+                                            gap: 6,
+                                            alignItems: 'center',
+                                            fontWeight: 600,
+                                            color: '#111827',
+                                        }}
+                                        title={`Usar início ${fmtHM(
+                                            seg.start,
+                                        )} (livre ${Math.round(
+                                            seg.lengthMin,
+                                        )} min)`}
+                                    >
+                                        <span
+                                            style={{
+                                                fontWeight: 700,
+                                                color: border,
+                                            }}
+                                        >
+                                            {fmtHM(seg.start)}
+                                        </span>
+                                        <span style={{ opacity: 0.6 }}>→</span>
+                                        <span>{fmtHM(seg.end)}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
                 {/* Date controls: prev, date picker, next */}
                 <div
@@ -882,9 +980,20 @@ export default function ScheduleModal({
                     >
                         <div>
                             <span>Nome: </span>
-                            <span style={{ fontWeight: 800 }}>
-                                {client.first_name} {client.last_name}
-                            </span>
+                            {client ? (
+                                <span style={{ fontWeight: 800 }}>
+                                    {client.first_name} {client.last_name}
+                                </span>
+                            ) : (
+                                <span
+                                    style={{
+                                        fontStyle: 'italic',
+                                        color: '#047857',
+                                    }}
+                                >
+                                    Selecione um cliente acima
+                                </span>
+                            )}
                         </div>
                         <div>
                             <span>Data: </span>

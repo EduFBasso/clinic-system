@@ -109,6 +109,9 @@ class Client(models.Model):
     city = models.CharField("Cidade", max_length=100, null=True, blank=True)
     state = models.CharField("Estado", max_length=2, null=True, blank=True)
     postal_code = models.CharField("CEP", max_length=20, null=True, blank=True)
+    # Complementos solicitados
+    date_of_birth = models.DateField("Data de nascimento", null=True, blank=True)
+    address_number = models.CharField("Número", max_length=16, null=True, blank=True)
 
     # Registro
     created_at = models.DateTimeField("Criado em", auto_now_add=True)

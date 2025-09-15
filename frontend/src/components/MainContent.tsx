@@ -250,6 +250,15 @@ const MainContent: React.FC<MainContentProps> = ({
                 )?.focus?.();
             }
         }
+        function onScrollToClientCard(e: Event) {
+            const detail = (e as CustomEvent).detail || {};
+            const id: number | undefined = detail.clientId;
+            if (!id) return;
+            const el = cardRefs.current[id];
+            if (el) {
+                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+        }
         function onNeedClientSelectionForAgenda() {
             const input = document.getElementById(
                 'client-filter',
@@ -260,6 +269,7 @@ const MainContent: React.FC<MainContentProps> = ({
             'focusSelectedClientCard',
             onFocusSelectedClientCard,
         );
+        window.addEventListener('scrollToClientCard', onScrollToClientCard);
         window.addEventListener(
             'needClientSelectionForAgenda',
             onNeedClientSelectionForAgenda,
@@ -268,6 +278,10 @@ const MainContent: React.FC<MainContentProps> = ({
             window.removeEventListener(
                 'focusSelectedClientCard',
                 onFocusSelectedClientCard,
+            );
+            window.removeEventListener(
+                'scrollToClientCard',
+                onScrollToClientCard,
             );
             window.removeEventListener(
                 'needClientSelectionForAgenda',

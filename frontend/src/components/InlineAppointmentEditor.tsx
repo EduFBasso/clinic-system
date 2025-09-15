@@ -225,7 +225,7 @@ export default function InlineAppointmentEditor({
                 : {
                       client: client.id,
                       title: 'Consulta',
-                      visit_type: 'avaliacao',
+                      visit_type: 'consulta',
                       start_at: startISO,
                       end_at: endISO,
                   };

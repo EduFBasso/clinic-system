@@ -7,6 +7,8 @@ export interface ClientData {
     phone: string;
     profession: string; // Profissão do cliente
     address: string;
+    address_number?: string; // Número (opcional, apenas dígitos, max 16)
+    date_of_birth?: string; // dd/mm/YYYY (UI) -> convertido para YYYY-MM-DD no envio
     neighborhood: string;
     city: string;
     state: string;

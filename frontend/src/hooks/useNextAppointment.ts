@@ -7,7 +7,7 @@ export interface Appointment {
     professional: number;
     client: number;
     title: string;
-    visit_type: 'avaliacao' | 'retorno' | 'procedimento' | 'outro';
+    visit_type: 'avaliacao' | 'retorno' | 'procedimento' | 'outro' | 'consulta';
     start_at: string; // ISO
     end_at: string; // ISO
     location?: string;

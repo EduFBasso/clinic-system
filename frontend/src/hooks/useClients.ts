@@ -10,9 +10,11 @@ export interface ClientBasic {
     phone: string;
     email: string;
     address?: string;
+    address_number?: string;
     neighborhood?: string;
     city?: string;
     state?: string;
+    date_of_birth?: string | null;
     next_appointment_start_at?: string | null; // Added for next appointment details
     next_appointment_title?: string | null; // Added for next appointment details
     next_appointment_visit_type?:
@@ -20,6 +22,7 @@ export interface ClientBasic {
         | 'retorno'
         | 'procedimento'
         | 'outro'
+        | 'consulta'
         | null; // Added for next appointment details
     next_appointment_notes?: string | null; // Added for next appointment notes
     next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null; // Added for next appointment status
@@ -87,10 +90,16 @@ export function useClients() {
         };
         window.addEventListener('clearClients', handleClearClients);
         window.addEventListener('updateClients', handleUpdateClients);
+        // Refresh explícito mais forte (ex: após criação e auto-close) – reutiliza mesmo fetch
+        window.addEventListener('clients:forceRefresh', handleUpdateClients);
         window.addEventListener('focus', handleFocus);
         return () => {
             window.removeEventListener('clearClients', handleClearClients);
             window.removeEventListener('updateClients', handleUpdateClients);
+            window.removeEventListener(
+                'clients:forceRefresh',
+                handleUpdateClients,
+            );
             window.removeEventListener('focus', handleFocus);
         };
     }, []);

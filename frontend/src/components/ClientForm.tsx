@@ -1,12 +1,12 @@
 // frontend\src\components\ClientForm.tsx
 import { API_BASE } from '../config/api';
 import React, { useEffect, useRef, useState } from 'react';
+import { normalizeDOBForApi } from '../utils/dateOfBirth';
 import type { ClientData } from '../types/ClientData';
 import AppModal from './Modal';
 import ClientFormDesktop from './ClientFormDesktop';
 import ClientFormMobile from './ClientFormMobile';
 import useIsMobile from './useIsMobile';
-// @ts-ignore - resolve at runtime
 import { useNavigate } from 'react-router-dom';
 
 export default function ClientForm({
@@ -218,6 +218,13 @@ export default function ClientForm({
             const phoneTrim = (formData.phone || '').trim();
             // Normaliza para dígitos, mantendo compatível com backend
             const phoneDigits = phoneTrim.replace(/\D/g, '');
+            // Normaliza address_number (somente dígitos ou null)
+            const addressNumberDigits = (formData.address_number || '')
+                .replace(/\D/g, '')
+                .slice(0, 16);
+            const address_number = addressNumberDigits || null;
+            // Normaliza date_of_birth usando util (aceita dd/mm/YYYY ou ISO)
+            const dob = normalizeDOBForApi(formData.date_of_birth || null);
             const dataToSend = {
                 ...formData,
                 first_name: first,
@@ -225,6 +232,8 @@ export default function ClientForm({
                 email: emailTrim ? emailTrim.toLowerCase() : null,
                 profession: professionTrim ? professionTrim : null,
                 phone: phoneDigits,
+                address_number,
+                date_of_birth: dob,
             };
             fetch(`${API_BASE}/register/clients/`, {
                 method: 'POST',
@@ -405,6 +414,17 @@ export default function ClientForm({
         if ('phone' in payload) {
             const p = (formData.phone || '').trim();
             body.phone = p ? p.replace(/\D/g, '') : null;
+        }
+        if ('address_number' in payload) {
+            const ad = (formData.address_number || '')
+                .replace(/\D/g, '')
+                .slice(0, 16);
+            body.address_number = ad || null;
+        }
+        if ('date_of_birth' in payload) {
+            body.date_of_birth = normalizeDOBForApi(
+                formData.date_of_birth || null,
+            );
         }
 
         fetch(`${API_BASE}/register/clients/${cliente.id}/`, {

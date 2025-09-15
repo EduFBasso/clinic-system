@@ -6,8 +6,8 @@ import {
 } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import { useNow } from '../hooks/useNow';
-// @ts-ignore - type modeling not required at build time in this context
-import { FaEdit } from 'react-icons/fa';
+import AppointmentCard from './AppointmentCard';
+import { API_BASE } from '../config/api';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -26,13 +26,6 @@ function toISODate(d: Date) {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${dd}`;
-}
-
-function formatTime(dt: Date) {
-    return dt.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
 }
 
 function groupByDay(items: Appointment[]) {
@@ -73,32 +66,10 @@ export default function MonthlyAgendaModal({
     const y = month.getFullYear();
     const mName = month.toLocaleDateString('pt-BR', { month: 'long' });
     const now = useNow(30000);
+    const [error, setError] = React.useState<string | null>(null);
 
-    // Colors consistent with AgendaPage
-    const COLOR = {
-        scheduled: { fg: '#059669', bg: '#f0fdf4' },
-        done: { fg: '#065f46', bg: '#ecfdf5' },
-        canceled: { fg: '#b91c1c', bg: '#fef2f2' },
-        expired: { fg: '#6b7280', bg: '#f3f4f6' },
-        ongoing: { fg: '#b45309', bg: '#fffbeb' },
-    } as const;
-
-    function statusVisual(a: Appointment) {
-        const start = new Date(a.start_at);
-        const end = new Date(a.end_at);
-        const isExpired =
-            a.status === 'scheduled' && end.getTime() <= now.getTime();
-        const isOngoing =
-            a.status === 'scheduled' &&
-            start.getTime() <= now.getTime() &&
-            now.getTime() < end.getTime();
-        if (isExpired) return { label: 'Vencido', ...COLOR.expired };
-        if (isOngoing) return { label: 'Em Atendimento', ...COLOR.ongoing };
-        if (a.status === 'scheduled')
-            return { label: 'Agendado', ...COLOR.scheduled };
-        if (a.status === 'done') return { label: 'Realizado', ...COLOR.done };
-        return { label: 'Cancelado', ...COLOR.canceled };
-    }
+    // Mantemos now para futuras evoluções (ex: highlight do dia corrente)
+    void now;
 
     const monthValue = `${y}-${String(month.getMonth() + 1).padStart(2, '0')}`;
 
@@ -230,125 +201,158 @@ export default function MonthlyAgendaModal({
                                         >
                                             {label}
                                         </div>
-                                        {grouped[dayISO].map(a => {
-                                            const s = new Date(a.start_at);
-                                            const e = new Date(a.end_at);
-                                            const vis = statusVisual(a);
-                                            return (
-                                                <div
-                                                    key={a.id}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 10,
-                                                        padding: '10px 12px',
-                                                        border: `1px solid ${vis.bg}`,
-                                                        borderRadius: 10,
-                                                        background: vis.bg,
-                                                    }}
-                                                >
-                                                    <div
-                                                        style={{
-                                                            width: 86,
-                                                            color: '#111827',
-                                                            fontWeight: 700,
-                                                        }}
-                                                    >
-                                                        {formatTime(s)} -{' '}
-                                                        {formatTime(e)}
-                                                    </div>
-                                                    <div style={{ flex: 1 }}>
-                                                        <div
-                                                            style={{
-                                                                fontWeight: 700,
-                                                                color: '#111827',
-                                                            }}
-                                                        >
-                                                            {a.title ||
-                                                                'Consulta'}
-                                                        </div>
-                                                        {a.notes ? (
-                                                            <div
-                                                                style={{
-                                                                    color: '#374151',
-                                                                    fontSize: 13,
-                                                                }}
-                                                            >
-                                                                {a.notes}
-                                                            </div>
-                                                        ) : null}
-                                                    </div>
-                                                    <div
-                                                        title={vis.label}
-                                                        style={{
-                                                            fontSize: 12,
-                                                            fontWeight: 800,
-                                                            color: vis.fg,
-                                                            textTransform:
-                                                                'uppercase',
-                                                            marginRight: 8,
-                                                        }}
-                                                    >
-                                                        {vis.label}
-                                                    </div>
-                                                    <button
-                                                        title='Editar'
-                                                        onClick={() => {
-                                                            const dayIso =
-                                                                toISODate(
-                                                                    new Date(
-                                                                        a.start_at,
-                                                                    ),
-                                                                );
-                                                            // Desktop: pedir para Home abrir o ScheduleModal em modo edição;
-                                                            // Mobile: manter navegação por URL.
-                                                            const isMobile =
-                                                                /Mobi|Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
-                                                                    window
-                                                                        .navigator
-                                                                        .userAgent,
-                                                                );
-                                                            if (!isMobile) {
+                                        {grouped[dayISO].map(a => (
+                                            <AppointmentCard
+                                                key={a.id}
+                                                appt={a as Appointment}
+                                                onEdit={appt => {
+                                                    const dayIso = toISODate(
+                                                        new Date(appt.start_at),
+                                                    );
+                                                    const isMobile =
+                                                        /Mobi|Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
+                                                            window.navigator
+                                                                .userAgent,
+                                                        );
+                                                    if (!isMobile) {
+                                                        try {
+                                                            window.dispatchEvent(
+                                                                new CustomEvent(
+                                                                    'openScheduleEdit',
+                                                                    {
+                                                                        detail: {
+                                                                            client,
+                                                                            date: new Date(
+                                                                                dayIso +
+                                                                                    'T00:00:00',
+                                                                            ),
+                                                                            appointment:
+                                                                                appt,
+                                                                        },
+                                                                    },
+                                                                ),
+                                                            );
+                                                            return;
+                                                        } catch {
+                                                            /* noop */
+                                                        }
+                                                    }
+                                                    window.location.href = `/agenda?date=${dayIso}&client=${client.id}&edit=${appt.id}`;
+                                                }}
+                                                onCancel={async appt => {
+                                                    try {
+                                                        setError(null);
+                                                        const token =
+                                                            localStorage.getItem(
+                                                                'accessToken',
+                                                            );
+                                                        const headers: Record<
+                                                            string,
+                                                            string
+                                                        > = {
+                                                            'Content-Type':
+                                                                'application/json',
+                                                        };
+                                                        if (token)
+                                                            headers[
+                                                                'Authorization'
+                                                            ] = `Bearer ${token}`;
+                                                        const resp =
+                                                            await fetch(
+                                                                `${API_BASE}/agenda/appointments/${appt.id}/cancel/`,
+                                                                {
+                                                                    method: 'POST',
+                                                                    headers,
+                                                                },
+                                                            );
+                                                        if (!resp.ok) {
+                                                            const txt =
+                                                                await resp.text();
+                                                            throw new Error(
+                                                                txt ||
+                                                                    'Erro ao cancelar',
+                                                            );
+                                                        }
+                                                        // Mensagem global por 3s
+                                                        try {
+                                                            window.dispatchEvent(
+                                                                new CustomEvent(
+                                                                    'systemMessage',
+                                                                    {
+                                                                        detail: {
+                                                                            text: 'Compromisso cancelado',
+                                                                            type: 'success',
+                                                                        },
+                                                                    },
+                                                                ),
+                                                            );
+                                                        } catch {
+                                                            /* noop */
+                                                        }
+                                                        // Atualiza clientes
+                                                        try {
+                                                            window.dispatchEvent(
+                                                                new Event(
+                                                                    'updateClients',
+                                                                ),
+                                                            );
+                                                        } catch {
+                                                            /* noop */
+                                                        }
+                                                        // Fechar modal levemente depois para evitar corte visual abrupto
+                                                        setTimeout(() => {
+                                                            onClose();
+                                                            // Após fechar, rola até cartão
+                                                            setTimeout(() => {
                                                                 try {
                                                                     window.dispatchEvent(
                                                                         new CustomEvent(
-                                                                            'openScheduleEdit',
+                                                                            'scrollToClientCard',
                                                                             {
                                                                                 detail: {
-                                                                                    client,
-                                                                                    date: new Date(
-                                                                                        dayIso +
-                                                                                            'T00:00:00',
-                                                                                    ),
-                                                                                    appointment:
-                                                                                        a,
+                                                                                    clientId:
+                                                                                        client.id,
                                                                                 },
                                                                             },
                                                                         ),
                                                                     );
-                                                                    return;
                                                                 } catch {
-                                                                    /* fall through */
+                                                                    /* noop */
                                                                 }
-                                                            }
-                                                            window.location.href = `/agenda?date=${dayIso}&client=${client.id}&edit=${a.id}`;
-                                                        }}
-                                                        style={{
-                                                            background:
-                                                                'transparent',
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            color: vis.fg,
-                                                        }}
-                                                    >
-                                                        <FaEdit />
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
+                                                            }, 120);
+                                                        }, 140);
+                                                    } catch (err) {
+                                                        const msg =
+                                                            err &&
+                                                            typeof err ===
+                                                                'object' &&
+                                                            'message' in err
+                                                                ? String(
+                                                                      (
+                                                                          err as Error
+                                                                      ).message,
+                                                                  )
+                                                                : 'Erro ao cancelar';
+                                                        setError(msg);
+                                                        setTimeout(
+                                                            () =>
+                                                                setError(null),
+                                                            4000,
+                                                        );
+                                                    }
+                                                }}
+                                            />
+                                        ))}
                                     </div>
                                 );
                             })}
+                    </div>
+                )}
+                {error && (
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                        <span style={{ color: '#b91c1c', fontWeight: 600 }}>
+                            {error}
+                        </span>
                     </div>
                 )}
             </div>
