@@ -44,6 +44,13 @@ function groupByDay(items: Appointment[]) {
     return map;
 }
 
+// Parse 'YYYY-MM-DD' into a local Date (avoid UTC interpretation shifting a day back)
+function parseISODateLocal(iso: string): Date {
+    const [y, m, d] = iso.split('-').map(Number);
+    // Using Date(y, m-1, d) constructs a date in local timezone at 00:00
+    return new Date(y, (m || 1) - 1, d || 1);
+}
+
 export default function MonthlyAgendaModal({
     open,
     onClose,
@@ -182,7 +189,9 @@ export default function MonthlyAgendaModal({
                         {Object.keys(grouped)
                             .sort()
                             .map(dayISO => {
-                                const day = new Date(dayISO);
+                                // Important: new Date('YYYY-MM-DD') is parsed as UTC in JS.
+                                // Use local constructor to avoid timezone shifting the label (e.g., showing 15/09 instead of 16/09).
+                                const day = parseISODateLocal(dayISO);
                                 const label = day.toLocaleDateString('pt-BR', {
                                     weekday: 'short',
                                     day: '2-digit',
@@ -222,10 +231,33 @@ export default function MonthlyAgendaModal({
                                                                     {
                                                                         detail: {
                                                                             client,
-                                                                            date: new Date(
-                                                                                dayIso +
-                                                                                    'T00:00:00',
-                                                                            ),
+                                                                            // Ensure date is constructed in local timezone at midnight
+                                                                            date: (() => {
+                                                                                const [
+                                                                                    yy,
+                                                                                    mm,
+                                                                                    dd,
+                                                                                ] =
+                                                                                    dayIso
+                                                                                        .split(
+                                                                                            '-',
+                                                                                        )
+                                                                                        .map(
+                                                                                            Number,
+                                                                                        );
+                                                                                return new Date(
+                                                                                    yy,
+                                                                                    (mm ||
+                                                                                        1) -
+                                                                                        1,
+                                                                                    dd ||
+                                                                                        1,
+                                                                                    0,
+                                                                                    0,
+                                                                                    0,
+                                                                                    0,
+                                                                                );
+                                                                            })(),
                                                                             appointment:
                                                                                 appt,
                                                                         },
