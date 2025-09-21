@@ -21,6 +21,8 @@ export interface AppointmentCardProps<
     appt: T;
     onClick?: (appt: T) => void; // legacy primary click
     onUseTime?: (appt: T) => void; // alias for primary click (QuickSchedule)
+    // Novo: permite que o cartão "Pendente" ative um fluxo de resolução (ex: PendingActionsModal)
+    onResolvePending?: (appt: T) => void;
     onEdit?: (appt: T) => void;
     onCancel?: (appt: T) => void;
     onDetails?: (appt: T) => void;
@@ -48,6 +50,7 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
     appt,
     onClick,
     onUseTime,
+    onResolvePending,
     onEdit,
     onCancel,
     onDetails,
@@ -87,6 +90,7 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
             ? 'var(--color-done)'
             : 'var(--color-success)';
 
+    const isPending = status === 'past';
     const base: React.CSSProperties = {
         border: '1px solid var(--color-border)',
         borderRadius: 8,
@@ -105,7 +109,12 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
-        cursor: onClick || onUseTime ? 'pointer' : 'default',
+        cursor:
+            isPending && onResolvePending
+                ? 'pointer'
+                : onClick || onUseTime
+                ? 'pointer'
+                : 'default',
         position: 'relative',
         maxWidth: '100%',
         boxShadow: editingActive
@@ -127,7 +136,17 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
             data-appt-id={appt.id}
             className={className}
             style={base}
-            onClick={() => (onUseTime ? onUseTime(appt) : onClick?.(appt))}
+            onClick={() => {
+                if (isPending && onResolvePending) {
+                    onResolvePending(appt);
+                    return;
+                }
+                if (onUseTime) {
+                    onUseTime(appt);
+                } else if (onClick) {
+                    onClick(appt);
+                }
+            }}
         >
             {/* Left status color stripe */}
             <div

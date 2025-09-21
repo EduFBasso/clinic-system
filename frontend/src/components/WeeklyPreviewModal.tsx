@@ -3,6 +3,7 @@ import AppModal from './Modal';
 import { track } from '../utils/telemetry';
 import FloatingDatePicker from './FloatingDatePicker';
 import AppointmentCard from './shared/AppointmentCard';
+import PendingActionsModal from './PendingActionsModal';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import {
     useAppointmentsRange,
@@ -48,7 +49,7 @@ function groupByDay(items: Appointment[]) {
     return map;
 }
 
-export default function WeeklyAgendaModal({
+export default function WeeklyPreviewModal({
     open,
     onClose,
     initialDate,
@@ -80,10 +81,12 @@ export default function WeeklyAgendaModal({
         [anchorDate],
     );
     const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
+    const [reloadKey, setReloadKey] = React.useState(0);
     const { items, loading } = useAppointmentsRange(
         weekStart,
         weekEnd,
         undefined,
+        reloadKey,
     );
 
     const [selectedDayISO, setSelectedDayISO] = React.useState<string>(() =>
@@ -94,13 +97,13 @@ export default function WeeklyAgendaModal({
         if (open)
             track({
                 type: 'modal_opened',
-                payload: { name: 'WeeklyAgendaModal' },
+                payload: { name: 'WeeklyPreviewModal' },
             });
         return () => {
             if (open)
                 track({
                     type: 'modal_closed',
-                    payload: { name: 'WeeklyAgendaModal' },
+                    payload: { name: 'WeeklyPreviewModal' },
                 });
         };
     }, [open]);
@@ -193,6 +196,11 @@ export default function WeeklyAgendaModal({
 
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
+        null,
+    );
+    // Pending actions modal state
+    const [pendingOpen, setPendingOpen] = React.useState(false);
+    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
         null,
     );
 
@@ -529,6 +537,13 @@ export default function WeeklyAgendaModal({
                                                 onClick={() =>
                                                     setSelectedDayISO(iso)
                                                 }
+                                                onResolvePending={appt => {
+                                                    setDetailsOpen(false);
+                                                    setPendingAppt(
+                                                        appt as Appointment,
+                                                    );
+                                                    setPendingOpen(true);
+                                                }}
                                                 onDetails={
                                                     a.status === 'done'
                                                         ? appt => {
@@ -563,6 +578,17 @@ export default function WeeklyAgendaModal({
                     // Ensure the floating picker stays below sticky bars so its header is fully visible on iPhone
                     minTop={160}
                 />
+                {pendingOpen && pendingAppt && (
+                    <PendingActionsModal
+                        open={pendingOpen}
+                        onClose={() => {
+                            setPendingOpen(false);
+                            setPendingAppt(null);
+                            setReloadKey(x => x + 1);
+                        }}
+                        appt={pendingAppt}
+                    />
+                )}
 
                 {detailsOpen && detailsAppt && (
                     <AppointmentDetailsModal

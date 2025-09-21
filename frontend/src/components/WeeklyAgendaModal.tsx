@@ -3,6 +3,7 @@ import AppModal from './Modal';
 import FloatingDatePicker from './FloatingDatePicker';
 import AppointmentCard from './shared/AppointmentCard';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
+import PendingActionsModal from './PendingActionsModal';
 import {
     useAppointmentsRange,
     type Appointment,
@@ -82,10 +83,12 @@ export default function WeeklyAgendaModal({
         [anchorDate],
     );
     const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
+    const [reloadKey, setReloadKey] = React.useState(0);
     const { items, loading } = useAppointmentsRange(
         weekStart,
         weekEnd,
         undefined,
+        reloadKey,
     );
 
     // Selected day (for highlight/filtering UI)
@@ -180,6 +183,10 @@ export default function WeeklyAgendaModal({
     // Details modal (only for done)
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
+        null,
+    );
+    const [pendingOpen, setPendingOpen] = React.useState(false);
+    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
         null,
     );
 
@@ -503,11 +510,16 @@ export default function WeeklyAgendaModal({
                                                 appt={a as Appointment}
                                                 compact
                                                 showNotes={false}
-                                                // Clicking a card selects the day (no other action for now)
                                                 onClick={() =>
                                                     setSelectedDayISO(iso)
                                                 }
-                                                // Only expose details for done items
+                                                onResolvePending={appt => {
+                                                    setDetailsOpen(false);
+                                                    setPendingAppt(
+                                                        appt as Appointment,
+                                                    );
+                                                    setPendingOpen(true);
+                                                }}
                                                 onDetails={
                                                     a.status === 'done'
                                                         ? appt => {
@@ -550,6 +562,17 @@ export default function WeeklyAgendaModal({
                             setDetailsAppt(null);
                         }}
                         appt={detailsAppt}
+                    />
+                )}
+                {pendingOpen && pendingAppt && (
+                    <PendingActionsModal
+                        open={pendingOpen}
+                        onClose={() => {
+                            setPendingOpen(false);
+                            setPendingAppt(null);
+                            setReloadKey(x => x + 1);
+                        }}
+                        appt={pendingAppt}
                     />
                 )}
             </div>
