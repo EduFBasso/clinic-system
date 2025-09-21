@@ -24,6 +24,8 @@ import WeeklyAgendaModal from './WeeklyPreviewModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
 import { useOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import { track } from '../utils/telemetry';
+import PendingActionsModal from './PendingActionsModal';
+import type { SharedAppointmentLike } from './shared/AppointmentCard';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
 
@@ -44,6 +46,9 @@ export default function ClientCard({
     const [showWeekly, setShowWeekly] = React.useState(false);
     const [showQuick, setShowQuick] = React.useState(false);
     const [showSchedule, setShowSchedule] = React.useState(false);
+    const [showPendingActions, setShowPendingActions] = React.useState(false);
+    const [pendingAppt, setPendingAppt] =
+        React.useState<SharedAppointmentLike | null>(null);
     const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
         null,
     );
@@ -173,6 +178,41 @@ export default function ClientCard({
         client.next_appointment_end_at,
         now,
     ]);
+
+    // Helper para abrir o modal de pendência com os dados do próximo compromisso pendente
+    const openPendingActions = React.useCallback(() => {
+        const sISO = client.next_appointment_start_at;
+        const eISO = client.next_appointment_end_at;
+        const id = client.next_appointment_id ?? undefined;
+        if (!sISO || !eISO || !id) {
+            // Fallback: mensagem caso dados estejam inconsistentes
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: {
+                            text: 'Há uma pendência, mas não foi possível carregar os detalhes. Atualize a página.',
+                            type: 'warning',
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        const appt: SharedAppointmentLike = {
+            id,
+            title: client.next_appointment_title ?? undefined,
+            start_at: sISO,
+            end_at: eISO,
+            status: 'scheduled',
+            notes: client.next_appointment_notes ?? undefined,
+            client_name: `${client.first_name} ${client.last_name}`.trim(),
+            client: client.id,
+        };
+        setPendingAppt(appt);
+        setShowPendingActions(true);
+    }, [client]);
 
     const hasAgendaLine = isScheduled || isOngoing; // mantém a linha visível durante a janela em andamento
     // Estilos centralizados via hook: mantém regra de cartão branco durante atendimento
@@ -634,21 +674,7 @@ export default function ClientCard({
                                     onClick={e => {
                                         e.stopPropagation();
                                         if (isPending) {
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'systemMessage',
-                                                        {
-                                                            detail: {
-                                                                text: 'Finalize o compromisso pendente antes de criar um novo.',
-                                                                type: 'warning',
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
+                                            openPendingActions();
                                             return;
                                         }
                                         if (limitReached) {
@@ -1043,21 +1069,7 @@ export default function ClientCard({
                                     onClick={e => {
                                         e.stopPropagation();
                                         if (isPending) {
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'systemMessage',
-                                                        {
-                                                            detail: {
-                                                                text: 'Finalize o compromisso pendente antes de criar outro.',
-                                                                type: 'warning',
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
+                                            openPendingActions();
                                             return;
                                         }
                                         if (limitReached) {
@@ -1128,6 +1140,15 @@ export default function ClientCard({
                     maxFutureAppointments={getMaxScheduledPerClient()}
                     afterPersist={() => {
                         // Atualizar clientes para refletir dados do próximo compromisso
+                        {
+                            showPendingActions && pendingAppt && (
+                                <PendingActionsModal
+                                    open={showPendingActions}
+                                    onClose={() => setShowPendingActions(false)}
+                                    appt={pendingAppt}
+                                />
+                            );
+                        }
                         window.dispatchEvent(new Event('updateClients'));
                         // Agora FECHA também em edição conforme solicitado (uniformizar experiência)
                         setShowQuick(false);
