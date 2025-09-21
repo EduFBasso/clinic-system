@@ -27,11 +27,13 @@ export default function ModalActionsBar({
                 zIndex: 1000,
                 display: 'flex',
                 justifyContent: 'flex-end',
-                gap: 8,
-                padding: '0 4px 0 6px',
-                // Opaque background to prevent content showing through under the top bar
-                background: 'var(--color-bg)',
-                borderBottom: '1px solid var(--color-border)',
+                gap: 0,
+                padding: 0,
+                // Transparente para não encobrir conteúdo ao rolar
+                background: 'transparent',
+                borderBottom: 'none',
+                // Não bloquear interações/rolagem do conteúdo por baixo
+                pointerEvents: 'none',
                 ...style,
             }}
         >
@@ -53,6 +55,8 @@ export default function ModalActionsBar({
                         justifyContent: 'center',
                         touchAction: 'manipulation',
                         WebkitTapHighlightColor: 'transparent',
+                        // Reabilita interação apenas no botão
+                        pointerEvents: 'auto',
                     }}
                     title='Fechar'
                 >
