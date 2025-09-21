@@ -90,23 +90,27 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'clinic_project.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': config("DB_ENGINE", default="django.db.backends.postgresql"),
-    'NAME': config("DB_NAME"),
-    'USER': config("DB_USER"),
-        'PASSWORD': config("DB_PASSWORD"),
-        'HOST': config("DB_HOST", default="localhost"),
-    'PORT': config("DB_PORT", default="5432"),
-    }
-}
-
-# Durante testes (pytest) podemos usar SQLite em memória para acelerar e isolar ambiente
 import os as _os
-if _os.environ.get('PYTEST_CURRENT_TEST') and config('TEST_USE_SQLITE', default=True, cast=bool):
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
+_IN_CI = _os.environ.get('GITHUB_ACTIONS') == 'true'
+# Use SQLite em memória em CI ou quando explicitamente solicitado via TEST_USE_SQLITE
+_USE_SQLITE_FOR_TESTS = config('TEST_USE_SQLITE', default=False, cast=bool) or _IN_CI
+if _USE_SQLITE_FOR_TESTS:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+            'NAME': config('DB_NAME', default='clinic'),
+            'USER': config('DB_USER', default='clinic'),
+            'PASSWORD': config('DB_PASSWORD', default='clinic'),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+        }
     }
 
 # Garante transações automáticas por requisição (evita estados parciais em exceptions)
