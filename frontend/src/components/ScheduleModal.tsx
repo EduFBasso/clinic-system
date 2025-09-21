@@ -7,8 +7,20 @@ import type { Appointment } from '../hooks/useAppointments';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
+import {
+    getDefaultDuration,
+    getSlotInterval,
+    getWorkTimes,
+} from '../utils/agendaSettings';
 
-type DurationOption = 60 | 90 | 120 | 150;
+type DurationOption = 30 | 60 | 90 | 120 | 150;
+
+function pad2(n: number) {
+    return String(n).padStart(2, '0');
+}
+function makeDayTime(day: string, h: number, m: number) {
+    return new Date(`${day}T${pad2(h)}:${pad2(m)}:00`);
+}
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -30,11 +42,6 @@ function toHHMM(d: Date) {
     return d
         .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
         .slice(0, 5);
-}
-function parseHM(h: number, m: number) {
-    const d = new Date();
-    d.setHours(h, m, 0, 0);
-    return d;
 }
 function addMinutes(d: Date, mins: number) {
     const x = new Date(d);
@@ -58,10 +65,11 @@ export default function ScheduleModal({
     defaultDate?: Date;
     editAppointment?: Appointment | null;
 }) {
-    const TITLE_GREEN = '#065f46';
-    const ARROW_HOVER = '#064e3b';
-    const ARROW_ACTIVE = '#052e22';
+    const TITLE_GREEN = 'var(--color-success-dark)';
+    const ARROW_HOVER = 'var(--color-success-darker)';
+    const ARROW_ACTIVE = 'var(--color-success-deep)';
     const [selectedDay, setSelectedDay] = React.useState<Date>(() => {
+        // 1) Se houver última data do cliente, usa
         if (client) {
             try {
                 const key = `schedule:lastDay:${client.id}`;
@@ -74,8 +82,10 @@ export default function ScheduleModal({
                 /* ignore */
             }
         }
+        // 2) Se veio defaultDate (ex.: via rota), respeita
         if (defaultDate) return startOfDay(defaultDate);
-        return startOfDay(new Date());
+        // 3) Caso novo agendamento sem data -> padrão = hoje + 7 dias (igual Quick)
+        return startOfDay(addDays(new Date(), 7));
     });
     // Persist selection per client
     React.useEffect(() => {
@@ -97,11 +107,38 @@ export default function ScheduleModal({
     const effectiveItems = loading ? stableItems : items;
 
     const BUFFER = 30;
-    const [duration, setDuration] = React.useState<DurationOption>(60);
-    const [hour, setHour] = React.useState<number>(
-        (defaultDate ? new Date(defaultDate) : new Date()).getHours(),
+    const [duration, setDuration] = React.useState<DurationOption>(() =>
+        getDefaultDuration(),
     );
-    const [minute, setMinute] = React.useState<number>(0);
+    // Inicializa hora/minuto no próximo slot válido (evitando retroativo)
+    const initialHM = React.useMemo(() => {
+        const ws = getWorkTimes();
+        const step = getSlotInterval();
+        const isToday = toISODate(selectedDay) === toISODate(new Date());
+        let base = new Date(selectedDay);
+        if (isToday) {
+            // Dia de hoje -> arredonda a partir de agora
+            base = new Date();
+        } else {
+            // Outro dia -> início do expediente
+            base.setHours(ws.startHour, ws.startMin, 0, 0);
+        }
+        // Ceil para próximo múltiplo do intervalo
+        const m = base.getMinutes();
+        const nextM = Math.ceil(m / step) * step;
+        if (nextM >= 60) {
+            base.setHours(base.getHours() + 1, 0, 0, 0);
+        } else {
+            base.setMinutes(nextM, 0, 0);
+        }
+        // Garante dentro do expediente do dia selecionado
+        const workStartSel = new Date(selectedDay);
+        workStartSel.setHours(ws.startHour, ws.startMin, 0, 0);
+        if (base < workStartSel) base = workStartSel;
+        return { h: base.getHours(), m: base.getMinutes() };
+    }, [selectedDay]);
+    const [hour, setHour] = React.useState<number>(initialHM.h);
+    const [minute, setMinute] = React.useState<number>(initialHM.m);
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [offerReplace, setOfferReplace] = React.useState(false);
@@ -126,7 +163,6 @@ export default function ScheduleModal({
         }
         return 'consulta';
     });
-    const [setDefaultVisitType, setSetDefaultVisitType] = React.useState(false);
     const [notes, setNotes] = React.useState<string>('');
     const [editingId, setEditingId] = React.useState<number | null>(null);
     // UI interaction states
@@ -173,7 +209,7 @@ export default function ScheduleModal({
                 Math.round((e.getTime() - s.getTime()) / 60000),
             );
             const closest: DurationOption = (
-                [60, 90, 120, 150] as DurationOption[]
+                [30, 60, 90, 120, 150] as DurationOption[]
             ).reduce((prev, cur) =>
                 Math.abs(cur - diffMin) < Math.abs(prev - diffMin) ? cur : prev,
             );
@@ -183,6 +219,11 @@ export default function ScheduleModal({
         } else {
             // creating new
             setEditingId(null);
+            // Padroniza igual ao Quick: novo agendamento abre em hoje + 7
+            if (!defaultDate) {
+                const d = startOfDay(addDays(new Date(), 7));
+                setSelectedDay(d);
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, editAppointment?.id]);
@@ -231,20 +272,15 @@ export default function ScheduleModal({
     }
     // windowFreeSegments removido (simplificação) — usamos apenas cálculo unificado do dia
 
-    // Lê horário inicial e final do expediente das configurações salvas
-    function readWorkTimes() {
-        const ws = localStorage.getItem('agenda.workStart') || '06:00';
-        const we = localStorage.getItem('agenda.workEnd') || '21:00';
-        const [sh, sm] = ws.split(':').map(n => parseInt(n, 10));
-        const [eh, em] = we.split(':').map(n => parseInt(n, 10));
-        return {
-            startHour: isNaN(sh) ? 6 : sh,
-            startMin: isNaN(sm) ? 0 : sm,
-            endHour: isNaN(eh) ? 21 : eh,
-            endMin: isNaN(em) ? 0 : em,
-        };
-    }
-    const workTimes = React.useMemo(readWorkTimes, []);
+    const workTimes = React.useMemo(getWorkTimes, []);
+    const slotInterval = React.useMemo(getSlotInterval, []);
+    const minutesList = React.useMemo(() => {
+        const step = Math.max(1, Math.min(30, slotInterval));
+        const arr: number[] = [];
+        for (let m = 0; m < 60; m += step) arr.push(m);
+        return arr;
+    }, [slotInterval]);
+
     // Cortes fixos apenas para colorir (manhã / tarde / noite)
     const cutNoon = 12; // meio-dia
     const cutEvening = 18; // início noite
@@ -301,31 +337,64 @@ export default function ScheduleModal({
         });
     }
     // Lógica de sugestões macro removida — focamos apenas na lista granular de intervalos livres
+    // Candidatos calculados no dia selecionado (consistência com busy bounds)
     const startCandidate = React.useMemo(
-        () => parseHM(hour, minute),
-        [hour, minute],
+        () => makeDayTime(dayISO, hour, minute),
+        [dayISO, hour, minute],
     );
     const endCandidate = React.useMemo(
         () => addMinutes(startCandidate, duration),
         [startCandidate, duration],
     );
 
+    // Limites absolutos do expediente no dia selecionado
+    const workStartBound = React.useMemo(
+        () => makeDayTime(dayISO, workTimes.startHour, workTimes.startMin),
+        [dayISO, workTimes.startHour, workTimes.startMin],
+    );
+    const workEndBound = React.useMemo(
+        () => makeDayTime(dayISO, workTimes.endHour, workTimes.endMin),
+        [dayISO, workTimes.endHour, workTimes.endMin],
+    );
+
     const startAllowed = React.useMemo(
         () =>
+            startCandidate >= workStartBound &&
+            endCandidate <= workEndBound &&
             !busy.some(b =>
                 overlaps(startCandidate, endCandidate, b.start, b.end),
             ),
-        [busy, startCandidate, endCandidate],
+        [busy, startCandidate, endCandidate, workStartBound, workEndBound],
     );
+    // Retroativo (no passado) não permitido
+    const isRetroactive = React.useMemo(() => {
+        const now = new Date();
+        const todayISO = toISODate(now);
+        if (dayISO < todayISO) return true;
+        if (dayISO > todayISO) return false;
+        return startCandidate < now;
+    }, [dayISO, startCandidate]);
+    const canSubmit = startAllowed && !isRetroactive;
+
+    const hoursRange = React.useMemo(() => {
+        const startH = Math.max(0, Math.min(23, workTimes.startHour));
+        const endH = Math.max(startH, Math.min(23, workTimes.endHour));
+        const len = endH - startH + 1;
+        return Array.from({ length: len }, (_, i) => startH + i);
+    }, [workTimes.startHour, workTimes.endHour]);
 
     const hourHasAnyValidMinute = React.useMemo(() => {
         const map: Record<number, boolean> = {};
-        for (let h = 6; h <= 22; h++) {
+        for (const h of hoursRange) {
             let ok = false;
-            for (const m of [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]) {
-                const s = parseHM(h, m);
+            for (const m of minutesList) {
+                const s = makeDayTime(dayISO, h, m);
                 const e = addMinutes(s, duration);
-                if (!busy.some(b => overlaps(s, e, b.start, b.end))) {
+                if (
+                    s >= workStartBound &&
+                    e <= workEndBound &&
+                    !busy.some(b => overlaps(s, e, b.start, b.end))
+                ) {
                     ok = true;
                     break;
                 }
@@ -333,7 +402,15 @@ export default function ScheduleModal({
             map[h] = ok;
         }
         return map;
-    }, [busy, duration]);
+    }, [
+        hoursRange,
+        minutesList,
+        dayISO,
+        duration,
+        busy,
+        workStartBound,
+        workEndBound,
+    ]);
 
     // Live client-side conflict detection (no buffer) for the currently selected range
     const clientConflicts = React.useMemo(() => {
@@ -346,9 +423,11 @@ export default function ScheduleModal({
         );
     }, [effectiveItems, dayISO, startCandidate, endCandidate]);
 
-    const DURATION_OPTIONS: DurationOption[] = [60, 90, 120, 150];
+    const DURATION_OPTIONS: DurationOption[] = [30, 60, 90, 120, 150];
     function formatDurationLabel(mins: DurationOption) {
         switch (mins) {
+            case 30:
+                return '30 min';
             case 60:
                 return '60 min';
             case 90:
@@ -401,13 +480,7 @@ export default function ScheduleModal({
                       status: 'scheduled',
                       notes,
                   };
-            if (setDefaultVisitType) {
-                try {
-                    localStorage.setItem('defaultVisitType', visitType);
-                } catch {
-                    /* noop */
-                }
-            }
+            // ScheduleModal não altera mais o padrão de tipo de visita aqui; permanece somente leitura da config existente
             const r = await fetch(url, {
                 method,
                 headers: {
@@ -559,25 +632,6 @@ export default function ScheduleModal({
                             <option value='outro'>Outro</option>
                         </select>
                     </label>
-                    <label
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            marginTop: 18,
-                        }}
-                    >
-                        <input
-                            type='checkbox'
-                            checked={setDefaultVisitType}
-                            onChange={e =>
-                                setSetDefaultVisitType(e.target.checked)
-                            }
-                        />
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
-                            Definir como padrão
-                        </span>
-                    </label>
                 </div>
                 {/* Intervalos livres (granular) */}
                 <div
@@ -613,7 +667,7 @@ export default function ScheduleModal({
                                 // Determina cor conforme período de início
                                 const h = seg.start.getHours();
                                 let bg = '#ecfdf5';
-                                let border = '#059669';
+                                let border = 'var(--color-success)';
                                 if (h >= cutNoon && h < cutEvening) {
                                     bg = '#fffbeb';
                                     border = '#b45309';
@@ -640,6 +694,57 @@ export default function ScheduleModal({
                                             alignItems: 'center',
                                             fontWeight: 600,
                                             color: '#111827',
+                                        }}
+                                        onClick={() => {
+                                            // Usa o início do intervalo como hora inicial
+                                            const s = new Date(seg.start);
+                                            setHour(s.getHours());
+                                            setMinute(s.getMinutes());
+                                            // Sugere duração padrão, mas clamp até o fim do intervalo
+                                            const ddRaw = localStorage.getItem(
+                                                'agenda.defaultDuration',
+                                            );
+                                            const dd = (() => {
+                                                const n = parseInt(
+                                                    ddRaw || '60',
+                                                    10,
+                                                );
+                                                return !isNaN(n) &&
+                                                    n > 0 &&
+                                                    n <= 240
+                                                    ? n
+                                                    : 60;
+                                            })();
+                                            const suggestedEnd = addMinutes(
+                                                s,
+                                                dd,
+                                            );
+                                            const end =
+                                                suggestedEnd > seg.end
+                                                    ? seg.end
+                                                    : suggestedEnd;
+                                            const diff = Math.max(
+                                                5,
+                                                Math.round(
+                                                    (end.getTime() -
+                                                        s.getTime()) /
+                                                        60000,
+                                                ),
+                                            );
+                                            // Ajusta para a opção mais próxima disponível
+                                            const closest: DurationOption = (
+                                                [
+                                                    30, 60, 90, 120, 150,
+                                                ] as DurationOption[]
+                                            ).reduce(
+                                                (prev, cur) =>
+                                                    Math.abs(cur - diff) <
+                                                    Math.abs(prev - diff)
+                                                        ? cur
+                                                        : prev,
+                                                60 as DurationOption,
+                                            );
+                                            setDuration(closest);
                                         }}
                                         title={`Usar início ${fmtHM(
                                             seg.start,
@@ -721,7 +826,9 @@ export default function ScheduleModal({
                             padding: '8px 12px',
                             borderRadius: 8,
                             border: `1px solid ${
-                                dateFocused ? '#059669' : TITLE_GREEN
+                                dateFocused
+                                    ? 'var(--color-success)'
+                                    : TITLE_GREEN
                             }`,
                             background: '#ecfdf5',
                             color: TITLE_GREEN,
@@ -803,10 +910,7 @@ export default function ScheduleModal({
                                     borderRadius: 8,
                                 }}
                             >
-                                {Array.from(
-                                    { length: 17 },
-                                    (_, i) => 6 + i,
-                                ).map(h => {
+                                {hoursRange.map(h => {
                                     const ok = hourHasAnyValidMinute[h];
                                     const selected = h === hour;
                                     return (
@@ -818,13 +922,11 @@ export default function ScheduleModal({
                                                 textAlign: 'left',
                                                 padding: '8px 10px',
                                                 background: selected
-                                                    ? ok
-                                                        ? '#ecfdf5'
-                                                        : '#fee2e2'
+                                                    ? 'color-mix(in oklab, var(--color-success) 8%, white)'
                                                     : 'transparent',
                                                 color: ok
-                                                    ? '#065f46'
-                                                    : '#b91c1c',
+                                                    ? 'var(--color-success-dark)'
+                                                    : '#9ca3af',
                                                 fontWeight: selected
                                                     ? 800
                                                     : 600,
@@ -863,15 +965,15 @@ export default function ScheduleModal({
                                     borderRadius: 8,
                                 }}
                             >
-                                {[
-                                    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50,
-                                    55,
-                                ].map(m => {
-                                    const s = parseHM(hour, m);
+                                {minutesList.map(m => {
+                                    const s = makeDayTime(dayISO, hour, m);
                                     const e = addMinutes(s, duration);
-                                    const allowed = !busy.some(b =>
-                                        overlaps(s, e, b.start, b.end),
-                                    );
+                                    const allowed =
+                                        s >= workStartBound &&
+                                        e <= workEndBound &&
+                                        !busy.some(b =>
+                                            overlaps(s, e, b.start, b.end),
+                                        );
                                     const selected = m === minute;
                                     return (
                                         <button
@@ -886,12 +988,12 @@ export default function ScheduleModal({
                                                 padding: '8px 10px',
                                                 background: selected
                                                     ? allowed
-                                                        ? '#ecfdf5'
-                                                        : '#fee2e2'
+                                                        ? 'color-mix(in oklab, var(--color-success) 8%, white)'
+                                                        : 'var(--color-danger-bg)'
                                                     : 'transparent',
                                                 color: allowed
-                                                    ? '#065F46'
-                                                    : '#b91c1c',
+                                                    ? 'var(--color-success-dark)'
+                                                    : 'var(--color-danger-dark)',
                                                 fontWeight: selected
                                                     ? 800
                                                     : 600,
@@ -945,12 +1047,12 @@ export default function ScheduleModal({
                                             padding: '6px 10px',
                                             borderRadius: 999,
                                             border: selected
-                                                ? '2px solid #059669'
+                                                ? '2px solid var(--color-success)'
                                                 : '1px solid #e5e7eb',
                                             background: selected
                                                 ? '#ecfdf5'
                                                 : 'white',
-                                            color: '#065f46',
+                                            color: 'var(--color-success-dark)',
                                             fontWeight: 700,
                                             fontSize: 14,
                                             cursor: 'pointer',
@@ -969,9 +1071,9 @@ export default function ScheduleModal({
                         style={{
                             padding: '12px 14px',
                             border: '1px solid #d1fae5',
-                            borderLeft: '6px solid #059669',
+                            borderLeft: '6px solid var(--color-success)',
                             background: '#F8FAFC',
-                            color: '#065f46',
+                            color: 'var(--color-success-dark)',
                             marginTop: 12,
                             borderRadius: 10,
                             display: 'grid',
@@ -1028,18 +1130,20 @@ export default function ScheduleModal({
                                     borderRadius: 6,
                                     padding: '6px 8px',
                                     background: '#F8FAFC',
-                                    color: '#065f46',
+                                    color: 'var(--color-success-dark)',
                                 }}
                             />
                         </div>
-                        {!startAllowed && (
+                        {(!startAllowed || isRetroactive) && (
                             <div
                                 style={{
-                                    color: '#991b1b',
+                                    color: 'var(--color-danger-dark)',
                                     fontWeight: 700,
                                 }}
                             >
-                                Indisponível (respeito ao intervalo)
+                                {isRetroactive
+                                    ? 'Não é possível criar compromisso no passado. Ajuste data/horário.'
+                                    : 'Indisponível (respeito ao intervalo)'}
                             </div>
                         )}
                     </div>
@@ -1068,9 +1172,11 @@ export default function ScheduleModal({
                                         style={{
                                             padding: '12px 14px',
                                             border: '1px solid #fee2e2',
-                                            borderLeft: '6px solid #b91c1c',
-                                            background: '#fef2f2',
-                                            color: '#991b1b',
+                                            borderLeft:
+                                                '6px solid var(--color-danger)',
+                                            background:
+                                                'var(--color-danger-bg)',
+                                            color: 'var(--color-danger-dark)',
                                             borderRadius: 10,
                                             display: 'grid',
                                             gap: 6,
@@ -1113,7 +1219,12 @@ export default function ScheduleModal({
                     )}
 
                     {error && (
-                        <div style={{ color: '#b91c1c', fontWeight: 600 }}>
+                        <div
+                            style={{
+                                color: 'var(--color-danger)',
+                                fontWeight: 600,
+                            }}
+                        >
                             {error}
                         </div>
                     )}
@@ -1135,16 +1246,16 @@ export default function ScheduleModal({
                         {!(offerReplace || clientConflicts.length > 0) ? (
                             <button
                                 onClick={() => submitCreate(false)}
-                                disabled={saving || !startAllowed}
+                                disabled={saving || !canSubmit}
                                 style={{
                                     padding: '8px 12px',
-                                    background: '#059669',
+                                    background: 'var(--color-success)',
                                     color: 'white',
                                     borderRadius: 6,
                                     fontWeight: 800,
-                                    opacity: saving || !startAllowed ? 0.7 : 1,
+                                    opacity: saving || !canSubmit ? 0.7 : 1,
                                     cursor:
-                                        saving || !startAllowed
+                                        saving || !canSubmit
                                             ? 'not-allowed'
                                             : 'pointer',
                                 }}
@@ -1154,14 +1265,15 @@ export default function ScheduleModal({
                         ) : (
                             <button
                                 onClick={replaceConflictsAndCreate}
-                                disabled={saving || !startAllowed}
+                                disabled={saving || !canSubmit}
                                 style={{
                                     padding: '8px 12px',
-                                    background: '#b91c1c',
+                                    background: 'var(--color-danger)',
+                                    border: '1px solid var(--color-danger-dark)',
                                     color: 'white',
                                     borderRadius: 6,
                                     fontWeight: 800,
-                                    opacity: saving || !startAllowed ? 0.7 : 1,
+                                    opacity: saving || !canSubmit ? 0.7 : 1,
                                 }}
                             >
                                 Substituir

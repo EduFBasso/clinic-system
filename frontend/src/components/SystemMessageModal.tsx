@@ -10,8 +10,16 @@ interface SystemMessageModalProps {
 }
 
 const palette: Record<string, { bg: string; color: string; border: string }> = {
-    success: { bg: '#ecfdf5', color: '#065f46', border: '#34d399' },
-    error: { bg: '#fef2f2', color: '#b91c1c', border: '#f87171' },
+    success: {
+        bg: 'color-mix(in oklab, var(--color-success) 8%, white)',
+        color: 'var(--color-success-dark)',
+        border: 'color-mix(in oklab, var(--color-success) 45%, white)',
+    },
+    error: {
+        bg: 'var(--color-danger-bg)',
+        color: 'var(--color-danger)',
+        border: 'color-mix(in oklab, var(--color-danger) 55%, white)',
+    },
     info: { bg: '#eff6ff', color: '#1d4ed8', border: '#60a5fa' },
 };
 

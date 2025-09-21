@@ -16,12 +16,58 @@
     --color-shadow: rgba(0, 0, 0, 0.06);
     --color-text: #222;
     --color-text-light: #333;
+    --color-text-muted: #6b7280; /* cinza 600-700 */
+    --color-heading: #111827; /* quase preto para títulos */
+    --color-disabled: #9ca3af; /* cinza para ícones/controles desabilitados */
+    /* Legacy error tokens (mantidos para compatibilidade) */
     --color-error: #d32f2f;
     --color-error-light: #ffeaea;
     --color-error-dark: #a31515;
     --color-error-border: #a31515;
+
+    /* Semantic tokens - use estes em componentes */
+    /* Success (verdes) */
+    --color-success: #059669;
+    --color-success-dark: #065f46;
+    --color-success-darker: #064e3b; /* hover mais escuro */
+    --color-success-deep: #052e22; /* active/pressed */
+    --color-success-bg: #ecfdf5; /* fundo suave para sucesso */
+
+    /* Danger (vermelhos) */
+    --color-danger: #b91c1c; /* principal - botões/ênfase */
+    --color-danger-dark: #991b1b; /* bordas/textos */
+    --color-danger-bg: #fef2f2; /* plano de fundo de alerta */
+
+    /* Warning (ambar) */
+    --color-warning: #f59e0b;
+    --color-warning-bg: #fef3c7;
+
+    /* Ongoing (atendimento em curso) - tons laranja escuro/marrom + bege claro */
+    --color-ongoing: #7c2d12; /* laranja escuro puxando para marrom */
+    --color-ongoing-bg: #fff7ed; /* bege/laranja bem claro (alto contraste) */
+
+    /* Done (atendimento finalizado) - azul claro sugerido */
+    --color-done: #2563eb; /* azul médio para textos/bordas */
+    --color-done-bg: #eff6ff; /* azul clarinho de fundo */
+
+    /* Pending (vencido/aguardando ação) - tons de cinza */
+    --color-pending: #6b7280; /* cinza médio para rótulo */
+    --color-pending-bg: #f3f4f6; /* cinza claro de fundo dos cartões */
+
+    /* Ícones e bordas (linkar a tokens existentes) */
+    --color-icon-default: var(--color-primary);
+    --color-card-border: var(--color-border);
+
     --color-selected-bg: #e0f7fa; /* exemplo: azul claro */
     --color-selected-border: #00838f; /* exemplo: azul escuro */
+
+    /* Font sizes (tokens de tipografia) */
+    --font-title-lg: 22px; /* títulos de modais principais */
+    --font-title-md: 18px; /* subtítulos, seções */
+    --font-body: 14px; /* texto padrão */
+    --font-small: 12px; /* rótulos pequenos */
+    --icon-size-md: 18px; /* ícones padrão */
+    --icon-size-lg: 20px; /* ícones de cabeçalho */
 }
 
 /* Removido override mobile para manter contraste entre cartões e fundo do main */

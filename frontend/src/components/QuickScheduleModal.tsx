@@ -6,9 +6,12 @@ import type { Appointment } from '../hooks/useAppointments';
 import { API_BASE } from '../config/api';
 import FloatingDatePicker from './FloatingDatePicker';
 import { FaCalendarAlt } from 'react-icons/fa';
-import AppointmentCard from './AppointmentCard';
+import AppointmentCard from './shared/AppointmentCard';
+import AppointmentDetailsModal from './AppointmentDetailsModal';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import { AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE } from '../config/limits';
+import { getSlotInterval, getWorkTimes } from '../utils/agendaSettings';
+import { track } from '../utils/telemetry';
 
 function pad2(n: number) {
     return String(n).padStart(2, '0');
@@ -44,13 +47,33 @@ export default function QuickScheduleModal({
     futureAppointments = [],
     maxFutureAppointments = 7,
 }: QuickScheduleModalProps) {
-    const [expanded, setExpanded] = React.useState(false);
+    // QuickSchedule sempre full screen
+    const expanded = true;
     const [currentEdit, setCurrentEdit] = React.useState<
         Appointment | null | undefined
     >(editAppointment);
     React.useEffect(() => setCurrentEdit(editAppointment), [editAppointment]);
+    const [detailsOpen, setDetailsOpen] = React.useState(false);
+    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
+        null,
+    );
 
     const isEdit = !!(currentEdit && currentEdit.id);
+    // Telemetry: modal lifecycle
+    React.useEffect(() => {
+        if (open)
+            track({
+                type: 'modal_opened',
+                payload: { name: 'QuickScheduleModal' },
+            });
+        return () => {
+            if (open)
+                track({
+                    type: 'modal_closed',
+                    payload: { name: 'QuickScheduleModal' },
+                });
+        };
+    }, [open]);
     const baseDate = React.useMemo(() => {
         if (isEdit && currentEdit) return new Date(currentEdit.start_at);
         // Regra: sempre sugerir criação para +7 dias a partir de agora.
@@ -60,7 +83,34 @@ export default function QuickScheduleModal({
         return d;
     }, [isEdit, currentEdit]);
 
+    // Local storage keys (alinhar com AgendaSettingsModal)
+    const LS_KEYS = React.useMemo(
+        () => ({
+            workStart: 'agenda.workStart',
+            workEnd: 'agenda.workEnd',
+            defaultDuration: 'agenda.defaultDuration',
+        }),
+        [],
+    );
+
+    function clampHM(v: string, fallback: string) {
+        if (!/^\d{2}:\d{2}$/.test(v)) return fallback;
+        const [h, m] = v.split(':').map(n => parseInt(n, 10));
+        if (isNaN(h) || isNaN(m)) return fallback;
+        const hh = Math.min(23, Math.max(0, h));
+        const mm = Math.min(59, Math.max(0, m));
+        return `${pad2(hh)}:${pad2(mm)}`;
+    }
+
     const [startHM, setStartHM] = React.useState(() => {
+        if (!isEdit) {
+            try {
+                const ws = localStorage.getItem(LS_KEYS.workStart) || '06:00';
+                return clampHM(ws, '06:00');
+            } catch {
+                /* noop */
+            }
+        }
         const d = new Date(baseDate);
         return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     });
@@ -69,11 +119,22 @@ export default function QuickScheduleModal({
             const e = new Date(currentEdit.end_at);
             return `${pad2(e.getHours())}:${pad2(e.getMinutes())}`;
         }
-        const d = new Date(baseDate);
-        d.setMinutes(d.getMinutes() + 60);
-        return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+        // Deriva de workStart + defaultDuration (fallback 60min)
+        let duration = 60;
+        try {
+            const ddRaw = localStorage.getItem(LS_KEYS.defaultDuration);
+            const dd = parseInt(ddRaw || '60', 10);
+            if (!isNaN(dd) && dd > 0 && dd <= 240) duration = dd;
+        } catch {
+            /* noop */
+        }
+        const [sh, sm] = startHM.split(':').map(n => parseInt(n, 10));
+        const baseM = isNaN(sh) || isNaN(sm) ? 6 * 60 : sh * 60 + sm;
+        const endM = baseM + duration;
+        const eh = Math.floor(endM / 60);
+        const em = endM % 60;
+        return `${pad2(eh % 24)}:${pad2(em)}`;
     });
-    const MIN_DURATION_MIN = 60;
     // helper convert HH:MM to minutes from midnight
     function toMinutes(hm: string) {
         const [h, m] = hm.split(':').map(n => parseInt(n, 10));
@@ -83,6 +144,17 @@ export default function QuickScheduleModal({
         const h = Math.floor(total / 60);
         const m = total % 60;
         return `${pad2(h)}:${pad2(m)}`;
+    }
+    // Sugestão de duração padrão (ex.: 60 min) — usada quando o horário de início é alterado
+    function getDefaultDuration(): number {
+        try {
+            const raw = localStorage.getItem(LS_KEYS.defaultDuration);
+            const v = parseInt(raw || '60', 10);
+            if (!isNaN(v) && v > 0 && v <= 240) return v;
+        } catch {
+            /* noop */
+        }
+        return 60;
     }
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
@@ -147,11 +219,106 @@ export default function QuickScheduleModal({
             setNotes(currentEdit.notes || '');
         }
     }, [currentEdit]);
+    // Quando abre (e não está editando), aplique as configurações salvas
+    React.useEffect(() => {
+        if (!open || isEdit) return;
+        try {
+            const ws = clampHM(
+                localStorage.getItem(LS_KEYS.workStart) || '06:00',
+                '06:00',
+            );
+            const we = clampHM(
+                localStorage.getItem(LS_KEYS.workEnd) || '21:00',
+                '21:00',
+            );
+            let dd = 60;
+            const ddRaw = localStorage.getItem(LS_KEYS.defaultDuration);
+            const parsed = parseInt(ddRaw || '60', 10);
+            if (!isNaN(parsed) && parsed > 0 && parsed <= 240) dd = parsed;
+            // Ajusta início e fim conforme configuração (garante end > start)
+            setStartHM(ws);
+            const [sh, sm] = ws.split(':').map(n => parseInt(n, 10));
+            let endTotal =
+                (isNaN(sh) || isNaN(sm) ? 6 * 60 : sh * 60 + sm) + dd;
+            const [weh, wem] = we.split(':').map(n => parseInt(n, 10));
+            const workEndM =
+                isNaN(weh) || isNaN(wem) ? 21 * 60 : weh * 60 + wem;
+            if (endTotal > workEndM) endTotal = workEndM; // limita ao fim do expediente
+            const eh = Math.floor(endTotal / 60);
+            const em = endTotal % 60;
+            setEndHM(`${pad2(eh % 24)}:${pad2(em)}`);
+        } catch {
+            /* noop */
+        }
+    }, [open, isEdit, LS_KEYS]);
+
+    // Atualiza se o usuário salvar novas configurações no modal de Agenda
+    React.useEffect(() => {
+        if (isEdit) return; // não sobrescreve em modo edição
+        function handleUpdated() {
+            try {
+                const ws = clampHM(
+                    localStorage.getItem(LS_KEYS.workStart) || '06:00',
+                    '06:00',
+                );
+                let dd = 60;
+                const ddRaw = localStorage.getItem(LS_KEYS.defaultDuration);
+                const parsed = parseInt(ddRaw || '60', 10);
+                if (!isNaN(parsed) && parsed > 0 && parsed <= 240) dd = parsed;
+                setStartHM(ws);
+                const [sh, sm] = ws.split(':').map(n => parseInt(n, 10));
+                const endM =
+                    (isNaN(sh) || isNaN(sm) ? 6 * 60 : sh * 60 + sm) + dd;
+                const eh = Math.floor(endM / 60);
+                const em = endM % 60;
+                setEndHM(`${pad2(eh % 24)}:${pad2(em)}`);
+            } catch {
+                /* noop */
+            }
+        }
+        window.addEventListener(
+            'agendaSettingsUpdated',
+            handleUpdated as EventListener,
+        );
+        return () =>
+            window.removeEventListener(
+                'agendaSettingsUpdated',
+                handleUpdated as EventListener,
+            );
+    }, [isEdit, LS_KEYS]);
 
     const dateStr = toDateStr(selectedDate);
+    // Bounds e passo dos minutos conforme configurações
+    const workTimes = React.useMemo(() => getWorkTimes(), []);
+    const stepMinutes = React.useMemo(() => getSlotInterval(), []);
+    const minHM = React.useMemo(
+        () => `${pad2(workTimes.startHour)}:${pad2(workTimes.startMin)}`,
+        [workTimes],
+    );
+    const maxHM = React.useMemo(
+        () => `${pad2(workTimes.endHour)}:${pad2(workTimes.endMin)}`,
+        [workTimes],
+    );
     const subtitleAgenda = `${weekdayLabel(selectedDate)}, ${pad2(
         selectedDate.getDate(),
     )}/${pad2(selectedDate.getMonth() + 1)}`;
+    // Título amigável para a seção de mini cards (histórico visual)
+    const sectionDateTitle = React.useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const sel = new Date(selectedDate);
+        sel.setHours(0, 0, 0, 0);
+        const diffDays = Math.round(
+            (sel.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const base = `${weekdayLabel(selectedDate)} ${pad2(
+            selectedDate.getDate(),
+        )}/${pad2(selectedDate.getMonth() + 1)}`;
+        if (diffDays === 0) return `Hoje — ${base}`;
+        if (diffDays === 1) return `Amanhã — ${base}`;
+        if (diffDays === -1) return `Ontem — ${base}`;
+        return base;
+    }, [selectedDate]);
 
     // helper for day range
     function startEndOfDay(d: Date) {
@@ -306,6 +473,20 @@ export default function QuickScheduleModal({
         (client.next_appointment_status === 'scheduled' ? 1 : 0) +
             futureAppointments.length >=
             maxFutureAppointments;
+
+    // Pending guard: when the client's next server appointment is already in the past and not done/canceled, block creation
+    const isPending = React.useMemo(() => {
+        if (client.next_appointment_status !== 'scheduled') return false;
+        const sISO = client.next_appointment_start_at;
+        const eISO = client.next_appointment_end_at;
+        if (!sISO || !eISO) return false;
+        const endMs = new Date(eISO).getTime();
+        return endMs <= Date.now();
+    }, [
+        client.next_appointment_status,
+        client.next_appointment_start_at,
+        client.next_appointment_end_at,
+    ]);
     // nearLimit reservado para futura UI (mensagem de sugestão de empurrar data)
     // const nearLimit =
     //     !isEdit && futureAppointments.length === maxFutureAppointments - 1;
@@ -316,6 +497,21 @@ export default function QuickScheduleModal({
                 '[QuickSchedule] Ignorando clique extra enquanto saving=true',
             );
             return; // evita duplo clique / corrida
+        }
+        if (!isEdit && isPending) {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: {
+                            text: 'Há um compromisso pendente para este cliente. Finalize antes de criar outro.',
+                            type: 'warning',
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
         }
         if (limitReached) {
             try {
@@ -338,10 +534,6 @@ export default function QuickScheduleModal({
         const endM = toMinutes(endHM);
         if (isNaN(startM) || isNaN(endM)) {
             setError('Horário inválido');
-            return;
-        }
-        if (endM - startM < MIN_DURATION_MIN) {
-            setError(`Duração mínima de ${MIN_DURATION_MIN} min`);
             return;
         }
         if (endM <= startM) {
@@ -458,6 +650,32 @@ export default function QuickScheduleModal({
             if (updatedId) setLastEditedId(updatedId);
             if (afterPersist)
                 afterPersist(updatedId, wasEdit ? 'updated' : 'created');
+            // Telemetry: created/updated
+            try {
+                if (!wasEdit && updatedId)
+                    track({
+                        type: 'appointment_created',
+                        payload: {
+                            id: updatedId,
+                            client_id: client.id,
+                            start_at: new Date(
+                                `${dateStr}T${startHM}:00`,
+                            ).toISOString(),
+                        },
+                    });
+                else if (wasEdit && updatedId)
+                    track({
+                        type: 'appointment_updated',
+                        payload: {
+                            id: updatedId,
+                            start_at: new Date(
+                                `${dateStr}T${startHM}:00`,
+                            ).toISOString(),
+                        },
+                    });
+            } catch {
+                /* noop */
+            }
             // Nota: auto-close opcional (apenas criação) para fluxo rápido.
             // Aguardos de 3s foram eliminados — fechamento é quase imediato para reduzir fricção.
             if (!wasEdit && AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE) {
@@ -547,7 +765,13 @@ export default function QuickScheduleModal({
             open={open}
             onClose={handleImmediateClose}
             closeOnEnter={false}
-            fullScreen={expanded}
+            fullScreen
+            maxHeightVh={96}
+            actionsBarStyle={{
+                // Deixa a barra do X transparente neste modal para não cobrir o título
+                background: 'transparent',
+                borderBottom: 'none',
+            }}
         >
             <div
                 style={{
@@ -559,85 +783,136 @@ export default function QuickScheduleModal({
                     margin: '0 auto',
                 }}
             >
+                {/* Sticky header to standardize title area and keep it visible */}
                 <div
                     style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        gap: 12,
-                        flexWrap: 'wrap',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 900,
+                        background: 'var(--color-bg)',
+                        borderBottom: '1px solid var(--color-border)',
+                        // Occupy the visual top when actions bar is transparent
+                        paddingTop: 'env(safe-area-inset-top, 0px)',
                     }}
                 >
-                    <h2
-                        style={{
-                            margin: '0 0 4px 0',
-                            fontSize: expanded ? 28 : 20,
-                            fontWeight: 800,
-                            color: '#111827',
-                        }}
-                    >
-                        {isEdit ? 'Editar compromisso' : 'Agendar compromisso'}
-                    </h2>
-                    <button
-                        type='button'
-                        onClick={() => setExpanded(v => !v)}
-                        style={{
-                            border: '1px solid #d1d5db',
-                            background: expanded ? '#1e3a8a' : '#f3f4f6',
-                            color: expanded ? '#fff' : '#111827',
-                            padding: '6px 12px',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-                            alignSelf: 'flex-start',
-                        }}
-                        title={
-                            expanded
-                                ? 'Reduzir tamanho'
-                                : 'Expandir para tela cheia'
-                        }
-                    >
-                        {expanded ? 'Reduzir' : 'Expandir'}
-                    </button>
-                </div>
-                <div style={{ color: '#374151' }}>
-                    <div style={{ marginBottom: 4 }}>
-                        <strong>Nome:</strong> {client.first_name}{' '}
-                        {client.last_name}
-                    </div>
                     <div
                         style={{
                             display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: 12,
+                            flexWrap: 'wrap',
+                            paddingBottom: 8,
+                        }}
+                    >
+                        <h2
+                            style={{
+                                margin: '0 0 4px 0',
+                                fontSize: expanded ? 28 : 20,
+                                fontWeight: 800,
+                                color: '#111827',
+                            }}
+                        >
+                            {isEdit
+                                ? 'Editar compromisso'
+                                : 'Agendar compromisso'}
+                        </h2>
+                    </div>
+                    <div style={{ color: '#374151', paddingBottom: 8 }}>
+                        <div style={{ marginBottom: 4 }}>
+                            <strong>Nome:</strong> {client.first_name}{' '}
+                            {client.last_name}
+                        </div>
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                            }}
+                        >
+                            <span style={{ whiteSpace: 'nowrap' }}>
+                                <strong>Agenda:</strong> {subtitleAgenda}
+                            </span>
+                            <button
+                                type='button'
+                                onClick={() => setShowPicker(v => !v)}
+                                title='Selecionar dia'
+                                style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    padding: 4,
+                                }}
+                            >
+                                <FaCalendarAlt color='#2563eb' />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {/* Warning banner appears under the sticky header */}
+                {!isEdit && isPending && (
+                    <div
+                        style={{
+                            background: '#f3f4f6',
+                            border: '1px solid #d1d5db',
+                            color: '#374151',
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            display: 'flex',
                             alignItems: 'center',
+                            justifyContent: 'space-between',
                             gap: 8,
                         }}
                     >
-                        <span>
-                            <strong>Agenda:</strong> {subtitleAgenda}
-                        </span>
-                        <button
-                            type='button'
-                            onClick={() => setShowPicker(v => !v)}
-                            title='Selecionar dia'
-                            style={{
-                                border: 'none',
-                                background: 'transparent',
-                                cursor: 'pointer',
-                                padding: 4,
-                            }}
-                        >
-                            <FaCalendarAlt color='#2563eb' />
-                        </button>
+                        <div>
+                            <strong>Atenção:</strong> há um compromisso pendente
+                            para este cliente. Finalize-o antes de criar um
+                            novo.
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                                onClick={() => {
+                                    try {
+                                        window.dispatchEvent(
+                                            new CustomEvent(
+                                                'scrollToClientCard',
+                                                {
+                                                    detail: {
+                                                        clientId: client.id,
+                                                    },
+                                                },
+                                            ),
+                                        );
+                                    } catch {
+                                        /* noop */
+                                    }
+                                }}
+                                style={{
+                                    padding: '6px 10px',
+                                    background: '#e5e7eb',
+                                }}
+                            >
+                                Ir para cliente
+                            </button>
+                            <button
+                                onClick={handleImmediateClose}
+                                style={{
+                                    padding: '6px 10px',
+                                    background: '#e5e7eb',
+                                }}
+                            >
+                                Fechar
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
                 <div
                     style={{
                         display: 'flex',
                         gap: 12,
                         alignItems: 'center',
                         flexWrap: 'wrap',
+                        marginTop: 8,
                     }}
                 >
                     <TimePicker10
@@ -645,36 +920,32 @@ export default function QuickScheduleModal({
                         value={startHM}
                         onChange={val => {
                             setStartHM(val);
-                            // enforce min 1h
+                            // Sugere automaticamente fim = início + duração padrão
                             const sMin = toMinutes(val);
-                            const eMin = toMinutes(endHM);
-                            if (eMin < sMin + MIN_DURATION_MIN) {
-                                let newEnd = sMin + MIN_DURATION_MIN;
-                                // clamp to 21:00 (21*60)
-                                const max = 21 * 60; // inclusive hour boundary but we don't allow exceed
-                                if (newEnd > max) newEnd = max;
-                                setEndHM(fromMinutes(newEnd));
-                            }
+                            let newEnd = sMin + getDefaultDuration();
+                            const max =
+                                workTimes.endHour * 60 + workTimes.endMin;
+                            if (newEnd > max) newEnd = max;
+                            setEndHM(fromMinutes(newEnd));
                         }}
-                        minHour={6}
-                        maxHour={21}
+                        minHour={workTimes.startHour}
+                        maxHour={workTimes.endHour}
+                        minHM={minHM}
+                        maxHM={maxHM}
+                        stepMinutes={stepMinutes as 5 | 10 | 15 | 20 | 30}
                     />
                     <TimePicker10
                         label='Fim'
                         value={endHM}
                         onChange={val => {
-                            const sMin = toMinutes(startHM);
-                            let eMin = toMinutes(val);
-                            if (eMin < sMin + MIN_DURATION_MIN) {
-                                eMin = Math.min(
-                                    sMin + MIN_DURATION_MIN,
-                                    21 * 60,
-                                );
-                            }
-                            setEndHM(fromMinutes(eMin));
+                            // Aceita fim menor que sugestão — apenas define o valor
+                            setEndHM(val);
                         }}
-                        minHour={6}
-                        maxHour={21}
+                        minHour={workTimes.startHour}
+                        maxHour={workTimes.endHour}
+                        minHM={minHM}
+                        maxHM={maxHM}
+                        stepMinutes={stepMinutes as 5 | 10 | 15 | 20 | 30}
                     />
                     <label style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: 12, color: '#6b7280' }}>
@@ -716,14 +987,24 @@ export default function QuickScheduleModal({
                                 setSetDefaultVisitType(e.target.checked)
                             }
                         />
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        <span
+                            style={{
+                                fontSize: 12,
+                                color: 'var(--color-text-light)',
+                            }}
+                        >
                             Definir como padrão
                         </span>
                     </label>
                 </div>
                 {/* Observações */}
                 <label style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>
+                    <span
+                        style={{
+                            fontSize: 12,
+                            color: 'var(--color-text-light)',
+                        }}
+                    >
                         Observações
                     </span>
                     <textarea
@@ -745,9 +1026,9 @@ export default function QuickScheduleModal({
                         // Removido overflow hidden para não interferir em gesto vertical no iOS;
                         // a rolagem é controlada pelo filho interno (scroll container)
                         overflow: 'visible',
-                        border: '1px solid #e5e7eb',
+                        border: '1px solid var(--color-border)',
                         borderRadius: 8,
-                        background: '#fdfdfd',
+                        background: 'var(--card-bg)',
                     }}
                 >
                     <div
@@ -758,10 +1039,10 @@ export default function QuickScheduleModal({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            color: '#374151',
+                            color: 'var(--color-text)',
                             padding: expanded ? '10px 14px' : '6px 8px',
                             background: 'linear-gradient(#ffffff,#f8fafc)',
-                            borderBottom: '1px solid #e5e7eb',
+                            borderBottom: '1px solid var(--color-border)',
                         }}
                     >
                         <strong style={{ fontSize: expanded ? 18 : 14 }}>
@@ -783,9 +1064,9 @@ export default function QuickScheduleModal({
                                     padding: expanded ? '8px 12px' : '6px 10px',
                                     fontSize: expanded ? 15 : 13,
                                     fontWeight: 600,
-                                    border: '1px solid #d1d5db',
+                                    border: '1px solid var(--color-border)',
                                     borderRadius: 6,
-                                    background: '#f1f5f9',
+                                    background: 'var(--color-bg)',
                                     cursor: 'pointer',
                                 }}
                                 title='Filtrar por status'
@@ -847,13 +1128,24 @@ export default function QuickScheduleModal({
                         }}
                         ref={listRef}
                     >
+                        {/* Título da data (restaura cabeçalho para contexto/histórico) */}
+                        <div
+                            style={{
+                                fontSize: 13,
+                                color: '#6b7280',
+                                fontWeight: 700,
+                                letterSpacing: 0.2,
+                            }}
+                        >
+                            {sectionDateTitle}
+                        </div>
                         {filteredAppointments
                             .slice()
                             .sort((a, b) =>
                                 a.start_at.localeCompare(b.start_at),
                             )
                             .map(appt => (
-                                <AppointmentCard
+                                <AppointmentCard<Appointment>
                                     key={appt.id}
                                     appt={appt}
                                     highlight={highlightId === appt.id}
@@ -864,6 +1156,10 @@ export default function QuickScheduleModal({
                                         editingHighlightId === appt.id &&
                                         currentEdit?.id === appt.id
                                     }
+                                    onDetails={(a: Appointment) => {
+                                        setDetailsAppt(a);
+                                        setDetailsOpen(true);
+                                    }}
                                     onUseTime={a => {
                                         const sd = new Date(a.start_at);
                                         const ed = new Date(a.end_at);
@@ -912,6 +1208,14 @@ export default function QuickScheduleModal({
                                                 );
                                             }
                                             setReloadKey(k => k + 1);
+                                            try {
+                                                track({
+                                                    type: 'appointment_cancel_succeeded',
+                                                    payload: { id: a.id },
+                                                });
+                                            } catch {
+                                                /* noop */
+                                            }
                                             // (Removido toast de sucesso de cancelamento para evitar sobreposição visual)
                                             // Atualiza clientes e depois rola cartão do cliente
                                             try {
@@ -969,10 +1273,31 @@ export default function QuickScheduleModal({
                                                       )
                                                     : 'Erro ao cancelar';
                                             setError(msg);
+                                            try {
+                                                track({
+                                                    type: 'appointment_cancel_failed',
+                                                    payload: {
+                                                        id: a.id,
+                                                        error: msg,
+                                                    },
+                                                });
+                                            } catch {
+                                                /* noop */
+                                            }
                                         }
                                     }}
                                 />
                             ))}
+                        {detailsOpen && detailsAppt && (
+                            <AppointmentDetailsModal
+                                open={detailsOpen}
+                                onClose={() => {
+                                    setDetailsOpen(false);
+                                    setDetailsAppt(null);
+                                }}
+                                appt={detailsAppt}
+                            />
+                        )}
                         {!dayLoading && filteredAppointments.length === 0 && (
                             <div style={{ color: '#6b7280', fontSize: 13 }}>
                                 Nenhum compromisso neste filtro.

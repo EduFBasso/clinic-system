@@ -15,22 +15,24 @@ const LABELS: Record<StatusKind, string> = {
     done: 'Concluído',
     canceled: 'Cancelado',
     ongoing: 'Em andamento',
-    past: 'Vencido',
+    past: 'Pendente',
 };
 
 function color(status: StatusKind) {
     switch (status) {
         case 'canceled':
-            return '#b91c1c';
+            return 'var(--color-danger)';
         case 'ongoing':
-            return '#2563eb';
+            // Unify ongoing visuals using token
+            return 'var(--color-ongoing)';
         case 'done':
-            return '#6b7280';
+            return 'var(--color-done)';
         case 'past':
-            return '#92400e';
+            // Pending should use tokenized grey
+            return 'var(--color-pending)';
         case 'scheduled':
         default:
-            return '#047857';
+            return 'var(--color-success)';
     }
 }
 

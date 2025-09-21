@@ -179,20 +179,7 @@ const NavBar: React.FC<NavBarProps> = ({
         }
     }
 
-    function goAgendaDay(dateISO: string, clientId?: number) {
-        const d = new Date(dateISO);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const url = `/agenda?date=${y}-${m}-${day}${
-            clientId ? `&client=${clientId}` : ''
-        }`;
-        if (isMobileDevice()) {
-            window.location.href = url;
-        } else {
-            window.open(url, '_self');
-        }
-    }
+    // goAgendaDay removed: unificamos via modais (sem rota /schedule)
 
     async function handleAgendaEditLast() {
         setAgendaDropdownOpen(false);
@@ -212,25 +199,14 @@ const NavBar: React.FC<NavBarProps> = ({
             setModalOpen(true);
             return;
         }
-        // Desktop: abrir ScheduleModal em modo edição; Mobile: rota com edit
-        if (agendaOpeners && !isMobileDevice()) {
+        // Abrir via openSchedule para unificar experiência (QuickSchedule)
+        if (agendaOpeners) {
             await agendaOpeners.openSchedule(
                 selectedClientId || undefined,
                 new Date(nextAppt.start_at),
                 nextAppt as unknown as Appointment,
             );
             return;
-        }
-        try {
-            const d = new Date(nextAppt.start_at);
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            const url = `/agenda?date=${y}-${m}-${day}&client=${selectedClientId}&edit=${nextAppt.id}`;
-            if (isMobileDevice()) window.location.href = url;
-            else window.open(url, '_self');
-        } catch {
-            goAgendaDay(nextAppt.start_at, selectedClientId);
         }
     }
 
@@ -439,32 +415,13 @@ const NavBar: React.FC<NavBarProps> = ({
                                             /* ignore */
                                         }
                                     }
-                                    if (agendaOpeners && !isMobileDevice()) {
+                                    if (agendaOpeners) {
                                         await agendaOpeners.openSchedule(
                                             selectedClientId || undefined,
                                             new Date(),
                                             null,
                                         );
                                         return;
-                                    }
-                                    try {
-                                        const now = new Date();
-                                        const y = now.getFullYear();
-                                        const m = String(
-                                            now.getMonth() + 1,
-                                        ).padStart(2, '0');
-                                        const d = String(
-                                            now.getDate(),
-                                        ).padStart(2, '0');
-                                        const base = `/agenda?date=${y}-${m}-${d}&new=1`;
-                                        const url = selectedClientId
-                                            ? `${base}&client=${selectedClientId}`
-                                            : base;
-                                        if (isMobileDevice())
-                                            window.location.href = url;
-                                        else window.open(url, '_self');
-                                    } catch {
-                                        /* noop */
                                     }
                                 }}
                             >

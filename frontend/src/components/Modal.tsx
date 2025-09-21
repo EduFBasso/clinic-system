@@ -9,6 +9,8 @@ declare global {
 }
 import Modal from '@mui/material/Modal';
 import Box from '@mui/material/Box';
+import ModalActionsBar from './ModalActionsBar';
+import { useModalCloseHotkeys } from '../hooks/useModalCloseHotkeys';
 
 interface AppModalProps {
     open: boolean;
@@ -17,9 +19,15 @@ interface AppModalProps {
     closeOnEnter?: boolean; // padrão: true – fecha ao pressionar Enter
     closeOnEscape?: boolean; // padrão: true – fecha ao pressionar Escape
     showCloseButton?: boolean; // padrão: true – mostra botão X
+    // Permite customizar estilo da barra de ações (X) por modal
+    actionsBarStyle?: React.CSSProperties;
     disableBackdropClose?: boolean; // se true, clicar fora não fecha
     disableEscapeKeyDown?: boolean; // se true, ESC do MUI não fecha
     fullScreen?: boolean; // se true, ocupa a tela inteira
+    // Controla a altura máxima em modo não-fullscreen (em unidades de vh dinâmico). Padrão: 90.
+    maxHeightVh?: number;
+    // Se true, não aplica o padding-top de safe-area no container fullScreen (útil quando o conteúdo já possui header com safe-area)
+    disableTopSafePadding?: boolean;
 }
 
 const style = {
@@ -27,56 +35,100 @@ const style = {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    bgcolor: 'background.paper',
+    bgcolor: 'var(--color-bg)',
     borderRadius: 2,
     boxShadow: 24,
-    p: 4,
-    pb: 6, // padding-bottom extra
+    // Padding menor em telas pequenas para maximizar área útil (iPhone)
+    p: { xs: 2, sm: 4 },
+    // padding-bottom considera a safe-area inferior para evitar choque com a barra do Safari
+    pb: {
+        xs: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+        sm: 6,
+    },
     minWidth: 340,
     width: '100%',
     maxWidth: { xs: '98vw', sm: '700px', md: '900px', lg: '1100px' },
-    maxHeight: '90vh',
+    // Evitar 90vh devido à toolbar dinâmica do Safari; usar unidade dinâmica baseada em JS
+    maxHeight: 'calc(var(--appmodal-vh, 1vh) * 90)',
     overflowY: 'auto',
 };
 
-export default function AppModal({
-    open,
-    onClose,
-    children,
-    closeOnEnter = true,
-    closeOnEscape = true,
-    showCloseButton = true,
-    disableBackdropClose = false,
-    disableEscapeKeyDown = false,
-    fullScreen = false,
-}: AppModalProps) {
-    // Detecta iOS (Safari principalmente). Heurística simples suficiente para fallback de scroll.
+export default function AppModal(props: AppModalProps) {
+    const {
+        open,
+        onClose,
+        children,
+        closeOnEnter = true,
+        closeOnEscape = true,
+        showCloseButton = true,
+        actionsBarStyle,
+        disableBackdropClose = false,
+        disableEscapeKeyDown = false,
+        fullScreen = false,
+        maxHeightVh = 90,
+        disableTopSafePadding = false,
+    } = props;
+
+    const contentRef = React.useRef<HTMLDivElement | null>(null);
+    const prevScrollRef = React.useRef<number>(0);
+
     const isIOS = React.useMemo(() => {
         if (typeof navigator === 'undefined') return false;
-        const ua = navigator.userAgent;
-        const platform = navigator.platform;
-        // Alguns navegadores expõem maxTouchPoints (Safari iPad em modo desktop) sem definir tipo em TS lib alvo
-        const maxTouchPoints =
-            (navigator as unknown as { maxTouchPoints?: number })
-                .maxTouchPoints || 0;
+        const ua = navigator.userAgent || '';
+        const platform = navigator.platform || '';
         return (
             /iP(ad|hone|od)/.test(ua) ||
-            (platform === 'MacIntel' && maxTouchPoints > 1)
+            (platform === 'MacIntel' && navigator.maxTouchPoints > 1)
         );
     }, []);
 
-    // Armazena scroll anterior para restauração após fechar modal (iOS lock fix)
-    const prevScrollRef = React.useRef<number | null>(null);
-
-    // Ao abrir: capturamos posição de scroll e (em iOS) aplicamos um lock leve baseado em position:fixed.
+    const updateVhVar = React.useCallback(() => {
+        try {
+            const vhPx =
+                (window.visualViewport?.height ?? window.innerHeight) * 0.01;
+            document.documentElement.style.setProperty(
+                '--appmodal-vh',
+                `${vhPx}px`,
+            );
+        } catch {
+            /* noop */
+        }
+    }, []);
     React.useEffect(() => {
         if (!open) return;
-        // Captura scroll atual
-        prevScrollRef.current =
-            window.scrollY ||
-            document.documentElement.scrollTop ||
-            document.body.scrollTop ||
-            0;
+        try {
+            prevScrollRef.current =
+                window.scrollY || document.documentElement.scrollTop || 0;
+        } catch {
+            /* noop */
+        }
+
+        // Remover possíveis estados de teclado aberto que criam painel rolável alternativo
+        try {
+            document.body.classList.remove('keyboardOpen');
+        } catch {
+            /* noop */
+        }
+        // Define var de viewport dinâmica e listeners enquanto o modal está aberto
+        updateVhVar();
+        const onResize = () => updateVhVar();
+        window.addEventListener('resize', onResize);
+        (window.visualViewport || null)?.addEventListener?.(
+            'resize',
+            onResize as EventListener,
+        );
+
+        // Lock padrão: impedir rolagem do documento em todos os ambientes
+        try {
+            const body = document.body as HTMLBodyElement;
+            const html = document.documentElement as HTMLElement;
+            html.style.overflow = 'hidden';
+            body.style.overflow = 'hidden';
+            // Reduz efeitos de overscroll (Android/Chrome)
+            html.style.setProperty('overscroll-behavior-y', 'contain');
+        } catch {
+            /* noop */
+        }
         if (isIOS) {
             // Aplica lock manual para evitar "rubber band" mantendo o conteúdo congelado.
             const body = document.body as HTMLBodyElement;
@@ -92,46 +144,70 @@ export default function AppModal({
                 body.style.overflow = 'hidden';
             }
         }
-    }, [open, isIOS]);
-    // Fecha modal ao pressionar Enter (padronização para modais de mensagem)
-    React.useEffect(() => {
-        if (!open || !closeOnEnter) return;
-        function onKeyDown(e: KeyboardEvent) {
-            // Ignora se o usuário estiver com Shift/Ctrl/Alt para evitar conflitos
-            if (
-                e.key === 'Enter' &&
-                !e.shiftKey &&
-                !e.ctrlKey &&
-                !e.altKey &&
-                !e.metaKey
-            ) {
-                // Evita submits acidentais ao pressionar Enter em formulários dentro do modal de mensagem
+        // Bloqueia gestos de rolagem fora do conteúdo do modal (Android/iOS)
+        const preventOutsideScroll = (e: Event) => {
+            const target = e.target as Node | null;
+            const content = contentRef.current;
+            if (!content) {
+                // Sem referência confiável, evita scroll global
                 e.preventDefault();
-                onClose();
+                return;
             }
-        }
-        document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, [open, closeOnEnter, onClose]);
+            if (target && content.contains(target)) {
+                // Dentro do conteúdo: permitir rolagem interna
+                return;
+            }
+            e.preventDefault();
+        };
+        const passiveFalse: AddEventListenerOptions = { passive: false };
+        document.addEventListener(
+            'touchmove',
+            preventOutsideScroll,
+            passiveFalse,
+        );
+        document.addEventListener('wheel', preventOutsideScroll, passiveFalse);
 
-    // Fecha modal ao pressionar Escape (fallback explícito; MUI já tenta fechar por ESC)
-    React.useEffect(() => {
-        if (!open || !closeOnEscape) return;
-        function onKeyDown(e: KeyboardEvent) {
-            if (
-                e.key === 'Escape' &&
-                !e.shiftKey &&
-                !e.ctrlKey &&
-                !e.altKey &&
-                !e.metaKey
-            ) {
-                e.preventDefault();
-                onClose();
-            }
+        // Dar foco ao conteúdo do modal para capturar imediatamente a interação
+        try {
+            contentRef.current?.setAttribute('tabindex', '-1');
+            contentRef.current?.focus();
+            // Garante scroll interno no topo ao abrir
+            if (contentRef.current) contentRef.current.scrollTop = 0;
+        } catch {
+            /* noop */
         }
-        document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, [open, closeOnEscape, onClose]);
+
+        return () => {
+            try {
+                document.removeEventListener(
+                    'touchmove',
+                    preventOutsideScroll as EventListener,
+                );
+                document.removeEventListener(
+                    'wheel',
+                    preventOutsideScroll as EventListener,
+                );
+            } catch {
+                /* noop */
+            }
+            try {
+                window.removeEventListener('resize', onResize);
+                (window.visualViewport || null)?.removeEventListener?.(
+                    'resize',
+                    onResize as EventListener,
+                );
+            } catch {
+                /* noop */
+            }
+        };
+    }, [open, isIOS, updateVhVar]);
+    // Hotkeys reutilizáveis para fechar modal
+    useModalCloseHotkeys({
+        open,
+        onClose,
+        closeOnEnter,
+        closeOnEscape,
+    });
 
     // Handler que respeita as flags de bloqueio do MUI (backdrop/escape)
     const handleMuiClose = (
@@ -185,6 +261,7 @@ export default function AppModal({
                 body.style.right = '';
                 body.style.width = '';
                 html.style.overflow = '';
+                html.style.removeProperty('overscroll-behavior-y');
                 body.classList.remove('MuiModal-open');
                 html.classList.remove('MuiModal-open');
                 if (body.dataset.appliedIosLock)
@@ -261,6 +338,7 @@ export default function AppModal({
                     body.style.right = '';
                     body.style.width = '';
                     html.style.overflow = '';
+                    html.style.removeProperty('overscroll-behavior-y');
                     body.classList.remove('MuiModal-open');
                     html.classList.remove('MuiModal-open');
                 }
@@ -277,6 +355,7 @@ export default function AppModal({
             disableEscapeKeyDown={disableEscapeKeyDown || !closeOnEscape}
         >
             <Box
+                ref={contentRef}
                 sx={
                     fullScreen
                         ? {
@@ -284,39 +363,53 @@ export default function AppModal({
                               top: 0,
                               left: 0,
                               transform: 'none',
-                              bgcolor: 'background.paper',
+                              bgcolor: 'var(--color-bg)',
                               borderRadius: 0,
                               boxShadow: 24,
-                              p: 2,
-                              pb: 2,
-                              width: '100vw',
-                              maxWidth: '100vw',
-                              height: '100vh',
-                              maxHeight: '100vh',
+                              // Safe-area superior: pode ser desativado quando o conteúdo já trata disso
+                              pt: disableTopSafePadding
+                                  ? 0
+                                  : 'env(safe-area-inset-top, 0px)',
+                              pr: 2,
+                              pl: 2,
+                              // padding-bottom com safe-area inferior
+                              pb: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+                              boxSizing: 'border-box',
+                              width: '100%',
+                              maxWidth: '100%',
+                              // usar viewport dinâmico para contornar toolbars do Safari
+                              height: 'calc(var(--appmodal-vh, 1vh) * 100)',
+                              maxHeight: 'calc(var(--appmodal-vh, 1vh) * 100)',
                               overflowY: 'auto',
+                              overflowX: 'hidden',
+                              WebkitOverflowScrolling: 'touch',
                           }
-                        : { ...style, position: 'absolute' as const }
+                        : {
+                              ...style,
+                              // Permite ajustar a altura máxima por modal
+                              maxHeight: `calc(var(--appmodal-vh, 1vh) * ${maxHeightVh})`,
+                              position: 'absolute' as const,
+                              WebkitOverflowScrolling: 'touch',
+                          }
                 }
+                tabIndex={-1}
             >
                 {showCloseButton && (
-                    <button
-                        aria-label='Fechar'
-                        onClick={onClose}
-                        style={{
-                            position: 'absolute',
-                            top: 8,
-                            right: 8,
-                            background: 'transparent',
-                            border: 'none',
-                            fontSize: 18,
-                            cursor: 'pointer',
-                            color: 'rgba(0,0,0,0.56)',
-                        }}
-                    >
-                        ×
-                    </button>
+                    <ModalActionsBar
+                        onClose={onClose}
+                        showCloseButton={showCloseButton}
+                        style={actionsBarStyle}
+                    />
                 )}
-                {children}
+                {/* Reserve a right-side safe area so content never goes under the sticky close (X) */}
+                <div
+                    style={{
+                        // Reserve space for larger touch target (44px) + small gutter
+                        paddingRight: showCloseButton ? 48 : 0,
+                    }}
+                >
+                    {children}
+                </div>
             </Box>
         </Modal>
     );

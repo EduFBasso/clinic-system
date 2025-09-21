@@ -8,21 +8,27 @@ interface TimePicker10Props {
     maxHour?: number; // limite superior (default 21)
     disabled?: boolean;
     style?: React.CSSProperties;
+    // Novo: passo dos minutos (5,10,15,20,30) e limites precisos HH:MM
+    stepMinutes?: 5 | 10 | 15 | 20 | 30;
+    minHM?: string; // 'HH:MM' mínimo permitido (prioritário sobre minHour)
+    maxHM?: string; // 'HH:MM' máximo permitido (prioritário sobre maxHour)
 }
 
 // Garante HH:MM
-function normalize(v: string, minH: number, maxH: number): string {
-    if (!/^\d{2}:\d{2}$/.test(v)) return `${String(minH).padStart(2, '0')}:00`;
+function normalizeHour(
+    v: string,
+    minH: number,
+    maxH: number,
+): [string, string] {
+    if (!/^\d{2}:\d{2}$/.test(v)) return [String(minH).padStart(2, '0'), '00'];
     const [hStr, mStr] = v.split(':');
     let h = parseInt(hStr, 10);
     if (Number.isNaN(h)) h = minH;
     h = Math.min(maxH, Math.max(minH, h));
     const rawM = Math.min(59, Math.max(0, parseInt(mStr, 10)));
-    const m10 = Math.floor(rawM / 10) * 10;
-    return `${String(h).padStart(2, '0')}:${String(m10).padStart(2, '0')}`;
+    return [String(h).padStart(2, '0'), String(rawM).padStart(2, '0')];
 }
 
-const minutesOptions = ['00', '10', '20', '30', '40', '50'];
 // hoursOptions será gerado dinamicamente com base em minHour/maxHour
 
 export const TimePicker10: React.FC<TimePicker10Props> = ({
@@ -33,23 +39,63 @@ export const TimePicker10: React.FC<TimePicker10Props> = ({
     style,
     minHour = 6,
     maxHour = 21,
+    stepMinutes = 10,
+    minHM,
+    maxHM,
 }) => {
     if (minHour > maxHour) {
         // garante coerência
         [minHour, maxHour] = [6, 21];
     }
+    // Deriva limites de HH:MM se fornecidos
+    let minH = minHour;
+    let minM = 0;
+    let maxH = maxHour;
+    let maxM = 59;
+    if (minHM && /^\d{2}:\d{2}$/.test(minHM)) {
+        const [h, m] = minHM.split(':').map(n => parseInt(n, 10));
+        if (!Number.isNaN(h)) minH = h;
+        if (!Number.isNaN(m)) minM = Math.min(59, Math.max(0, m));
+    }
+    if (maxHM && /^\d{2}:\d{2}$/.test(maxHM)) {
+        const [h, m] = maxHM.split(':').map(n => parseInt(n, 10));
+        if (!Number.isNaN(h)) maxH = h;
+        if (!Number.isNaN(m)) maxM = Math.min(59, Math.max(0, m));
+    }
     const hoursOptions = React.useMemo(
         () =>
-            Array.from({ length: maxHour - minHour + 1 }, (_, i) =>
-                String(minHour + i).padStart(2, '0'),
+            Array.from({ length: maxH - minH + 1 }, (_, i) =>
+                String(minH + i).padStart(2, '0'),
             ),
-        [minHour, maxHour],
+        [minH, maxH],
     );
-    const norm = React.useMemo(
-        () => normalize(value, minHour, maxHour),
-        [value, minHour, maxHour],
+    const [hour, minuteRaw] = React.useMemo(
+        () => normalizeHour(value, minH, maxH),
+        [value, minH, maxH],
     );
-    const [hour, minute] = norm.split(':');
+    // Gera opções de minuto com step configurável
+    const baseMinutes = React.useMemo(() => {
+        const opts: string[] = [];
+        for (let m = 0; m < 60; m += stepMinutes) {
+            opts.push(String(m).padStart(2, '0'));
+        }
+        return opts;
+    }, [stepMinutes]);
+    const minute = minuteRaw.padStart(2, '0');
+    const minuteOptions = React.useMemo(() => {
+        let opts = baseMinutes;
+        // Aplica limites por HH:MM quando estiver na borda
+        if (hour === String(minH).padStart(2, '0')) {
+            opts = opts.filter(m => parseInt(m, 10) >= minM);
+        }
+        if (hour === String(maxH).padStart(2, '0')) {
+            opts = opts.filter(m => parseInt(m, 10) <= maxM);
+        }
+        // Inclui minuto atual mesmo que fora da grade (para exibir/permitir manter)
+        if (!opts.includes(minute))
+            opts = [minute, ...opts].filter((v, i, a) => a.indexOf(v) === i);
+        return opts;
+    }, [baseMinutes, hour, minH, maxH, minM, maxM, minute]);
 
     function handleHourChange(e: React.ChangeEvent<HTMLSelectElement>) {
         onChange(`${e.target.value}:${minute}`);
@@ -83,7 +129,7 @@ export const TimePicker10: React.FC<TimePicker10Props> = ({
                     disabled={disabled}
                     style={{ padding: '6px 8px' }}
                 >
-                    {minutesOptions.map(m => (
+                    {minuteOptions.map(m => (
                         <option key={m} value={m}>
                             {m}
                         </option>

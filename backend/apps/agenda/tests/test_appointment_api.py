@@ -85,3 +85,79 @@ def test_create_future_and_conflict(auth_client, client_obj):
     # Mensagem geral ou detail
     combined = ' '.join(str(v) for v in body.values())
     assert 'conflit' in combined.lower()
+
+
+@pytest.mark.django_db
+def test_block_new_when_client_has_pending_past(auth_client, client_obj):
+    # Cria um agendamento passado com status scheduled (pendente)
+    base = (timezone.now() - timezone.timedelta(days=1)).replace(minute=0, second=0, microsecond=0)
+    past_payload = {
+        'client': client_obj.id,
+        'title': 'Pendente Antigo',
+        'visit_type': 'avaliacao',
+        'start_at': base.isoformat(),
+        'end_at': (base + timezone.timedelta(minutes=30)).isoformat(),
+    }
+    r1 = auth_client.post('/agenda/appointments/', past_payload, format='json')
+    # Dependendo das regras existentes, criar no passado pode falhar via API. Então criamos diretamente via ORM.
+    if r1.status_code not in (200, 201):
+        from apps.register.models import Professional
+        # Captura professional do token atual
+        # Para simplificar, obtenha qualquer pro ligado ao client_obj
+        pro = Professional.objects.get(id=client_obj.professional_id)
+        from apps.agenda.models import Appointment
+        Appointment.objects.create(
+            professional=pro,
+            client=client_obj,
+            title='Pendente Antigo',
+            visit_type='avaliacao',
+            start_at=base,
+            end_at=base + timezone.timedelta(minutes=30),
+            status='scheduled',
+        )
+
+    # Agora tente criar um novo no futuro: deve ser bloqueado por pendência
+    future_base = (timezone.now() + timezone.timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
+    new_payload = {
+        'client': client_obj.id,
+        'title': 'Nova Consulta',
+        'visit_type': 'avaliacao',
+        'start_at': future_base.isoformat(),
+        'end_at': (future_base + timezone.timedelta(minutes=30)).isoformat(),
+    }
+    r2 = auth_client.post('/agenda/appointments/', new_payload, format='json')
+    assert r2.status_code in (400, 422), r2.content
+    body = r2.json()
+    text = ' '.join(str(v) for v in body.values())
+    assert 'pendente' in text.lower()
+
+
+@pytest.mark.django_db
+def test_ongoing_does_not_block_new(auth_client, client_obj):
+    # Cria um agendamento em andamento (start <= now < end) diretamente no ORM
+    from apps.agenda.models import Appointment
+    now = timezone.now()
+    start = now - timezone.timedelta(minutes=5)
+    end = now + timezone.timedelta(minutes=25)
+    Appointment.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        title='Em andamento',
+        visit_type=Appointment.VisitType.AVALIACAO,
+        start_at=start,
+        end_at=end,
+        status=Appointment.Status.SCHEDULED,
+    )
+
+    # Tentar criar um novo no futuro deve SER permitido (não bloqueia em andamento)
+    # Ajusta para 2h no futuro para garantir que não sobreponha (inclusive atravessando meia-noite)
+    future_base = (timezone.now() + timezone.timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
+    new_payload = {
+        'client': client_obj.id,
+        'title': 'Nova Consulta',
+        'visit_type': 'avaliacao',
+        'start_at': future_base.isoformat(),
+        'end_at': (future_base + timezone.timedelta(minutes=30)).isoformat(),
+    }
+    r = auth_client.post('/agenda/appointments/', new_payload, format='json')
+    assert r.status_code == 201, r.content

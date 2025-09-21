@@ -10,8 +10,9 @@ import MainContent from '../components/MainContent';
 import Footer from '../components/Footer';
 import styles from '../styles/pages/Home.module.css';
 import ScheduleModal from '../components/ScheduleModal';
+import QuickScheduleModal from '../components/QuickScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
-import WeeklyPreviewModal from '../components/WeeklyPreviewModal';
+import WeeklyAgendaModal from '../components/WeeklyPreviewModal';
 import SystemMessageModal from '../components/SystemMessageModal';
 import DailyAgendaModal from '../components/DailyAgendaModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
@@ -231,16 +232,23 @@ export default function Home() {
         date?: Date,
         edit?: Appointment | null,
     ) => {
-        // Permitir abrir sem cliente; quando houver clientId, garantir dados básicos carregados
-        if (clientId) {
-            const c = await ensureClientBasic(clientId);
-            setRouteClient(c);
-        } else {
+        // Agora abre o QuickSchedule (mais completo visualmente) — requer cliente
+        if (!clientId) {
+            // Sem cliente: informa e não tenta abrir o Quick (evita prop obrigatória ausente)
+            setSysMsg({
+                text: 'Selecione um cliente para abrir o agendamento rápido.',
+                type: 'info',
+            });
+            setQuickOpen(false);
             setRouteClient(undefined);
+            return;
         }
+        const c = await ensureClientBasic(clientId);
+        setRouteClient(c);
         setRouteDefaultDate(date);
         setRouteEditAppt(edit ?? null);
-        setScheduleOpen(true);
+        setQuickOpen(true);
+        setScheduleOpen(false);
         setMonthlyOpen(false);
         setWeeklyOpen(false);
     };
@@ -338,6 +346,9 @@ export default function Home() {
         };
     }, []);
 
+    // Estado do Quick
+    const [quickOpen, setQuickOpen] = useState(false);
+
     return (
         <div className={styles.container}>
             <Header />
@@ -367,6 +378,17 @@ export default function Home() {
                 editAppointment={routeEditAppt}
             />
             {routeClient && (
+                <QuickScheduleModal
+                    open={quickOpen}
+                    onClose={() => {
+                        setQuickOpen(false);
+                        clearAgendaRouteFlags();
+                    }}
+                    client={routeClient}
+                    editAppointment={routeEditAppt}
+                />
+            )}
+            {routeClient && (
                 <MonthlyAgendaModal
                     open={monthlyOpen}
                     onClose={() => {
@@ -377,7 +399,7 @@ export default function Home() {
                     initialMonth={routeInitialMonth}
                 />
             )}
-            <WeeklyPreviewModal
+            <WeeklyAgendaModal
                 open={weeklyOpen}
                 onClose={() => {
                     setWeeklyOpen(false);
@@ -389,30 +411,6 @@ export default function Home() {
                 date={dailyDate}
                 focusAppointmentId={dailyFocusId}
                 onClose={() => setDailyOpen(false)}
-                onEditAppointment={appt => {
-                    if (!appt) return;
-                    const apptAny = appt as unknown as {
-                        client?: { id?: number };
-                    };
-                    const clientId = apptAny.client && apptAny.client.id;
-                    const proceed = (cid?: number) => {
-                        if (cid) {
-                            ensureClientBasic(cid).then(c => {
-                                setRouteClient(c);
-                                setRouteEditAppt(appt);
-                                setRouteDefaultDate(new Date(appt.start_at));
-                                setScheduleOpen(true);
-                                setDailyOpen(false);
-                            });
-                        } else {
-                            setRouteEditAppt(appt);
-                            setRouteDefaultDate(new Date(appt.start_at));
-                            setScheduleOpen(true);
-                            setDailyOpen(false);
-                        }
-                    };
-                    proceed(clientId);
-                }}
             />
             <Footer />
             <SystemMessageModal
@@ -424,7 +422,7 @@ export default function Home() {
             />
             <AppointmentDetailsModal
                 open={detailsOpen}
-                appointment={detailsAppt}
+                appt={(detailsAppt as Appointment) || null}
                 onClose={() => setDetailsOpen(false)}
             />
         </div>

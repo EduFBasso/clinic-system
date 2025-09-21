@@ -54,9 +54,15 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if self.instance is None and start and start < now:
             raise serializers.ValidationError({"start_at": "Não é permitido agendar no passado."})
 
-        # Atualização: bloquear qualquer edição de agendamento que já começou (passado ou em andamento)
-        # Requisito de negócio: registros históricos são somente leitura (somente ação dedicada p/ cancelar)
         if self.instance is not None:
+            # Bloqueio geral temporário de edição: nenhuma alteração via PATCH/PUT é permitida
+            # Diretriz: utilize a ação de cancelamento e crie novo agendamento.
+            raise serializers.ValidationError({
+                "detail": "Edição de compromissos está temporariamente bloqueada. Cancele e crie um novo agendamento."
+            })
+            # As regras abaixo permanecem como documentação e podem ser reativadas quando edição for liberada.
+            # Atualização: bloquear qualquer edição de agendamento que já começou (passado ou em andamento)
+            # Requisito de negócio: registros históricos são somente leitura (somente ação dedicada p/ cancelar)
             inst_start = getattr(self.instance, "start_at", None)
             inst_end = getattr(self.instance, "end_at", None)
             if inst_end and inst_end < now:
@@ -78,6 +84,18 @@ class AppointmentSerializer(serializers.ModelSerializer):
             if getattr(user, "id", None):
                 professional = user
         client = attrs.get("client", getattr(self.instance, "client", None))
+
+        # Regra de negócio: bloquear novo agendamento se o cliente possui compromisso pendente (status scheduled no passado)
+        # "Pendente" aqui significa agendamento que já terminou (end_at < now) mas não foi concluído (done) nem cancelado.
+        if self.instance is None and client is not None:
+            pending_qs = (
+                Appointment.objects.filter(client=client, status=Appointment.Status.SCHEDULED)
+                .filter(end_at__lt=now)
+            )
+            if pending_qs.exists():
+                raise serializers.ValidationError({
+                    "client": "Cliente possui compromisso pendente (não concluído/cancelado). Resolva o anterior antes de agendar um novo."
+                })
         if professional and start and end:
             # conflito simples
             inst = self.instance if getattr(self, "instance", None) else None

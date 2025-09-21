@@ -6,6 +6,8 @@ type Props = {
     selectedDate: Date;
     onChange: (next: Date) => void;
     initialPosition?: { x: number; y: number };
+    // Ensures the picker never renders above this Y to avoid header being clipped under sticky bars
+    minTop?: number;
 };
 
 const weekdayLabels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
@@ -37,6 +39,7 @@ export default function FloatingDatePicker({
     selectedDate,
     onChange,
     initialPosition,
+    minTop,
 }: Props) {
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     const [pos, setPos] = React.useState(() => ({
@@ -96,13 +99,23 @@ export default function FloatingDatePicker({
         days.push({ date: d, inMonth: d.getMonth() === month });
     }
 
+    // Clamp position so header isn't cut off and keep within horizontal bounds
+    const minTopPx = typeof minTop === 'number' ? minTop : 88;
+    const minLeftPx = 8;
+    const maxLeftPx = Math.max(
+        8,
+        (typeof window !== 'undefined' ? window.innerWidth : 360) - 280 - 8,
+    );
+    const clampedX = Math.min(Math.max(pos.x, minLeftPx), maxLeftPx);
+    const clampedY = Math.max(pos.y, minTopPx);
+
     return (
         <div
             ref={containerRef}
             style={{
                 position: 'absolute',
-                left: pos.x,
-                top: pos.y,
+                left: clampedX,
+                top: clampedY,
                 width: 280,
                 background: '#fff',
                 border: '1px solid #e5e7eb',

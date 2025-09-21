@@ -15,7 +15,6 @@ const LS_KEYS = {
     slotInterval: 'agenda.slotInterval',
     defaultDuration: 'agenda.defaultDuration',
     defaultVisitType: 'defaultVisitType', // já usada anteriormente
-    autoSuggest: 'agenda.autoSuggestNext',
 };
 
 const intervalOptions = [5, 10, 15, 20, 30];
@@ -47,7 +46,6 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     const [slotInterval, setSlotInterval] = React.useState(10);
     const [defaultDuration, setDefaultDuration] = React.useState(60);
     const [defaultVisitType, setDefaultVisitType] = React.useState('consulta');
-    const [autoSuggest, setAutoSuggest] = React.useState(true);
     const [savedMsg, setSavedMsg] = React.useState<string | null>(null);
 
     React.useEffect(() => {
@@ -77,7 +75,6 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
         setDefaultVisitType(
             visitTypes.some(v => v.value === vt) ? vt : 'consulta',
         );
-        setAutoSuggest(localStorage.getItem(LS_KEYS.autoSuggest) !== 'false');
     }, [open]);
 
     function save() {
@@ -91,10 +88,6 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
         localStorage.setItem(LS_KEYS.slotInterval, String(slotInterval));
         localStorage.setItem(LS_KEYS.defaultDuration, String(defaultDuration));
         localStorage.setItem(LS_KEYS.defaultVisitType, defaultVisitType);
-        localStorage.setItem(
-            LS_KEYS.autoSuggest,
-            autoSuggest ? 'true' : 'false',
-        );
         setSavedMsg('Configurações salvas.');
         if (onApply) onApply();
         // Mantém aberto para permitir ajustes contínuos
@@ -107,46 +100,123 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 16,
-                    minWidth: 420,
+                    width: '100%',
+                    // Mantém limite confortável em telas grandes sem restringir em xs
+                    maxWidth: 560,
+                    boxSizing: 'border-box',
+                    overflowX: 'hidden',
                 }}
             >
                 <h2 style={{ margin: 0 }}>Configurações da Agenda</h2>
                 <div style={{ display: 'grid', gap: 12 }}>
+                    {/* Linha 1: início e fim do expediente */}
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                         <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minWidth: 0,
+                                // Força dividir em 2 colunas quando houver espaço
+                                flex: '1 1 0',
+                            }}
                         >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            <span style={{ fontSize: 15, color: '#6b7280' }}>
                                 Início expediente
                             </span>
-                            <input
-                                type='time'
-                                value={workStart}
-                                onChange={e =>
-                                    setWorkStart(
-                                        clampHM(e.target.value, '06:00'),
-                                    )
-                                }
-                            />
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type='time'
+                                    value={workStart}
+                                    onChange={e =>
+                                        setWorkStart(
+                                            clampHM(e.target.value, '06:00'),
+                                        )
+                                    }
+                                    style={{ width: '100%', paddingRight: 36 }}
+                                />
+                                <span
+                                    aria-hidden
+                                    style={{
+                                        position: 'absolute',
+                                        right: 8,
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        color: '#9ca3af',
+                                        fontSize: 24,
+                                        lineHeight: 1,
+                                        pointerEvents: 'none',
+                                        userSelect: 'none',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    {'▾'}
+                                </span>
+                            </div>
                         </label>
+                        {/* Divisor vertical sutil entre os campos de horário */}
+                        <div
+                            aria-hidden
+                            style={{
+                                width: 1,
+                                background: '#e5e7eb',
+                                alignSelf: 'stretch',
+                                borderRadius: 1,
+                            }}
+                        />
                         <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minWidth: 0,
+                                flex: '1 1 0',
+                            }}
                         >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            <span style={{ fontSize: 15, color: '#6b7280' }}>
                                 Fim expediente
                             </span>
-                            <input
-                                type='time'
-                                value={workEnd}
-                                onChange={e =>
-                                    setWorkEnd(clampHM(e.target.value, '21:00'))
-                                }
-                            />
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type='time'
+                                    value={workEnd}
+                                    onChange={e =>
+                                        setWorkEnd(
+                                            clampHM(e.target.value, '21:00'),
+                                        )
+                                    }
+                                    style={{ width: '100%', paddingRight: 36 }}
+                                />
+                                <span
+                                    aria-hidden
+                                    style={{
+                                        position: 'absolute',
+                                        right: 8,
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        color: '#9ca3af',
+                                        fontSize: 24,
+                                        lineHeight: 1,
+                                        pointerEvents: 'none',
+                                        userSelect: 'none',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    {'▾'}
+                                </span>
+                            </div>
                         </label>
+                    </div>
+
+                    {/* Linha 2: Intervalo e Duração padrão */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minWidth: 0,
+                                flex: '1 1 0',
+                            }}
                         >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            <span style={{ fontSize: 15, color: '#6b7280' }}>
                                 Intervalo (min)
                             </span>
                             <select
@@ -156,6 +226,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                         parseInt(e.target.value, 10),
                                     )
                                 }
+                                style={{ width: '100%' }}
                             >
                                 {intervalOptions.map(i => (
                                     <option key={i} value={i}>
@@ -165,9 +236,14 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                             </select>
                         </label>
                         <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minWidth: 0,
+                                flex: '1 1 0',
+                            }}
                         >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            <span style={{ fontSize: 15, color: '#6b7280' }}>
                                 Duração padrão (min)
                             </span>
                             <select
@@ -177,6 +253,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                         parseInt(e.target.value, 10),
                                     )
                                 }
+                                style={{ width: '100%' }}
                             >
                                 {durationOptions.map(i => (
                                     <option key={i} value={i}>
@@ -185,10 +262,19 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                 ))}
                             </select>
                         </label>
+                    </div>
+
+                    {/* Linha 3: Tipo padrão */}
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                         <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minWidth: 220,
+                                flex: '1 1 220px',
+                            }}
                         >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            <span style={{ fontSize: 15, color: '#6b7280' }}>
                                 Tipo padrão
                             </span>
                             <select
@@ -196,6 +282,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                 onChange={e =>
                                     setDefaultVisitType(e.target.value)
                                 }
+                                style={{ width: '100%' }}
                             >
                                 {visitTypes.map(v => (
                                     <option key={v.value} value={v.value}>
@@ -205,23 +292,8 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                             </select>
                         </label>
                     </div>
-                    <label
-                        style={{
-                            display: 'flex',
-                            gap: 8,
-                            alignItems: 'center',
-                        }}
-                    >
-                        <input
-                            type='checkbox'
-                            checked={autoSuggest}
-                            onChange={e => setAutoSuggest(e.target.checked)}
-                        />
-                        <span style={{ fontSize: 13 }}>
-                            Sugerir próximo slot livre ao abrir agendamento
-                        </span>
-                    </label>
                 </div>
+
                 {savedMsg && (
                     <div
                         style={{
@@ -234,6 +306,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                         {savedMsg}
                     </div>
                 )}
+
                 <div
                     style={{
                         display: 'flex',

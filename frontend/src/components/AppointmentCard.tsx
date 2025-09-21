@@ -1,12 +1,13 @@
 import React from 'react';
 import type { Appointment } from '../hooks/useAppointments';
-import { FaEdit, FaBan } from 'react-icons/fa';
+import { FaEdit, FaBan, FaRegFileAlt } from 'react-icons/fa';
 
 export default function AppointmentCard({
     appt,
     onEdit,
     onCancel,
     onUseTime,
+    onDetails,
     highlight, // highlight temporário (ex: pós criação/atualização)
     editingActive, // highlight persistente enquanto em edição
     pulse, // animação de pulsar (usada nos primeiros segundos da edição)
@@ -15,6 +16,7 @@ export default function AppointmentCard({
     onEdit?: (appt: Appointment) => void;
     onCancel?: (appt: Appointment) => void;
     onUseTime?: (appt: Appointment) => void;
+    onDetails?: (appt: Appointment) => void;
     highlight?: boolean;
     editingActive?: boolean;
     pulse?: boolean;
@@ -24,8 +26,21 @@ export default function AppointmentCard({
     const now = new Date();
     const expired = e.getTime() < now.getTime();
     const canceled = appt.status === 'canceled';
-    const color = canceled ? '#ef4444' : expired ? '#9ca3af' : '#10b981';
+    const ongoing =
+        !canceled &&
+        !expired &&
+        s.getTime() <= now.getTime() &&
+        e.getTime() > now.getTime();
+    // Lateral color strip: canceled(red) > ongoing(orange) > expired(gray) > scheduled(green)
+    const color = canceled
+        ? '#ef4444'
+        : ongoing
+        ? '#f59e0b'
+        : expired
+        ? '#9ca3af'
+        : '#10b981';
     const canEdit = appt.status === 'scheduled' && !expired && !canceled;
+    const isDone = appt.status === 'done';
     const canCancel = appt.status === 'scheduled' && !expired && !canceled;
 
     function hhmm(d: Date) {
@@ -62,11 +77,14 @@ export default function AppointmentCard({
     }, []);
 
     // Mesma família de tom da faixa lateral, porém translúcido no fundo para manter legibilidade.
+    // Fundo sutil para destacar o cartão em modo edição; um pouco mais forte para percepção clara
     const editingBg = canceled
-        ? 'rgba(239,68,68,0.10)'
+        ? 'rgba(239,68,68,0.12)'
         : expired
-        ? 'rgba(156,163,175,0.14)'
-        : 'rgba(16,185,129,0.14)';
+        ? 'rgba(156,163,175,0.16)'
+        : ongoing
+        ? 'rgba(245,158,11,0.16)'
+        : 'rgba(16,185,129,0.16)';
     const editingBoxShadow = editingActive
         ? pulse
             ? '0 0 0 1px var(--pulse-color), 0 1px 3px rgba(0,0,0,0.08)'
@@ -75,16 +93,21 @@ export default function AppointmentCard({
     const creationHighlightBoxShadow = highlight
         ? '0 0 0 2px #3b82f6 inset, 0 1px 3px rgba(0,0,0,0.08)'
         : undefined;
+    const ongoingBg = 'rgba(245,158,11,0.10)';
     const baseBackground = editingActive
         ? editingBg
         : highlight
         ? '#eef6ff'
+        : ongoing
+        ? ongoingBg
         : '#fff';
 
     const pulseColor = canceled
         ? 'rgba(185,28,28,0.55)'
         : expired
         ? 'rgba(107,114,128,0.50)'
+        : ongoing
+        ? 'rgba(245,158,11,0.55)'
         : 'rgba(16,185,129,0.55)';
 
     // Duração aprox. de 1 ciclo: 1.15s -> 3 ciclos ~3.45s
@@ -174,6 +197,22 @@ export default function AppointmentCard({
                     <strong>Tipo:</strong>{' '}
                     <span style={{ fontWeight: 600 }}>{visitTypeLabel}</span>
                 </span>
+                {editingActive && (
+                    <span
+                        title='Você está editando este compromisso'
+                        style={{
+                            background: '#ecfeff',
+                            color: '#155e75',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            border: '1px solid #a5f3fc',
+                        }}
+                    >
+                        Editando
+                    </span>
+                )}
                 {canceled && (
                     <span
                         style={{
@@ -188,6 +227,21 @@ export default function AppointmentCard({
                         Cancelado
                     </span>
                 )}
+                {ongoing && !canceled && !expired && (
+                    <span
+                        style={{
+                            background: '#fff7ed',
+                            color: '#9a3412',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            border: '1px solid #fed7aa',
+                        }}
+                    >
+                        Em andamento
+                    </span>
+                )}
                 {expired && !canceled && (
                     <span
                         style={{
@@ -199,7 +253,7 @@ export default function AppointmentCard({
                             fontWeight: 600,
                         }}
                     >
-                        Expirado
+                        Pendente
                     </span>
                 )}
             </div>
@@ -212,6 +266,25 @@ export default function AppointmentCard({
                     alignSelf: 'center',
                 }}
             >
+                {isDone && (
+                    <button
+                        type='button'
+                        title='Appointment details'
+                        onClick={e => {
+                            e.stopPropagation();
+                            onDetails?.(appt);
+                        }}
+                        style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 6,
+                            background: 'var(--color-done-bg)',
+                            padding: 6,
+                            cursor: onDetails ? 'pointer' : 'default',
+                        }}
+                    >
+                        <FaRegFileAlt color={'var(--color-done)'} />
+                    </button>
+                )}
                 <button
                     type='button'
                     title={canEdit ? 'Editar' : 'Edição indisponível'}

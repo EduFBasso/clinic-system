@@ -13,6 +13,8 @@ function App() {
                 <Route path='/clients/edit/:id' element={<ClientFormPage />} />
                 {/* AgendaPage removida: consolidamos em modais no Home */}
                 <Route path='/agenda' element={<Home />} />
+                {/* Full-page scheduler for mobile */}
+                {/** Rota /schedule removida para unificar experiência via modais */}
                 {/* Rota /agenda/settings removida */}
             </Routes>
         </Router>

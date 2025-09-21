@@ -1,17 +1,21 @@
 import React from 'react';
 import AppModal from './Modal';
-import type { Appointment } from '../hooks/useAppointments';
-import { useAppointments } from '../hooks/useAppointments';
-import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
+import FloatingDatePicker from './FloatingDatePicker';
+import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import TimeRangeLabel from './shared/TimeRangeLabel';
 import AppointmentCard from './shared/AppointmentCard';
+import QuickScheduleModal from './QuickScheduleModal';
+import PendingActionsModal from './PendingActionsModal';
+import AppointmentDetailsModal from './AppointmentDetailsModal';
+import type { Appointment } from '../hooks/useAppointments';
+import { useAppointmentsRange } from '../hooks/useAppointments';
+import type { ClientBasic } from '../types/ClientBasic';
 
 interface DailyAgendaModalProps {
     open: boolean;
     date: Date;
     onClose: () => void;
     focusAppointmentId?: number;
-    onEditAppointment?: (appt: Appointment) => void;
 }
 
 function startOfDay(d: Date) {
@@ -24,28 +28,72 @@ function addDays(d: Date, n: number) {
     x.setDate(x.getDate() + n);
     return x;
 }
-// fmtHM removido (uso substituído por TimeRangeLabel)
 
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 const STATUS_ORDER: StatusKey[] = ['ongoing', 'scheduled', 'done', 'canceled'];
-
 export default function DailyAgendaModal({
     open,
     date,
     onClose,
     focusAppointmentId,
-    onEditAppointment,
 }: DailyAgendaModalProps) {
+    // Floating picker state/position (consistent with QuickScheduleModal)
+    const [showPicker, setShowPicker] = React.useState(false);
+    const [pickerPos, setPickerPos] = React.useState<
+        { x: number; y: number } | undefined
+    >(undefined);
+    const openDatePicker = React.useCallback(
+        (ev?: React.MouseEvent | React.PointerEvent | React.TouchEvent) => {
+            // Compute a nice initial position near the tap/click
+            let px = 24;
+            let py = 120;
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const native = (ev as any)?.nativeEvent ?? ev;
+                if (native) {
+                    if (typeof native.clientX === 'number') {
+                        px = native.clientX;
+                        py = native.clientY;
+                    } else if (native.touches && native.touches[0]) {
+                        px = native.touches[0].clientX;
+                        py = native.touches[0].clientY;
+                    }
+                }
+            } catch {
+                /* noop */
+            }
+            setPickerPos({ x: px, y: py });
+            setShowPicker(true);
+        },
+        [],
+    );
     const [selectedDay, setSelectedDay] = React.useState(startOfDay(date));
     React.useEffect(() => {
         if (open) setSelectedDay(startOfDay(date));
     }, [open, date]);
-    // Reutiliza hook padrão de agenda por dia (consistência com ScheduleModal)
-    const { items, loading, error } = useAppointments(selectedDay);
+    const [reloadKey, setReloadKey] = React.useState(0);
+    const [pendingOpen, setPendingOpen] = React.useState(false);
+    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
+        null,
+    );
+    const [detailsOpen, setDetailsOpen] = React.useState(false);
+    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
+        null,
+    );
+    const dayStart = React.useMemo(
+        () => startOfDay(selectedDay),
+        [selectedDay],
+    );
+    const dayEnd = React.useMemo(() => addDays(dayStart, 1), [dayStart]);
+    const { items, loading, error } = useAppointmentsRange(
+        dayStart,
+        dayEnd,
+        undefined,
+        reloadKey,
+    );
     const [statusFilter, setStatusFilter] = React.useState<
         'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing'
     >('all');
-    // Removido refresh manual: modal é somente leitura e se atualizará em reaberturas
 
     interface ClientLike {
         id: number;
@@ -57,10 +105,23 @@ export default function DailyAgendaModal({
         _end: Date;
         _isPast: boolean;
         _isOngoing: boolean;
-        client?: ClientLike;
+        client?: ClientLike | number;
     };
+    // Live 'now' to auto-update ongoing/past without user interaction
+    const [now, setNow] = React.useState<Date>(new Date());
+    React.useEffect(() => {
+        if (!open) return;
+        // Only tick when viewing the current day to save work
+        const isToday =
+            startOfDay(new Date()).getTime() ===
+            startOfDay(selectedDay).getTime();
+        if (!isToday) return;
+        const id = setInterval(() => setNow(new Date()), 5000); // tick every 5s
+        return () => clearInterval(id);
+    }, [open, selectedDay]);
+
     const enriched: EnrichedAppt[] = React.useMemo(() => {
-        const refNow = new Date();
+        const refNow = now;
         return items.map(a => {
             const _start = new Date(a.start_at);
             const _end = new Date(a.end_at);
@@ -83,10 +144,10 @@ export default function DailyAgendaModal({
                 _end,
                 _isPast,
                 _isOngoing,
-                client,
+                ...(client ? { client } : {}),
             } as EnrichedAppt;
         });
-    }, [items]);
+    }, [items, now]);
 
     const filtered = enriched.filter(a => {
         switch (statusFilter) {
@@ -121,7 +182,6 @@ export default function DailyAgendaModal({
 
     React.useEffect(() => {
         if (!open || !focusAppointmentId) return;
-        // scroll later after paint
         const id = focusAppointmentId;
         const to = setTimeout(() => {
             const el = document.querySelector(`[data-appt-id="${id}"]`);
@@ -130,208 +190,425 @@ export default function DailyAgendaModal({
         return () => clearTimeout(to);
     }, [open, focusAppointmentId, sorted]);
 
-    // badgeColor/statusLabel substituídos por <StatusBadge />
+    // QuickSchedule: abrir em modo edição ao tocar no cartão
+    const [qsOpen, setQsOpen] = React.useState(false);
+    const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
+    const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
+
+    function splitName(full?: string): { first: string; last: string } {
+        if (!full) return { first: 'Cliente', last: '' };
+        const parts = full.trim().split(/\s+/);
+        if (parts.length === 1) return { first: parts[0], last: '' };
+        const last = parts.pop() || '';
+        return { first: parts.join(' '), last };
+    }
+
+    function isClientLike(x: unknown): x is { id: number; name?: string } {
+        return (
+            typeof x === 'object' &&
+            x !== null &&
+            'id' in (x as Record<string, unknown>) &&
+            typeof (x as { id: unknown }).id === 'number'
+        );
+    }
+
+    function makeClientBasic(a: EnrichedAppt): ClientBasic {
+        const c: ClientLike | number | undefined = a.client as
+            | ClientLike
+            | number
+            | undefined;
+        const displayName = (isClientLike(c) && c.name) || a.client_name || '';
+        const { first, last } = splitName(displayName);
+        let clientId = 0;
+        if (typeof c === 'number') clientId = c;
+        else if (isClientLike(c)) clientId = c.id;
+        return {
+            id: clientId,
+            first_name: first,
+            last_name: last,
+            phone: '',
+            email: '',
+            next_appointment_id: a.id,
+            next_appointment_status: a.status,
+            next_appointment_start_at: a.start_at,
+            next_appointment_end_at: a.end_at,
+            next_appointment_title: a.title,
+            next_appointment_visit_type: a.visit_type,
+            next_appointment_notes: a.notes || null,
+        } as ClientBasic;
+    }
 
     return (
-        <AppModal open={open} onClose={onClose}>
+        <AppModal
+            open={open}
+            onClose={onClose}
+            fullScreen
+            actionsBarStyle={{
+                background: 'transparent',
+                boxShadow: 'none',
+                borderBottom: 'none',
+            }}
+            showCloseButton={false}
+            disableTopSafePadding
+        >
             <div
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 12,
-                    maxHeight: '80vh',
+                    gap: 16,
+                    height: '100%',
                 }}
             >
-                {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <button
-                        onClick={() => setSelectedDay(addDays(selectedDay, -1))}
-                        title='Dia anterior'
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: '#065f46',
-                        }}
-                    >
-                        <FaArrowLeft />
-                    </button>
-                    <div
-                        style={{
-                            fontWeight: 700,
-                            color: '#065f46',
-                            fontSize: 22,
-                        }}
-                    >
-                        {selectedDay.toLocaleDateString('pt-BR', {
-                            weekday: 'long',
-                            day: '2-digit',
-                            month: '2-digit',
-                        })}
-                    </div>
-                    <button
-                        onClick={() => setSelectedDay(addDays(selectedDay, 1))}
-                        title='Próximo dia'
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: '#065f46',
-                        }}
-                    >
-                        <FaArrowRight />
-                    </button>
-                    <button
-                        onClick={() => setSelectedDay(startOfDay(new Date()))}
-                        style={{
-                            marginLeft: 4,
-                            fontSize: 15,
-                            fontWeight: 600,
-                            padding: '6px 12px',
-                            border: '1px solid #065f46',
-                            background: 'white',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            color: '#065f46',
-                        }}
-                    >
-                        Hoje
-                    </button>
-                    <div style={{ marginLeft: 'auto' }}>
-                        <select
-                            value={statusFilter}
-                            onChange={e =>
-                                setStatusFilter(
-                                    e.target.value as typeof statusFilter,
-                                )
-                            }
+                {/* Sticky header com título + botão fechar inline */}
+                <div
+                    style={{
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 900,
+                        background: 'var(--color-bg)',
+                        borderBottom: '1px solid var(--color-border)',
+                        paddingTop: 'env(safe-area-inset-top, 0px)',
+                    }}
+                >
+                    <div style={{ display: 'grid', gap: 12, paddingBottom: 8 }}>
+                        <div
                             style={{
-                                fontSize: 14,
-                                padding: '6px 8px',
-                                background: '#f3f4f6',
-                                border: '1px solid #d1d5db',
-                                borderRadius: 6,
-                                color: '#374151',
-                                fontWeight: 500,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                minWidth: 0,
                             }}
                         >
-                            <option value='all'>Todos</option>
-                            <option value='active'>Ativos</option>
-                            <option value='ongoing'>Em andamento</option>
-                            <option value='past'>Vencidos</option>
-                            <option value='done'>Concluídos</option>
-                            <option value='canceled'>Cancelados</option>
-                        </select>
+                            <div
+                                style={{
+                                    fontWeight: 800,
+                                    fontSize: 'var(--font-title-lg)',
+                                    color: 'var(--color-heading)',
+                                }}
+                            >
+                                Agenda diária
+                            </div>
+                            <button
+                                type='button'
+                                aria-label='Fechar'
+                                onClick={onClose}
+                                style={{
+                                    width: 44,
+                                    height: 44,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    color: 'var(--color-heading)',
+                                    fontSize: 26,
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
                     </div>
                 </div>
-                {/* Body */}
-                <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
-                    {loading && (
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>
-                            Carregando…
-                        </div>
-                    )}
-                    {error && (
-                        <div style={{ fontSize: 12, color: '#b91c1c' }}>
-                            Erro: {error}
-                        </div>
-                    )}
-                    {!loading && !sorted.length && (
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>
-                            Nenhum compromisso neste dia.
-                        </div>
-                    )}
+                {/* Linha 2: Hoje + ícone calendário à esquerda, cluster central <- semana, dd/mm ->, espelho à direita para manter centro */}
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                    {/* Bloco esquerdo: Hoje + calendário */}
                     <div
                         style={{
                             display: 'flex',
-                            flexDirection: 'column',
-                            gap: 8,
+                            alignItems: 'center',
+                            gap: 16,
                         }}
                     >
-                        {sorted.map(a => (
-                            <div
-                                key={a.id}
-                                data-appt-id={a.id}
-                                style={{
-                                    display: 'flex',
-                                    gap: 8,
-                                    alignItems: 'stretch',
-                                }}
-                            >
-                                <TimeRangeLabel
-                                    start={a._start}
-                                    end={a._end}
-                                    size='lg'
-                                    style={{
-                                        width: 78,
-                                        textAlign: 'right',
-                                        paddingTop: 4,
-                                        color: '#1f2937',
-                                    }}
-                                />
-                                <AppointmentCard
-                                    appt={a}
-                                    onClick={appt =>
-                                        onEditAppointment?.(appt as Appointment)
-                                    }
-                                    // Destaca visualmente se for o foco inicial
-                                    highlight={focusAppointmentId === a.id}
-                                    showNotes
-                                    style={{ flex: 1 }}
-                                />
-                            </div>
-                        ))}
+                        <button
+                            onClick={() =>
+                                setSelectedDay(startOfDay(new Date()))
+                            }
+                            style={{
+                                fontSize: 'var(--font-body)',
+                                fontWeight: 700,
+                                padding: '4px 10px',
+                                border: '1px solid var(--color-success-darker)',
+                                background: 'var(--color-success-dark)',
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                color: 'white',
+                            }}
+                            aria-label='Ir para hoje'
+                        >
+                            Hoje
+                        </button>
+                        <button
+                            type='button'
+                            onClick={openDatePicker}
+                            title='Abrir calendário'
+                            aria-label='Abrir calendário'
+                            style={{
+                                width: 32,
+                                height: 32,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-success-dark)',
+                                fontSize: 'var(--icon-size-lg)',
+                                userSelect: 'none',
+                            }}
+                        >
+                            <FaCalendarAlt />
+                        </button>
                     </div>
+                    {/* Cluster central: <-  semana, dd/mm  -> */}
+                    <div
+                        style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 12,
+                        }}
+                    >
+                        <button
+                            onClick={() =>
+                                setSelectedDay(addDays(selectedDay, -1))
+                            }
+                            title='Dia anterior'
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-success-dark)',
+                                width: 36,
+                                height: 36,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 'var(--icon-size-lg)',
+                            }}
+                            aria-label='Dia anterior'
+                        >
+                            <FaArrowLeft />
+                        </button>
+                        <button
+                            type='button'
+                            onClick={openDatePicker}
+                            title='Selecionar data'
+                            aria-label='Selecionar data'
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-success-dark)',
+                                fontWeight: 800,
+                                fontSize: 'var(--font-title-md)',
+                                whiteSpace: 'nowrap',
+                                userSelect: 'none',
+                            }}
+                        >
+                            {selectedDay.toLocaleDateString('pt-BR', {
+                                weekday: 'long',
+                                day: '2-digit',
+                                month: '2-digit',
+                            })}
+                        </button>
+                        <button
+                            onClick={() =>
+                                setSelectedDay(addDays(selectedDay, 1))
+                            }
+                            title='Próximo dia'
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-success-dark)',
+                                width: 36,
+                                height: 36,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 'var(--icon-size-lg)',
+                            }}
+                            aria-label='Próximo dia'
+                        >
+                            <FaArrowRight />
+                        </button>
+                    </div>
+                    {/* Hidden native input removido – usamos FloatingDatePicker para consistência */}
                 </div>
-                {/* Footer / stats simples */}
+                {/* Linha 3: apenas filtro de status (Hoje movido para a linha da data) */}
                 <div
                     style={{
                         display: 'flex',
-                        gap: 20,
-                        fontSize: 13,
-                        color: '#1f2937',
-                        paddingTop: 6,
-                        borderTop: '1px solid var(--color-border)',
-                        fontWeight: 600,
+                        alignItems: 'center',
+                        gap: 10,
                         flexWrap: 'wrap',
                     }}
                 >
-                    <span>
-                        Total: <strong>{sorted.length}</strong>
-                    </span>
-                    <span>
-                        Ativos:{' '}
-                        <strong>
-                            {
-                                sorted.filter(
-                                    a => a.status === 'scheduled' && !a._isPast,
-                                ).length
-                            }
-                        </strong>
-                    </span>
-                    <span>
-                        Vencidos:{' '}
-                        <strong>
-                            {
-                                sorted.filter(
-                                    a => a.status === 'scheduled' && a._isPast,
-                                ).length
-                            }
-                        </strong>
-                    </span>
-                    <span>
-                        Concluídos:{' '}
-                        <strong>
-                            {sorted.filter(a => a.status === 'done').length}
-                        </strong>
-                    </span>
-                    <span>
-                        Cancelados:{' '}
-                        <strong>
-                            {sorted.filter(a => a.status === 'canceled').length}
-                        </strong>
-                    </span>
+                    <select
+                        value={statusFilter}
+                        onChange={e =>
+                            setStatusFilter(
+                                e.target.value as typeof statusFilter,
+                            )
+                        }
+                        style={{
+                            fontSize: 'var(--font-body)',
+                            padding: '6px 8px',
+                            background: 'var(--color-pending-bg)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 6,
+                            color: 'var(--color-text)',
+                            fontWeight: 500,
+                        }}
+                        aria-label='Filtro de status'
+                    >
+                        <option value='all'>Todos</option>
+                        <option value='active'>Ativos</option>
+                        <option value='ongoing'>Em andamento</option>
+                        <option value='past'>Pendentes</option>
+                        <option value='done'>Concluídos</option>
+                        <option value='canceled'>Cancelados</option>
+                    </select>
                 </div>
+                {/* Resumo removido conforme solicitado para reduzir informação */}
+                {/* Lista */}
+                <div
+                    style={{
+                        overflow: 'auto',
+                        paddingTop: 8,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                    }}
+                >
+                    {error && (
+                        <div style={{ color: 'var(--color-danger)' }}>
+                            Erro ao carregar: {String(error)}
+                        </div>
+                    )}
+                    {loading && <div>Carregando…</div>}
+                    {!loading && sorted.length === 0 && (
+                        <div>Nenhum agendamento para este dia.</div>
+                    )}
+                    {!loading &&
+                        sorted.map(a => {
+                            const isActive =
+                                a.status === 'scheduled' && !a._isPast;
+                            const isPending =
+                                a.status === 'scheduled' && a._isPast;
+                            return (
+                                <div
+                                    key={a.id}
+                                    data-appt-id={a.id}
+                                    style={{
+                                        display: 'flex',
+                                        gap: 10,
+                                        alignItems: 'flex-start',
+                                    }}
+                                >
+                                    <TimeRangeLabel
+                                        start={a.start_at}
+                                        end={a.end_at}
+                                        size='md'
+                                    />
+                                    <div
+                                        style={{
+                                            flex: 1,
+                                            minWidth: 0,
+                                            width: '100%',
+                                            // ~10% wider and responsive to viewport: cap by min(px, %)
+                                            maxWidth: 'min(704px, 94%)',
+                                        }}
+                                    >
+                                        <AppointmentCard
+                                            appt={a}
+                                            style={{ padding: '6px 8px' }}
+                                            onClick={
+                                                isActive
+                                                    ? () => {
+                                                          const client =
+                                                              makeClientBasic(
+                                                                  a,
+                                                              );
+                                                          setQsClient(client);
+                                                          setQsEdit(a);
+                                                          setQsOpen(true);
+                                                      }
+                                                    : isPending
+                                                    ? () => {
+                                                          setPendingAppt(a);
+                                                          setPendingOpen(true);
+                                                      }
+                                                    : undefined
+                                            }
+                                            onDetails={
+                                                a.status === 'done'
+                                                    ? appt => {
+                                                          setDetailsAppt(
+                                                              appt as Appointment,
+                                                          );
+                                                          setDetailsOpen(true);
+                                                      }
+                                                    : undefined
+                                            }
+                                            highlight={
+                                                focusAppointmentId === a.id
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                </div>
+                {/* FloatingDatePicker consistente com QuickSchedule */}
+                <FloatingDatePicker
+                    open={showPicker}
+                    onClose={() => setShowPicker(false)}
+                    selectedDate={selectedDay}
+                    onChange={d => {
+                        setSelectedDay(startOfDay(d));
+                        setShowPicker(false);
+                    }}
+                    initialPosition={pickerPos}
+                />
+                {/* QuickScheduleModal para edição */}
+                {qsOpen && qsClient && (
+                    <QuickScheduleModal
+                        open={qsOpen}
+                        onClose={() => setQsOpen(false)}
+                        client={qsClient}
+                        editAppointment={qsEdit}
+                        afterPersist={() => {
+                            setQsOpen(false);
+                            setReloadKey(x => x + 1); // força recarregar agenda diária
+                        }}
+                    />
+                )}
+                {pendingOpen && pendingAppt && (
+                    <PendingActionsModal
+                        open={pendingOpen}
+                        onClose={() => {
+                            setPendingOpen(false);
+                            setPendingAppt(null);
+                            setReloadKey(x => x + 1); // recarrega após ação
+                        }}
+                        appt={pendingAppt}
+                    />
+                )}
+                {detailsOpen && detailsAppt && (
+                    <AppointmentDetailsModal
+                        open={detailsOpen}
+                        onClose={() => {
+                            setDetailsOpen(false);
+                            setDetailsAppt(null);
+                        }}
+                        appt={detailsAppt}
+                    />
+                )}
             </div>
         </AppModal>
     );
