@@ -214,6 +214,79 @@ export default function ClientCard({
         setShowPendingActions(true);
     }, [client]);
 
+    // Verifica no servidor se existe ALGUM compromisso agendado que já terminou (pendente)
+    const detectAnyPendingFromServer =
+        React.useCallback(async (): Promise<SharedAppointmentLike | null> => {
+            try {
+                const token = localStorage.getItem('accessToken') || '';
+                if (!token) return null;
+                // Busca últimos agendados e verifica se algum já terminou
+                const url = `${API_BASE}/agenda/appointments/?client=${client.id}&status=scheduled&ordering=-end_at&limit=20`;
+                const r = await fetch(url, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!r.ok) return null;
+                const data = (await r.json()) as Array<{
+                    id: number;
+                    start_at: string;
+                    end_at: string;
+                    status: 'scheduled' | 'done' | 'canceled';
+                    title?: string;
+                    notes?: string;
+                    client?: { id: number; name?: string } | number;
+                }>;
+                if (!Array.isArray(data) || !data.length) return null;
+                const nowMs = now.getTime();
+                const pending = data.find(
+                    ap =>
+                        new Date(ap.end_at).getTime() <= nowMs &&
+                        ap.status === 'scheduled',
+                );
+                if (!pending) return null;
+                const ap = pending;
+                const appt: SharedAppointmentLike = {
+                    id: ap.id,
+                    start_at: ap.start_at,
+                    end_at: ap.end_at,
+                    status: 'scheduled',
+                    title: ap.title,
+                    notes: ap.notes,
+                    client:
+                        typeof ap.client === 'number'
+                            ? ap.client
+                            : ap.client?.id || client.id,
+                    client_name:
+                        (typeof ap.client === 'object' &&
+                        ap.client &&
+                        'name' in ap.client
+                            ? String(
+                                  (ap.client as { name?: string }).name || '',
+                              )
+                            : undefined) ||
+                        `${client.first_name} ${client.last_name}`.trim(),
+                };
+                return appt;
+            } catch {
+                return null;
+            }
+        }, [client.id, client.first_name, client.last_name, now]);
+
+    // Fluxo: tenta abrir pendência; se não houver, cai para QuickSchedule
+    const tryOpenPendingElseQuick = React.useCallback(async () => {
+        if (isPending) {
+            openPendingActions();
+            return;
+        }
+        const appt = await detectAnyPendingFromServer();
+        if (appt) {
+            setPendingAppt(appt);
+            setShowPendingActions(true);
+            return;
+        }
+        setEditingAppt(null);
+        setShowQuick(true);
+    }, [isPending, openPendingActions, detectAnyPendingFromServer]);
+
     const hasAgendaLine = isScheduled || isOngoing; // mantém a linha visível durante a janela em andamento
     // Estilos centralizados via hook: mantém regra de cartão branco durante atendimento
     const {
@@ -662,9 +735,9 @@ export default function ClientCard({
                                 <button
                                     className={styles.iconButton}
                                     title={title}
-                                    disabled={limitReached || isPending}
+                                    disabled={limitReached}
                                     style={
-                                        limitReached || isPending
+                                        limitReached
                                             ? {
                                                   opacity: 0.45,
                                                   cursor: 'not-allowed',
@@ -695,9 +768,10 @@ export default function ClientCard({
                                             }
                                             return;
                                         }
-                                        // Abrir QuickSchedule diretamente (uniformizar comportamento)
-                                        setEditingAppt(null);
-                                        setShowQuick(true);
+                                        // Verifica no servidor se há pendência; se não houver, abre QuickSchedule
+                                        (async () => {
+                                            await tryOpenPendingElseQuick();
+                                        })();
                                     }}
                                 >
                                     <FaPlus color={iconColor} />
@@ -1057,9 +1131,9 @@ export default function ClientCard({
                                 <button
                                     className={styles.iconButton}
                                     title={title}
-                                    disabled={limitReached || isPending}
+                                    disabled={limitReached}
                                     style={
-                                        limitReached || isPending
+                                        limitReached
                                             ? {
                                                   opacity: 0.45,
                                                   cursor: 'not-allowed',
@@ -1090,9 +1164,10 @@ export default function ClientCard({
                                             }
                                             return;
                                         }
-                                        // Abrir QuickSchedule diretamente em todos os dispositivos
-                                        setEditingAppt(null);
-                                        setShowQuick(true);
+                                        // Verifica no servidor se há pendência; se não houver, abre QuickSchedule
+                                        (async () => {
+                                            await tryOpenPendingElseQuick();
+                                        })();
                                     }}
                                 >
                                     <FaPlus color={iconColor} />
@@ -1140,15 +1215,6 @@ export default function ClientCard({
                     maxFutureAppointments={getMaxScheduledPerClient()}
                     afterPersist={() => {
                         // Atualizar clientes para refletir dados do próximo compromisso
-                        {
-                            showPendingActions && pendingAppt && (
-                                <PendingActionsModal
-                                    open={showPendingActions}
-                                    onClose={() => setShowPendingActions(false)}
-                                    appt={pendingAppt}
-                                />
-                            );
-                        }
                         window.dispatchEvent(new Event('updateClients'));
                         // Agora FECHA também em edição conforme solicitado (uniformizar experiência)
                         setShowQuick(false);
@@ -1171,6 +1237,13 @@ export default function ClientCard({
                             }
                         }, 50);
                     }}
+                />
+            )}
+            {showPendingActions && pendingAppt && (
+                <PendingActionsModal
+                    open={showPendingActions}
+                    onClose={() => setShowPendingActions(false)}
+                    appt={pendingAppt}
                 />
             )}
             {showSchedule && (
