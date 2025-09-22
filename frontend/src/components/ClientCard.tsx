@@ -26,6 +26,8 @@ import { useOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import { track } from '../utils/telemetry';
 import PendingActionsModal from './PendingActionsModal';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
+import FinalizeButton from './clientCard/FinalizeButton';
+import FutureAppointmentsList from './clientCard/FutureAppointmentsList';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
 
@@ -52,7 +54,6 @@ export default function ClientCard({
     const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
         null,
     );
-    // Próximos compromissos além do próximo principal
     const [futureAppointments, setFutureAppointments] = React.useState<
         Appointment[]
     >([]);
@@ -60,9 +61,6 @@ export default function ClientCard({
     const [pressed, setPressed] = React.useState(false);
     const [finishing, setFinishing] = React.useState(false);
     // Refresh time-based UI every 30s while visible (lightweight)
-    {
-        /** Botão responsivo: alterna entre 'Editar' e 'Sair' conforme estado inlineEdit */
-    }
     const now = useNow(30000);
     // start derivado como Date não é necessário; mantemos ISO para o snapshot
     // end derivado não é necessário para estilização; snapshot usa ISO strings
@@ -110,12 +108,12 @@ export default function ClientCard({
                 const r = await fetch(url, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                if (!r.ok) return;
                 const data = (await r.json()) as Appointment[];
-                if (cancelled) return;
-                setOverrideOngoing(
-                    Array.isArray(data) && data.length ? data[0] : null,
-                );
+                if (!cancelled) {
+                    setOverrideOngoing(
+                        Array.isArray(data) && data.length ? data[0] : null,
+                    );
+                }
             } catch {
                 if (!cancelled) setOverrideOngoing(null);
             }
@@ -299,7 +297,28 @@ export default function ClientCard({
     } = useClientCardStyle({ isOngoing, selected, pressed, isScheduled });
     const cardRef = React.useRef<HTMLDivElement | null>(null);
 
-    async function finalizeCurrentAppointment(): Promise<void> {
+    // Checagem de capacidade do backend para finalizar antecipadamente
+    const checkEarlyFinalizeSupported = React.useCallback(
+        async (apptId: number): Promise<boolean> => {
+            try {
+                const token = localStorage.getItem('accessToken') || '';
+                const headers: Record<string, string> = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const url = `${API_BASE}/agenda/appointments/${apptId}/finalize/`;
+                const r = await fetch(url, { method: 'OPTIONS', headers });
+                if (r.ok) return true;
+                if ([404, 405].includes(r.status)) return false;
+                return false;
+            } catch {
+                return false;
+            }
+        },
+        [],
+    );
+
+    async function finalizeCurrentAppointment(
+        openPendingAfter?: boolean,
+    ): Promise<void> {
         const apptId =
             client.next_appointment_id ?? overrideOngoing?.id ?? null;
         if (!apptId || finishing) return;
@@ -376,6 +395,18 @@ export default function ClientCard({
             } catch {
                 /* noop */
             }
+            // Após finalizar adiantado, abrir o modal de ações de pendência (se houver)
+            if (openPendingAfter) {
+                try {
+                    const appt = await detectAnyPendingFromServer();
+                    if (appt) {
+                        setPendingAppt(appt);
+                        setShowPendingActions(true);
+                    }
+                } catch {
+                    /* noop */
+                }
+            }
         } catch (e) {
             const msg =
                 e && typeof e === 'object' && 'message' in e
@@ -399,6 +430,18 @@ export default function ClientCard({
             setFinishing(false);
         }
     }
+
+    // Wrapper que leva em conta o suporte do backend para "antecipação"
+    const finalizeEarlyAware = React.useCallback(async () => {
+        const apptId = effectiveApptId;
+        if (!apptId) return;
+        const earlyFinish = isOngoing;
+        let openPendingAfter = false;
+        if (earlyFinish) {
+            openPendingAfter = await checkEarlyFinalizeSupported(apptId);
+        }
+        await finalizeCurrentAppointment(openPendingAfter);
+    }, [effectiveApptId, isOngoing, checkEarlyFinalizeSupported]);
     // Fechar modo edição ao clicar fora do card
     // Efeito de clique fora removido enquanto editor inline está desativado
     // Borda e fundo já definidos no hook (containerStyle)
@@ -908,44 +951,26 @@ export default function ClientCard({
                             }}
                         >
                             {isOngoing && (
-                                <button
-                                    className={`${styles.actionButton} ${styles.actionPrimary}`}
-                                    title={
-                                        finishing
-                                            ? 'Finalizando…'
-                                            : 'Finalizar atendimento'
-                                    }
-                                    disabled={finishing || !effectiveApptId}
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        let prevented = false;
-                                        try {
-                                            const ev = new CustomEvent(
-                                                'confirmFinalizeAppointment',
-                                                {
-                                                    detail: {
-                                                        clientId: client.id,
-                                                        appointmentId:
-                                                            effectiveApptId,
-                                                        proceed: () =>
-                                                            finalizeCurrentAppointment(),
-                                                    },
-                                                    cancelable: true,
-                                                },
-                                            );
-                                            prevented =
-                                                !window.dispatchEvent(ev);
-                                        } catch {
-                                            /* noop */
-                                        }
-                                        if (!prevented) {
-                                            void finalizeCurrentAppointment();
-                                        }
+                                <FinalizeButton
+                                    finishing={finishing}
+                                    disabled={!effectiveApptId}
+                                    isEarly={isOngoing}
+                                    clientId={client.id}
+                                    appointmentId={effectiveApptId}
+                                    onFinalize={async () => {
+                                        const earlyFinish = isOngoing;
+                                        // Checa suporte para abrir pendências após finalizar antecipadamente
+                                        const openAfter =
+                                            earlyFinish && effectiveApptId
+                                                ? await checkEarlyFinalizeSupported(
+                                                      effectiveApptId,
+                                                  )
+                                                : false;
+                                        await finalizeCurrentAppointment(
+                                            openAfter,
+                                        );
                                     }}
-                                    style={{ fontWeight: 700 }}
-                                >
-                                    {finishing ? 'Finalizando…' : 'Finalizar'}
-                                </button>
+                                />
                             )}
                             {/* Botão 'Editar' removido: editar agora via ícone na linha de Data */}
                         </div>
@@ -1074,6 +1099,7 @@ export default function ClientCard({
                             onClick={e => {
                                 e.stopPropagation();
                                 let prevented = false;
+                                const earlyFinish = isOngoing; // finalizar antes do horário previsto (consulta ainda em andamento)
                                 try {
                                     const ev = new CustomEvent(
                                         'confirmFinalizeAppointment',
@@ -1082,7 +1108,9 @@ export default function ClientCard({
                                                 clientId: client.id,
                                                 appointmentId: effectiveApptId,
                                                 proceed: () =>
-                                                    finalizeCurrentAppointment(),
+                                                    finalizeCurrentAppointment(
+                                                        earlyFinish,
+                                                    ),
                                             },
                                             cancelable: true,
                                         },
@@ -1091,8 +1119,17 @@ export default function ClientCard({
                                 } catch {
                                     /* noop */
                                 }
-                                if (!prevented)
-                                    void finalizeCurrentAppointment();
+                                if (!prevented) {
+                                    if (earlyFinish) {
+                                        const ok = window.confirm(
+                                            'Finalizar a consulta antes do horário previsto?',
+                                        );
+                                        if (!ok) return;
+                                    }
+                                    void finalizeCurrentAppointment(
+                                        earlyFinish,
+                                    );
+                                }
                             }}
                             style={{ fontWeight: 700 }}
                         >
@@ -1275,185 +1312,17 @@ export default function ClientCard({
                             gap: 4,
                         }}
                     >
-                        {futureAppointments.slice(0, 7).map(f => {
-                            const s = new Date(f.start_at);
-                            const e = new Date(f.end_at);
-                            const wd = s
-                                .toLocaleDateString('pt-BR', {
-                                    weekday: 'short',
-                                })
-                                .replace('.', '')
-                                .replace(/\b(\w)/, c => c.toUpperCase());
-                            const dd = String(s.getDate()).padStart(2, '0');
-                            const mm = String(s.getMonth() + 1).padStart(
-                                2,
-                                '0',
-                            );
-                            const fmt = (d: Date) =>
-                                d.toLocaleTimeString('pt-BR', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                });
-                            const rowSelected = false; // placeholder if futuramente marcar seleção
-                            // Sem exibir título aqui — foco em data/horário compactos
-                            return (
-                                <div
-                                    key={f.id}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: 8,
-                                        padding: '6px 8px',
-                                        background: rowSelected
-                                            ? 'var(--color-selected-bg)'
-                                            : 'var(--card-bg)',
-                                        border: rowSelected
-                                            ? '1px solid var(--color-selected-border)'
-                                            : '1px solid var(--color-border)',
-                                        borderRadius: 6,
-                                        // fontSize alinhado ao restante do cartão (removido valor fixo anterior)
-                                        lineHeight: 1.25,
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            flex: 1,
-                                            minWidth: 0,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 6,
-                                            overflow: 'hidden',
-                                        }}
-                                    >
-                                        <span
-                                            style={{
-                                                fontWeight: 600,
-                                                color: '#065f46',
-                                                whiteSpace: 'nowrap',
-                                            }}
-                                        >
-                                            {wd} {dd}/{mm}
-                                        </span>
-                                        <span
-                                            style={{
-                                                color: valueColor,
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                            }}
-                                        >
-                                            {fmt(s)} - {fmt(e)}
-                                        </span>
-                                    </div>
-                                    <button
-                                        className={styles.iconButton}
-                                        title='Ver detalhes do compromisso'
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            fetch(
-                                                `${API_BASE}/agenda/appointments/${f.id}/`,
-                                                {
-                                                    headers: {
-                                                        Authorization: token
-                                                            ? `Bearer ${token}`
-                                                            : '',
-                                                    },
-                                                },
-                                            )
-                                                .then(r =>
-                                                    r.ok ? r.json() : null,
-                                                )
-                                                .then(data => {
-                                                    const appt = data || f;
-                                                    try {
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'openAppointmentDetails',
-                                                                {
-                                                                    detail: {
-                                                                        appointment:
-                                                                            appt,
-                                                                    },
-                                                                },
-                                                            ),
-                                                        );
-                                                    } catch {
-                                                        /* noop */
-                                                    }
-                                                })
-                                                .catch(() => {
-                                                    window.dispatchEvent(
-                                                        new CustomEvent(
-                                                            'openAppointmentDetails',
-                                                            {
-                                                                detail: {
-                                                                    appointment:
-                                                                        f,
-                                                                },
-                                                            },
-                                                        ),
-                                                    );
-                                                });
-                                        }}
-                                    >
-                                        <FaEye color={iconColor} />
-                                    </button>
-                                    <button
-                                        className={styles.iconButton}
-                                        title='Editar este compromisso'
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            fetch(
-                                                `${API_BASE}/agenda/appointments/${f.id}/`,
-                                                {
-                                                    headers: {
-                                                        Authorization: token
-                                                            ? `Bearer ${token}`
-                                                            : '',
-                                                    },
-                                                },
-                                            )
-                                                .then(r =>
-                                                    r.ok ? r.json() : null,
-                                                )
-                                                .then(data => {
-                                                    setEditingAppt(data);
-                                                    setShowQuick(true);
-                                                })
-                                                .catch(() => {
-                                                    setEditingAppt({
-                                                        ...f,
-                                                    } as Appointment);
-                                                    setShowQuick(true);
-                                                });
-                                        }}
-                                    >
-                                        <FaEdit color={iconColor} />
-                                    </button>
-                                </div>
-                            );
-                        })}
-                        {futureAppointments.length > 7 && (
-                            <div
-                                style={{
-                                    fontSize: 11,
-                                    color: '#6b7280',
-                                    padding: '2px 4px',
-                                }}
-                            >
-                                + {futureAppointments.length - 7} outros
-                                agendados
-                            </div>
-                        )}
+                        <FutureAppointmentsList
+                            items={futureAppointments}
+                            valueColor={valueColor}
+                            iconColor={iconColor}
+                            labelColor={labelColor}
+                            clientId={client.id}
+                            onEdit={(appt: Appointment) => {
+                                setEditingAppt(appt);
+                                setShowQuick(true);
+                            }}
+                        />
                         {loadingFuture && (
                             <div style={{ fontSize: 11, color: '#6b7280' }}>
                                 Carregando…

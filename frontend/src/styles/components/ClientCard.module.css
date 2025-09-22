@@ -203,4 +203,6 @@
     );
     /* Preferred: keep hue, slightly lighter on press */
     background-color: color-mix(in srgb, var(--color-ongoing) 94%, white 6%);
+    /* Avoid visual size shift on press for primary action */
+    transform: none !important;
 }
