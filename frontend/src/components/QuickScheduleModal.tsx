@@ -1016,6 +1016,56 @@ export default function QuickScheduleModal({
                     />
                 </label>
                 {/* Day agenda list (header sticky) */}
+                {/* Top actions bar to keep primary actions visible before a long list */}
+                <div
+                    style={{
+                        display: 'flex',
+                        gap: 8,
+                        justifyContent: 'flex-end',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 5,
+                        paddingTop: 6,
+                        paddingBottom: 6,
+                        background: 'var(--color-bg)',
+                    }}
+                >
+                    <button
+                        onClick={handleImmediateClose}
+                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
+                        disabled={saving}
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        style={{
+                            padding: '8px 12px',
+                            background: '#059669',
+                            color: '#fff',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 8,
+                        }}
+                        disabled={saving}
+                    >
+                        {saving && (
+                            <span
+                                style={{
+                                    width: 14,
+                                    height: 14,
+                                    borderRadius: '50%',
+                                    border: '2px solid rgba(255,255,255,0.6)',
+                                    borderTopColor: 'rgba(255,255,255,1)',
+                                    animation: 'qsSpin 0.8s linear infinite',
+                                }}
+                            />
+                        )}
+                        {saving ? 'Salvando...' : isEdit ? 'Salvar' : 'Criar'}
+                    </button>
+                </div>
+
+                {/* Day agenda list (header sticky) */}
                 <div
                     style={{
                         marginTop: 4,
