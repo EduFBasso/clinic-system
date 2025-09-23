@@ -70,7 +70,7 @@ describe('AppointmentCard', () => {
         expect(onUseTime).toHaveBeenCalledWith(appt);
     });
 
-    it('enables edit/cancel when scheduled future; disables when past', () => {
+    it('shows edit/cancel when futuro; oculta quando passado', () => {
         const future = makeAppt({
             start_at: new Date(Date.now() + 10 * 60_000).toISOString(),
             end_at: new Date(Date.now() + 20 * 60_000).toISOString(),
@@ -101,15 +101,15 @@ describe('AppointmentCard', () => {
         expect(onCancel).toHaveBeenCalledTimes(1);
         confirmSpy.mockRestore();
 
-        // Rerender as past -> buttons disabled
+        // Rerender como passado -> botões deixam de existir (fluxo atual remove ações em vez de deixar disabled)
         rerender(
             <AppointmentCard appt={past} onEdit={onEdit} onCancel={onCancel} />,
         );
-        expect(screen.getByTitle(/Edit appointment/i)).toHaveAttribute(
-            'disabled',
-        );
-        expect(screen.getByTitle(/Cancel appointment/i)).toHaveAttribute(
-            'disabled',
-        );
+        expect(
+            screen.queryByTitle(/Edit appointment/i),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByTitle(/Cancel appointment/i),
+        ).not.toBeInTheDocument();
     });
 });
