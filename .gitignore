@@ -26,8 +26,11 @@ info/*
 
 # Python virtual environments
 venv/
+.venv/
 backend/venv*/
+backend/.venv*/
 frontend/venv*/
+frontend/.venv*/
 
 # Collected static files and python cache
 backend/staticfiles/
