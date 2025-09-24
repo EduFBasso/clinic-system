@@ -118,3 +118,44 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         if not obj:
             return Response({"detail": "no-upcoming"})
         return Response(self.get_serializer(obj).data)
+
+    @action(detail=True, methods=["post"], url_path="finalize")
+    def finalize(self, request, pk=None):
+        """Conclui o compromisso como 'done' sem permitir edição geral.
+
+        Regras:
+        - Apenas o profissional dono pode concluir.
+        - Só é permitido se o status atual for 'scheduled'.
+        - Permite finalização antecipada durante a janela em andamento (start_at <= now < end_at).
+          Não permite antes do início.
+        - Ajusta o fim (end_at) SOMENTE se ainda em andamento (now < end_at) para refletir duração real.
+          Se o compromisso já terminou (now >= end_at) mantemos o fim planejado.
+        """
+        obj = self.get_object()
+        # Permissão explícita
+        if getattr(request.user, "id", None) != getattr(obj.professional, "id", None):
+            return Response({"detail": "forbidden"}, status=403)
+        if obj.status == obj.Status.DONE:
+            # idempotente
+            return Response(self.get_serializer(obj).data, status=200)
+        if obj.status == obj.Status.CANCELED:
+            return Response({"detail": "compromisso cancelado não pode ser concluído"}, status=400)
+
+        now = timezone.now()
+        if obj.start_at and now < obj.start_at:
+            # 422 sinaliza regra de negócio
+            return Response({"detail": "compromisso ainda não iniciou", "code": "too_early"}, status=422)
+
+        # Marca como concluído; encurta end_at apenas se em andamento
+        obj.status = obj.Status.DONE
+        if obj.end_at and now < obj.end_at:
+            obj.end_at = now
+            if obj.start_at and obj.end_at <= obj.start_at:
+                obj.end_at = obj.start_at
+        obj.save(update_fields=["status", "end_at", "updated_at"])
+        return Response(self.get_serializer(obj).data, status=200)
+
+    @action(detail=True, methods=["post"], url_path="done")
+    def done(self, request, pk=None):
+        """Alias para finalize, por compatibilidade no frontend."""
+        return self.finalize(request, pk)

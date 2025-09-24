@@ -2,7 +2,17 @@
 
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Home from '../src/pages/Home';
-import DesktopAgendaPage from './pages/DesktopAgendaPage';
+// DesktopAgendaPage carregado de forma lazy; se falhar import (arquivo ausente na branch remota), renderiza Home.
+import React from 'react';
+const LazyDesktopAgenda: React.ComponentType = React.lazy(async () => {
+    try {
+        return (await import('./pages/DesktopAgendaPage')) as unknown as {
+            default: React.ComponentType;
+        };
+    } catch {
+        return { default: () => null } as { default: React.ComponentType };
+    }
+});
 import ClientFormPage from './pages/Clients/ClientFormPage';
 import { ServerTimeProvider } from './contexts/ServerTimeContext';
 
@@ -23,7 +33,14 @@ function App() {
                     {/** Rota /schedule removida para unificar experiência via modais */}
                     {/* Rota /agenda/settings removida */}
                     {/* Desktop unified agenda page */}
-                    <Route path='/desktop' element={<DesktopAgendaPage />} />
+                    <Route
+                        path='/desktop'
+                        element={
+                            <React.Suspense fallback={<div />}>
+                                <LazyDesktopAgenda />
+                            </React.Suspense>
+                        }
+                    />
                 </Routes>
             </Router>
         </ServerTimeProvider>
