@@ -1,391 +1,219 @@
 import React from 'react';
-import styles from '../styles/components/InlineAppointmentEditor.module.css';
+import FloatingDatePicker from './FloatingDatePicker';
+import TimePicker10 from './TimePicker10';
 import { API_BASE } from '../config/api';
-import { isTokenExpired } from '../utils/jwt';
-import type { ClientBasic } from '../types/ClientBasic';
+import type { Appointment } from '../hooks/useAppointments';
 
-interface InlineAppointmentEditorProps {
-    client: ClientBasic;
-    onClose: () => void;
-    onSaved?: () => void;
+export interface InlineAppointmentEditorProps {
+    /** Preferred prop name */
+    appt?: Appointment;
+    /** Legacy prop name for compatibility */
+    appointment?: Appointment;
+    onCancel: () => void;
+    onSaved: (updated: Appointment) => void;
 }
 
-function toDateInputValue(d: Date) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-        2,
-        '0',
-    )}-${String(d.getDate()).padStart(2, '0')}`;
+function pad2(n: number) {
+    return String(n).padStart(2, '0');
 }
 
-type Part =
-    | 'date'
-    | 'startHour'
-    | 'startMinute'
-    | 'endHour'
-    | 'endMinute'
-    | null;
+function toISO(date: Date, hm: string) {
+    const [hh, mm] = hm.split(':').map(n => parseInt(n, 10));
+    const d = new Date(date);
+    d.setHours(hh || 0, mm || 0, 0, 0);
+    return d.toISOString();
+}
 
 export default function InlineAppointmentEditor({
-    client,
-    onClose,
+    appt,
+    appointment,
+    onCancel,
     onSaved,
 }: InlineAppointmentEditorProps) {
-    const existingStart = React.useMemo(
-        () =>
-            client.next_appointment_start_at
-                ? new Date(client.next_appointment_start_at)
-                : null,
-        [client.next_appointment_start_at],
+    const effective = (appt || appointment) as Appointment | undefined;
+    const start = new Date(effective ? effective.start_at : Date.now());
+    const end = new Date(effective ? effective.end_at : Date.now());
+    const [date, setDate] = React.useState<Date>(new Date(start));
+    const [showPicker, setShowPicker] = React.useState(false);
+    const [pickerPos, setPickerPos] = React.useState<
+        { x: number; y: number } | undefined
+    >();
+    const [startHM, setStartHM] = React.useState(
+        `${pad2(start.getHours())}:${pad2(start.getMinutes())}`,
     );
-    const existingEnd = React.useMemo(
-        () =>
-            client.next_appointment_end_at
-                ? new Date(client.next_appointment_end_at)
-                : null,
-        [client.next_appointment_end_at],
+    const [endHM, setEndHM] = React.useState(
+        `${pad2(end.getHours())}:${pad2(end.getMinutes())}`,
     );
-    const baseline = new Date();
-    baseline.setMinutes(0, 0, 0);
-    baseline.setHours(baseline.getHours() + 1);
-    const [date, setDate] = React.useState<string>(() =>
-        toDateInputValue(existingStart || baseline),
-    );
-    const [startHour, setStartHour] = React.useState<number>(() =>
-        existingStart ? existingStart.getHours() : baseline.getHours(),
-    );
-    const [startMinute, setStartMinute] = React.useState<number>(() =>
-        existingStart ? existingStart.getMinutes() : 0,
-    );
-    const [endHour, setEndHour] = React.useState<number>(() =>
-        existingEnd
-            ? existingEnd.getHours()
-            : existingStart
-            ? existingStart.getHours() + 1
-            : baseline.getHours() + 1,
-    );
-    const [endMinute, setEndMinute] = React.useState<number>(() =>
-        existingEnd ? existingEnd.getMinutes() : startMinute,
-    );
-    const [editingId, setEditingId] = React.useState<number | null>(null);
-    const [activePart, setActivePart] = React.useState<Part>(null);
-    const [dirty, setDirty] = React.useState(false);
-    const [saving, setSaving] = React.useState(false);
+    const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
-    const dragInfo = React.useRef<{
-        startY: number;
-        orig: number;
-        part: Part;
-    } | null>(null);
-    // discover existing appointment id for edit mode (only while mounted & editing)
-    React.useEffect(() => {
-        if (!existingStart) return;
-        let cancelled = false;
-        interface MinimalAppt {
-            id: number;
-            start_at: string;
-        }
-        (async () => {
-            try {
-                const token = localStorage.getItem('accessToken');
-                if (isTokenExpired(token)) return;
-                const day = new Date(existingStart);
-                day.setHours(0, 0, 0, 0);
-                const dayEnd = new Date(day);
-                dayEnd.setDate(dayEnd.getDate() + 1);
-                const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
-                    day.toISOString(),
-                )}&end=${encodeURIComponent(dayEnd.toISOString())}&client=${
-                    client.id
-                }`;
-                const r = await fetch(url, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!r.ok) return;
-                const data: MinimalAppt[] = await r.json();
-                if (cancelled) return;
-                const match = data.find(
-                    a => a.start_at === client.next_appointment_start_at,
-                );
-                if (match) setEditingId(match.id);
-            } catch {
-                /* ignore */
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [existingStart, client.id, client.next_appointment_start_at]);
 
-    // ensure end stays at least 1h after start
-    React.useEffect(() => {
-        const startTotal = startHour * 60 + startMinute;
-        let endTotal = endHour * 60 + endMinute;
-        if (endTotal <= startTotal) {
-            endTotal = startTotal + 60;
-            setEndHour(Math.floor(endTotal / 60) % 24);
-            setEndMinute(endTotal % 60);
-        }
-    }, [startHour, startMinute, endHour, endMinute]);
-
-    function markDirty() {
-        if (!dirty) setDirty(true);
+    function openPicker() {
+        // Use FloatingDatePicker defaults; avoid reading event coordinates to keep types simple
+        setPickerPos(undefined);
+        setShowPicker(true);
     }
 
-    function adjust(part: Part, delta: number) {
-        if (!part) return;
-        markDirty();
-        if (part === 'startHour') {
-            setStartHour(h => (h + delta + 24) % 24);
-            return;
-        }
-        if (part === 'endHour') {
-            setEndHour(h => (h + delta + 24) % 24);
-            return;
-        }
-        if (part === 'startMinute') {
-            setStartMinute(m => {
-                let v = m + delta;
-                while (v < 0) v += 60;
-                return v % 60;
-            });
-            return;
-        }
-        if (part === 'endMinute') {
-            setEndMinute(m => {
-                let v = m + delta;
-                while (v < 0) v += 60;
-                return v % 60;
-            });
-            return;
-        }
-    }
-
-    function onPointerDown(part: Part, value: number, e: React.PointerEvent) {
-        e.preventDefault();
-        setActivePart(part);
-        dragInfo.current = { startY: e.clientY, orig: value, part };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }
-    function onPointerMove(e: React.PointerEvent) {
-        if (!dragInfo.current) return;
-        const { startY, part } = dragInfo.current;
-        if (!part) return;
-        const dy = startY - e.clientY;
-        const step = part === 'startMinute' || part === 'endMinute' ? 5 : 1;
-        const threshold = 28; // pixels per increment
-        const units = Math.trunc(dy / threshold);
-        if (Math.abs(units) >= 1) {
-            adjust(part, units * step);
-            dragInfo.current.startY =
-                dragInfo.current.startY - units * threshold;
-        }
-    }
-    function onPointerUp() {
-        if (dragInfo.current) {
-            dragInfo.current = null;
-        }
+    function validate(): string | null {
+        const sISO = toISO(date, startHM);
+        const eISO = toISO(date, endHM);
+        if (new Date(eISO) <= new Date(sISO))
+            return 'Horário final deve ser após o inicial.';
+        return null;
     }
 
     async function handleSave() {
+        if (busy) return;
+        const v = validate();
+        if (v) {
+            setError(v);
+            return;
+        }
         setError(null);
-        const token = localStorage.getItem('accessToken');
-        if (isTokenExpired(token)) {
-            setError('Sessão expirada');
-            return;
-        }
-        // Validate start is in the future
-        const startCandidate = new Date(
-            `${date}T${String(startHour).padStart(2, '0')}:${String(
-                startMinute,
-            ).padStart(2, '0')}:00`,
-        );
-        if (startCandidate.getTime() < Date.now()) {
-            setError('Horário inicial no passado');
-            return;
-        }
-        setSaving(true);
+        setBusy(true);
         try {
-            const startISO = new Date(
-                `${date}T${String(startHour).padStart(2, '0')}:${String(
-                    startMinute,
-                ).padStart(2, '0')}:00`,
-            ).toISOString();
-            const endISO = new Date(
-                `${date}T${String(endHour).padStart(2, '0')}:${String(
-                    endMinute,
-                ).padStart(2, '0')}:00`,
-            ).toISOString();
-            const isEdit = !!editingId;
-            const url = isEdit
-                ? `${API_BASE}/agenda/appointments/${editingId}/`
-                : `${API_BASE}/agenda/appointments/`;
-            const method = isEdit ? 'PATCH' : 'POST';
-            const payload = isEdit
-                ? { start_at: startISO, end_at: endISO }
-                : {
-                      client: client.id,
-                      title: 'Consulta',
-                      visit_type: 'consulta',
-                      start_at: startISO,
-                      end_at: endISO,
-                  };
-            const r = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
+            const token = localStorage.getItem('accessToken') || '';
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const body = {
+                start_at: toISO(date, startHM),
+                end_at: toISO(date, endHM),
+            };
+            if (!effective) return;
+            const resp = await fetch(
+                `${API_BASE}/agenda/appointments/${effective.id}/`,
+                {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify(body),
                 },
-                body: JSON.stringify(payload),
-            });
-            if (!r.ok) {
-                const body = await r.text();
-                throw new Error(body || 'Erro ao salvar');
+            );
+            if (!resp.ok) throw new Error(await resp.text());
+            const updated = (await resp.json()) as Appointment;
+            try {
+                window.dispatchEvent(new Event('appointments:changed'));
+                window.dispatchEvent(new Event('updateClients'));
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: {
+                            text: 'Agendamento atualizado.',
+                            type: 'success',
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
             }
-            setDirty(false);
-            if (onSaved) onSaved();
-            window.dispatchEvent(new CustomEvent('appointments:changed'));
-            onClose();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Erro desconhecido');
+            onSaved(updated);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Falha ao salvar';
+            setError(msg);
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'error' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
         } finally {
-            setSaving(false);
+            setBusy(false);
         }
     }
 
-    const timeDisplay = (
-        <div className={styles.timeInline}>
-            <Segment
-                label='Início'
-                hour={startHour}
-                minute={startMinute}
-                onPointerDown={onPointerDown}
-                activePart={activePart}
-                prefix='start'
-            />
-            <span className={styles.timeSep}>→</span>
-            <Segment
-                label='Fim'
-                hour={endHour}
-                minute={endMinute}
-                onPointerDown={onPointerDown}
-                activePart={activePart}
-                prefix='end'
-            />
-        </div>
-    );
-
-    function Segment({
-        label,
-        hour,
-        minute,
-        onPointerDown,
-        activePart,
-        prefix,
-    }: {
-        label: string;
-        hour: number;
-        minute: number;
-        onPointerDown: (p: Part, v: number, e: React.PointerEvent) => void;
-        activePart: Part;
-        prefix: 'start' | 'end';
-    }) {
-        const ah = activePart === (`${prefix}Hour` as Part);
-        const am = activePart === (`${prefix}Minute` as Part);
+    if (!effective) {
         return (
-            <div className={styles.segmentBlock}>
-                <div className={styles.segmentLabel}>{label}</div>
-                <div className={styles.segmentTime}>
-                    <span
-                        className={ah ? styles.segmentActive : styles.segment}
-                        onPointerDown={e =>
-                            onPointerDown(`${prefix}Hour` as Part, hour, e)
-                        }
-                        onPointerMove={onPointerMove}
-                        onPointerUp={onPointerUp}
-                        onClick={() => {
-                            setActivePart(`${prefix}Hour` as Part);
-                        }}
-                    >
-                        {String(hour).padStart(2, '0')}
-                    </span>
-                    <span className={styles.colon}>:</span>
-                    <span
-                        className={am ? styles.segmentActive : styles.segment}
-                        onPointerDown={e =>
-                            onPointerDown(`${prefix}Minute` as Part, minute, e)
-                        }
-                        onPointerMove={onPointerMove}
-                        onPointerUp={onPointerUp}
-                        onClick={() => {
-                            setActivePart(`${prefix}Minute` as Part);
-                        }}
-                    >
-                        {String(minute).padStart(2, '0')}
-                    </span>
-                </div>
+            <div style={{ color: 'var(--color-danger)', fontSize: 12 }}>
+                Erro: agendamento não informado.
             </div>
         );
     }
-
     return (
-        <div className={styles.compactContainer}>
-            {activePart === 'date' && (
-                <div className={styles.dateOverlayWrapper}>
-                    <div className={styles.dateOverlay}>
-                        <input
-                            autoFocus
-                            type='date'
-                            value={date}
-                            onChange={e => {
-                                setDate(e.target.value);
-                                markDirty();
-                            }}
-                            onBlur={() => setActivePart(null)}
-                            className={styles.dateInline}
-                        />
-                    </div>
-                </div>
-            )}
-            <div className={styles.rowCompact}>
+        <div
+            style={{
+                display: 'grid',
+                gap: 8,
+                padding: 8,
+                border: '1px dashed var(--color-border)',
+                borderRadius: 8,
+                background: 'var(--color-bg)',
+            }}
+        >
+            <div
+                style={{
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                }}
+            >
                 <button
                     type='button'
-                    className={
-                        activePart === 'date'
-                            ? styles.dateButton + ' ' + styles.greenAccent
-                            : styles.dateButton
-                    }
-                    onClick={() =>
-                        setActivePart(activePart === 'date' ? null : 'date')
-                    }
+                    onClick={openPicker}
+                    style={{
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        border: '1px solid var(--color-border)',
+                        background: '#fff',
+                    }}
                 >
-                    {date.split('-').reverse().join('/')}
+                    {date.toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                    })}
+                </button>
+                <TimePicker10
+                    label='Início'
+                    value={startHM}
+                    onChange={setStartHM}
+                />
+                <TimePicker10 label='Fim' value={endHM} onChange={setEndHM} />
+            </div>
+            {error && (
+                <div style={{ color: 'var(--color-danger)' }}>{error}</div>
+            )}
+            <div
+                style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}
+            >
+                <button
+                    type='button'
+                    onClick={onCancel}
+                    style={{
+                        padding: '6px 10px',
+                        background: '#e5e7eb',
+                        borderRadius: 6,
+                    }}
+                >
+                    Cancelar
+                </button>
+                <button
+                    type='button'
+                    onClick={handleSave}
+                    disabled={busy}
+                    style={{
+                        padding: '6px 10px',
+                        background: 'var(--color-success-dark)',
+                        color: '#fff',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                    }}
+                >
+                    {busy ? 'Salvando…' : 'Salvar'}
                 </button>
             </div>
-            {timeDisplay}
-            {error && <div className={styles.error}>{error}</div>}
-            {dirty && (
-                <div className={styles.saveBar}>
-                    <button
-                        type='button'
-                        className={styles.btnGhost}
-                        onClick={() => {
-                            // Cancelar descarta alterações (state local é perdido ao desmontar)
-                            onClose();
-                        }}
-                        disabled={saving}
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type='button'
-                        className={styles.btnPrimaryMini}
-                        onClick={handleSave}
-                        disabled={saving}
-                    >
-                        {saving ? '...' : 'Salvar'}
-                    </button>
-                </div>
-            )}
+            <FloatingDatePicker
+                open={showPicker}
+                onClose={() => setShowPicker(false)}
+                selectedDate={date}
+                onChange={d => {
+                    setDate(new Date(d));
+                    setShowPicker(false);
+                }}
+                initialPosition={pickerPos}
+            />
         </div>
     );
 }
