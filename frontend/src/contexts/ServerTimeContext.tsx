@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Ctx, ServerTimeContextValue } from './ServerTimeCore';
+import { Ctx } from './ServerTimeCore';
+import type { ServerTimeContextValue } from './ServerTimeCore';
 
 /**
  * Provides a monotonic-ish server-corrected current Date, mitigating client clock skew.
