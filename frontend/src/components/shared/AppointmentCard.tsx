@@ -3,13 +3,14 @@ import StatusBadge from './StatusBadge';
 import type { StatusKind } from './StatusBadge';
 import TimeRangeLabel from './TimeRangeLabel';
 import { FaRegFileAlt, FaEdit, FaBan } from 'react-icons/fa';
+import { useServerTime } from '../../contexts/ServerTimeContext';
 
 export interface SharedAppointmentLike {
     id: number;
     title?: string;
     start_at: string;
     end_at: string;
-    status: 'scheduled' | 'done' | 'canceled';
+    status: 'scheduled' | 'done' | 'canceled' | 'ongoing';
     notes?: string;
     client_name?: string;
     client?: { id: number; name: string } | number;
@@ -31,6 +32,16 @@ export interface AppointmentCardProps<
     pulse?: boolean;
     compact?: boolean;
     showNotes?: boolean;
+    // Novo: seleção explícita (borda espessa verde)
+    selected?: boolean;
+    // Controla exibição do ícone de editar
+    showEditAction?: boolean;
+    // Controla exibição do horário no cartão
+    showTime?: boolean;
+    // Exibe o horário inline (HH:MM - HH:MM) na primeira linha em vez de bloco
+    timeInline?: boolean;
+    // Força layout com o NOME na primeira linha e o tipo de consulta abaixo
+    stackName?: boolean;
     className?: string;
     style?: React.CSSProperties;
     now?: Date;
@@ -59,11 +70,19 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
     pulse,
     compact,
     showNotes = true,
+    selected = false,
+    showEditAction = true,
+    showTime = true,
+    timeInline = false,
+    stackName = false,
     className,
     style,
     now = new Date(),
 }: AppointmentCardProps<T>) {
-    const status = deriveStatus(appt, now);
+    // If a server-synced time is available, prefer it silently (invisible mitigation of client skew)
+    const serverTime = useServerTime();
+    const effectiveNow = serverTime?.effectiveNow ?? now;
+    const status = deriveStatus(appt, effectiveNow);
     const start = new Date(appt.start_at);
     const end = new Date(appt.end_at);
     let clientName: string | undefined = (appt as SharedAppointmentLike)
@@ -92,7 +111,9 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
 
     const isPending = status === 'past';
     const base: React.CSSProperties = {
-        border: '1px solid var(--color-border)',
+        border: selected
+            ? '3px solid var(--color-success)'
+            : '1px solid var(--color-border)',
         borderRadius: 8,
         padding: compact ? '6px 8px' : '8px 10px',
         // Fundo claro conforme status para padronização visual
@@ -127,8 +148,9 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
             : null),
         ...style,
     };
-    const canEdit = status === 'scheduled' && end > now;
-    const canCancel = status === 'scheduled' && end > now;
+    const isOngoing = status === 'ongoing';
+    const canEdit = status === 'scheduled' && end > effectiveNow;
+    const canCancel = status === 'scheduled' && end > effectiveNow;
 
     return (
         <div
@@ -137,11 +159,15 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
             className={className}
             style={base}
             onClick={() => {
+                if (isOngoing) return; // bloquear interações em andamento
                 if (isPending && onResolvePending) {
                     onResolvePending(appt);
                     return;
                 }
-                if (onUseTime) {
+                // Prioriza edição quando disponível
+                if (onEdit) {
+                    onEdit(appt);
+                } else if (onUseTime) {
                     onUseTime(appt);
                 } else if (onClick) {
                     onClick(appt);
@@ -167,8 +193,9 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                 <div
                     style={{
                         display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
+                        alignItems: stackName ? 'flex-start' : 'center',
+                        flexDirection: stackName ? 'column' : 'row',
+                        gap: stackName ? 2 : 8,
                         flex: 1,
                         minWidth: 0,
                     }}
@@ -187,13 +214,20 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                                     : status === 'past'
                                     ? 'var(--color-pending)'
                                     : 'var(--color-success-dark)',
-                            overflowWrap: 'anywhere',
-                            wordBreak: 'break-word',
+                            // Quando empilhado, manter nome em uma linha com elipse
+                            whiteSpace: stackName ? 'nowrap' : 'normal',
+                            overflow: stackName ? 'hidden' : 'visible',
+                            textOverflow: stackName ? 'ellipsis' : 'clip',
+                            minWidth: 0,
+                            maxWidth: '100%',
+                            overflowWrap: stackName ? 'normal' : 'anywhere',
+                            wordBreak: stackName ? 'normal' : 'break-word',
                         }}
+                        title={clientName || 'Cliente'}
                     >
                         {clientName || 'Cliente'}
                     </span>
-                    {/* Visit type label next to name */}
+                    {/* Visit type label: ao lado (padrão) ou abaixo do nome (stackName=true) */}
                     {!compact && (
                         <span
                             style={{
@@ -203,7 +237,6 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                                     status === 'done'
                                         ? 'var(--color-done)'
                                         : 'var(--color-text)',
-                                // Prefer wrapping at spaces; allow break-word only if needed
                                 overflowWrap: 'break-word',
                                 wordBreak: 'normal',
                                 whiteSpace: 'normal',
@@ -238,8 +271,37 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                         flexShrink: 0,
                     }}
                 >
+                    {/* Always show time on non-compact cards for clarity (canceled/done included) */}
+                    {!compact &&
+                        showTime &&
+                        (timeInline ? (
+                            <span
+                                style={{
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: 'var(--color-text)',
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {new Date(appt.start_at).toLocaleTimeString(
+                                    'pt-BR',
+                                    { hour: '2-digit', minute: '2-digit' },
+                                )}{' '}
+                                –{' '}
+                                {new Date(appt.end_at).toLocaleTimeString(
+                                    'pt-BR',
+                                    { hour: '2-digit', minute: '2-digit' },
+                                )}
+                            </span>
+                        ) : (
+                            <TimeRangeLabel
+                                start={appt.start_at}
+                                end={appt.end_at}
+                                size='sm'
+                            />
+                        ))}
                     {/* Optional edit/cancel action buttons */}
-                    {onEdit && (
+                    {onEdit && showEditAction && canEdit && (
                         <button
                             type='button'
                             title='Edit appointment'
@@ -247,27 +309,19 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                                 e.stopPropagation();
                                 if (canEdit) onEdit(appt);
                             }}
-                            disabled={!canEdit}
                             style={{
                                 border: '1px solid var(--color-border)',
                                 borderRadius: 6,
-                                background: canEdit
-                                    ? 'var(--color-bg)'
-                                    : 'var(--color-bg-section)',
+                                background: 'var(--color-bg)',
                                 padding: 6,
-                                cursor: canEdit ? 'pointer' : 'not-allowed',
+                                cursor: 'pointer',
                             }}
+                            disabled={!canEdit}
                         >
-                            <FaEdit
-                                color={
-                                    canEdit
-                                        ? 'var(--color-heading)'
-                                        : 'var(--color-disabled)'
-                                }
-                            />
+                            <FaEdit color={'var(--color-heading)'} />
                         </button>
                     )}
-                    {onCancel && (
+                    {onCancel && canCancel && (
                         <button
                             type='button'
                             title='Cancel appointment'
@@ -289,46 +343,48 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                                 }?`;
                                 if (window.confirm(msg)) onCancel(appt);
                             }}
-                            disabled={!canCancel}
                             style={{
                                 border: '1px solid var(--color-border)',
                                 borderRadius: 6,
-                                background: canCancel
-                                    ? 'var(--color-danger-bg)'
-                                    : 'var(--color-bg-section)',
-                                padding: 6,
-                                cursor: canCancel ? 'pointer' : 'not-allowed',
-                            }}
-                        >
-                            <FaBan
-                                color={
-                                    canCancel
-                                        ? 'var(--color-danger)'
-                                        : 'var(--color-disabled)'
-                                }
-                            />
-                        </button>
-                    )}
-                    {status === 'done' && onDetails && (
-                        <button
-                            type='button'
-                            title='Resumo da consulta'
-                            aria-label='Resumo da consulta'
-                            onClick={e => {
-                                e.stopPropagation();
-                                onDetails?.(appt);
-                            }}
-                            style={{
-                                border: '1px solid var(--color-border)',
-                                borderRadius: 6,
-                                background: 'var(--color-done-bg)',
+                                background: 'var(--color-danger-bg)',
                                 padding: 6,
                                 cursor: 'pointer',
                             }}
+                            disabled={!canCancel}
                         >
-                            <FaRegFileAlt color={'var(--color-done)'} />
+                            <FaBan color={'var(--color-danger)'} />
                         </button>
                     )}
+                    {(status === 'done' || status === 'canceled') &&
+                        onDetails && (
+                            <button
+                                type='button'
+                                title='Resumo da consulta'
+                                aria-label='Resumo da consulta'
+                                onClick={e => {
+                                    e.stopPropagation();
+                                    onDetails?.(appt);
+                                }}
+                                style={{
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: 6,
+                                    background:
+                                        status === 'done'
+                                            ? 'var(--color-done-bg)'
+                                            : 'var(--color-danger-bg)',
+                                    padding: 6,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                <FaRegFileAlt
+                                    color={
+                                        status === 'done'
+                                            ? 'var(--color-done)'
+                                            : 'var(--color-danger)'
+                                    }
+                                />
+                            </button>
+                        )}
                     <StatusBadge status={status} size='md' />
                 </span>
             </div>
@@ -353,7 +409,7 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                 </div>
             )}
             {/* Time range footer (optional) */}
-            {compact && (
+            {compact && showTime && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <TimeRangeLabel
                         start={appt.start_at}
