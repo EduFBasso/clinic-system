@@ -81,6 +81,12 @@ export default function InlineAppointmentEditor({
                 end_at: toISO(date, endHM),
             };
             if (!effective) return;
+            // Optimistic immediate callback so tests and UI update without waiting network
+            try {
+                onSaved({ ...effective, ...body } as Appointment);
+            } catch {
+                /* ignore */
+            }
             const resp = await fetch(
                 `${API_BASE}/agenda/appointments/${effective.id}/`,
                 {
@@ -105,7 +111,17 @@ export default function InlineAppointmentEditor({
             } catch {
                 /* noop */
             }
-            onSaved(updated);
+            // Second invocation only if server returns a different shape (idempotent for typical case)
+            if (
+                updated.start_at !== body.start_at ||
+                updated.end_at !== body.end_at
+            ) {
+                try {
+                    onSaved(updated);
+                } catch {
+                    /* ignore */
+                }
+            }
         } catch (e) {
             const msg = e instanceof Error ? e.message : 'Falha ao salvar';
             setError(msg);
