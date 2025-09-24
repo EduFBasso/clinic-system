@@ -19,6 +19,9 @@ mysqlclient==2.2.7
 packaging==24.0
 phonenumbers==9.0.8
 psycopg2-binary==2.9.10
+# psycopg v3 (modern driver). Kept alongside psycopg2 during transition; once confirmed stable
+# remove psycopg2-binary and keep only psycopg. The [binary] extra provides a self-contained wheel.
+psycopg[binary]==3.2.1
 PyJWT==2.10.1
 python-decouple==3.8
 requests==2.32.3

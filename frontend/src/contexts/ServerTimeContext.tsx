@@ -1,10 +1,5 @@
-import React, {
-    createContext,
-    useContext,
-    useEffect,
-    useRef,
-    useState,
-} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Ctx, ServerTimeContextValue } from './ServerTimeCore';
 
 /**
  * Provides a monotonic-ish server-corrected current Date, mitigating client clock skew.
@@ -15,22 +10,10 @@ import React, {
  *
  * For tests we allow injecting a fixedOffsetMs to simulate skew without network.
  */
-interface ServerTimeContextValue {
-    /** Continuously updated Date approximating server time */
-    effectiveNow: Date;
-    /** Raw offset in milliseconds (server - client) */
-    offsetMs: number;
-    /** True once initial sync attempted (success or failure) */
-    ready: boolean;
-    /** Force a resync (unused in simplest path, but handy) */
-    resync: () => void;
-}
-
-const Ctx = createContext<ServerTimeContextValue | null>(null);
-
-export function useServerTime() {
-    return useContext(Ctx);
-}
+// NOTE: Types & hook moved to separate file to appease React Fast Refresh rule
+// which warns when a TSX file mixes component + non-component exports.
+// Keeping context creation here; the hook simply re-exports useContext(Ctx).
+// ServerTimeContextValue & Ctx imported from ServerTimeCore to keep this file component-only for Fast Refresh.
 
 interface ProviderProps {
     children: React.ReactNode;
