@@ -3,7 +3,7 @@ import StatusBadge from './StatusBadge';
 import type { StatusKind } from './StatusBadge';
 import TimeRangeLabel from './TimeRangeLabel';
 import { FaRegFileAlt, FaEdit, FaBan } from 'react-icons/fa';
-import { useServerTime } from '../../contexts/ServerTimeContext';
+import { useServerTime } from '../../contexts/useServerTime'; // unified import path (no .js extension)
 
 export interface SharedAppointmentLike {
     id: number;

@@ -1,6 +1,6 @@
 import { useContext } from 'react';
-import { Ctx } from './ServerTimeContext';
-import type { ServerTimeContextValue } from './ServerTimeContext';
+import { Ctx } from './ServerTimeCore';
+import type { ServerTimeContextValue } from './ServerTimeCore';
 
 export function useServerTime() {
     return useContext(Ctx) as ServerTimeContextValue | null;
