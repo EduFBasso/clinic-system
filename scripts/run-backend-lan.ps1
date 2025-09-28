@@ -27,7 +27,7 @@ function Get-LanIPv4s {
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $backendDir = Join-Path $repoRoot 'backend'
-$venvPython = Join-Path $repoRoot 'venv/Scripts/python.exe'
+$venvPython = Join-Path $repoRoot '.venv/Scripts/python.exe'
 
 if (-not (Test-Path $venvPython)) {
     throw "Python venv not found at $venvPython. Activate venv or adjust the path."

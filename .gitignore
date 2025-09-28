@@ -28,10 +28,13 @@ info/*
 venv/
 backend/venv*/
 frontend/venv*/
+.venv/
 
 # Collected static files and python cache
 backend/staticfiles/
 **/__pycache__/
+**/*.py[cod]
+**/*.pyo
 
 # Logs
 logs
@@ -46,6 +49,11 @@ node_modules
 dist
 dist-ssr
 *.local
+.python-version
+.ruff_cache/
+.coverage
+htmlcov/
+scripts/local/**
 
 # Vercel local project files
 .vercel
@@ -74,3 +82,11 @@ scripts/db/backups/**/*.json
 *.sw?
 
 .env
+backend/.env.*
+backend/.env.postgres.bak
+!backend/.env.sqlite.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.development.example
+!frontend/.env.production.example
+Thumbs.db

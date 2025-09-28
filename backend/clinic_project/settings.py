@@ -22,6 +22,7 @@ ALLOWED_HOSTS = config(
 
 INSTALLED_APPS = [
     'rest_framework',
+    'phonenumber_field',
     'apps.agenda',
     'apps.register',
     'django.contrib.admin',
@@ -100,6 +101,12 @@ DATABASES = {
     'PORT': config("DB_PORT", default="5432"),
     }
 }
+
+# If using SQLite with a relative NAME (e.g., "db.sqlite3"), anchor it to BASE_DIR
+_engine = DATABASES['default'].get('ENGINE', '')
+_name = DATABASES['default'].get('NAME')
+if _engine.endswith('sqlite3') and _name and _name != ':memory:' and not os.path.isabs(_name):
+    DATABASES['default']['NAME'] = os.path.join(BASE_DIR, _name)
 
 # Durante testes (pytest) podemos usar SQLite em memória para acelerar e isolar ambiente
 import os as _os

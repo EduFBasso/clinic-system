@@ -13,7 +13,7 @@
   "code-runner.executorMap": {
     "javascript": "node",
     "typescript": "ts-node",
-    "python": "cls; python -u",
+    "python": "cls; ${workspaceFolder}\\.venv\\Scripts\\python.exe -u",
     "java": "cd $dir && javac $fileName && java $fileNameWithoutExt",
     "c": "gcc $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt",
     "cpp": "g++ $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt"
@@ -78,5 +78,23 @@
   // Monorepo: direcione o ESLint para a pasta do frontend
   "eslint.workingDirectories": [
     { "directory": "./frontend", "changeProcessCWD": true }
-  ]
+  ],
+
+  // Python: use the local virtualenv for this workspace
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+
+  // Terminal profiles: add a PowerShell variant that uses ExecutionPolicy Bypass only for the terminal session,
+  // plus a CMD profile (activate.bat works without PowerShell policies).
+  "terminal.integrated.profiles.windows": {
+    "PowerShell (Bypass)": {
+      "path": "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+      "args": ["-NoLogo", "-ExecutionPolicy", "Bypass"],
+      "icon": "terminal-powershell"
+    },
+    "Command Prompt": {
+      "path": "C:/Windows/System32/cmd.exe",
+      "icon": "terminal-cmd"
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell (Bypass)"
 }
