@@ -1,7 +1,7 @@
 import React from 'react';
 import AppModal from './Modal';
 import FloatingDatePicker from './FloatingDatePicker';
-import AppointmentCard from './shared/AppointmentCard';
+import MiniAppointmentCard, { type MiniStatus } from './shared/MiniAppointmentCard';
 
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
@@ -27,6 +27,20 @@ function makeSample(day: Date): FakeAppt[] {
     return { id, title: 'Consulta', start_at: s.toISOString(), end_at: e.toISOString(), status, client_name: `Cliente ${id}` };
   };
   return [mk(8,0,60,1,'scheduled'), mk(10,0,60,2,'scheduled'), mk(14,30,45,3,'done')];
+}
+
+// Map backend-like status to MiniStatus visuals for this preview
+function mapToMiniStatus(s: FakeAppt['status']): MiniStatus {
+  switch (s) {
+    case 'scheduled':
+      return 'ativo';
+    case 'canceled':
+      return 'cancelado';
+    case 'done':
+      return 'concluido';
+    default:
+      return 'pendente';
+  }
 }
 
 export default function WeeklyAgendaModal({ open, onClose, initialDate }: { open: boolean; onClose: () => void; initialDate?: Date; }) {
@@ -105,7 +119,14 @@ export default function WeeklyAgendaModal({ open, onClose, initialDate }: { open
               <div style={{ fontWeight: 700, color: 'var(--color-heading)', marginBottom: 6, textTransform: 'capitalize' }}>{d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '')}</div>
               <div style={{ display: 'grid', gap: 8 }}>
                 {list.map(a => (
-                  <AppointmentCard key={a.id} appt={a} compact showNotes={false} onClick={() => setSelectedDayISO(iso)} />
+                  <MiniAppointmentCard
+                    key={a.id}
+                    appt={a}
+                    status={mapToMiniStatus(a.status)}
+                    onEdit={() => {/* visual-only */}}
+                    onCancel={() => {/* visual-only */}}
+                    onConclude={() => {/* visual-only */}}
+                  />
                 ))}
               </div>
             </div>
