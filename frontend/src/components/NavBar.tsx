@@ -293,8 +293,9 @@ const NavBar: React.FC<NavBarProps> = ({
                     {agendaDropdownOpen && (
                         <div className={styles.dropdownMenu}>
                             {/**
-                             * ORDEM SOLICITADA:
-                             * Configurações -> Agenda Diária -> Agenda Semanal -> Agenda Mensal (>10") -> Novo -> Editar
+                             * ORDEM ATUAL:
+                             * Configurações -> Agenda Semanal -> Agenda Mensal (>10") -> Novo -> Editar
+                             * (Agenda Diária removida do menu para simplificar o fluxo; QuickSchedule cobre o caso diário)
                              */}
                             <button
                                 className={styles.dropdownItem}
@@ -305,26 +306,7 @@ const NavBar: React.FC<NavBarProps> = ({
                             >
                                 Configurações
                             </button>
-                            <button
-                                className={styles.dropdownItem}
-                                onClick={() => {
-                                    setAgendaDropdownOpen(false);
-                                    try {
-                                        const today = new Date();
-                                        window.dispatchEvent(
-                                            new CustomEvent('openDailyAgenda', {
-                                                detail: {
-                                                    date: today.toISOString(),
-                                                },
-                                            }),
-                                        );
-                                    } catch {
-                                        /* noop */
-                                    }
-                                }}
-                            >
-                                Agenda Diária
-                            </button>
+                            {/** Agenda Diária removida do menu (mantemos evento para chamadas internas, se necessário) */}
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
