@@ -105,56 +105,8 @@ export default function ClientCard({
     // title display moved into the agenda section below when scheduled
     const [flash, setFlash] = React.useState(false);
     React.useEffect(() => {
-        let cancelled = false;
         const cleanupTimers: number[] = [];
-        // Cancela auto-scroll se usuário interagir manualmente após o trigger
-        function cancelByUser() {
-            cancelled = true;
-        }
-        window.addEventListener('touchstart', cancelByUser, { passive: true });
-        window.addEventListener('wheel', cancelByUser, { passive: true });
 
-        function ensureVisible(attempt: number) {
-            if (cancelled) return;
-            const el = cardRef.current;
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
-            const vh =
-                window.innerHeight || document.documentElement.clientHeight;
-            const overlapTop = Math.max(
-                0,
-                Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
-            );
-            const ratio = overlapTop / rect.height;
-            // Se menos de 70% visível ou topo muito acima (< -32) ou bottom cortado > 32px, ajusta
-            const needsScroll =
-                ratio < 0.7 || rect.top < 8 || rect.bottom > vh - 8;
-            if (needsScroll) {
-                try {
-                    // Calcula scroll target centralizado mas com leve offset para deixar título visível
-                    const currentY = window.scrollY || window.pageYOffset;
-                    const targetTop = rect.top + currentY - 60; // 60px de margem superior
-                    window.scrollTo({ top: targetTop, behavior: 'smooth' });
-                } catch {
-                    try {
-                        el.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'center',
-                        });
-                    } catch {
-                        /* noop */
-                    }
-                }
-            }
-            // Re-tenta se ainda houver mudanças de layout (ex: futuros compromissos carregando)
-            if (attempt < 4) {
-                const t = window.setTimeout(
-                    () => ensureVisible(attempt + 1),
-                    [0, 150, 350, 700, 1200][attempt],
-                );
-                cleanupTimers.push(t as unknown as number);
-            }
-        }
 
         function onScrollEv(e: Event) {
             const det = (e as CustomEvent).detail;
@@ -168,8 +120,7 @@ export default function ClientCard({
                 setFlash(true);
                 const t = setTimeout(() => setFlash(false), 2600);
                 cleanupTimers.push(t as unknown as number);
-                // agenda verificação assíncrona depois do repaint para pegar altura final inicial
-                requestAnimationFrame(() => ensureVisible(0));
+                // Scroll será tratado centralmente no MainContent para evitar duplicação.
             }
         }
         window.addEventListener(
@@ -181,8 +132,6 @@ export default function ClientCard({
                 'scrollToClientCard',
                 onScrollEv as EventListener,
             );
-            window.removeEventListener('touchstart', cancelByUser);
-            window.removeEventListener('wheel', cancelByUser);
         };
     }, [client.id, onSelect]);
 

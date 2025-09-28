@@ -171,6 +171,44 @@ const MainContent: React.FC<MainContentProps> = ({
     const lastPrefixTargetRef = React.useRef<number | null>(null);
     const debounceRef = React.useRef<number | null>(null);
 
+    // Centralized scroll helper: align a card just below the sticky filter (works with keyboardOpen panel)
+    const scrollCardBelowFilter = React.useCallback((el: HTMLElement) => {
+        const inputEl = document.getElementById('client-filter');
+        const filterEl = document.querySelector(
+            `.${styles.filterContainer}`,
+        ) as HTMLElement | null;
+        requestAnimationFrame(() => {
+            const targetRect = el.getBoundingClientRect();
+            const filterRect = filterEl?.getBoundingClientRect();
+            const desiredTop = (filterRect ? filterRect.bottom : 0) + 24;
+            const delta = targetRect.top - desiredTop;
+            if (Math.abs(delta) > 1) {
+                const container = document.body.classList.contains(
+                    'keyboardOpen',
+                )
+                    ? (document.querySelector(
+                          'main.' + styles.main,
+                      ) as HTMLElement | null)
+                    : null;
+                if (container) {
+                    container.scrollBy({ top: delta, behavior: 'smooth' });
+                } else {
+                    window.scrollBy({ top: delta, behavior: 'smooth' });
+                }
+            }
+            // Keep filter input visible if keyboard is open and it has focus
+            if (
+                document.body.classList.contains('keyboardOpen') &&
+                document.activeElement === inputEl
+            ) {
+                inputEl?.scrollIntoView({
+                    block: 'start',
+                    behavior: 'instant' as ScrollBehavior,
+                });
+            }
+        });
+    }, []);
+
     // Helper: desfoca, remove lock e pede atualização da lista
     const refreshAndUnlock = React.useCallback(() => {
         try {
@@ -243,7 +281,7 @@ const MainContent: React.FC<MainContentProps> = ({
             if (!selectedClientId) return;
             const el = cardRefs.current[selectedClientId];
             if (el) {
-                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                scrollCardBelowFilter(el);
                 // Tenta focar um elemento interativo dentro do cartão
                 (
                     el.querySelector('button, [tabindex]') as HTMLElement | null
@@ -256,7 +294,7 @@ const MainContent: React.FC<MainContentProps> = ({
             if (!id) return;
             const el = cardRefs.current[id];
             if (el) {
-                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                scrollCardBelowFilter(el);
             }
         }
         function onNeedClientSelectionForAgenda() {
@@ -288,7 +326,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 onNeedClientSelectionForAgenda,
             );
         };
-    }, [selectedClientId]);
+    }, [selectedClientId, scrollCardBelowFilter]);
 
     // Filtra clientes por nome (acentos/maiúsculas ignorados)
     const normalizedFilter = normalizeText(filter);
@@ -359,41 +397,8 @@ const MainContent: React.FC<MainContentProps> = ({
             if (selectedClientId !== firstPrefix.id) {
                 setSelectedClientId(firstPrefix.id);
             }
-            // Garante que o cartão fique imediatamente abaixo do filtro visível
-            const inputEl = document.getElementById('client-filter');
-            const filterEl = document.querySelector(
-                `.${styles.filterContainer}`,
-            ) as HTMLElement | null;
-            requestAnimationFrame(() => {
-                const targetRect = el.getBoundingClientRect();
-                const filterRect = filterEl?.getBoundingClientRect();
-                const desiredTop = (filterRect ? filterRect.bottom : 0) + 24; // respiro maior para não ficar sob o filtro
-                const delta = targetRect.top - desiredTop;
-                if (Math.abs(delta) > 1) {
-                    const container = document.body.classList.contains(
-                        'keyboardOpen',
-                    )
-                        ? (document.querySelector(
-                              'main.' + styles.main,
-                          ) as HTMLElement | null)
-                        : null;
-                    if (container) {
-                        container.scrollBy({ top: delta, behavior: 'smooth' });
-                    } else {
-                        window.scrollBy({ top: delta, behavior: 'smooth' });
-                    }
-                }
-                // Se o teclado estiver aberto, mantém o input visível
-                if (
-                    document.body.classList.contains('keyboardOpen') &&
-                    document.activeElement === inputEl
-                ) {
-                    inputEl?.scrollIntoView({
-                        block: 'start',
-                        behavior: 'instant' as ScrollBehavior,
-                    });
-                }
-            });
+            // Centralized scroll alignment below sticky filter
+            scrollCardBelowFilter(el);
         }, 140);
 
         return () => {
@@ -402,7 +407,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 debounceRef.current = null;
             }
         };
-    }, [filter, filteredClients, selectedClientId, setSelectedClientId]);
+    }, [filter, filteredClients, selectedClientId, setSelectedClientId, scrollCardBelowFilter]);
 
     function handleView(cliente: ClientBasic) {
         // Solta qualquer foco ativo antes de abrir a visualização, evitando foco "grudado" caso o item seja removido depois
