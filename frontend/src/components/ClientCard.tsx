@@ -94,7 +94,7 @@ export default function ClientCard({
     const cardBorder = isOngoing
         ? `${borderWidth}px solid ${amber}`
         : selected
-        ? '2px solid var(--color-selected-border)'
+        ? '1px solid var(--color-selected-border)'
         : '1px solid var(--color-border)';
     const cardBg = isOngoing
         ? amberBg
