@@ -11,7 +11,7 @@ import Footer from '../components/Footer';
 import styles from '../styles/pages/Home.module.css';
 import ScheduleModal from '../components/ScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
-import WeeklyPreviewModal from '../components/WeeklyPreviewModal';
+import WeeklyAgendaModal from '../components/WeeklyAgendaModal';
 import SystemMessageModal from '../components/SystemMessageModal';
 import DailyAgendaModal from '../components/DailyAgendaModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
@@ -377,7 +377,7 @@ export default function Home() {
                     initialMonth={routeInitialMonth}
                 />
             )}
-            <WeeklyPreviewModal
+            <WeeklyAgendaModal
                 open={weeklyOpen}
                 onClose={() => {
                     setWeeklyOpen(false);

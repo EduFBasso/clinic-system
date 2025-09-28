@@ -19,7 +19,7 @@ import { FaEdit } from 'react-icons/fa';
 import '../styles/palette.css';
 import { parseDOB, calcAge } from '../utils/dateOfBirth';
 import MonthlyAgendaModal from './MonthlyAgendaModal';
-import WeeklyPreviewModal from './WeeklyPreviewModal';
+import WeeklyAgendaModal from './WeeklyAgendaModal';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
 
@@ -681,7 +681,7 @@ export default function ClientCard({
                 />
             )}
             {showWeekly && (
-                <WeeklyPreviewModal
+                <WeeklyAgendaModal
                     open={showWeekly}
                     onClose={() => setShowWeekly(false)}
                 />
