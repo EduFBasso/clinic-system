@@ -74,6 +74,7 @@ class ClientSerializer(serializers.ModelSerializer):
             # Continua com o restante dos campos clínicos…
             "date_of_birth": {"required": False, "allow_null": True},
             "address_number": {"required": False, "allow_null": True, "allow_blank": True},
+            "photo": {"required": False, "allow_null": True},
         }
 
     # Normalizações e validações leves
@@ -151,7 +152,7 @@ class ClientBasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = [
-            'id', 'first_name', 'last_name', 'phone', 'email',
+            'id', 'first_name', 'last_name', 'phone', 'email', 'photo',
             'address', 'address_number', 'neighborhood', 'city', 'state', 'date_of_birth',
             'next_appointment_start_at', 'next_appointment_end_at', 'next_appointment_title', 'next_appointment_visit_type', 'next_appointment_notes', 'next_appointment_status',
             'next_appointment_id',

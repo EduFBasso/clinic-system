@@ -22,6 +22,7 @@ export default function FinalizeButton({
 }: Props) {
     return (
         <button
+            type='button'
             className={`${styles.actionButton} ${styles.actionPrimary} ${
                 className || ''
             }`}
@@ -35,6 +36,7 @@ export default function FinalizeButton({
                         detail: {
                             clientId,
                             appointmentId,
+                            isEarly,
                             proceed: () => onFinalize(),
                         },
                         cancelable: true,

@@ -19,21 +19,17 @@ function buildAppt(start: Date): SharedAppointmentLike {
     };
 }
 
-describe('ServerTimeProvider skew mitigation', () => {
-    it('keeps appointment as scheduled when local clock is ahead by 2 minutes', () => {
-        // Local machine time (fast): treat start_at as "now" local
+describe('ServerTimeProvider (local-time only behavior)', () => {
+    it('marks as ongoing when start is now (local)', () => {
         const localNow = new Date();
         const appt = buildAppt(localNow);
-        // Simulate server being 2 minutes BEHIND local (offset = -120000)
-        // Effective server time = localNow - 2m => before start => should remain scheduled
+        // Even if a fixedOffset is provided, the UI now relies on local time only
         render(
             <ServerTimeProvider fixedOffsetMs={-120000} disableFetch>
                 <AppointmentCard appt={appt} />
             </ServerTimeProvider>,
         );
-        // StatusBadge for scheduled currently renders with text mapping (assumed not 'Em andamento')
-        // Defensive: ensure "Em andamento" NOT present
-        const ongoing = screen.queryByText(/Em andamento/i);
-        expect(ongoing).toBeNull();
+        const ongoing = screen.getByText(/Em andamento/i);
+        expect(ongoing).toBeTruthy();
     });
 });

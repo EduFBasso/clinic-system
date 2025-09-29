@@ -1,3 +1,53 @@
+export type StatusKind = 'scheduled' | 'done' | 'canceled' | 'ongoing' | 'past';
+
+/**
+ * Derive a visual status for an appointment-like object based on server-aligned time.
+ * - canceled → 'canceled'
+ * - done → 'done'
+ * - start <= now < end → 'ongoing'
+ * - end < now and status === 'scheduled' → 'past' (pending)
+ * - else → 'scheduled'
+ */
+export function deriveStatus(
+    appt: {
+        start_at: string;
+        end_at: string;
+        status: 'scheduled' | 'done' | 'canceled' | 'ongoing';
+    },
+    now: Date,
+): StatusKind {
+    const start = new Date(appt.start_at);
+    const end = new Date(appt.end_at);
+    if (appt.status === 'canceled') return 'canceled';
+    if (appt.status === 'done') return 'done';
+    if (start <= now && end > now) return 'ongoing';
+    if (end < now && appt.status === 'scheduled') return 'past';
+    return 'scheduled';
+}
+
+export function statusStripeColor(status: StatusKind): string {
+    return status === 'canceled'
+        ? 'var(--color-danger)'
+        : status === 'ongoing'
+        ? 'var(--color-ongoing)'
+        : status === 'past'
+        ? 'var(--color-pending)'
+        : status === 'done'
+        ? 'var(--color-done)'
+        : 'var(--color-success)';
+}
+
+export function statusBackgroundColor(status: StatusKind): string {
+    return status === 'canceled'
+        ? 'var(--color-danger-bg)'
+        : status === 'ongoing'
+        ? 'var(--color-ongoing-bg)'
+        : status === 'past'
+        ? 'var(--color-pending-bg)'
+        : status === 'done'
+        ? 'var(--color-done-bg)'
+        : 'var(--color-success-bg)';
+}
 import type { Appointment } from '../../hooks/useAppointments';
 
 export interface EnrichedAppointment extends Appointment {

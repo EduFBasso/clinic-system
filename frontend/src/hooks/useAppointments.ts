@@ -14,7 +14,7 @@ export interface Appointment {
     end_at: string;
     notes?: string;
     location?: string;
-    status: 'scheduled' | 'done' | 'canceled';
+    status: 'scheduled' | 'done' | 'canceled' | 'ongoing';
 }
 
 function dayRangeISO(d: Date) {
@@ -53,9 +53,10 @@ export function useAppointmentsRange(
             startISO,
         )}&end=${encodeURIComponent(endISO)}${
             clientId ? `&client=${clientId}` : ''
-        }`;
+        }&ts=${Date.now()}`;
         fetch(url, {
             headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store',
         })
             .then(r => {
                 if (!r.ok) throw new Error('Erro ao carregar agenda');

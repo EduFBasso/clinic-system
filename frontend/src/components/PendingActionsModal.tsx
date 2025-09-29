@@ -1,7 +1,11 @@
 import React from 'react';
 import AppModal from './Modal';
+import { clearOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import { API_BASE } from '../config/api';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
+import { dispatchers } from '../events/dispatchers';
+import { finalizeWithFallback } from '../services/appointments';
+import { setAppointmentOverride } from '../utils/appointments/overrides';
 
 interface PendingActionsModalProps {
     open: boolean;
@@ -27,12 +31,59 @@ export default function PendingActionsModal({
 }: PendingActionsModalProps) {
     const [busy, setBusy] = React.useState<'cancel' | 'finalize' | null>(null);
 
+    async function sleep(ms: number) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    type ApptStatus = 'scheduled' | 'done' | 'canceled' | 'unknown';
+    async function fetchApptStatus(id: number): Promise<ApptStatus> {
+        try {
+            const token = localStorage.getItem('accessToken') || '';
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const r = await fetch(
+                `${API_BASE}/agenda/appointments/${id}/?ts=${Date.now()}`,
+                {
+                    headers,
+                    cache: 'no-store',
+                },
+            );
+            if (!r.ok) return 'unknown';
+            const data = (await r.json()) as { status?: string };
+            const st = (data?.status || '').toLowerCase();
+            if (st === 'scheduled' || st === 'done' || st === 'canceled')
+                return st as ApptStatus;
+            return 'unknown';
+        } catch {
+            return 'unknown';
+        }
+    }
+
+    async function waitUntilFinalized(
+        id: number,
+        attempts = 4,
+    ): Promise<boolean> {
+        for (let i = 0; i < attempts; i++) {
+            const st = await fetchApptStatus(id);
+            if (st === 'done' || st === 'canceled') return true;
+            if (st !== 'scheduled' && st !== 'unknown') return true; // qualquer outro estado não bloqueia
+            await sleep(120 + i * 160);
+        }
+        return false;
+    }
+
     React.useEffect(() => {
         // no-op for now; keeping hook structure if future fields appear
     }, [open]);
 
     if (!appt) return null;
     const apptId = appt.id; // safe after null check
+    const apptClientId =
+        typeof appt.client === 'number'
+            ? appt.client
+            : appt.client && 'id' in appt.client
+            ? (appt.client as { id: number }).id
+            : undefined;
 
     const clientName =
         appt.client_name ||
@@ -83,8 +134,28 @@ export default function PendingActionsModal({
             } catch {
                 /* noop */
             }
-            window.dispatchEvent(new Event('appointments:changed'));
-            window.dispatchEvent(new Event('updateClients'));
+            dispatchers.appointmentsChanged();
+            dispatchers.updateClients();
+            try {
+                localStorage.setItem(
+                    'appointments.changed',
+                    String(Date.now()),
+                );
+            } catch {
+                /* noop */
+            }
+            // Clear ongoing latch for this client in the same tab (avoids sticky 'em andamento')
+            try {
+                if (typeof apptClientId === 'number') {
+                    window.dispatchEvent(
+                        new CustomEvent('client:clearOngoing', {
+                            detail: { clientId: apptClientId },
+                        }),
+                    );
+                }
+            } catch {
+                /* noop */
+            }
             onClose();
         } catch (e) {
             const msg = e instanceof Error ? e.message : 'Falha ao cancelar';
@@ -106,23 +177,22 @@ export default function PendingActionsModal({
         if (busy) return;
         setBusy('finalize');
         try {
-            const token = localStorage.getItem('accessToken') || '';
-            const headers: Record<string, string> = {
-                'Content-Type': 'application/json',
-            };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
             const id = apptId;
-            const r = await fetch(`${API_BASE}/agenda/appointments/${id}/`, {
-                method: 'PATCH',
-                headers,
-                body: JSON.stringify({ status: 'done' }),
-            });
-            if (!r.ok) throw new Error(await r.text());
+            const ok = await finalizeWithFallback(id);
+            if (!ok) throw new Error('Falha ao finalizar');
+            try {
+                setAppointmentOverride(id, { status: 'done' });
+            } catch {
+                /* noop */
+            }
+            const finalized = await waitUntilFinalized(id, 5);
             try {
                 window.dispatchEvent(
                     new CustomEvent('systemMessage', {
                         detail: {
-                            text: 'Atendimento marcado como concluído.',
+                            text: finalized
+                                ? 'Atendimento marcado como concluído.'
+                                : 'Concluído enviado. Atualizando…',
                             type: 'success',
                         },
                     }),
@@ -130,8 +200,34 @@ export default function PendingActionsModal({
             } catch {
                 /* noop */
             }
-            window.dispatchEvent(new Event('appointments:changed'));
-            window.dispatchEvent(new Event('updateClients'));
+            // Dispara eventos de atualização com pequeno backoff para evitar corrida
+            try {
+                // Limpa snapshot local, caso exista (garante remoção do estilo de atendimento)
+                if (typeof apptClientId === 'number') {
+                    clearOngoingSnapshot(apptClientId);
+                }
+                // Coalesce refresh events to avoid bursts
+                dispatchers.appointmentsChanged();
+                dispatchers.updateClients();
+                try {
+                    localStorage.setItem(
+                        'appointments.changed',
+                        String(Date.now()),
+                    );
+                } catch {
+                    /* noop */
+                }
+                // Clear ongoing latch for this client in the same tab (evita visual colado)
+                if (typeof apptClientId === 'number') {
+                    window.dispatchEvent(
+                        new CustomEvent('client:clearOngoing', {
+                            detail: { clientId: apptClientId },
+                        }),
+                    );
+                }
+            } catch {
+                /* noop */
+            }
             onClose();
         } catch (e) {
             const msg = e instanceof Error ? e.message : 'Falha ao concluir';

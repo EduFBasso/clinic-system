@@ -520,18 +520,20 @@ export default function WeeklyAgendaModal({
                                                     );
                                                     setPendingOpen(true);
                                                 }}
-                                                onDetails={
-                                                    a.status === 'done'
-                                                        ? appt => {
-                                                              setDetailsAppt(
-                                                                  appt as Appointment,
-                                                              );
-                                                              setDetailsOpen(
-                                                                  true,
-                                                              );
-                                                          }
-                                                        : undefined
-                                                }
+                                                onDetails={appt => {
+                                                    // Só abre detalhes para done/canceled; o card bloqueia ongoing
+                                                    if (
+                                                        appt.status ===
+                                                            'done' ||
+                                                        appt.status ===
+                                                            'canceled'
+                                                    ) {
+                                                        setDetailsAppt(
+                                                            appt as Appointment,
+                                                        );
+                                                        setDetailsOpen(true);
+                                                    }
+                                                }}
                                             />
                                         ))}
                                     </div>

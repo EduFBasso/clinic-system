@@ -30,6 +30,14 @@ function writeSnapshot(clientId: number | string, snap: OngoingSnapshot) {
     }
 }
 
+export function clearOngoingSnapshot(clientId: number | string) {
+    try {
+        localStorage.removeItem(`client:ongoing:${clientId}`);
+    } catch {
+        /* noop */
+    }
+}
+
 function isInWindow(
     now: Date,
     startISO?: string | null,
@@ -51,8 +59,16 @@ export function useOngoingSnapshot(opts: {
     now: Date;
     graceMs?: number; // extra time to keep style after end
     maxAgeMs?: number; // max age to trust snapshot when server is off (default ~12h)
+    useSnapshotWhenServerNotScheduled?: boolean; // default true; set to false to ignore snapshot fallback when server says not scheduled
 }) {
-    const { clientId, startAt, endAt, serverIsScheduled, now } = opts;
+    const {
+        clientId,
+        startAt,
+        endAt,
+        serverIsScheduled,
+        now,
+        useSnapshotWhenServerNotScheduled = true,
+    } = opts;
     const graceMs = opts.graceMs ?? 90_000; // 1.5min de tolerância
     const maxAgeMs = opts.maxAgeMs ?? 12 * 60 * 60 * 1000; // 12 horas
 
@@ -70,6 +86,13 @@ export function useOngoingSnapshot(opts: {
             return {
                 effectiveIsOngoing: inWindow,
                 source: 'server' as const,
+                snapshot: undefined,
+            };
+        }
+        if (!useSnapshotWhenServerNotScheduled) {
+            return {
+                effectiveIsOngoing: false,
+                source: 'none' as const,
                 snapshot: undefined,
             };
         }
@@ -99,7 +122,16 @@ export function useOngoingSnapshot(opts: {
             source: 'none' as const,
             snapshot: snap ?? undefined,
         };
-    }, [clientId, serverIsScheduled, startAt, endAt, now, graceMs, maxAgeMs]);
+    }, [
+        clientId,
+        serverIsScheduled,
+        startAt,
+        endAt,
+        now,
+        graceMs,
+        maxAgeMs,
+        useSnapshotWhenServerNotScheduled,
+    ]);
 
     return { effectiveIsOngoing, source, snapshot };
 }

@@ -243,8 +243,10 @@ const MainContent: React.FC<MainContentProps> = ({
             if (!selectedClientId) return;
             const el = cardRefs.current[selectedClientId];
             if (el) {
-                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                // Tenta focar um elemento interativo dentro do cartão
+                el.scrollIntoView({
+                    block: 'center',
+                    behavior: 'instant' as ScrollBehavior,
+                });
                 (
                     el.querySelector('button, [tabindex]') as HTMLElement | null
                 )?.focus?.();
@@ -256,7 +258,10 @@ const MainContent: React.FC<MainContentProps> = ({
             if (!id) return;
             const el = cardRefs.current[id];
             if (el) {
-                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                el.scrollIntoView({
+                    block: 'center',
+                    behavior: 'instant' as ScrollBehavior,
+                });
             }
         }
         function onNeedClientSelectionForAgenda() {
@@ -484,7 +489,9 @@ const MainContent: React.FC<MainContentProps> = ({
                     />
                 </div>
             </div>
-            {loading && <div>Carregando clientes...</div>}
+            {loading && clients.length === 0 && (
+                <div>Carregando clientes...</div>
+            )}
             {error && error.includes('Sessão expirada') && (
                 <SessionExpiredModal
                     open={true}
@@ -553,6 +560,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 open={modalOpen}
                 onClose={handleCloseModal}
                 showCloseButton
+                fullScreen
             >
                 {selectedClient && <ClientView client={selectedClient} />}
             </AppModal>

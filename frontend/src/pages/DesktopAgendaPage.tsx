@@ -1,4 +1,5 @@
 import React from 'react';
+import { getNow } from '../utils/now';
 import FloatingDatePicker from '../components/FloatingDatePicker';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import TimeRangeLabel from '../components/shared/TimeRangeLabel';
@@ -94,14 +95,14 @@ export default function DesktopAgendaPage() {
         _isOngoing: boolean;
         client?: ClientLike | number;
     };
-    const [now, setNow] = React.useState<Date>(new Date());
+    const [now, setNow] = React.useState<Date>(getNow());
     React.useEffect(() => {
         // Tick only when viewing today
         const isToday =
-            startOfDay(new Date()).getTime() ===
+            startOfDay(getNow()).getTime() ===
             startOfDay(selectedDay).getTime();
         if (!isToday) return;
-        const id = setInterval(() => setNow(new Date()), 5000);
+        const id = setInterval(() => setNow(getNow()), 5000);
         return () => clearInterval(id);
     }, [selectedDay]);
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { getNow } from '../utils/now';
 import FloatingDatePicker from './FloatingDatePicker';
 import TimePicker10 from './TimePicker10';
 import { API_BASE } from '../config/api';
@@ -31,8 +32,11 @@ export default function InlineAppointmentEditor({
     onSaved,
 }: InlineAppointmentEditorProps) {
     const effective = (appt || appointment) as Appointment | undefined;
-    const start = new Date(effective ? effective.start_at : Date.now());
-    const end = new Date(effective ? effective.end_at : Date.now());
+    const fallbackNow = getNow();
+    const start = new Date(
+        effective ? effective.start_at : fallbackNow.getTime(),
+    );
+    const end = new Date(effective ? effective.end_at : fallbackNow.getTime());
     const [date, setDate] = React.useState<Date>(new Date(start));
     const [showPicker, setShowPicker] = React.useState(false);
     const [pickerPos, setPickerPos] = React.useState<

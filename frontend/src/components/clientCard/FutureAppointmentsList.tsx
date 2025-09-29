@@ -18,7 +18,6 @@ export default function FutureAppointmentsList({
     valueColor,
     iconColor,
     labelColor,
-    clientId,
     onEdit,
 }: Props) {
     if (!items.length) return null;

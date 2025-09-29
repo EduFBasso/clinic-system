@@ -87,3 +87,22 @@ Testing tips:
 
 - On a phone, use ClientCard “+” or Menu → Agenda → Novo to reach `/schedule`.
 - For conflicts at the same time, the primary action becomes a red “Substituir e salvar” button; otherwise, it’s the green “Salvar”.
+
+## Workspaces (npm) — uso rápido
+
+Este repositório usa npm workspaces com um pacote principal: `frontend`.
+
+- Comandos comuns (na raiz do repo):
+  - Build: `npm run -w frontend build`
+  - Testes: `npm run -w frontend test`
+  - Lint: `npm run -w frontend lint`
+  - Dev (Vite): `npm run -w frontend dev`
+  - Preview: `npm run -w frontend preview`
+- Atalhos adicionados no package.json da raiz:
+  - `npm run build`, `npm run test`, `npm run lint`, `npm run dev:frontend`, `npm run preview`
+- VS Code: a task "Build frontend (vite typecheck)" usa `-w frontend` e agora roda a partir da raiz.
+
+Deploy
+
+- Vercel (recomendado): configure o Root Directory do projeto como `frontend/`. Assim nada muda nos comandos do Vercel.
+- Alternativa (Root na raiz): ajuste o Build Command para `npm run -w frontend build`.

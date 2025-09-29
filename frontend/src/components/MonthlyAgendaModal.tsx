@@ -7,6 +7,7 @@ import {
 } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import AppointmentCard from './shared/AppointmentCard';
+import { getAppointmentOverride } from '../utils/appointments/overrides';
 import TimeRangeLabel from './shared/TimeRangeLabel';
 import PendingActionsModal from './PendingActionsModal';
 
@@ -63,11 +64,15 @@ export default function MonthlyAgendaModal({
     client: ClientBasic;
     initialMonth?: Date;
 }) {
+    const effectiveNowRef = React.useMemo(() => new Date(), []);
     const [month, setMonth] = React.useState<Date>(() =>
         startOfMonth(initialMonth ? new Date(initialMonth) : new Date()),
     );
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
+    const [dayFilter, setDayFilter] = React.useState<'all' | string>('all');
     const [reloadKey, setReloadKey] = React.useState(0);
+    // Limit rendering for heavy clients (many appointments/days)
+    const [visibleDaysCount, setVisibleDaysCount] = React.useState<number>(14);
 
     const monthStart = React.useMemo(() => startOfMonth(month), [month]);
     const monthEnd = React.useMemo(() => endOfMonth(month), [month]);
@@ -86,54 +91,106 @@ export default function MonthlyAgendaModal({
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
-    // No explicit error handling in monthly view (no destructive actions here)
 
     const filteredItems = React.useMemo(() => {
-        const now = new Date();
+        const now = effectiveNowRef;
         return items.filter(a => {
+            const ov = getAppointmentOverride(a.id)?.status;
+            const status =
+                (ov as 'scheduled' | 'done' | 'canceled') ?? a.status;
             const start = new Date(a.start_at);
             const end = new Date(a.end_at);
             switch (statusFilter) {
                 case 'all':
                     return true;
                 case 'active':
-                    return a.status === 'scheduled' && end >= now;
+                    return status === 'scheduled' && end >= now;
                 case 'ongoing':
-                    return (
-                        a.status === 'scheduled' && start <= now && end > now
-                    );
+                    return status === 'scheduled' && start <= now && end > now;
                 case 'past':
-                    return a.status === 'scheduled' && end < now;
+                    return status === 'scheduled' && end < now;
                 case 'done':
-                    return a.status === 'done';
+                    return status === 'done';
                 case 'canceled':
-                    return a.status === 'canceled';
+                    return status === 'canceled';
                 default:
                     return true;
             }
         });
-    }, [items, statusFilter]);
+    }, [items, statusFilter, effectiveNowRef]);
 
     const groupedFiltered = React.useMemo(
         () => groupByDay(filteredItems),
         [filteredItems],
     );
 
+    // All calendar days for the current month (for the day dropdown)
+    const allMonthDays = React.useMemo(() => {
+        const days: string[] = [];
+        const d = new Date(monthStart);
+        while (d < monthEnd) {
+            days.push(toISODate(d));
+            d.setDate(d.getDate() + 1);
+        }
+        return days;
+    }, [monthStart, monthEnd]);
+
+    React.useEffect(() => {
+        if (!open) return;
+        // Ao abrir: sempre mostrar "Todos os dias" por padrão
+        setDayFilter('all');
+    }, [open]);
+
+    React.useEffect(() => {
+        if (!open) return;
+        // Ao trocar de mês, se um dia específico estiver selecionado e for inválido no novo mês,
+        // voltamos para 'all'.  Caso contrário, preservamos a escolha do usuário.
+        if (dayFilter !== 'all' && !allMonthDays.includes(dayFilter)) {
+            setDayFilter('all');
+        }
+    }, [month, allMonthDays, open, dayFilter]);
+
+    // Reload when external appointment changes happen
+    React.useEffect(() => {
+        // Debounce external refresh events to avoid rapid re-renders (helps mobile stability)
+        let t: number | undefined;
+        const onChanged = () => {
+            if (t) window.clearTimeout(t);
+            t = window.setTimeout(() => setReloadKey(x => x + 1), 180);
+        };
+        window.addEventListener('appointments:changed', onChanged);
+        return () => {
+            if (t) window.clearTimeout(t);
+            window.removeEventListener('appointments:changed', onChanged);
+        };
+    }, []);
+
     const mName = React.useMemo(
-        () =>
-            month.toLocaleString('pt-BR', {
-                month: 'long',
-            }),
+        () => month.toLocaleString('pt-BR', { month: 'long' }),
         [month],
     );
     const y = month.getFullYear();
     const monthValue = `${y}-${String(month.getMonth() + 1).padStart(2, '0')}`;
 
+    // Compute which days to render based on filter and virtualization
+    const sortedDays = React.useMemo(
+        () => Object.keys(groupedFiltered).sort(),
+        [groupedFiltered],
+    );
+    // Heuristic: reduce initial visible days for very heavy lists
+    React.useEffect(() => {
+        if (!open) return;
+        // If many appointments in this month, start smaller to improve iOS performance
+        const total = items.length;
+        if (total > 400) setVisibleDaysCount(5);
+        else if (total > 250) setVisibleDaysCount(8);
+        else setVisibleDaysCount(14);
+    }, [open, items.length]);
+
     return (
         <AppModal
             open={open}
             onClose={onClose}
-            // X bar transparente neste modal específico
             actionsBarStyle={{
                 background: 'transparent',
                 boxShadow: 'none',
@@ -143,23 +200,18 @@ export default function MonthlyAgendaModal({
             fullScreen
             disableTopSafePadding
         >
-            {/* Container central com largura reduzida e responsiva */}
             <div
                 style={{
                     display: 'grid',
                     gap: 12,
                     margin: '0 auto',
-                    // Evita extrapolar viewport em desktops: usa 100% até um limite menor
                     width: '100%',
-                    // afunila um pouco mais para evitar corte em aparelhos menores
                     maxWidth: '520px',
-                    // Evita corte lateral mantendo pequenas margens internas
                     paddingLeft: 12,
                     paddingRight: 12,
                     boxSizing: 'border-box',
                 }}
             >
-                {/* Sticky header (abaixo da barra do X) */}
                 <div
                     style={{
                         position: 'sticky',
@@ -171,7 +223,6 @@ export default function MonthlyAgendaModal({
                     }}
                 >
                     <div style={{ display: 'grid', gap: 12, paddingBottom: 8 }}>
-                        {/* Title + Close aligned */}
                         <div
                             style={{
                                 display: 'flex',
@@ -184,13 +235,19 @@ export default function MonthlyAgendaModal({
                             <div
                                 style={{
                                     fontWeight: 800,
-                                    // Título levemente fluido para caber junto do botão X
                                     fontSize:
                                         'clamp(18px, 4.6vw, var(--font-title-lg))',
                                     color: 'var(--color-heading)',
+                                    // Truncation for long names
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    minWidth: 0,
+                                    flex: '1 1 auto',
                                 }}
+                                aria-label='Título: Agenda mensal por cliente'
                             >
-                                Agenda mensal
+                                {`Agenda — ${client.first_name} ${client.last_name}`}
                             </div>
                             <button
                                 type='button'
@@ -213,52 +270,24 @@ export default function MonthlyAgendaModal({
                                 ×
                             </button>
                         </div>
-                        {/* Name line */}
+                        {/* Nome do cliente agora está incorporado ao título acima */}
+
+                        {/* Linha de data (segunda linha): Dia (esquerda) + Navegação de mês/ano (direita) */}
                         <div
                             style={{
                                 display: 'flex',
-                                alignItems: 'baseline',
-                                gap: 8,
-                            }}
-                        >
-                            <span
-                                style={{
-                                    fontWeight: 400,
-                                    color: 'var(--color-heading)',
-                                    minWidth: 56,
-                                    fontSize: 'var(--font-title-md)',
-                                }}
-                            >
-                                Nome:
-                            </span>
-                            <span
-                                style={{
-                                    color: 'var(--color-heading)',
-                                    fontWeight: 700,
-                                    fontSize: 'var(--font-title-md)',
-                                }}
-                            >
-                                {client.first_name} {client.last_name}
-                            </span>
-                        </div>
-                        {/* Row 3: filter (esquerda) + seletor de data mais à direita */}
-                        <div
-                            style={{
-                                // 3 colunas: filtro (auto) | espaçador (1fr) | seletor de mês (auto à direita)
-                                display: 'grid',
-                                gridTemplateColumns: 'auto 1fr auto',
                                 alignItems: 'center',
-                                columnGap: 8,
+                                justifyContent: 'space-between',
+                                gap: 8,
                                 minWidth: 0,
                             }}
                         >
-                            {/* Coluna esquerda: filtro */}
-                            <div style={{ minWidth: 0, justifySelf: 'start' }}>
+                            <div>
                                 <select
-                                    value={statusFilter}
+                                    value={dayFilter}
                                     onChange={e =>
-                                        setStatusFilter(
-                                            e.target.value as StatusFilter,
+                                        setDayFilter(
+                                            e.target.value as 'all' | string,
                                         )
                                     }
                                     style={{
@@ -269,22 +298,32 @@ export default function MonthlyAgendaModal({
                                         borderRadius: 6,
                                         color: 'var(--color-text)',
                                         fontWeight: 500,
-                                        // Reduzido ~20% em relação ao ajuste atual; responsivo sem estourar
-                                        width: 'clamp(144px, 100%, 192px)',
+                                        minWidth: 140,
+                                        maxWidth: 220,
+                                        width: 'auto',
                                     }}
-                                    aria-label='Filtro de status'
+                                    aria-label='Filtro de dia'
+                                    title='Escolha um dia do mês'
                                 >
-                                    <option value='all'>Todos</option>
-                                    <option value='active'>Ativos</option>
-                                    <option value='ongoing'>
-                                        Em andamento
-                                    </option>
-                                    <option value='past'>Pendentes</option>
-                                    <option value='done'>Concluídos</option>
-                                    <option value='canceled'>Cancelados</option>
+                                    <option value='all'>Todos os dias</option>
+                                    {allMonthDays.map(dISO => {
+                                        const d = parseISODateLocal(dISO);
+                                        const label = d.toLocaleDateString(
+                                            'pt-BR',
+                                            {
+                                                weekday: 'short',
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                            },
+                                        );
+                                        return (
+                                            <option key={dISO} value={dISO}>
+                                                {label}
+                                            </option>
+                                        );
+                                    })}
                                 </select>
                             </div>
-                            {/* Coluna direita: setas + rótulo do mês/ano (alinhado à direita) */}
                             <div
                                 style={{
                                     display: 'flex',
@@ -292,8 +331,7 @@ export default function MonthlyAgendaModal({
                                     justifyContent: 'flex-end',
                                     gap: 6,
                                     minWidth: 0,
-                                    // posiciona este bloco na 3ª coluna (auto à direita)
-                                    gridColumn: '3',
+                                    flex: 1,
                                 }}
                             >
                                 <button
@@ -334,10 +372,10 @@ export default function MonthlyAgendaModal({
                                         background: 'transparent',
                                         border: 'none',
                                         cursor: 'pointer',
-                                        // Permitir quebra em telas estreitas para não gerar overflow horizontal
-                                        whiteSpace: 'normal',
-                                        overflowWrap: 'anywhere',
-                                        wordBreak: 'break-word',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        maxWidth: '100%',
                                         fontSize: 'var(--font-body)',
                                     }}
                                     title='Selecionar mês'
@@ -395,124 +433,251 @@ export default function MonthlyAgendaModal({
                                     ▶
                                 </button>
                             </div>
-                            {/* Coluna direita: espaçador flexível para manter centralização */}
-                            <div style={{ minWidth: 0 }} />
+                        </div>
+
+                        {/* Linha de status (terceira linha): botão Hoje à esquerda e Status à direita */}
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                flexWrap: 'wrap',
+                            }}
+                        >
+                            <div>
+                                <button
+                                    onClick={() => {
+                                        const now = new Date();
+                                        const targetMonth = startOfMonth(now);
+                                        // Ir para o mês atual, se necessário
+                                        if (
+                                            targetMonth.getFullYear() !==
+                                                month.getFullYear() ||
+                                            targetMonth.getMonth() !==
+                                                month.getMonth()
+                                        ) {
+                                            setMonth(targetMonth);
+                                        }
+                                        // Selecionar o dia de hoje
+                                        setDayFilter(toISODate(now));
+                                    }}
+                                    style={{
+                                        padding: '8px 10px',
+                                        background:
+                                            'var(--color-primary-bg, var(--color-pending-bg))',
+                                        border: '1px solid var(--color-border)',
+                                        borderRadius: 6,
+                                        color: 'var(--color-text)',
+                                        fontWeight: 600,
+                                    }}
+                                    aria-label='Ir para hoje'
+                                >
+                                    Hoje
+                                </button>
+                            </div>
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                }}
+                            >
+                                <label
+                                    htmlFor='statusFilterSelect'
+                                    style={{
+                                        fontSize: 'var(--font-body)',
+                                        color: 'var(--color-heading)',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Status:
+                                </label>
+                                <div>
+                                    <select
+                                        id='statusFilterSelect'
+                                        value={statusFilter}
+                                        onChange={e =>
+                                            setStatusFilter(
+                                                e.target.value as StatusFilter,
+                                            )
+                                        }
+                                        style={{
+                                            fontSize: 'var(--font-body)',
+                                            padding: '8px 10px',
+                                            background:
+                                                'var(--color-pending-bg)',
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: 6,
+                                            color: 'var(--color-text)',
+                                            fontWeight: 500,
+                                            minWidth: 120,
+                                            maxWidth: 180,
+                                            width: 'auto',
+                                        }}
+                                        aria-label='Filtro de status'
+                                    >
+                                        <option value='all'>Todos</option>
+                                        <option value='active'>Ativos</option>
+                                        <option value='ongoing'>
+                                            Em andamento
+                                        </option>
+                                        <option value='past'>Pendentes</option>
+                                        <option value='done'>Concluídos</option>
+                                        <option value='canceled'>
+                                            Cancelados
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Content below sticky header */}
                 {loading ? (
                     <div>Carregando…</div>
                 ) : items.length === 0 ? (
                     <div>Nenhum compromisso neste mês.</div>
                 ) : (
                     <div style={{ display: 'grid', gap: 12, paddingTop: 6 }}>
-                        {Object.keys(groupedFiltered)
-                            .sort()
-                            .map(dayISO => {
-                                // Importante: new Date('YYYY-MM-DD') é UTC. Use construtor local para rótulo correto.
-                                const day = parseISODateLocal(dayISO);
-                                const label = day.toLocaleDateString('pt-BR', {
-                                    weekday: 'short',
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                });
-                                return (
+                        {(dayFilter === 'all'
+                            ? sortedDays.slice(0, visibleDaysCount)
+                            : [dayFilter]
+                        ).map(dayISO => {
+                            const day = parseISODateLocal(dayISO);
+                            const label = day.toLocaleDateString('pt-BR', {
+                                weekday: 'short',
+                                day: '2-digit',
+                                month: '2-digit',
+                            });
+                            return (
+                                <div
+                                    key={dayISO}
+                                    style={{ display: 'grid', gap: 8 }}
+                                >
                                     <div
-                                        key={dayISO}
-                                        style={{ display: 'grid', gap: 8 }}
+                                        style={{
+                                            fontWeight: 600,
+                                            color: '#374151',
+                                        }}
                                     >
+                                        {label}
+                                    </div>
+                                    {(groupedFiltered[dayISO] || []).length ===
+                                        0 && dayFilter !== 'all' ? (
                                         <div
                                             style={{
-                                                fontWeight: 600,
-                                                color: '#374151',
+                                                color: 'var(--color-muted)',
                                             }}
                                         >
-                                            {label}
+                                            Nenhum compromisso neste dia.
                                         </div>
-                                        {groupedFiltered[dayISO].map(a => {
-                                            const end = new Date(a.end_at);
-                                            const isPending =
-                                                a.status === 'scheduled' &&
-                                                end < new Date();
-                                            return (
+                                    ) : null}
+                                    {(groupedFiltered[dayISO] || []).map(a => {
+                                        const end = new Date(a.end_at);
+                                        const now = effectiveNowRef;
+                                        const isPending =
+                                            a.status === 'scheduled' &&
+                                            end < now;
+                                        return (
+                                            <div
+                                                key={a.id}
+                                                data-appt-id={a.id}
+                                                style={{
+                                                    display: 'grid',
+                                                    gridTemplateColumns:
+                                                        '56px 1fr',
+                                                    columnGap: 10,
+                                                    alignItems: 'flex-start',
+                                                    minWidth: 0,
+                                                    width: '100%',
+                                                    willChange: 'transform',
+                                                }}
+                                            >
+                                                <TimeRangeLabel
+                                                    start={a.start_at}
+                                                    end={a.end_at}
+                                                    size='md'
+                                                />
                                                 <div
-                                                    key={a.id}
-                                                    data-appt-id={a.id}
                                                     style={{
-                                                        display: 'grid',
-                                                        gridTemplateColumns:
-                                                            '56px 1fr',
-                                                        columnGap: 10,
-                                                        alignItems:
-                                                            'flex-start',
                                                         minWidth: 0,
                                                         width: '100%',
                                                     }}
                                                 >
-                                                    <TimeRangeLabel
-                                                        start={a.start_at}
-                                                        end={a.end_at}
-                                                        size='md'
-                                                    />
-                                                    <div
+                                                    <AppointmentCard<Appointment>
+                                                        appt={a as Appointment}
                                                         style={{
-                                                            minWidth: 0,
-                                                            width: '100%',
+                                                            padding: '6px 8px',
                                                         }}
-                                                    >
-                                                        <AppointmentCard<Appointment>
-                                                            appt={
-                                                                a as Appointment
-                                                            }
-                                                            style={{
-                                                                padding:
-                                                                    '6px 8px',
-                                                            }}
-                                                            onClick={
-                                                                isPending
-                                                                    ? () => {
-                                                                          setPendingAppt(
-                                                                              a as Appointment,
-                                                                          );
-                                                                          setPendingOpen(
-                                                                              true,
-                                                                          );
-                                                                      }
-                                                                    : undefined
-                                                            }
-                                                            onDetails={
-                                                                a.status ===
-                                                                'done'
-                                                                    ? appt => {
-                                                                          setDetailsAppt(
-                                                                              appt as Appointment,
-                                                                          );
-                                                                          setDetailsOpen(
-                                                                              true,
-                                                                          );
-                                                                      }
-                                                                    : undefined
-                                                            }
-                                                        />
-                                                    </div>
+                                                        showTime={false}
+                                                        stackName
+                                                        onClick={
+                                                            isPending
+                                                                ? () => {
+                                                                      setPendingAppt(
+                                                                          a as Appointment,
+                                                                      );
+                                                                      setPendingOpen(
+                                                                          true,
+                                                                      );
+                                                                  }
+                                                                : undefined
+                                                        }
+                                                        onDetails={
+                                                            a.status === 'done'
+                                                                ? appt => {
+                                                                      setDetailsAppt(
+                                                                          appt as Appointment,
+                                                                      );
+                                                                      setDetailsOpen(
+                                                                          true,
+                                                                      );
+                                                                  }
+                                                                : undefined
+                                                        }
+                                                    />
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            })}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })}
+                        {dayFilter === 'all' &&
+                            visibleDaysCount < sortedDays.length && (
+                                <div
+                                    style={{
+                                        textAlign: 'center',
+                                        padding: '8px 0',
+                                    }}
+                                >
+                                    <button
+                                        onClick={() =>
+                                            setVisibleDaysCount(c =>
+                                                Math.min(
+                                                    c + 7,
+                                                    sortedDays.length,
+                                                ),
+                                            )
+                                        }
+                                        style={{ padding: '8px 12px' }}
+                                        aria-label='Carregar mais dias'
+                                    >
+                                        Mostrar mais dias
+                                    </button>
+                                </div>
+                            )}
                     </div>
                 )}
-                {/* No error banner needed here; actions are non-destructive */}
+
                 {pendingOpen && pendingAppt && (
                     <PendingActionsModal
                         open={pendingOpen}
                         onClose={() => {
                             setPendingOpen(false);
                             setPendingAppt(null);
-                            setReloadKey(x => x + 1); // recarrega lista após ação
+                            setReloadKey(x => x + 1);
                         }}
                         appt={pendingAppt}
                     />

@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from decouple import config
+from corsheaders.defaults import default_headers  # for extending allowed CORS headers
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,12 +38,12 @@ AUTH_USER_MODEL = 'register.Professional'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     # Slow query logger (added after security/whitenoise for realistic timings)
     'clinic_project.middleware.QueryTimingMiddleware',
     'clinic_project.middleware.VersionHeaderMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -70,6 +71,15 @@ CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bo
 
 # Optional: allow credentials via env var if needed (useful when cookies are used).
 CORS_ALLOW_CREDENTIALS = config("CORS_ALLOW_CREDENTIALS", default=False, cast=bool)
+
+# Explicitly allow custom headers used by the frontend (device/session correlation, future versioning)
+# NOTE: keep header names in lowercase (browsers send them lowercased in preflight)
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-device-id',
+    'x-device-info',
+    'x-client-now',
+    # 'x-app-version',  # reserve for future use
+]
 
 ROOT_URLCONF = 'clinic_project.urls'
 
@@ -171,10 +181,16 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Media (uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.SessionAuthentication',
+        'apps.register.auth_device.JWTDeviceAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Enable session auth (useful for Django test client and local admin)
+        'rest_framework.authentication.SessionAuthentication',
     ),
     # Em produção removemos o BrowsableAPI para performance/segurança mínima
     'DEFAULT_RENDERER_CLASSES': [

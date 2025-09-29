@@ -9,6 +9,8 @@ function isMobileDevice() {
 }
 // frontend\src\components\NavBar.tsx
 import React, { useState, useRef, useEffect } from 'react';
+import AboutModal from './AboutModal';
+import { useSessionsSummary } from '../hooks/useSessions';
 import SessionExpiredModal from './SessionExpiredModal';
 import { API_BASE } from '../config/api';
 import { getOrCreateDeviceId } from '../utils/device';
@@ -21,7 +23,6 @@ type VerifyResponse = {
     message?: string;
 };
 import { useProfessionals } from '../hooks/useProfessionals';
-import type { Appointment } from '../hooks/useAppointments';
 import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
 import AgendaSettingsModal from './AgendaSettingsModal';
@@ -33,11 +34,6 @@ interface NavBarProps {
     openNewClientModal?: () => void;
     selectedClientId?: number | null;
     agendaOpeners?: {
-        openSchedule: (
-            clientId?: number | null,
-            date?: Date,
-            edit?: Appointment | null,
-        ) => void | Promise<void>;
         openMonthly: (clientId: number, date?: Date) => void | Promise<void>;
         openWeekly: (date?: Date) => void | Promise<void>;
     };
@@ -48,6 +44,7 @@ const NavBar: React.FC<NavBarProps> = ({
     selectedClientId,
     agendaOpeners,
 }) => {
+    // Viewport listener removido (usado apenas pelo relógio)
     const [selectedProfessional, setSelectedProfessional] =
         useState<string>('');
     const [codeSent, setCodeSent] = useState(false);
@@ -82,6 +79,10 @@ const NavBar: React.FC<NavBarProps> = ({
     const [agendaSettingsOpen, setAgendaSettingsOpen] = useState(false);
     // Quando true após solicitar OTP com sucesso, só revela o campo após clicar em OK no modal
     const [otpSentConfirmPending, setOtpSentConfirmPending] = useState(false);
+    // About modal state
+    const [aboutOpen, setAboutOpen] = useState(false);
+    // Trigger summary fetch when dropdown toggles open
+    const { summary } = useSessionsSummary(dropdownOpen);
 
     // Estado para modal de sessão expirada
     const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
@@ -161,54 +162,11 @@ const NavBar: React.FC<NavBarProps> = ({
     }
 
     // Helpers Agenda
-    async function fetchNextScheduledAppointment(clientId: number) {
-        const token = localStorage.getItem('accessToken');
-        if (isTokenExpired(token)) return null;
-        try {
-            const url = `${API_BASE}/agenda/appointments/?client=${clientId}&start=${encodeURIComponent(
-                new Date().toISOString(),
-            )}&status=scheduled`;
-            const res = await fetch(url, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) return null;
-            const list = await res.json();
-            return Array.isArray(list) && list.length ? list[0] : null;
-        } catch {
-            return null;
-        }
-    }
+    // Helper de busca de próximo agendamento removido (não utilizado após retirar 'Editar')
 
     // goAgendaDay removed: unificamos via modais (sem rota /schedule)
 
-    async function handleAgendaEditLast() {
-        setAgendaDropdownOpen(false);
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-            setSessionExpiredOpen(true);
-            return;
-        }
-        if (!selectedClientId) {
-            setModalMessage('Selecione um cliente para editar o compromisso.');
-            setModalOpen(true);
-            return;
-        }
-        const nextAppt = await fetchNextScheduledAppointment(selectedClientId);
-        if (!nextAppt) {
-            setModalMessage('Não há compromisso agendado para este cliente.');
-            setModalOpen(true);
-            return;
-        }
-        // Abrir via openSchedule para unificar experiência (QuickSchedule)
-        if (agendaOpeners) {
-            await agendaOpeners.openSchedule(
-                selectedClientId || undefined,
-                new Date(nextAppt.start_at),
-                nextAppt as unknown as Appointment,
-            );
-            return;
-        }
-    }
+    // Edição via menu Agenda removida (opção Editar retirada)
 
     // handleAgendaNew removido (menu Novo Compromisso retirado)
 
@@ -246,6 +204,32 @@ const NavBar: React.FC<NavBarProps> = ({
                             >
                                 Editar
                             </button>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setDropdownOpen(false);
+                                    setAboutOpen(true);
+                                }}
+                            >
+                                Sobre{' '}
+                                {summary && summary.has_others && (
+                                    <span
+                                        style={{
+                                            marginLeft: 6,
+                                            background: 'crimson',
+                                            color: '#fff',
+                                            borderRadius: 8,
+                                            padding: '0 6px',
+                                            fontSize: 11,
+                                            lineHeight: '16px',
+                                            display: 'inline-block',
+                                        }}
+                                        title={`Sessões ativas: ${summary.count}`}
+                                    >
+                                        {summary.count}
+                                    </span>
+                                )}
+                            </button>
                         </div>
                     )}
                 </div>
@@ -268,10 +252,7 @@ const NavBar: React.FC<NavBarProps> = ({
                     </button>
                     {agendaDropdownOpen && (
                         <div className={styles.dropdownMenu}>
-                            {/**
-                             * ORDEM SOLICITADA:
-                             * Configurações -> Agenda Diária -> Agenda Semanal -> Agenda Mensal (>10") -> Novo -> Editar
-                             */}
+                            {/** Menu Agenda simplificado: Configurações, Agenda Diária, Semanal e Mensal (>10"). */}
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
@@ -371,8 +352,28 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 agendaOpeners &&
                                                 !isMobileDevice()
                                             ) {
+                                                // Requer um cliente selecionado para abrir a agenda mensal
+                                                if (!selectedClientId) {
+                                                    try {
+                                                        window.dispatchEvent(
+                                                            new CustomEvent(
+                                                                'systemMessage',
+                                                                {
+                                                                    detail: {
+                                                                        text: 'Selecione um cliente para abrir a Agenda Mensal.',
+                                                                        type: 'info',
+                                                                        autoCloseMs: 6000,
+                                                                    },
+                                                                },
+                                                            ),
+                                                        );
+                                                    } catch {
+                                                        /* noop */
+                                                    }
+                                                    return;
+                                                }
                                                 agendaOpeners.openMonthly(
-                                                    selectedClientId || 0,
+                                                    selectedClientId,
                                                     now,
                                                 );
                                             } else {
@@ -383,7 +384,30 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 const d = String(
                                                     now.getDate(),
                                                 ).padStart(2, '0');
-                                                const url = `/agenda?date=${y}-${m}-${d}&mode=month`;
+                                                // Em dispositivos móveis, navegar com client=id para abrir o modal com o cliente correto
+                                                const url = selectedClientId
+                                                    ? `/agenda?client=${selectedClientId}&date=${y}-${m}-${d}&mode=month`
+                                                    : `/agenda?date=${y}-${m}-${d}&mode=month`;
+                                                if (!selectedClientId) {
+                                                    try {
+                                                        window.dispatchEvent(
+                                                            new CustomEvent(
+                                                                'systemMessage',
+                                                                {
+                                                                    detail: {
+                                                                        text: 'Selecione um cliente para abrir a Agenda Mensal.',
+                                                                        type: 'info',
+                                                                        autoCloseMs: 6000,
+                                                                    },
+                                                                },
+                                                            ),
+                                                        );
+                                                    } catch {
+                                                        /* noop */
+                                                    }
+                                                    // Mesmo sem cliente, ainda permite navegar para visão mensal geral (sem cliente) se desejado
+                                                    // Aqui mantemos o comportamento anterior: segue para a URL sem client
+                                                }
                                                 if (isMobileDevice())
                                                     window.location.href = url;
                                                 else window.open(url, '_self');
@@ -394,47 +418,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                     </button>
                                 );
                             })()}
-                            <button
-                                className={styles.dropdownItem}
-                                onClick={async () => {
-                                    setAgendaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
-                                        return;
-                                    }
-                                    // Permitir abrir sem cliente (fluxo genérico), mas manter alerta opcional
-                                    if (!selectedClientId) {
-                                        try {
-                                            localStorage.setItem(
-                                                'agenda.promptSelectClient',
-                                                'Você abriu a Agenda sem um cliente selecionado. Dentro do modal é possível escolher ou cancelar.',
-                                            );
-                                        } catch {
-                                            /* ignore */
-                                        }
-                                    }
-                                    if (agendaOpeners) {
-                                        await agendaOpeners.openSchedule(
-                                            selectedClientId || undefined,
-                                            new Date(),
-                                            null,
-                                        );
-                                        return;
-                                    }
-                                }}
-                            >
-                                Novo
-                            </button>
-                            {selectedClientId ? (
-                                <button
-                                    className={styles.dropdownItem}
-                                    onClick={handleAgendaEditLast}
-                                >
-                                    Editar
-                                </button>
-                            ) : null}
+                            {/* Opções 'Novo' e 'Editar' removidas para simplificar e evitar redundâncias */}
                         </div>
                     )}
                 </div>
@@ -484,6 +468,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                     {loggedProfessional.register_number}
                                 </span>
                             ) : null}
+                            {/* Relógio removido para simplificação */}
                         </div>
                         <button
                             className={
@@ -795,6 +780,16 @@ const NavBar: React.FC<NavBarProps> = ({
                     localStorage.removeItem('loggedProfessional');
                     window.location.reload();
                 }}
+            />
+            <AboutModal
+                open={aboutOpen}
+                onClose={() => setAboutOpen(false)}
+                buildCommit={
+                    import.meta.env?.VITE_APP_COMMIT as string | undefined
+                }
+                buildTime={
+                    import.meta.env?.VITE_BUILD_TIME as string | undefined
+                }
             />
         </div>
     );

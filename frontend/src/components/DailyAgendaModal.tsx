@@ -4,6 +4,8 @@ import FloatingDatePicker from './FloatingDatePicker';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import TimeRangeLabel from './shared/TimeRangeLabel';
 import AppointmentCard from './shared/AppointmentCard';
+import { enrichList } from '../utils/appointments/status';
+import { getAppointmentOverride } from '../utils/appointments/overrides';
 import QuickScheduleModal from './QuickScheduleModal';
 import PendingActionsModal from './PendingActionsModal';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
@@ -107,26 +109,14 @@ export default function DailyAgendaModal({
         _isOngoing: boolean;
         client?: ClientLike | number;
     };
-    // Live 'now' to auto-update ongoing/past without user interaction
-    const [now, setNow] = React.useState<Date>(new Date());
-    React.useEffect(() => {
-        if (!open) return;
-        // Only tick when viewing the current day to save work
-        const isToday =
-            startOfDay(new Date()).getTime() ===
-            startOfDay(selectedDay).getTime();
-        if (!isToday) return;
-        const id = setInterval(() => setNow(new Date()), 5000); // tick every 5s
-        return () => clearInterval(id);
-    }, [open, selectedDay]);
+    // Simplificado: usar hora local do dispositivo para status
+    const effectiveNowRef = React.useMemo(() => new Date(), []);
 
     const enriched: EnrichedAppt[] = React.useMemo(() => {
-        const refNow = now;
-        return items.map(a => {
-            const _start = new Date(a.start_at);
-            const _end = new Date(a.end_at);
-            const _isPast = _end < refNow;
-            const _isOngoing = _start <= refNow && _end > refNow;
+        const nowRef = effectiveNowRef;
+        // Reuse shared enrich to compute _isPast/_isOngoing and then reattach optional client shape
+        const base = enrichList(items, nowRef);
+        return base.map(a => {
             const rawClient = (a as unknown as { client?: RawClientField })
                 .client;
             let client: ClientLike | undefined = undefined;
@@ -138,31 +128,62 @@ export default function DailyAgendaModal({
                 )
                     client = candidate;
             }
-            return {
-                ...a,
-                _start,
-                _end,
-                _isPast,
-                _isOngoing,
-                ...(client ? { client } : {}),
-            } as EnrichedAppt;
+            return { ...a, ...(client ? { client } : {}) } as EnrichedAppt;
         });
-    }, [items, now]);
+    }, [items, effectiveNowRef]);
+
+    // Recarrega quando houver mudanças externas de compromissos
+    React.useEffect(() => {
+        if (!open) return;
+        const onChanged = () => setReloadKey(x => x + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, [open]);
+
+    // Quando algum compromisso entra em andamento, rolar até o cartão do cliente (como no filtro dinâmico)
+    React.useEffect(() => {
+        if (!open) return;
+        try {
+            const anyOngoing = enriched.find(
+                a => a.status === 'ongoing' || a._isOngoing,
+            );
+            if (anyOngoing) {
+                const c: ClientLike | number | undefined = anyOngoing.client as
+                    | ClientLike
+                    | number
+                    | undefined;
+                const clientId = typeof c === 'number' ? c : c?.id;
+                if (clientId) {
+                    window.dispatchEvent(
+                        new CustomEvent('scrollToClientCard', {
+                            detail: { clientId },
+                        }),
+                    );
+                }
+            }
+        } catch {
+            /* noop */
+        }
+    }, [open, enriched]);
 
     const filtered = enriched.filter(a => {
+        const ov = getAppointmentOverride(a.id)?.status;
+        const status = (ov as StatusKey) ?? a.status;
         switch (statusFilter) {
             case 'all':
                 return true;
             case 'active':
-                return a.status === 'scheduled' && !a._isPast;
+                return (status === 'scheduled' || a._isOngoing) && !a._isPast;
             case 'past':
-                return a.status === 'scheduled' && a._isPast;
+                return status === 'scheduled' && a._isPast;
             case 'done':
-                return a.status === 'done';
+                return status === 'done';
             case 'canceled':
-                return a.status === 'canceled';
+                return status === 'canceled';
             case 'ongoing':
-                return a._isOngoing && a.status === 'scheduled';
+                // Consider time-based ongoing and backend status 'ongoing' (when no override)
+                return a._isOngoing || status === 'ongoing';
             default:
                 return true;
         }
@@ -496,10 +517,6 @@ export default function DailyAgendaModal({
                     )}
                     {!loading &&
                         sorted.map(a => {
-                            const isActive =
-                                a.status === 'scheduled' && !a._isPast;
-                            const isPending =
-                                a.status === 'scheduled' && a._isPast;
                             return (
                                 <div
                                     key={a.id}
@@ -527,24 +544,21 @@ export default function DailyAgendaModal({
                                         <AppointmentCard
                                             appt={a}
                                             style={{ padding: '6px 8px' }}
-                                            onClick={
-                                                isActive
-                                                    ? () => {
-                                                          const client =
-                                                              makeClientBasic(
-                                                                  a,
-                                                              );
-                                                          setQsClient(client);
-                                                          setQsEdit(a);
-                                                          setQsOpen(true);
-                                                      }
-                                                    : isPending
-                                                    ? () => {
-                                                          setPendingAppt(a);
-                                                          setPendingOpen(true);
-                                                      }
-                                                    : undefined
-                                            }
+                                            showTime={false}
+                                            showEditAction={false}
+                                            onClick={() => {
+                                                const client =
+                                                    makeClientBasic(a);
+                                                setQsClient(client);
+                                                setQsEdit(a);
+                                                setQsOpen(true);
+                                            }}
+                                            onResolvePending={appt => {
+                                                setPendingAppt(
+                                                    appt as Appointment,
+                                                );
+                                                setPendingOpen(true);
+                                            }}
                                             onDetails={
                                                 a.status === 'done'
                                                     ? appt => {

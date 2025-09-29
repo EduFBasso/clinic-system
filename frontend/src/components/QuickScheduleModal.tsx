@@ -1,41 +1,59 @@
 import React from 'react';
-import TimePicker10 from './TimePicker10';
+import { dispatchers } from '../events/dispatchers';
 import AppModal from './Modal';
+import TimePicker10 from './TimePicker10';
+import FloatingDatePicker from './FloatingDatePicker';
+import QuickScheduleHeader from './quickschedule/QuickScheduleHeader';
+import QuickScheduleDayList, {
+    type DayFilter,
+} from './quickschedule/QuickScheduleDayList';
+import PendingActionsModal from './PendingActionsModal';
+import ensureDeviceSession from '../services/sessions';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
-import { API_BASE } from '../config/api';
-import FloatingDatePicker from './FloatingDatePicker';
-import { FaCalendarAlt } from 'react-icons/fa';
-import AppointmentCard from './shared/AppointmentCard';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
 import { useAppointmentsRange } from '../hooks/useAppointments';
+import { getNow } from '../utils/now';
+import {
+    getSlotInterval,
+    getWorkTimes,
+    getDefaultDuration,
+} from '../utils/agendaSettings';
 import { AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE } from '../config/limits';
-import { getSlotInterval, getWorkTimes } from '../utils/agendaSettings';
+import { API_BASE } from '../config/api';
 import { track } from '../utils/telemetry';
+import { buildDeviceHeaders } from '../services/device';
+import { usePendingGuard } from '../hooks/usePendingGuard';
 
-function pad2(n: number) {
-    return String(n).padStart(2, '0');
-}
-
-function toDateStr(d: Date) {
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-function weekdayLabel(d: Date) {
-    const s = d
-        .toLocaleDateString('pt-BR', { weekday: 'short' })
-        .replace('.', '');
-    return s.charAt(0).toUpperCase() + s.slice(1);
-}
+type VisitType = Appointment['visit_type'];
+type ClientMaybeNext = ClientBasic & { next_appointment_id?: number };
 
 interface QuickScheduleModalProps {
     open: boolean;
     onClose: () => void;
     client: ClientBasic;
     editAppointment?: Appointment | null;
-    afterPersist?: (id: number | null, mode: 'created' | 'updated') => void;
-    futureAppointments?: Appointment[];
+    afterPersist?: (id?: number, action?: 'created' | 'updated') => void;
+    futureAppointments?: Array<unknown>;
     maxFutureAppointments?: number;
+}
+
+function pad2(n: number) {
+    return String(n).padStart(2, '0');
+}
+function toMinutes(hm: string): number {
+    const [h, m] = hm.split(':').map(s => parseInt(s || '0', 10));
+    return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+function fromMinutes(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${pad2(h)}:${pad2(m)}`;
+}
+function weekdayLabel(d: Date) {
+    const s = d
+        .toLocaleDateString('pt-BR', { weekday: 'short' })
+        .replace('.', '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export default function QuickScheduleModal({
@@ -44,583 +62,302 @@ export default function QuickScheduleModal({
     client,
     editAppointment,
     afterPersist,
-    futureAppointments = [],
-    maxFutureAppointments = 7,
 }: QuickScheduleModalProps) {
-    // QuickSchedule sempre full screen
-    const expanded = true;
-    const [currentEdit, setCurrentEdit] = React.useState<
-        Appointment | null | undefined
-    >(editAppointment);
-    React.useEffect(() => setCurrentEdit(editAppointment), [editAppointment]);
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
-
-    const isEdit = !!(currentEdit && currentEdit.id);
-    // Telemetry: modal lifecycle
-    React.useEffect(() => {
-        if (open)
-            track({
-                type: 'modal_opened',
-                payload: { name: 'QuickScheduleModal' },
-            });
-        return () => {
-            if (open)
-                track({
-                    type: 'modal_closed',
-                    payload: { name: 'QuickScheduleModal' },
-                });
-        };
-    }, [open]);
-    const baseDate = React.useMemo(() => {
-        if (isEdit && currentEdit) return new Date(currentEdit.start_at);
-        // Regra: sempre sugerir criação para +7 dias a partir de agora.
-        const d = new Date();
-        d.setSeconds(0, 0);
-        d.setDate(d.getDate() + 7);
-        return d;
-    }, [isEdit, currentEdit]);
-
-    // Local storage keys (alinhar com AgendaSettingsModal)
-    const LS_KEYS = React.useMemo(
-        () => ({
-            workStart: 'agenda.workStart',
-            workEnd: 'agenda.workEnd',
-            defaultDuration: 'agenda.defaultDuration',
-        }),
-        [],
-    );
-
-    function clampHM(v: string, fallback: string) {
-        if (!/^\d{2}:\d{2}$/.test(v)) return fallback;
-        const [h, m] = v.split(':').map(n => parseInt(n, 10));
-        if (isNaN(h) || isNaN(m)) return fallback;
-        const hh = Math.min(23, Math.max(0, h));
-        const mm = Math.min(59, Math.max(0, m));
-        return `${pad2(hh)}:${pad2(mm)}`;
-    }
-
-    const [startHM, setStartHM] = React.useState(() => {
-        if (!isEdit) {
-            try {
-                const ws = localStorage.getItem(LS_KEYS.workStart) || '06:00';
-                return clampHM(ws, '06:00');
-            } catch {
-                /* noop */
-            }
+    const isEdit = !!editAppointment;
+    const [selectedDate, setSelectedDate] = React.useState<Date>(() => {
+        if (isEdit && editAppointment)
+            return new Date(editAppointment.start_at);
+        const base = getNow();
+        base.setMinutes(base.getMinutes() + 60);
+        return base;
+    });
+    const [startHM, setStartHM] = React.useState<string>(() => {
+        if (isEdit && editAppointment) {
+            const d = new Date(editAppointment.start_at);
+            return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
         }
-        const d = new Date(baseDate);
+        const d = new Date(selectedDate);
         return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     });
-    const [endHM, setEndHM] = React.useState(() => {
-        if (isEdit && currentEdit) {
-            const e = new Date(currentEdit.end_at);
-            return `${pad2(e.getHours())}:${pad2(e.getMinutes())}`;
+    const [endHM, setEndHM] = React.useState<string>(() => {
+        if (isEdit && editAppointment) {
+            const d = new Date(editAppointment.end_at);
+            return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
         }
-        // Deriva de workStart + defaultDuration (fallback 60min)
-        let duration = 60;
-        try {
-            const ddRaw = localStorage.getItem(LS_KEYS.defaultDuration);
-            const dd = parseInt(ddRaw || '60', 10);
-            if (!isNaN(dd) && dd > 0 && dd <= 240) duration = dd;
-        } catch {
-            /* noop */
-        }
-        const [sh, sm] = startHM.split(':').map(n => parseInt(n, 10));
-        const baseM = isNaN(sh) || isNaN(sm) ? 6 * 60 : sh * 60 + sm;
-        const endM = baseM + duration;
-        const eh = Math.floor(endM / 60);
-        const em = endM % 60;
-        return `${pad2(eh % 24)}:${pad2(em)}`;
+        const mins = toMinutes(startHM) + getDefaultDuration();
+        return fromMinutes(mins);
     });
-    // helper convert HH:MM to minutes from midnight
-    function toMinutes(hm: string) {
-        const [h, m] = hm.split(':').map(n => parseInt(n, 10));
-        return h * 60 + m;
-    }
-    function fromMinutes(total: number) {
-        const h = Math.floor(total / 60);
-        const m = total % 60;
-        return `${pad2(h)}:${pad2(m)}`;
-    }
-    // Sugestão de duração padrão (ex.: 60 min) — usada quando o horário de início é alterado
-    function getDefaultDuration(): number {
-        try {
-            const raw = localStorage.getItem(LS_KEYS.defaultDuration);
-            const v = parseInt(raw || '60', 10);
-            if (!isNaN(v) && v > 0 && v <= 240) return v;
-        } catch {
-            /* noop */
-        }
-        return 60;
-    }
+    const [visitType, setVisitType] = React.useState<VisitType>(
+        (isEdit && editAppointment
+            ? editAppointment.visit_type
+            : 'consulta') as VisitType,
+    );
+    const [setDefaultVisitType, setSetDefaultVisitType] = React.useState(false);
+    const [notes, setNotes] = React.useState<string>(
+        (isEdit && editAppointment && editAppointment.notes) || '',
+    );
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
-    const [showPicker, setShowPicker] = React.useState(false);
-    const [selectedDate, setSelectedDate] = React.useState<Date>(baseDate);
-    const [visitType, setVisitType] = React.useState<
-        'avaliacao' | 'retorno' | 'procedimento' | 'outro' | 'consulta'
-    >((): 'avaliacao' | 'retorno' | 'procedimento' | 'outro' | 'consulta' => {
-        const raw = localStorage.getItem('defaultVisitType');
-        if (
-            raw === 'avaliacao' ||
-            raw === 'retorno' ||
-            raw === 'procedimento' ||
-            raw === 'outro' ||
-            raw === 'consulta'
-        ) {
-            return raw;
-        }
-        // inválido ou ausente -> definir 'consulta' como novo padrão persistido
-        try {
-            localStorage.setItem('defaultVisitType', 'consulta');
-        } catch {
-            /* noop */
-        }
-        return 'consulta';
-    });
-    const [setDefaultVisitType, setSetDefaultVisitType] = React.useState(false);
-    const [notes, setNotes] = React.useState('');
-
-    React.useEffect(() => {
-        if (!open) return;
-        setError(null);
-        if (!isEdit && futureAppointments.length >= maxFutureAppointments) {
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: {
-                            text: `Limite de ${maxFutureAppointments} compromissos futuros atingido para este cliente`,
-                            type: 'warning',
-                        },
-                    }),
-                );
-            } catch {
-                /* noop: falha em disparar mensagem global */
-            }
-        }
-    }, [open, isEdit, futureAppointments.length, maxFutureAppointments]);
-
-    React.useEffect(() => {
-        // Sync selected date when baseDate changes (e.g., switching edit target)
-        setSelectedDate(baseDate);
-    }, [baseDate]);
-
-    // When currentEdit changes while modal is open, prefill times and notes
-    React.useEffect(() => {
-        if (currentEdit) {
-            const sd = new Date(currentEdit.start_at);
-            const ed = new Date(currentEdit.end_at);
-            setSelectedDate(sd);
-            setStartHM(`${pad2(sd.getHours())}:${pad2(sd.getMinutes())}`);
-            setEndHM(`${pad2(ed.getHours())}:${pad2(ed.getMinutes())}`);
-            setNotes(currentEdit.notes || '');
-        }
-    }, [currentEdit]);
-    // Quando abre (e não está editando), aplique as configurações salvas
-    React.useEffect(() => {
-        if (!open || isEdit) return;
-        try {
-            const ws = clampHM(
-                localStorage.getItem(LS_KEYS.workStart) || '06:00',
-                '06:00',
-            );
-            const we = clampHM(
-                localStorage.getItem(LS_KEYS.workEnd) || '21:00',
-                '21:00',
-            );
-            let dd = 60;
-            const ddRaw = localStorage.getItem(LS_KEYS.defaultDuration);
-            const parsed = parseInt(ddRaw || '60', 10);
-            if (!isNaN(parsed) && parsed > 0 && parsed <= 240) dd = parsed;
-            // Ajusta início e fim conforme configuração (garante end > start)
-            setStartHM(ws);
-            const [sh, sm] = ws.split(':').map(n => parseInt(n, 10));
-            let endTotal =
-                (isNaN(sh) || isNaN(sm) ? 6 * 60 : sh * 60 + sm) + dd;
-            const [weh, wem] = we.split(':').map(n => parseInt(n, 10));
-            const workEndM =
-                isNaN(weh) || isNaN(wem) ? 21 * 60 : weh * 60 + wem;
-            if (endTotal > workEndM) endTotal = workEndM; // limita ao fim do expediente
-            const eh = Math.floor(endTotal / 60);
-            const em = endTotal % 60;
-            setEndHM(`${pad2(eh % 24)}:${pad2(em)}`);
-        } catch {
-            /* noop */
-        }
-    }, [open, isEdit, LS_KEYS]);
-
-    // Atualiza se o usuário salvar novas configurações no modal de Agenda
-    React.useEffect(() => {
-        if (isEdit) return; // não sobrescreve em modo edição
-        function handleUpdated() {
-            try {
-                const ws = clampHM(
-                    localStorage.getItem(LS_KEYS.workStart) || '06:00',
-                    '06:00',
-                );
-                let dd = 60;
-                const ddRaw = localStorage.getItem(LS_KEYS.defaultDuration);
-                const parsed = parseInt(ddRaw || '60', 10);
-                if (!isNaN(parsed) && parsed > 0 && parsed <= 240) dd = parsed;
-                setStartHM(ws);
-                const [sh, sm] = ws.split(':').map(n => parseInt(n, 10));
-                const endM =
-                    (isNaN(sh) || isNaN(sm) ? 6 * 60 : sh * 60 + sm) + dd;
-                const eh = Math.floor(endM / 60);
-                const em = endM % 60;
-                setEndHM(`${pad2(eh % 24)}:${pad2(em)}`);
-            } catch {
-                /* noop */
-            }
-        }
-        window.addEventListener(
-            'agendaSettingsUpdated',
-            handleUpdated as EventListener,
-        );
-        return () =>
-            window.removeEventListener(
-                'agendaSettingsUpdated',
-                handleUpdated as EventListener,
-            );
-    }, [isEdit, LS_KEYS]);
-
-    const dateStr = toDateStr(selectedDate);
-    // Bounds e passo dos minutos conforme configurações
-    const workTimes = React.useMemo(() => getWorkTimes(), []);
-    const stepMinutes = React.useMemo(() => getSlotInterval(), []);
-    const minHM = React.useMemo(
-        () => `${pad2(workTimes.startHour)}:${pad2(workTimes.startMin)}`,
-        [workTimes],
-    );
-    const maxHM = React.useMemo(
-        () => `${pad2(workTimes.endHour)}:${pad2(workTimes.endMin)}`,
-        [workTimes],
-    );
-    const subtitleAgenda = `${weekdayLabel(selectedDate)}, ${pad2(
-        selectedDate.getDate(),
-    )}/${pad2(selectedDate.getMonth() + 1)}`;
-    // Título amigável para a seção de mini cards (histórico visual)
-    const sectionDateTitle = React.useMemo(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const sel = new Date(selectedDate);
-        sel.setHours(0, 0, 0, 0);
-        const diffDays = Math.round(
-            (sel.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-        );
-        const base = `${weekdayLabel(selectedDate)} ${pad2(
-            selectedDate.getDate(),
-        )}/${pad2(selectedDate.getMonth() + 1)}`;
-        if (diffDays === 0) return `Hoje — ${base}`;
-        if (diffDays === 1) return `Amanhã — ${base}`;
-        if (diffDays === -1) return `Ontem — ${base}`;
-        return base;
-    }, [selectedDate]);
-
-    // helper for day range
-    function startEndOfDay(d: Date) {
-        const s = new Date(d);
-        s.setHours(0, 0, 0, 0);
-        const e = new Date(s);
-        e.setDate(e.getDate() + 1);
-        return { s, e };
-    }
-    const { s: dayStart, e: dayEnd } = React.useMemo(
-        () => startEndOfDay(selectedDate),
-        [selectedDate],
-    );
     const [reloadKey, setReloadKey] = React.useState(0);
+    const [currentEdit, setCurrentEdit] = React.useState<Appointment | null>(
+        editAppointment || null,
+    );
     const [lastEditedId, setLastEditedId] = React.useState<number | null>(null);
     const [highlightId, setHighlightId] = React.useState<number | null>(null);
-    // Novo: highlight persistente enquanto em modo edição (#37)
     const [editingHighlightId, setEditingHighlightId] = React.useState<
         number | null
-    >(null);
-    // Ref para container scroll dos mini cards (para cálculo de visibilidade)
+    >(currentEdit?.id ?? null);
+    const [showPicker, setShowPicker] = React.useState(false);
     const listRef = React.useRef<HTMLDivElement | null>(null);
-    const { items: dayAppointments, loading: dayLoading } =
-        useAppointmentsRange(dayStart, dayEnd, undefined, reloadKey);
+    const workTimes = getWorkTimes();
 
-    // Filtro de status (todos / ativos / cancelados)
-    type DayFilter = 'todos' | 'ativos' | 'cancelados';
+    // Day range for list
+    const dayStart = React.useMemo(() => {
+        const d = new Date(selectedDate);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }, [selectedDate]);
+    const dayEnd = React.useMemo(() => {
+        const d = new Date(dayStart);
+        d.setDate(d.getDate() + 1);
+        return d;
+    }, [dayStart]);
+
+    const { items: dayAppointments, loading: dayLoading } =
+        useAppointmentsRange(dayStart, dayEnd, client.id, reloadKey);
+
     const [dayFilter, setDayFilter] = React.useState<DayFilter>('todos');
 
-    const filteredAppointments = React.useMemo(() => {
-        if (dayFilter === 'todos') return dayAppointments;
-        if (dayFilter === 'ativos')
-            return dayAppointments.filter(a => a.status === 'scheduled');
-        if (dayFilter === 'cancelados')
-            return dayAppointments.filter(a => a.status === 'canceled');
-        return dayAppointments;
-    }, [dayAppointments, dayFilter]);
+    // Title helpers
+    const subtitleAgenda = React.useMemo(() => {
+        const dateStr = selectedDate.toLocaleDateString('pt-BR');
+        return `${weekdayLabel(selectedDate)}, ${dateStr}`;
+    }, [selectedDate]);
+    const sectionDateTitle = React.useMemo(() => {
+        const d = selectedDate;
+        const dd = `${pad2(d.getDate())}/${pad2(
+            d.getMonth() + 1,
+        )}/${d.getFullYear()}`;
+        return `${weekdayLabel(d)} — ${dd}`;
+    }, [selectedDate]);
 
-    // After reload, if we have a lastEditedId (criação/atualização), highlight temporário e scroll
+    // Pending guard (block create when client has pending)
+    const { found: pendingFound, refresh: refreshPendingGuard } =
+        usePendingGuard({
+            open,
+            isEdit,
+            clientId: client.id,
+        });
+    const isPending = !!pendingFound;
+    const [pendingOpen, setPendingOpen] = React.useState(false);
+    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
+        null,
+    );
     React.useEffect(() => {
         if (!dayLoading && lastEditedId) {
-            const target = dayAppointments.find(a => a.id === lastEditedId);
-            if (target) {
+            const exists = dayAppointments.some(a => a.id === lastEditedId);
+            if (exists) {
                 setHighlightId(lastEditedId);
-                // Scroll after next paint
                 requestAnimationFrame(() => {
-                    const el = document.getElementById(
-                        `appt-card-${lastEditedId}`,
-                    );
-                    if (el) {
-                        try {
-                            const container = listRef.current;
-                            let doScroll = true;
-                            if (container) {
-                                const cRect = container.getBoundingClientRect();
-                                const eRect = el.getBoundingClientRect();
-                                const visibleTop = Math.max(
-                                    eRect.top,
-                                    cRect.top,
-                                );
-                                const visibleBottom = Math.min(
-                                    eRect.bottom,
-                                    cRect.bottom,
-                                );
-                                const visibleHeight = Math.max(
-                                    0,
-                                    visibleBottom - visibleTop,
-                                );
-                                const ratio = visibleHeight / eRect.height;
-                                if (ratio >= 0.6) doScroll = false; // já visível o suficiente
-                            }
-                            if (doScroll) {
-                                el.scrollIntoView({
-                                    behavior: 'smooth',
-                                    block: 'center',
-                                });
-                            }
-                        } catch {
-                            /* noop */
-                        }
-                    }
-                    // também rola o cartão do cliente para reforçar contexto
                     try {
-                        window.dispatchEvent(
-                            new CustomEvent('scrollToClientCard', {
-                                detail: { clientId: client.id },
-                            }),
+                        const el = document.getElementById(
+                            `appt-card-${lastEditedId}`,
                         );
+                        if (el && el.scrollIntoView)
+                            el.scrollIntoView({ block: 'center' });
                     } catch {
                         /* noop */
                     }
                 });
-                const t = setTimeout(() => setHighlightId(null), 2500);
-                return () => clearTimeout(t);
+                const t = window.setTimeout(() => setHighlightId(null), 2500);
+                return () => window.clearTimeout(t);
             }
         }
-    }, [dayLoading, dayAppointments, lastEditedId, client.id]);
+        return;
+    }, [dayLoading, lastEditedId, dayAppointments]);
 
-    // Quando entra em modo edição, focar e aplicar highlight persistente (com retries para caso o card seja o último e ainda não renderizado).
+    // Recarrega a lista do dia quando houver mudanças externas de compromissos
     React.useEffect(() => {
         if (!open) return;
-        if (currentEdit && currentEdit.id) {
-            setEditingHighlightId(currentEdit.id);
-            let attempts = 0;
-            const MAX_ATTEMPTS = 10;
-            const DELAY = 70; // ms
-            const targetId = currentEdit.id;
-            function tryScroll() {
-                const el = document.getElementById(`appt-card-${targetId}`);
-                if (el) {
+        const onChanged = () => setReloadKey(k => k + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, [open]);
+
+    function buildDateStr(d: Date) {
+        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(
+            d.getDate(),
+        )}`;
+    }
+
+    const handleImmediateClose = React.useCallback(() => {
+        try {
+            window.dispatchEvent(new Event('ensureScrollUnlocked'));
+        } catch {
+            /* noop */
+        }
+        try {
+            refreshPendingGuard();
+        } catch {
+            /* noop */
+        }
+        onClose();
+    }, [onClose, refreshPendingGuard]);
+
+    const handleSave = React.useCallback(async () => {
+        setError(null);
+        setSaving(true);
+        const t0 = performance.now();
+        const dateStr = buildDateStr(selectedDate);
+        const startISO = new Date(`${dateStr}T${startHM}:00`).toISOString();
+        const endISO = new Date(`${dateStr}T${endHM}:00`).toISOString();
+        const visitTitles: Record<string, string> = {
+            consulta: 'Consulta',
+            avaliacao: 'Avaliação',
+            retorno: 'Retorno',
+            procedimento: 'Procedimento',
+            outro: 'Outro',
+        };
+        const title = visitTitles[String(visitType)] || 'Consulta';
+        const token = localStorage.getItem('accessToken') || '';
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        try {
+            let updatedId: number | undefined;
+            const wasEdit = !!currentEdit;
+            if (currentEdit) {
+                const resp = await fetch(
+                    `${API_BASE}/agenda/appointments/${currentEdit.id}/`,
+                    {
+                        method: 'PATCH',
+                        headers,
+                        body: JSON.stringify({
+                            title,
+                            start_at: startISO,
+                            end_at: endISO,
+                            visit_type: visitType,
+                            notes,
+                        }),
+                    },
+                );
+                if (!resp.ok) throw new Error('Erro ao atualizar');
+                updatedId = currentEdit.id;
+            } else {
+                // Ensure device session exists before POST create
+                try {
+                    await ensureDeviceSession();
+                } catch {
+                    /* noop */
+                }
+                let resp = await fetch(`${API_BASE}/agenda/appointments/`, {
+                    method: 'POST',
+                    headers: { ...headers, ...buildDeviceHeaders() },
+                    body: JSON.stringify({
+                        client: client.id,
+                        title,
+                        start_at: startISO,
+                        end_at: endISO,
+                        visit_type: visitType,
+                        status: 'scheduled',
+                        notes,
+                    }),
+                });
+                if (resp.status === 401 || resp.status === 403) {
                     try {
-                        const container = listRef.current;
-                        let doScroll = true;
-                        if (container) {
-                            const cRect = container.getBoundingClientRect();
-                            const eRect = el.getBoundingClientRect();
-                            const visibleTop = Math.max(eRect.top, cRect.top);
-                            const visibleBottom = Math.min(
-                                eRect.bottom,
-                                cRect.bottom,
-                            );
-                            const visibleHeight = Math.max(
-                                0,
-                                visibleBottom - visibleTop,
-                            );
-                            const ratio = visibleHeight / eRect.height;
-                            if (ratio >= 0.6) doScroll = false; // suficiente visível
-                        }
-                        if (doScroll) {
-                            el.scrollIntoView({
-                                behavior: 'smooth',
-                                block: 'center',
-                            });
-                        }
+                        await ensureDeviceSession(true);
                     } catch {
                         /* noop */
                     }
-                } else if (attempts < MAX_ATTEMPTS) {
-                    attempts += 1;
-                    setTimeout(tryScroll, DELAY);
+                    resp = await fetch(`${API_BASE}/agenda/appointments/`, {
+                        method: 'POST',
+                        headers: { ...headers, ...buildDeviceHeaders() },
+                        body: JSON.stringify({
+                            client: client.id,
+                            title,
+                            start_at: startISO,
+                            end_at: endISO,
+                            visit_type: visitType,
+                            status: 'scheduled',
+                            notes,
+                        }),
+                    });
                 }
-            }
-            // tenta após paint; se a lista ainda estiver carregando, o retry cobre
-            requestAnimationFrame(tryScroll);
-        } else {
-            setEditingHighlightId(null);
-        }
-    }, [currentEdit, open, filteredAppointments.length]);
-
-    const limitReached =
-        !isEdit &&
-        (client.next_appointment_status === 'scheduled' ? 1 : 0) +
-            futureAppointments.length >=
-            maxFutureAppointments;
-
-    // Pending guard: when the client's next server appointment is already in the past and not done/canceled, block creation
-    const isPending = React.useMemo(() => {
-        if (client.next_appointment_status !== 'scheduled') return false;
-        const sISO = client.next_appointment_start_at;
-        const eISO = client.next_appointment_end_at;
-        if (!sISO || !eISO) return false;
-        const endMs = new Date(eISO).getTime();
-        return endMs <= Date.now();
-    }, [
-        client.next_appointment_status,
-        client.next_appointment_start_at,
-        client.next_appointment_end_at,
-    ]);
-    // nearLimit reservado para futura UI (mensagem de sugestão de empurrar data)
-    // const nearLimit =
-    //     !isEdit && futureAppointments.length === maxFutureAppointments - 1;
-
-    async function handleSave() {
-        if (saving) {
-            console.debug(
-                '[QuickSchedule] Ignorando clique extra enquanto saving=true',
-            );
-            return; // evita duplo clique / corrida
-        }
-        if (!isEdit && isPending) {
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: {
-                            text: 'Há um compromisso pendente para este cliente. Finalize antes de criar outro.',
-                            type: 'warning',
-                        },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-            return;
-        }
-        if (limitReached) {
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: {
-                            text: `Limite de ${maxFutureAppointments} compromissos futuros — não é possível criar novo agora`,
-                            type: 'warning',
-                        },
-                    }),
-                );
-            } catch {
-                /* noop: falha em disparar mensagem de limite */
-            }
-            return;
-        }
-        setError(null);
-        // Validação básica horários
-        const startM = toMinutes(startHM);
-        const endM = toMinutes(endHM);
-        if (isNaN(startM) || isNaN(endM)) {
-            setError('Horário inválido');
-            return;
-        }
-        if (endM <= startM) {
-            setError('Hora final deve ser após a inicial');
-            return;
-        }
-        // limpa mensagem local (agora global)
-        setSaving(true);
-        const t0 = performance.now();
-        // AbortController com timeout defensivo para evitar spinner infinito em rede lenta / servidor travado
-        const controller = new AbortController();
-        const ABORT_MS = 15000; // 15s
-        const abortTimer = setTimeout(() => {
-            try {
-                controller.abort();
-                console.debug('[QuickSchedule] abort por timeout', ABORT_MS);
-            } catch {
-                /* noop */
-            }
-        }, ABORT_MS);
-        try {
-            console.debug('[QuickSchedule] handleSave start', {
-                isEdit,
-                clientId: client.id,
-                startHM,
-                endHM,
-                dateStr,
-            });
-            const token = localStorage.getItem('accessToken');
-            const headers: Record<string, string> = {
-                'Content-Type': 'application/json',
-            };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            const startISO = new Date(`${dateStr}T${startHM}:00`).toISOString();
-            const endISO = new Date(`${dateStr}T${endHM}:00`).toISOString();
-            console.debug('[QuickSchedule] computed ISO', { startISO, endISO });
-
-            const url = isEdit
-                ? `${API_BASE}/agenda/appointments/${currentEdit!.id}/`
-                : `${API_BASE}/agenda/appointments/`;
-            const method = isEdit ? 'PATCH' : 'POST';
-            if (setDefaultVisitType) {
-                localStorage.setItem('defaultVisitType', visitType);
-            }
-            const body = isEdit
-                ? JSON.stringify({ start_at: startISO, end_at: endISO, notes })
-                : JSON.stringify({
-                      client: client.id,
-                      title: 'Consulta',
-                      visit_type: visitType,
-                      start_at: startISO,
-                      end_at: endISO,
-                      notes,
-                  });
-            console.debug('[QuickSchedule] fetch', { url, method, body });
-            const resp = await fetch(url, {
-                method,
-                headers,
-                body,
-                signal: controller.signal,
-            });
-            console.debug('[QuickSchedule] response status', resp.status);
-            if (!resp.ok) {
-                const text = await resp.text();
-                console.debug('[QuickSchedule] response error text', text);
-                throw new Error(text || 'Erro na solicitação');
-            }
-            const wasEdit = isEdit;
-            let updatedId: number | null = null;
-            if (wasEdit && currentEdit) {
-                updatedId = currentEdit.id;
-            } else {
-                // Need id from creation response
-                try {
-                    const created = await resp.json();
-                    if (created && typeof created.id === 'number') {
-                        updatedId = created.id;
-                        console.debug(
-                            '[QuickSchedule] parsed created id',
-                            updatedId,
-                        );
+                if (!resp.ok) {
+                    let text = '';
+                    try {
+                        const ct = resp.headers.get('Content-Type') || '';
+                        if (ct.includes('application/json')) {
+                            const j = await resp.json();
+                            text =
+                                typeof j === 'string' ? j : JSON.stringify(j);
+                        } else {
+                            text = await resp.text();
+                        }
+                    } catch {
+                        /* ignore */
                     }
-                } catch {
-                    /* ignore parse issues */
+                    // If backend indicates pending, open resolver
+                    if (/pendente/i.test(text)) {
+                        try {
+                            const token2 =
+                                localStorage.getItem('accessToken') || '';
+                            const headers2: Record<string, string> = {};
+                            if (token2)
+                                headers2['Authorization'] = `Bearer ${token2}`;
+                            const url = `${API_BASE}/agenda/appointments/?client=${
+                                client.id
+                            }&status=scheduled&ordering=-end_at&limit=50&ts=${Date.now()}`;
+                            const r = await fetch(url, {
+                                headers: headers2,
+                                cache: 'no-store',
+                            });
+                            if (r.ok) {
+                                const data = (await r.json()) as Appointment[];
+                                const nowMs = Date.now();
+                                const pending = Array.isArray(data)
+                                    ? data.find(ap => {
+                                          const endMs = new Date(
+                                              ap.end_at,
+                                          ).getTime();
+                                          return (
+                                              ap.status === 'scheduled' &&
+                                              isFinite(endMs) &&
+                                              endMs <= nowMs
+                                          );
+                                      })
+                                    : null;
+                                if (pending) {
+                                    setPendingAppt(pending);
+                                    setPendingOpen(true);
+                                    try {
+                                        window.dispatchEvent(
+                                            new CustomEvent('systemMessage', {
+                                                detail: {
+                                                    text: 'Há uma pendência anterior. Resolva-a antes de criar um novo compromisso.',
+                                                    type: 'warning',
+                                                },
+                                            }),
+                                        );
+                                    } catch {
+                                        /* noop */
+                                    }
+                                }
+                            }
+                        } catch {
+                            /* ignore */
+                        }
+                    }
+                    const friendly =
+                        text && text.length < 400 ? text : 'Erro ao criar';
+                    throw new Error(friendly);
                 }
+                const data = (await resp.json()) as { id?: number };
+                updatedId = data?.id;
             }
+
             try {
                 window.dispatchEvent(
                     new CustomEvent('systemMessage', {
@@ -632,56 +369,52 @@ export default function QuickScheduleModal({
                         },
                     }),
                 );
-                // Dispara eventos globais para atualização imediata de outros componentes
-                window.dispatchEvent(new Event('updateClients'));
-                window.dispatchEvent(
-                    new CustomEvent('appointments:changed', { detail: {} }),
-                );
-                console.debug(
-                    '[QuickSchedule] eventos disparados (systemMessage, updateClients, appointments:changed)',
-                );
             } catch {
                 /* noop */
             }
-            setReloadKey(k => k + 1); // refresh list
-            console.debug('[QuickSchedule] reload list triggered', {
-                updatedId,
-            });
+
+            try {
+                // Dispara imediatamente e também agenda via dispatcher para coalescer com outros eventos próximos
+                dispatchers.updateClients();
+                dispatchers.appointmentsChanged();
+                // Sinal adicional opcional: nudge 'appointments:maybeRefresh' para hooks que escutam pings leves
+                try {
+                    window.dispatchEvent(
+                        new Event('appointments:maybeRefresh'),
+                    );
+                } catch {
+                    /* noop */
+                }
+            } catch {
+                /* noop */
+            }
+
+            setReloadKey(k => k + 1);
             if (updatedId) setLastEditedId(updatedId);
             if (afterPersist)
                 afterPersist(updatedId, wasEdit ? 'updated' : 'created');
-            // Telemetry: created/updated
+
             try {
-                if (!wasEdit && updatedId)
+                if (!wasEdit && updatedId) {
                     track({
                         type: 'appointment_created',
                         payload: {
                             id: updatedId,
                             client_id: client.id,
-                            start_at: new Date(
-                                `${dateStr}T${startHM}:00`,
-                            ).toISOString(),
+                            start_at: startISO,
                         },
                     });
-                else if (wasEdit && updatedId)
+                } else if (wasEdit && updatedId) {
                     track({
                         type: 'appointment_updated',
-                        payload: {
-                            id: updatedId,
-                            start_at: new Date(
-                                `${dateStr}T${startHM}:00`,
-                            ).toISOString(),
-                        },
+                        payload: { id: updatedId, start_at: startISO },
                     });
+                }
             } catch {
                 /* noop */
             }
-            // Nota: auto-close opcional (apenas criação) para fluxo rápido.
-            // Aguardos de 3s foram eliminados — fechamento é quase imediato para reduzir fricção.
+
             if (!wasEdit && AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE) {
-                // Marca tempo para auto-close UX
-                console.debug('[QuickSchedule] scheduling auto-close');
-                // Desbloqueia scroll já aqui (caso o lock ainda esteja ativo) para reduzir sensação de travamento
                 try {
                     window.dispatchEvent(new Event('ensureScrollUnlocked'));
                 } catch {
@@ -689,45 +422,57 @@ export default function QuickScheduleModal({
                 }
                 setTimeout(() => {
                     try {
+                        // Mantemos forceRefresh direto (uso específico), mas coalescemos eventos globais
                         window.dispatchEvent(new Event('clients:forceRefresh'));
                     } catch {
                         /* noop */
                     }
                     handleImmediateClose();
-                }, 160); // reduzido de 250 -> 160ms
+                }, 160);
             }
         } catch (e) {
             const msg =
-                typeof e === 'object' && e && 'message' in e
+                e && typeof e === 'object' && 'message' in e
                     ? String((e as Error).message)
                     : 'Erro ao salvar';
-            if (msg === 'The user aborted a request.' || /abort/i.test(msg)) {
-                setError('Tempo excedido. Tente novamente.');
-            } else {
-                setError(msg);
+            setError(msg);
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'error' },
+                    }),
+                );
+            } catch {
+                /* noop */
             }
-            console.debug('[QuickSchedule] erro ao salvar', msg);
         } finally {
-            clearTimeout(abortTimer);
             setSaving(false);
             const t1 = performance.now();
             console.debug(
-                '[QuickSchedule] handleSave end (latency ms)',
+                '[QuickSchedule] handleSave latency ms',
                 (t1 - t0).toFixed(1),
             );
-            // Fallback extra para desbloquear scroll mesmo se MUI não disparar (race)
             try {
                 window.dispatchEvent(new Event('ensureScrollUnlocked'));
             } catch {
                 /* noop */
             }
         }
-    }
+    }, [
+        selectedDate,
+        startHM,
+        endHM,
+        visitType,
+        notes,
+        currentEdit,
+        client.id,
+        afterPersist,
+        handleImmediateClose,
+    ]);
 
-    // Safety: se por algum bug "saving" ficar preso > 20s, desfaz estado e exibe mensagem
     React.useEffect(() => {
         if (!saving) return;
-        const safety = setTimeout(() => {
+        const id = window.setTimeout(() => {
             setSaving(false);
             setError(
                 prev =>
@@ -740,25 +485,8 @@ export default function QuickScheduleModal({
                 /* noop */
             }
         }, 20000);
-        return () => clearTimeout(safety);
+        return () => window.clearTimeout(id);
     }, [saving]);
-
-    // Wrapper para fechar garantindo desbloqueio imediato (mitiga atraso percebido)
-    const handleImmediateClose = React.useCallback(() => {
-        try {
-            onClose();
-        } finally {
-            try {
-                window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                // Instrumentação
-                console.debug(
-                    '[QuickSchedule] close -> ensureScrollUnlocked dispatched',
-                );
-            } catch {
-                /* noop */
-            }
-        }
-    }, [onClose]);
 
     return (
         <AppModal
@@ -768,7 +496,6 @@ export default function QuickScheduleModal({
             fullScreen
             maxHeightVh={96}
             actionsBarStyle={{
-                // Deixa a barra do X transparente neste modal para não cobrir o título
                 background: 'transparent',
                 borderBottom: 'none',
             }}
@@ -777,79 +504,19 @@ export default function QuickScheduleModal({
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: expanded ? 16 : 12,
+                    gap: 16,
                     position: 'relative',
-                    maxWidth: expanded ? 1280 : undefined,
+                    maxWidth: 'min(1600px, 96vw)',
                     margin: '0 auto',
                 }}
             >
-                {/* Sticky header to standardize title area and keep it visible */}
-                <div
-                    style={{
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 900,
-                        background: 'var(--color-bg)',
-                        borderBottom: '1px solid var(--color-border)',
-                        // Occupy the visual top when actions bar is transparent
-                        paddingTop: 'env(safe-area-inset-top, 0px)',
-                    }}
-                >
-                    <div
-                        style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'flex-start',
-                            gap: 12,
-                            flexWrap: 'wrap',
-                            paddingBottom: 8,
-                        }}
-                    >
-                        <h2
-                            style={{
-                                margin: '0 0 4px 0',
-                                fontSize: expanded ? 28 : 20,
-                                fontWeight: 800,
-                                color: '#111827',
-                            }}
-                        >
-                            {isEdit
-                                ? 'Editar compromisso'
-                                : 'Agendar compromisso'}
-                        </h2>
-                    </div>
-                    <div style={{ color: '#374151', paddingBottom: 8 }}>
-                        <div style={{ marginBottom: 4 }}>
-                            <strong>Nome:</strong> {client.first_name}{' '}
-                            {client.last_name}
-                        </div>
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                            }}
-                        >
-                            <span style={{ whiteSpace: 'nowrap' }}>
-                                <strong>Agenda:</strong> {subtitleAgenda}
-                            </span>
-                            <button
-                                type='button'
-                                onClick={() => setShowPicker(v => !v)}
-                                title='Selecionar dia'
-                                style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    cursor: 'pointer',
-                                    padding: 4,
-                                }}
-                            >
-                                <FaCalendarAlt color='#2563eb' />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                {/* Warning banner appears under the sticky header */}
+                <QuickScheduleHeader
+                    isEdit={!!currentEdit}
+                    clientFullName={`${client.first_name} ${client.last_name}`}
+                    subtitleAgenda={subtitleAgenda}
+                    onToggleDatePicker={() => setShowPicker(v => !v)}
+                />
+
                 {!isEdit && isPending && (
                     <div
                         style={{
@@ -871,20 +538,76 @@ export default function QuickScheduleModal({
                         </div>
                         <div style={{ display: 'flex', gap: 8 }}>
                             <button
-                                onClick={() => {
+                                onClick={async () => {
                                     try {
-                                        window.dispatchEvent(
-                                            new CustomEvent(
-                                                'scrollToClientCard',
-                                                {
-                                                    detail: {
-                                                        clientId: client.id,
-                                                    },
-                                                },
-                                            ),
+                                        const id = (pendingFound?.id ||
+                                            (client as ClientMaybeNext)
+                                                .next_appointment_id) as
+                                            | number
+                                            | undefined;
+                                        if (!id) {
+                                            try {
+                                                window.dispatchEvent(
+                                                    new CustomEvent(
+                                                        'scrollToClientCard',
+                                                        {
+                                                            detail: {
+                                                                clientId:
+                                                                    client.id,
+                                                            },
+                                                        },
+                                                    ),
+                                                );
+                                            } catch {
+                                                /* noop */
+                                            }
+                                            return;
+                                        }
+                                        const token =
+                                            localStorage.getItem('accessToken');
+                                        const headers: Record<string, string> =
+                                            {
+                                                'Content-Type':
+                                                    'application/json',
+                                            };
+                                        if (token)
+                                            headers[
+                                                'Authorization'
+                                            ] = `Bearer ${token}`;
+                                        const resp = await fetch(
+                                            `${API_BASE}/agenda/appointments/${id}/`,
+                                            { headers },
                                         );
-                                    } catch {
-                                        /* noop */
+                                        if (!resp.ok)
+                                            throw new Error(
+                                                'Falha ao carregar compromisso pendente',
+                                            );
+                                        const appt =
+                                            (await resp.json()) as Appointment;
+                                        setPendingAppt(appt);
+                                        setPendingOpen(true);
+                                    } catch (e) {
+                                        const msg =
+                                            e &&
+                                            typeof e === 'object' &&
+                                            'message' in e
+                                                ? String((e as Error).message)
+                                                : 'Erro ao abrir pendência';
+                                        try {
+                                            window.dispatchEvent(
+                                                new CustomEvent(
+                                                    'systemMessage',
+                                                    {
+                                                        detail: {
+                                                            text: msg,
+                                                            type: 'warning',
+                                                        },
+                                                    },
+                                                ),
+                                            );
+                                        } catch {
+                                            /* noop */
+                                        }
                                     }
                                 }}
                                 style={{
@@ -892,7 +615,7 @@ export default function QuickScheduleModal({
                                     background: '#e5e7eb',
                                 }}
                             >
-                                Ir para cliente
+                                Resolver agora
                             </button>
                             <button
                                 onClick={handleImmediateClose}
@@ -906,6 +629,30 @@ export default function QuickScheduleModal({
                         </div>
                     </div>
                 )}
+
+                {pendingOpen && pendingAppt && (
+                    <PendingActionsModal
+                        open={pendingOpen}
+                        onClose={() => {
+                            setPendingOpen(false);
+                            setPendingAppt(null);
+                            setReloadKey(k => k + 1);
+                            try {
+                                refreshPendingGuard();
+                            } catch {
+                                /* noop */
+                            }
+                            try {
+                                dispatchers.updateClients();
+                                dispatchers.appointmentsChanged();
+                            } catch {
+                                /* noop */
+                            }
+                        }}
+                        appt={pendingAppt}
+                    />
+                )}
+
                 <div
                     style={{
                         display: 'flex',
@@ -920,7 +667,6 @@ export default function QuickScheduleModal({
                         value={startHM}
                         onChange={val => {
                             setStartHM(val);
-                            // Sugere automaticamente fim = início + duração padrão
                             const sMin = toMinutes(val);
                             let newEnd = sMin + getDefaultDuration();
                             const max =
@@ -930,22 +676,27 @@ export default function QuickScheduleModal({
                         }}
                         minHour={workTimes.startHour}
                         maxHour={workTimes.endHour}
-                        minHM={minHM}
-                        maxHM={maxHM}
-                        stepMinutes={stepMinutes as 5 | 10 | 15 | 20 | 30}
+                        minHM={`${pad2(workTimes.startHour)}:${pad2(
+                            workTimes.startMin,
+                        )}`}
+                        maxHM={`${pad2(workTimes.endHour)}:${pad2(
+                            workTimes.endMin,
+                        )}`}
+                        stepMinutes={getSlotInterval() as 5 | 10 | 15 | 20 | 30}
                     />
                     <TimePicker10
                         label='Fim'
                         value={endHM}
-                        onChange={val => {
-                            // Aceita fim menor que sugestão — apenas define o valor
-                            setEndHM(val);
-                        }}
+                        onChange={val => setEndHM(val)}
                         minHour={workTimes.startHour}
                         maxHour={workTimes.endHour}
-                        minHM={minHM}
-                        maxHM={maxHM}
-                        stepMinutes={stepMinutes as 5 | 10 | 15 | 20 | 30}
+                        minHM={`${pad2(workTimes.startHour)}:${pad2(
+                            workTimes.startMin,
+                        )}`}
+                        maxHM={`${pad2(workTimes.endHour)}:${pad2(
+                            workTimes.endMin,
+                        )}`}
+                        stepMinutes={getSlotInterval() as 5 | 10 | 15 | 20 | 30}
                     />
                     <label style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: 12, color: '#6b7280' }}>
@@ -954,14 +705,7 @@ export default function QuickScheduleModal({
                         <select
                             value={visitType}
                             onChange={e =>
-                                setVisitType(
-                                    e.target.value as
-                                        | 'avaliacao'
-                                        | 'retorno'
-                                        | 'procedimento'
-                                        | 'outro'
-                                        | 'consulta',
-                                )
+                                setVisitType(e.target.value as VisitType)
                             }
                             style={{ padding: '6px 8px' }}
                         >
@@ -997,7 +741,7 @@ export default function QuickScheduleModal({
                         </span>
                     </label>
                 </div>
-                {/* Observações */}
+
                 <label style={{ display: 'flex', flexDirection: 'column' }}>
                     <span
                         style={{
@@ -1015,8 +759,7 @@ export default function QuickScheduleModal({
                         placeholder='Anotações rápidas...'
                     />
                 </label>
-                {/* Day agenda list (header sticky) */}
-                {/* Top actions bar to keep primary actions visible before a long list */}
+
                 <div
                     style={{
                         display: 'flex',
@@ -1065,353 +808,117 @@ export default function QuickScheduleModal({
                     </button>
                 </div>
 
-                {/* Day agenda list (header sticky) */}
-                <div
-                    style={{
-                        marginTop: 4,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                        maxHeight: expanded ? 'calc(100vh - 360px)' : 260,
-                        // Removido overflow hidden para não interferir em gesto vertical no iOS;
-                        // a rolagem é controlada pelo filho interno (scroll container)
-                        overflow: 'visible',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 8,
-                        background: 'var(--card-bg)',
+                <QuickScheduleDayList
+                    appointments={dayAppointments}
+                    loading={dayLoading}
+                    dayFilter={dayFilter}
+                    onChangeFilter={setDayFilter}
+                    sectionDateTitle={sectionDateTitle}
+                    highlightId={highlightId}
+                    editingHighlightId={editingHighlightId}
+                    currentEditId={currentEdit?.id ?? null}
+                    listRef={listRef}
+                    onUseTime={a => {
+                        const sd = new Date(a.start_at);
+                        const ed = new Date(a.end_at);
+                        setSelectedDate(sd);
+                        setStartHM(
+                            `${pad2(sd.getHours())}:${pad2(sd.getMinutes())}`,
+                        );
+                        setEndHM(
+                            `${pad2(ed.getHours())}:${pad2(ed.getMinutes())}`,
+                        );
+                        setCurrentEdit(null);
                     }}
-                >
-                    <div
-                        style={{
-                            position: 'sticky',
-                            top: 0,
-                            zIndex: 2,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            color: 'var(--color-text)',
-                            padding: expanded ? '10px 14px' : '6px 8px',
-                            background: 'linear-gradient(#ffffff,#f8fafc)',
-                            borderBottom: '1px solid var(--color-border)',
-                        }}
-                    >
-                        <strong style={{ fontSize: expanded ? 18 : 14 }}>
-                            Compromissos do dia
-                        </strong>
-                        <div
-                            style={{
-                                display: 'flex',
-                                gap: 8,
-                                alignItems: 'center',
-                            }}
-                        >
-                            <select
-                                value={dayFilter}
-                                onChange={e =>
-                                    setDayFilter(e.target.value as DayFilter)
+                    onEdit={a => {
+                        setCurrentEdit(a);
+                        setEditingHighlightId(a.id);
+                    }}
+                    onCancel={async a => {
+                        try {
+                            const token = localStorage.getItem('accessToken');
+                            const headers: Record<string, string> = {
+                                'Content-Type': 'application/json',
+                            };
+                            if (token)
+                                headers['Authorization'] = `Bearer ${token}`;
+                            const resp = await fetch(
+                                `${API_BASE}/agenda/appointments/${a.id}/cancel/`,
+                                { method: 'POST', headers },
+                            );
+                            if (!resp.ok) {
+                                const text = await resp.text();
+                                throw new Error(text || 'Erro ao cancelar');
+                            }
+                            setReloadKey(k => k + 1);
+                            try {
+                                track({
+                                    type: 'appointment_cancel_succeeded',
+                                    payload: { id: a.id },
+                                });
+                            } catch {
+                                /* noop */
+                            }
+                            try {
+                                dispatchers.updateClients();
+                                dispatchers.appointmentsChanged();
+                            } catch {
+                                /* noop */
+                            }
+                            setTimeout(() => {
+                                try {
+                                    window.dispatchEvent(
+                                        new CustomEvent('scrollToClientCard', {
+                                            detail: { clientId: client.id },
+                                        }),
+                                    );
+                                } catch {
+                                    /* noop */
                                 }
-                                style={{
-                                    padding: expanded ? '8px 12px' : '6px 10px',
-                                    fontSize: expanded ? 15 : 13,
-                                    fontWeight: 600,
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 6,
-                                    background: 'var(--color-bg)',
-                                    cursor: 'pointer',
-                                }}
-                                title='Filtrar por status'
-                            >
-                                <option value='todos'>
-                                    Todos ({dayAppointments.length})
-                                </option>
-                                <option value='ativos'>
-                                    Ativos (
-                                    {
-                                        dayAppointments.filter(
-                                            a => a.status === 'scheduled',
-                                        ).length
-                                    }
-                                    )
-                                </option>
-                                <option value='cancelados'>
-                                    Cancelados (
-                                    {
-                                        dayAppointments.filter(
-                                            a => a.status === 'canceled',
-                                        ).length
-                                    }
-                                    )
-                                </option>
-                            </select>
-                            {dayLoading && (
-                                <span
-                                    style={{
-                                        fontSize: expanded ? 13 : 11,
-                                        color: '#6b7280',
-                                    }}
-                                >
-                                    carregando…
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                    <div
-                        style={{
-                            overflowY: 'auto',
-                            overflowX: 'hidden', // evita scroll horizontal acidental
-                            padding: expanded
-                                ? '10px 14px 16px'
-                                : '4px 8px 8px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 8,
-                            flex: 1,
-                            WebkitOverflowScrolling: 'touch', // iOS momentum
-                            overscrollBehavior: 'contain', // evita bounce propagando
-                            touchAction: 'pan-y', // garante scroll vertical responsivo
-                            maxHeight: '100%',
-                            // Evita caso raro de congelamento quando container pai tem overflow hidden
-                            // forcing também minHeight para que iOS reconheça área scrollable
-                            minHeight: 120,
-                            width: '100%',
-                            boxSizing: 'border-box',
-                        }}
-                        ref={listRef}
-                    >
-                        {/* Título da data (restaura cabeçalho para contexto/histórico) */}
-                        <div
-                            style={{
-                                fontSize: 13,
-                                color: '#6b7280',
-                                fontWeight: 700,
-                                letterSpacing: 0.2,
-                            }}
-                        >
-                            {sectionDateTitle}
-                        </div>
-                        {filteredAppointments
-                            .slice()
-                            .sort((a, b) =>
-                                a.start_at.localeCompare(b.start_at),
-                            )
-                            .map(appt => (
-                                <AppointmentCard<Appointment>
-                                    key={appt.id}
-                                    appt={appt}
-                                    highlight={highlightId === appt.id}
-                                    editingActive={
-                                        editingHighlightId === appt.id
-                                    }
-                                    pulse={
-                                        editingHighlightId === appt.id &&
-                                        currentEdit?.id === appt.id
-                                    }
-                                    onDetails={(a: Appointment) => {
-                                        setDetailsAppt(a);
-                                        setDetailsOpen(true);
-                                    }}
-                                    onUseTime={a => {
-                                        const sd = new Date(a.start_at);
-                                        const ed = new Date(a.end_at);
-                                        setSelectedDate(sd);
-                                        setStartHM(
-                                            `${pad2(sd.getHours())}:${pad2(
-                                                sd.getMinutes(),
-                                            )}`,
-                                        );
-                                        setEndHM(
-                                            `${pad2(ed.getHours())}:${pad2(
-                                                ed.getMinutes(),
-                                            )}`,
-                                        );
-                                        // stay in create mode
-                                        setCurrentEdit(null);
-                                    }}
-                                    onEdit={a => {
-                                        setCurrentEdit(a);
-                                    }}
-                                    onCancel={async a => {
-                                        try {
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            const headers: Record<
-                                                string,
-                                                string
-                                            > = {
-                                                'Content-Type':
-                                                    'application/json',
-                                            };
-                                            if (token)
-                                                headers[
-                                                    'Authorization'
-                                                ] = `Bearer ${token}`;
-                                            const resp = await fetch(
-                                                `${API_BASE}/agenda/appointments/${a.id}/cancel/`,
-                                                { method: 'POST', headers },
-                                            );
-                                            if (!resp.ok) {
-                                                const text = await resp.text();
-                                                throw new Error(
-                                                    text || 'Erro ao cancelar',
-                                                );
-                                            }
-                                            setReloadKey(k => k + 1);
-                                            try {
-                                                track({
-                                                    type: 'appointment_cancel_succeeded',
-                                                    payload: { id: a.id },
-                                                });
-                                            } catch {
-                                                /* noop */
-                                            }
-                                            // (Removido toast de sucesso de cancelamento para evitar sobreposição visual)
-                                            // Atualiza clientes e depois rola cartão do cliente
-                                            try {
-                                                window.dispatchEvent(
-                                                    new Event('updateClients'),
-                                                );
-                                                // Task #36: garante que outras visões (cards, agenda diária) invalidem cache/listas
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'appointments:changed',
-                                                        { detail: {} },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
-                                            setTimeout(() => {
-                                                try {
-                                                    window.dispatchEvent(
-                                                        new CustomEvent(
-                                                            'scrollToClientCard',
-                                                            {
-                                                                detail: {
-                                                                    clientId:
-                                                                        client.id,
-                                                                },
-                                                            },
-                                                        ),
-                                                    );
-                                                } catch {
-                                                    /* noop */
-                                                }
-                                            }, 120);
-                                            if (currentEdit?.id === a.id) {
-                                                setCurrentEdit(null);
-                                            }
-                                            if (lastEditedId === a.id) {
-                                                setLastEditedId(null);
-                                                setHighlightId(null);
-                                            }
-                                            // Novo comportamento: fechar modal imediatamente após cancelamento bem-sucedido
-                                            try {
-                                                handleImmediateClose();
-                                            } catch {
-                                                /* noop */
-                                            }
-                                        } catch (err) {
-                                            const msg =
-                                                typeof err === 'object' &&
-                                                err &&
-                                                'message' in err
-                                                    ? String(
-                                                          (err as Error)
-                                                              .message,
-                                                      )
-                                                    : 'Erro ao cancelar';
-                                            setError(msg);
-                                            try {
-                                                track({
-                                                    type: 'appointment_cancel_failed',
-                                                    payload: {
-                                                        id: a.id,
-                                                        error: msg,
-                                                    },
-                                                });
-                                            } catch {
-                                                /* noop */
-                                            }
-                                        }
-                                    }}
-                                />
-                            ))}
-                        {detailsOpen && detailsAppt && (
-                            <AppointmentDetailsModal
-                                open={detailsOpen}
-                                onClose={() => {
-                                    setDetailsOpen(false);
-                                    setDetailsAppt(null);
-                                }}
-                                appt={detailsAppt}
-                            />
-                        )}
-                        {!dayLoading && filteredAppointments.length === 0 && (
-                            <div style={{ color: '#6b7280', fontSize: 13 }}>
-                                Nenhum compromisso neste filtro.
-                            </div>
-                        )}
-                    </div>
-                </div>
+                            }, 120);
+                            if (currentEdit?.id === a.id) setCurrentEdit(null);
+                            if (lastEditedId === a.id) {
+                                setLastEditedId(null);
+                                setHighlightId(null);
+                            }
+                            try {
+                                handleImmediateClose();
+                            } catch {
+                                /* noop */
+                            }
+                        } catch (err) {
+                            const msg =
+                                err &&
+                                typeof err === 'object' &&
+                                'message' in err
+                                    ? String((err as Error).message)
+                                    : 'Erro ao cancelar';
+                            setError(msg);
+                            try {
+                                track({
+                                    type: 'appointment_cancel_failed',
+                                    payload: { id: a.id, error: msg },
+                                });
+                            } catch {
+                                /* noop */
+                            }
+                        }
+                    }}
+                />
+
                 {error && (
                     <div style={{ color: '#b91c1c', fontSize: 14 }}>
                         {error}
                     </div>
                 )}
-                <div
-                    style={{
-                        display: 'flex',
-                        gap: 8,
-                        justifyContent: 'flex-end',
-                    }}
-                >
-                    <button
-                        onClick={handleImmediateClose}
-                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
-                        disabled={saving}
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        style={{
-                            padding: '8px 12px',
-                            background: '#059669',
-                            color: '#fff',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 8,
-                        }}
-                        disabled={saving}
-                    >
-                        {saving && (
-                            <span
-                                style={{
-                                    width: 14,
-                                    height: 14,
-                                    borderRadius: '50%',
-                                    border: '2px solid rgba(255,255,255,0.6)',
-                                    borderTopColor: 'rgba(255,255,255,1)',
-                                    animation: 'qsSpin 0.8s linear infinite',
-                                }}
-                            />
-                        )}
-                        {saving ? 'Salvando...' : isEdit ? 'Salvar' : 'Criar'}
-                    </button>
-                </div>
-                {/* Spinner keyframes inline (injetado uma vez) */}
-                <style>
-                    {`@keyframes qsSpin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}
-                </style>
+                <style>{`@keyframes qsSpin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
                 <FloatingDatePicker
                     open={showPicker}
                     onClose={() => setShowPicker(false)}
                     selectedDate={selectedDate}
                     onChange={d => {
                         setSelectedDate(d);
-                        setShowPicker(false); // close after selecting the day
+                        setShowPicker(false);
                     }}
                 />
             </div>

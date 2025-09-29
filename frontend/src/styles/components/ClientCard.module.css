@@ -101,6 +101,26 @@
     height: 28px;
     border-radius: 6px;
 }
+/* On touch/coarse pointers, increase tap target for better ergonomics */
+@media (pointer: coarse) {
+    .iconButton {
+        width: 44px;
+        height: 44px;
+    }
+}
+
+/* Reduce tap highlight on iOS/Safari for a cleaner feel */
+.iconButton {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    touch-action: manipulation;
+}
+
+/* Improve focus visibility for keyboard users without altering touch UX */
+.iconButton:focus-visible,
+.actionButton:focus-visible {
+    outline: 2px solid var(--color-selected-border);
+    outline-offset: 2px;
+}
 
 .editButton {
     border: none;
@@ -168,6 +188,8 @@
     transition: background 0.12s ease, border-color 0.12s ease,
         box-shadow 0.12s ease, transform 0.05s ease;
     user-select: none;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    touch-action: manipulation;
 }
 .actionButton:hover {
     background: #f3f4f6; /* gray-100 */

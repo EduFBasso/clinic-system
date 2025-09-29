@@ -1,9 +1,13 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
-import type { StatusKind } from './StatusBadge';
+// StatusKind is exported from StatusBadge; not needed explicitly here
 import TimeRangeLabel from './TimeRangeLabel';
 import { FaRegFileAlt, FaEdit, FaBan } from 'react-icons/fa';
-import { useServerTime } from '../../contexts/useServerTime'; // unified import path (no .js extension)
+import { useAppointmentCardState } from '../../hooks/useAppointmentCardState.ts';
+import {
+    getAppointmentOverride,
+    subscribeOverrides,
+} from '../../utils/appointments/overrides';
 
 export interface SharedAppointmentLike {
     id: number;
@@ -47,17 +51,7 @@ export interface AppointmentCardProps<
     now?: Date;
 }
 
-function deriveStatus(appt: SharedAppointmentLike, now: Date): StatusKind {
-    const start = new Date(appt.start_at);
-    const end = new Date(appt.end_at);
-    if (appt.status === 'canceled') return 'canceled';
-    if (appt.status === 'done') return 'done';
-    if (start <= now && end > now) return 'ongoing';
-    if (end < now && appt.status === 'scheduled') return 'past';
-    return 'scheduled';
-}
-
-export function AppointmentCard<T extends SharedAppointmentLike>({
+function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     appt,
     onClick,
     onUseTime,
@@ -79,12 +73,32 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
     style,
     now = new Date(),
 }: AppointmentCardProps<T>) {
-    // If a server-synced time is available, prefer it silently (invisible mitigation of client skew)
-    const serverTime = useServerTime();
-    const effectiveNow = serverTime?.effectiveNow ?? now;
-    const status = deriveStatus(appt, effectiveNow);
-    const start = new Date(appt.start_at);
-    const end = new Date(appt.end_at);
+    // Apply ephemeral status override (e.g., optimistic 'done' after finalize)
+    const [overrideStatus, setOverrideStatus] = React.useState<
+        'scheduled' | 'done' | 'canceled' | undefined
+    >(() => getAppointmentOverride(appt.id)?.status);
+    React.useEffect(() => {
+        setOverrideStatus(getAppointmentOverride(appt.id)?.status);
+        const unsubscribe = subscribeOverrides(ids => {
+            if (!ids || ids.includes(appt.id)) {
+                setOverrideStatus(getAppointmentOverride(appt.id)?.status);
+            }
+        });
+        return () => {
+            try {
+                unsubscribe();
+            } catch {
+                /* noop */
+            }
+        };
+    }, [appt.id]);
+
+    const apptWithOverride = React.useMemo(() => {
+        return overrideStatus ? { ...appt, status: overrideStatus } : appt;
+    }, [appt, overrideStatus]);
+
+    const { status, canEdit, canCancel, isOngoing, start, end } =
+        useAppointmentCardState(apptWithOverride, now);
     let clientName: string | undefined = (appt as SharedAppointmentLike)
         .client_name;
     if (
@@ -138,6 +152,9 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                 : 'default',
         position: 'relative',
         maxWidth: '100%',
+        // Hint compositor to keep this element on its own layer and reduce repaints
+        willChange: 'transform',
+        transform: 'translateZ(0)',
         boxShadow: editingActive
             ? pulse
                 ? '0 0 0 1px var(--color-primary), 0 1px 3px rgba(0,0,0,0.08)'
@@ -148,9 +165,7 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
             : null),
         ...style,
     };
-    const isOngoing = status === 'ongoing';
-    const canEdit = status === 'scheduled' && end > effectiveNow;
-    const canCancel = status === 'scheduled' && end > effectiveNow;
+    // flags are derived by the shared hook
 
     return (
         <div
@@ -188,7 +203,15 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                     borderBottomLeftRadius: 8,
                 }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    // Reserve a bit of vertical space to avoid micro layout shifts
+                    minHeight: compact ? 20 : 24,
+                }}
+            >
                 {/* Left text cluster that can shrink & wrap */}
                 <div
                     style={{
@@ -196,7 +219,7 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                         alignItems: stackName ? 'flex-start' : 'center',
                         flexDirection: stackName ? 'column' : 'row',
                         gap: stackName ? 2 : 8,
-                        flex: 1,
+                        flex: '1 1 auto',
                         minWidth: 0,
                     }}
                 >
@@ -214,14 +237,17 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                                     : status === 'past'
                                     ? 'var(--color-pending)'
                                     : 'var(--color-success-dark)',
-                            // Quando empilhado, manter nome em uma linha com elipse
-                            whiteSpace: stackName ? 'nowrap' : 'normal',
-                            overflow: stackName ? 'hidden' : 'visible',
-                            textOverflow: stackName ? 'ellipsis' : 'clip',
+                            // Sempre manter nome em uma linha com elipse
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
                             minWidth: 0,
                             maxWidth: '100%',
-                            overflowWrap: stackName ? 'normal' : 'anywhere',
-                            wordBreak: stackName ? 'normal' : 'break-word',
+                            overflowWrap: 'normal',
+                            wordBreak: 'normal',
+                            // Permite que o nome ocupe o espaço livre do cluster esquerdo
+                            flex: stackName ? '0 0 auto' : 1,
+                            width: stackName ? '100%' : undefined,
                         }}
                         title={clientName || 'Cliente'}
                     >
@@ -237,9 +263,19 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                                     status === 'done'
                                         ? 'var(--color-done)'
                                         : 'var(--color-text)',
-                                overflowWrap: 'break-word',
-                                wordBreak: 'normal',
-                                whiteSpace: 'normal',
+                                // Em layout empilhado, forçar quebra abaixo do nome e ocupar a largura toda
+                                ...(stackName
+                                    ? {
+                                          display: 'block',
+                                          width: '100%',
+                                      }
+                                    : {
+                                          minWidth: 0,
+                                          flexShrink: 1,
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                      }),
                             }}
                         >
                             {(() => {
@@ -267,8 +303,10 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                         marginLeft: 'auto',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 8,
+                        gap: 6,
                         flexShrink: 0,
+                        // Keep a stable block for right-side controls + badge
+                        minHeight: 20,
                     }}
                 >
                     {/* Always show time on non-compact cards for clarity (canceled/done included) */}
@@ -300,91 +338,153 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
                                 size='sm'
                             />
                         ))}
-                    {/* Optional edit/cancel action buttons */}
-                    {onEdit && showEditAction && canEdit && (
-                        <button
-                            type='button'
-                            title='Edit appointment'
-                            onClick={e => {
-                                e.stopPropagation();
-                                if (canEdit) onEdit(appt);
-                            }}
-                            style={{
-                                border: '1px solid var(--color-border)',
-                                borderRadius: 6,
-                                background: 'var(--color-bg)',
-                                padding: 6,
-                                cursor: 'pointer',
-                            }}
-                            disabled={!canEdit}
-                        >
-                            <FaEdit color={'var(--color-heading)'} />
-                        </button>
-                    )}
-                    {onCancel && canCancel && (
-                        <button
-                            type='button'
-                            title='Cancel appointment'
-                            onClick={e => {
-                                e.stopPropagation();
-                                if (!canCancel) return;
-                                const hh = (d: Date) =>
-                                    `${String(d.getHours()).padStart(
-                                        2,
-                                        '0',
-                                    )}:${String(d.getMinutes()).padStart(
-                                        2,
-                                        '0',
-                                    )}`;
-                                const msg = `Tem certeza que deseja cancelar o agendamento de ${hh(
-                                    start,
-                                )} - ${hh(end)}${
-                                    clientName ? ' para ' + clientName : ''
-                                }?`;
-                                if (window.confirm(msg)) onCancel(appt);
-                            }}
-                            style={{
-                                border: '1px solid var(--color-border)',
-                                borderRadius: 6,
-                                background: 'var(--color-danger-bg)',
-                                padding: 6,
-                                cursor: 'pointer',
-                            }}
-                            disabled={!canCancel}
-                        >
-                            <FaBan color={'var(--color-danger)'} />
-                        </button>
-                    )}
-                    {(status === 'done' || status === 'canceled') &&
-                        onDetails && (
-                            <button
-                                type='button'
-                                title='Resumo da consulta'
-                                aria-label='Resumo da consulta'
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    onDetails?.(appt);
-                                }}
-                                style={{
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 6,
-                                    background:
-                                        status === 'done'
-                                            ? 'var(--color-done-bg)'
-                                            : 'var(--color-danger-bg)',
-                                    padding: 6,
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                <FaRegFileAlt
-                                    color={
-                                        status === 'done'
-                                            ? 'var(--color-done)'
-                                            : 'var(--color-danger)'
-                                    }
-                                />
-                            </button>
-                        )}
+                    {/* Optional edit/cancel/details action buttons: keep placeholders for stability */}
+                    {(() => {
+                        const showEdit = !!(
+                            onEdit &&
+                            showEditAction &&
+                            canEdit
+                        );
+                        const showCancel = !!(onCancel && canCancel);
+                        const showDetails = !!(
+                            onDetails &&
+                            (status === 'done' || status === 'canceled')
+                        );
+                        // Só preservar placeholders de layout quando for útil (cards não compactos, sem stack e com ações visíveis)
+                        const preserveActionsLayout =
+                            !compact && !stackName && showEditAction !== false;
+                        const hiddenStyle: React.CSSProperties = {
+                            visibility: 'hidden',
+                            pointerEvents: 'none',
+                        };
+                        const maybeRender = (
+                            shouldShow: boolean,
+                            element: React.ReactNode,
+                        ) => {
+                            if (shouldShow) return element;
+                            if (preserveActionsLayout) return element; // será estilizado como hidden no próprio botão
+                            return null;
+                        };
+                        return (
+                            <>
+                                {maybeRender(
+                                    showEdit,
+                                    <button
+                                        type='button'
+                                        title='Edit appointment'
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            if (showEdit && onEdit)
+                                                onEdit(appt);
+                                        }}
+                                        style={{
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: 6,
+                                            background: 'var(--color-bg)',
+                                            padding: 6,
+                                            cursor: 'pointer',
+                                            ...(showEdit
+                                                ? undefined
+                                                : hiddenStyle),
+                                        }}
+                                        disabled={!showEdit}
+                                        tabIndex={showEdit ? 0 : -1}
+                                        aria-hidden={
+                                            showEdit ? undefined : true
+                                        }
+                                    >
+                                        <FaEdit
+                                            color={'var(--color-heading)'}
+                                        />
+                                    </button>,
+                                )}
+                                {maybeRender(
+                                    showCancel,
+                                    <button
+                                        type='button'
+                                        title='Cancel appointment'
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            if (!showCancel || !onCancel)
+                                                return;
+                                            const hh = (d: Date) =>
+                                                `${String(
+                                                    d.getHours(),
+                                                ).padStart(2, '0')}:${String(
+                                                    d.getMinutes(),
+                                                ).padStart(2, '0')}`;
+                                            const msg = `Tem certeza que deseja cancelar o agendamento de ${hh(
+                                                start,
+                                            )} - ${hh(end)}${
+                                                clientName
+                                                    ? ' para ' + clientName
+                                                    : ''
+                                            }?`;
+                                            if (window.confirm(msg))
+                                                onCancel(appt);
+                                        }}
+                                        style={{
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: 6,
+                                            background:
+                                                'var(--color-danger-bg)',
+                                            padding: 6,
+                                            cursor: 'pointer',
+                                            ...(showCancel
+                                                ? undefined
+                                                : hiddenStyle),
+                                        }}
+                                        disabled={!showCancel}
+                                        tabIndex={showCancel ? 0 : -1}
+                                        aria-hidden={
+                                            showCancel ? undefined : true
+                                        }
+                                    >
+                                        <FaBan color={'var(--color-danger)'} />
+                                    </button>,
+                                )}
+                                {maybeRender(
+                                    showDetails,
+                                    <button
+                                        type='button'
+                                        title='Resumo da consulta'
+                                        aria-label='Resumo da consulta'
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            if (showDetails && onDetails)
+                                                onDetails(appt);
+                                        }}
+                                        style={{
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: 6,
+                                            background:
+                                                status === 'done'
+                                                    ? 'var(--color-done-bg)'
+                                                    : 'var(--color-danger-bg)',
+                                            padding: 6,
+                                            cursor: 'pointer',
+                                            ...(showDetails
+                                                ? undefined
+                                                : hiddenStyle),
+                                        }}
+                                        disabled={!showDetails}
+                                        tabIndex={showDetails ? 0 : -1}
+                                        aria-hidden={
+                                            showDetails ? undefined : true
+                                        }
+                                    >
+                                        <FaRegFileAlt
+                                            color={
+                                                status === 'done'
+                                                    ? 'var(--color-done)'
+                                                    : 'var(--color-danger)'
+                                            }
+                                        />
+                                    </button>,
+                                )}
+                            </>
+                        );
+                    })()}
                     <StatusBadge status={status} size='md' />
                 </span>
             </div>
@@ -422,4 +522,116 @@ export function AppointmentCard<T extends SharedAppointmentLike>({
     );
 }
 
-export default AppointmentCard;
+// Memoized view to avoid unnecessary re-renders when props are stable
+function areEqualShallow(
+    prev: AppointmentCardProps<SharedAppointmentLike>,
+    next: AppointmentCardProps<SharedAppointmentLike>,
+) {
+    const p = prev.appt;
+    const n = next.appt;
+    if (p.id !== n.id) return false;
+    if (
+        p.status !== n.status ||
+        p.start_at !== n.start_at ||
+        p.end_at !== n.end_at ||
+        p.client_name !== n.client_name ||
+        p.notes !== n.notes
+    )
+        return false;
+    if (
+        prev.highlight !== next.highlight ||
+        prev.editingActive !== next.editingActive ||
+        prev.pulse !== next.pulse ||
+        prev.compact !== next.compact ||
+        prev.showNotes !== next.showNotes ||
+        prev.selected !== next.selected ||
+        prev.showEditAction !== next.showEditAction ||
+        prev.showTime !== next.showTime ||
+        prev.timeInline !== next.timeInline ||
+        prev.stackName !== next.stackName
+    )
+        return false;
+    if (
+        prev.onClick !== next.onClick ||
+        prev.onUseTime !== next.onUseTime ||
+        prev.onResolvePending !== next.onResolvePending ||
+        prev.onEdit !== next.onEdit ||
+        prev.onCancel !== next.onCancel ||
+        prev.onDetails !== next.onDetails
+    )
+        return false;
+    if (prev.className !== next.className) return false;
+    if (prev.style !== next.style) return false;
+    if (prev.now !== next.now) return false;
+    return true;
+}
+
+const MemoizedAppointmentCardViewInner = React.memo(
+    AppointmentCardViewInner as unknown as (
+        props: AppointmentCardProps<SharedAppointmentLike>,
+    ) => React.ReactElement,
+    areEqualShallow,
+) as unknown as <T extends SharedAppointmentLike>(
+    props: AppointmentCardProps<T>,
+) => React.ReactElement;
+
+export function AppointmentCardView<T extends SharedAppointmentLike>(
+    props: AppointmentCardProps<T>,
+) {
+    // Cast props to the base shape accepted by the memoized component
+    return (
+        <MemoizedAppointmentCardViewInner
+            {...(props as unknown as AppointmentCardProps<SharedAppointmentLike>)}
+        />
+    );
+}
+
+export function AppointmentCardContainer<T extends SharedAppointmentLike>(
+    props: AppointmentCardProps<T>,
+) {
+    // Simplificado: usar hora local do dispositivo (ou now passado por props)
+    // Evitamos criar um "new Date()" a cada render para não invalidar a memoização do card.
+    // Atualizamos o "agora" apenas uma vez por minuto (suficiente para fins de status: ongoing/past).
+    function useNowTick(intervalMs: number) {
+        const [now, setNow] = React.useState<Date>(() => new Date());
+        React.useEffect(() => {
+            // Atualiza no início do próximo minuto para alinhar os ticks
+            const firstDelay = (() => {
+                const d = new Date();
+                const msToNextMinute =
+                    60000 - (d.getSeconds() * 1000 + d.getMilliseconds());
+                return Math.max(250, Math.min(msToNextMinute, 60000));
+            })();
+            let timer1: number | null = null;
+            let timer2: number | null = null;
+            timer1 = window.setTimeout(() => {
+                setNow(new Date());
+                // Depois, ticks fixos
+                timer2 = window.setInterval(
+                    () => setNow(new Date()),
+                    intervalMs,
+                ) as unknown as number;
+            }, firstDelay) as unknown as number;
+            return () => {
+                if (timer1 != null)
+                    window.clearTimeout(timer1 as unknown as number);
+                if (timer2 != null)
+                    window.clearInterval(timer2 as unknown as number);
+            };
+        }, [intervalMs]);
+        return now;
+    }
+
+    const effectiveNow = React.useMemo(() => props.now, [props.now]);
+    const tickNow = useNowTick(5000);
+    // Se o chamador fornecer "now", usamos como autoridade. Caso contrário, usamos o relógio com tick por minuto.
+    const finalNow = effectiveNow ?? tickNow;
+    return <AppointmentCardView {...props} now={finalNow} />;
+}
+
+// Backwards-compatible default export
+export default function AppointmentCard<T extends SharedAppointmentLike>(
+    props: AppointmentCardProps<T>,
+) {
+    return <AppointmentCardContainer {...props} />;
+}

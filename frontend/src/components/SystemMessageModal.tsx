@@ -28,7 +28,7 @@ export default function SystemMessageModal({
     message,
     type = 'info',
     onClose,
-    autoCloseMs = 3000,
+    autoCloseMs = 10000,
 }: SystemMessageModalProps) {
     const timerRef = React.useRef<number | null>(null);
     const wrappedClose = React.useCallback(() => {
@@ -81,40 +81,46 @@ export default function SystemMessageModal({
         }
     }
     return (
-        <AppModal open={open} onClose={wrappedClose} closeOnEnter={false}>
-            <div
-                style={{
-                    minWidth: 280,
-                    maxWidth: 420,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 12,
-                    background: p.bg,
-                    padding: '18px 20px',
-                    border: `1px solid ${p.border}`,
-                    borderRadius: 12,
-                    color: p.color,
-                    fontWeight: 600,
-                    textAlign: 'center',
-                }}
-            >
-                <div style={{ fontSize: 15 }}>{message}</div>
-                <button
-                    onClick={wrappedClose}
+        <AppModal
+            open={open}
+            onClose={wrappedClose}
+            closeOnEnter={false}
+            showCloseButton={false}
+        >
+            {/* Wrapper para centralizar o cartão dentro do modal, independente da largura */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <div
                     style={{
-                        background: p.color,
-                        color: '#fff',
-                        border: 'none',
-                        padding: '8px 14px',
-                        borderRadius: 6,
-                        cursor: 'pointer',
+                        minWidth: 280,
+                        maxWidth: 420,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 12,
+                        background: p.bg,
+                        padding: '18px 20px',
+                        border: `1px solid ${p.border}`,
+                        borderRadius: 12,
+                        color: p.color,
                         fontWeight: 600,
+                        textAlign: 'center',
                     }}
                 >
-                    Fechar
-                </button>
-                <div style={{ fontSize: 11, opacity: 0.65 }}>
-                    Fecha automaticamente em {Math.round(autoCloseMs / 1000)}s
+                    <div style={{ fontSize: 15 }}>{message}</div>
+                    <button
+                        onClick={wrappedClose}
+                        style={{
+                            background: p.color,
+                            color: '#fff',
+                            border: 'none',
+                            padding: '8px 14px',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            alignSelf: 'center',
+                        }}
+                    >
+                        OK
+                    </button>
                 </div>
             </div>
         </AppModal>

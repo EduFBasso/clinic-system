@@ -54,6 +54,7 @@ export default function ClientFormDesktop({
             onSubmit={handleSubmit}
             ref={formRef}
             className={styles.clientForm}
+            style={{ background: 'var(--color-bg)', minHeight: '100%' }}
         >
             <h2 className={styles.formTitle}>Cadastro de Cliente</h2>
             <div className={styles.formPanels}>

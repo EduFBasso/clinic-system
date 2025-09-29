@@ -118,6 +118,15 @@ export default function WeeklyPreviewModal({
 
     const grouped = React.useMemo(() => groupByDay(items), [items]);
 
+    // Recarrega ao receber mudanças globais de compromissos
+    React.useEffect(() => {
+        if (!open) return;
+        const onChanged = () => setReloadKey(x => x + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, [open]);
+
     const [showPicker, setShowPicker] = React.useState(false);
     const [pickerPos, setPickerPos] = React.useState<
         { x: number; y: number } | undefined

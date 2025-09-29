@@ -71,6 +71,9 @@ export default function AppModal(props: AppModalProps) {
 
     const contentRef = React.useRef<HTMLDivElement | null>(null);
     const prevScrollRef = React.useRef<number>(0);
+    const prevWindowScrollRef = React.useRef<number>(0);
+    const prevScrollElRef = React.useRef<HTMLElement | null>(null);
+    const prevActiveElRef = React.useRef<HTMLElement | null>(null);
 
     const isIOS = React.useMemo(() => {
         if (typeof navigator === 'undefined') return false;
@@ -97,8 +100,73 @@ export default function AppModal(props: AppModalProps) {
     React.useEffect(() => {
         if (!open) return;
         try {
-            prevScrollRef.current =
-                window.scrollY || document.documentElement.scrollTop || 0;
+            // Memoriza elemento ativo para restaurar foco sem deslocar a página
+            prevActiveElRef.current =
+                (document.activeElement as HTMLElement | null) || null;
+            // Detecta posição atual de scroll da janela
+            const winY = (() => {
+                try {
+                    return (
+                        window.scrollY ||
+                        window.pageYOffset ||
+                        document.documentElement.scrollTop ||
+                        document.body.scrollTop ||
+                        0
+                    );
+                } catch {
+                    return 0;
+                }
+            })();
+            prevWindowScrollRef.current = winY;
+
+            // Detecta container principal de scroll (ex.: <main> / custom)
+            let scrollEl: HTMLElement | null = null;
+            try {
+                const isScrollable = (el: HTMLElement | null) => {
+                    if (!el) return false;
+                    const cs = getComputedStyle(el);
+                    const overflowY = cs.overflowY;
+                    return (
+                        overflowY === 'auto' ||
+                        overflowY === 'scroll' ||
+                        el.scrollHeight > el.clientHeight + 1
+                    );
+                };
+                const candidates = Array.from(
+                    document.querySelectorAll<HTMLElement>(
+                        'main, [data-scroll-root], #content, .content, .page, [role="main"], .scroll, .scrollable',
+                    ),
+                );
+                const se =
+                    (document.scrollingElement as HTMLElement | null) || null;
+                if (se && !candidates.includes(se)) candidates.push(se);
+                const de = document.documentElement as HTMLElement;
+                if (!candidates.includes(de)) candidates.push(de);
+
+                // Escolhe o elemento com maior área rolável
+                let best: HTMLElement | null = null;
+                let bestDelta = -1;
+                for (const el of candidates) {
+                    if (!isScrollable(el)) continue;
+                    const delta = el.scrollHeight - el.clientHeight;
+                    if (delta > bestDelta) {
+                        bestDelta = delta;
+                        best = el;
+                    }
+                }
+                scrollEl = best;
+            } catch {
+                /* noop */
+            }
+            if (!scrollEl) {
+                scrollEl =
+                    (document.scrollingElement as HTMLElement | null) ||
+                    (document.documentElement as HTMLElement);
+            }
+            prevScrollElRef.current = scrollEl;
+            const elY = scrollEl?.scrollTop ?? 0;
+            // Use a maior entre janela e elemento — cobre ambos cenários
+            prevScrollRef.current = Math.max(elY, winY);
         } catch {
             /* noop */
         }
@@ -124,6 +192,10 @@ export default function AppModal(props: AppModalProps) {
             const html = document.documentElement as HTMLElement;
             html.style.overflow = 'hidden';
             body.style.overflow = 'hidden';
+            // Evita bloquear todos os gestos de toque globalmente; iOS pode ficar sem responder.
+            // Em vez disso, usamos preventDefault em listeners fora do conteúdo do modal (ver abaixo)
+            // html.style.touchAction = 'none';
+            // body.style.touchAction = 'none';
             // Reduz efeitos de overscroll (Android/Chrome)
             html.style.setProperty('overscroll-behavior-y', 'contain');
         } catch {
@@ -136,7 +208,8 @@ export default function AppModal(props: AppModalProps) {
             if (!body.dataset.appliedIosLock) {
                 body.dataset.appliedIosLock = '1';
                 body.style.position = 'fixed';
-                body.style.top = `-${prevScrollRef.current}px`;
+                // Para iOS, top deve ser baseado no scroll da janela
+                body.style.top = `-${prevWindowScrollRef.current}px`;
                 body.style.left = '0';
                 body.style.right = '0';
                 body.style.width = '100%';
@@ -238,6 +311,23 @@ export default function AppModal(props: AppModalProps) {
             try {
                 const body = document.body as HTMLBodyElement;
                 const html = document.documentElement as HTMLElement;
+                // Se a página marcou que o scroll deve permanecer como está, não tentar restaurar
+                if (body.dataset.keepScroll === '1') {
+                    if (source) {
+                        console.debug('[AppModal] keepScroll=1, skip restore', {
+                            source,
+                        });
+                    }
+                    // Ainda assim, remova locks do modal
+                    body.style.overflow = '';
+                    html.style.overflow = '';
+                    html.style.removeProperty('overscroll-behavior-y');
+                    body.classList.remove('MuiModal-open');
+                    html.classList.remove('MuiModal-open');
+                    if (body.dataset.appliedIosLock)
+                        delete body.dataset.appliedIosLock;
+                    return;
+                }
                 const activeModals = Array.from(
                     document.querySelectorAll(
                         '[role="presentation"][aria-hidden="false"]',
@@ -260,7 +350,9 @@ export default function AppModal(props: AppModalProps) {
                 body.style.left = '';
                 body.style.right = '';
                 body.style.width = '';
+                body.style.touchAction = '';
                 html.style.overflow = '';
+                html.style.touchAction = '';
                 html.style.removeProperty('overscroll-behavior-y');
                 body.classList.remove('MuiModal-open');
                 html.classList.remove('MuiModal-open');
@@ -270,16 +362,41 @@ export default function AppModal(props: AppModalProps) {
                 // Reflow para garantir aplicação das mudanças de estilo
                 void body.offsetHeight;
 
-                // Restaura posição de scroll (iOS precisa várias tentativas às vezes)
-                if (prevScrollRef.current != null) {
+                // Restaura posição de scroll (faz algumas tentativas com rAF e setTimeout)
+                const targetY = prevScrollRef.current ?? 0;
+                const scrollingEl =
+                    prevScrollElRef.current ||
+                    (document.scrollingElement as HTMLElement | null) ||
+                    (document.documentElement as HTMLElement);
+                const applyScroll = () => {
                     try {
-                        window.scrollTo({
-                            top: prevScrollRef.current,
-                            behavior: 'instant' as ScrollBehavior,
-                        });
+                        if (scrollingEl) scrollingEl.scrollTop = targetY;
+                        // Fallback adicional
+                        window.scrollTo(0, targetY);
                     } catch {
                         /* noop */
                     }
+                };
+                applyScroll();
+                requestAnimationFrame(() => applyScroll());
+                setTimeout(() => applyScroll(), 50);
+                setTimeout(() => applyScroll(), 100);
+
+                // Restaura foco ao elemento anterior, evitando scroll
+                try {
+                    const prev = prevActiveElRef.current;
+                    if (prev && typeof prev.focus === 'function') {
+                        // Some browsers support options for focus; pass preventScroll when available
+                        (
+                            prev.focus as unknown as (opts?: {
+                                preventScroll?: boolean;
+                            }) => void
+                        )({
+                            preventScroll: true,
+                        });
+                    }
+                } catch {
+                    /* noop */
                 }
                 if (source) {
                     // Instrumentação leve (não spam)
@@ -337,7 +454,9 @@ export default function AppModal(props: AppModalProps) {
                     body.style.left = '';
                     body.style.right = '';
                     body.style.width = '';
+                    body.style.touchAction = '';
                     html.style.overflow = '';
+                    html.style.touchAction = '';
                     html.style.removeProperty('overscroll-behavior-y');
                     body.classList.remove('MuiModal-open');
                     html.classList.remove('MuiModal-open');
@@ -353,9 +472,13 @@ export default function AppModal(props: AppModalProps) {
             open={open}
             onClose={handleMuiClose}
             disableEscapeKeyDown={disableEscapeKeyDown || !closeOnEscape}
+            keepMounted
+            disableScrollLock
         >
             <Box
                 ref={contentRef}
+                role='dialog'
+                aria-modal='true'
                 sx={
                     fullScreen
                         ? {
@@ -383,6 +506,19 @@ export default function AppModal(props: AppModalProps) {
                               overflowY: 'auto',
                               overflowX: 'hidden',
                               WebkitOverflowScrolling: 'touch',
+                              pointerEvents: 'auto',
+                              // A small fixed bar to paint the OS safe-area with the app's header blue
+                              '&::before': {
+                                  content: '""',
+                                  position: 'fixed',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  height: 'env(safe-area-inset-top, 0px)',
+                                  background: 'var(--color-primary)',
+                                  zIndex: 1,
+                                  pointerEvents: 'none',
+                              },
                           }
                         : {
                               ...style,
@@ -406,6 +542,7 @@ export default function AppModal(props: AppModalProps) {
                     style={{
                         // Reserve space for larger touch target (44px) + small gutter
                         paddingRight: showCloseButton ? 48 : 0,
+                        pointerEvents: 'auto',
                     }}
                 >
                     {children}

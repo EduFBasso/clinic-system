@@ -1,4 +1,5 @@
 import React from 'react';
+import { getNow } from '../utils/now';
 import type { ClientBasic } from '../types/ClientBasic';
 import { useAppointments } from '../hooks/useAppointments';
 import type { Appointment } from '../hooks/useAppointments';
@@ -105,10 +106,11 @@ export default function ScheduleEditorCore({
     const initialHM = React.useMemo(() => {
         const ws = getWorkTimes();
         const step = getSlotInterval();
-        const isToday = toISODate(selectedDay) === toISODate(new Date());
+        const now = getNow();
+        const isToday = toISODate(selectedDay) === toISODate(now);
         let base = new Date(selectedDay);
         if (isToday) {
-            base = new Date();
+            base = now;
         } else {
             base.setHours(ws.startHour, ws.startMin, 0, 0);
         }
@@ -837,7 +839,7 @@ export default function ScheduleEditorCore({
                                 borderRadius: 8,
                             }}
                         >
-                            {hoursRange.map(h => {
+                            {hoursRange.map((h, i) => {
                                 const ok = hourHasAnyValidMinute[h];
                                 const selected = h === hour;
                                 return (
@@ -856,7 +858,11 @@ export default function ScheduleEditorCore({
                                                 : '#9ca3af',
                                             fontWeight: selected ? 800 : 600,
                                             border: 0,
-                                            borderBottom: '1px solid #e5e7eb',
+                                            // Usa um único separador entre itens (evita "dupla linha")
+                                            borderTop:
+                                                i > 0
+                                                    ? '1px solid #e5e7eb'
+                                                    : 'none',
                                             cursor: 'pointer',
                                         }}
                                         title={
@@ -889,7 +895,7 @@ export default function ScheduleEditorCore({
                                 borderRadius: 8,
                             }}
                         >
-                            {minutesList.map(m => {
+                            {minutesList.map((m, idx) => {
                                 const s = makeDayTime(dayISO, hour, m);
                                 const e = addMinutes(s, duration);
                                 const allowed =
@@ -918,7 +924,11 @@ export default function ScheduleEditorCore({
                                                 : 'var(--color-danger-dark)',
                                             fontWeight: selected ? 800 : 600,
                                             border: 0,
-                                            borderBottom: '1px solid #e5e7eb',
+                                            // Único separador entre itens, consistente com coluna Hora
+                                            borderTop:
+                                                idx > 0
+                                                    ? '1px solid #e5e7eb'
+                                                    : 'none',
                                             cursor: allowed
                                                 ? 'pointer'
                                                 : 'not-allowed',

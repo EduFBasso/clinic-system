@@ -30,9 +30,10 @@ export function useNextAppointment(clientId?: number, enabled: boolean = true) {
             return;
         }
         setLoading(true);
-        const url = `${API_BASE}/agenda/appointments/?client=${clientId}&start=${new Date().toISOString()}&status=scheduled`;
+        const url = `${API_BASE}/agenda/appointments/?client=${clientId}&start=${new Date().toISOString()}&status=scheduled&ts=${Date.now()}`;
         fetch(url, {
             headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store',
         })
             .then(r => {
                 if (r.status === 401) throw new Error('Sessão expirada');

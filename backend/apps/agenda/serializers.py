@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 
-from .models import Appointment
+from .models import Appointment, FinalizeAudit
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -25,10 +25,22 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "location",
             "notes",
             "status",
+            "created_device_id",
+            "created_device_info",
+            "ended_device_id",
+            "ended_device_info",
             "created_at",
             "updated_at",
         ]
-    read_only_fields = ["created_at", "updated_at", "professional"]
+    read_only_fields = [
+        "created_at",
+        "updated_at",
+        "professional",
+        "created_device_id",
+        "created_device_info",
+        "ended_device_id",
+        "ended_device_info",
+    ]
 
     def get_professional_name(self, obj):
         p = obj.professional
@@ -54,22 +66,50 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if self.instance is None and start and start < now:
             raise serializers.ValidationError({"start_at": "Não é permitido agendar no passado."})
 
+        # Edição: permitir alterações com regras pontuais
         if self.instance is not None:
-            # Bloqueio geral temporário de edição: nenhuma alteração via PATCH/PUT é permitida
-            # Diretriz: utilize a ação de cancelamento e crie novo agendamento.
-            raise serializers.ValidationError({
-                "detail": "Edição de compromissos está temporariamente bloqueada. Cancele e crie um novo agendamento."
-            })
-            # As regras abaixo permanecem como documentação e podem ser reativadas quando edição for liberada.
-            # Atualização: bloquear qualquer edição de agendamento que já começou (passado ou em andamento)
-            # Requisito de negócio: registros históricos são somente leitura (somente ação dedicada p/ cancelar)
-            inst_start = getattr(self.instance, "start_at", None)
-            inst_end = getattr(self.instance, "end_at", None)
-            if inst_end and inst_end < now:
-                raise serializers.ValidationError({"detail": "Agendamentos passados não podem ser editados."})
-            # Se já iniciou (start_at <= now < end_at) também não permitir alterações para evitar inconsistências
-            if inst_start and inst_start <= now and (inst_end is None or inst_end > now):
-                raise serializers.ValidationError({"detail": "Agendamentos em andamento não podem ser editados."})
+            inst_status = getattr(self.instance, "status", None)
+            # Apenas compromissos ativos (scheduled) podem ser editados
+            if inst_status and inst_status != Appointment.Status.SCHEDULED:
+                raise serializers.ValidationError({
+                    "detail": "Somente compromissos ativos podem ser editados."
+                })
+            # Se o compromisso já está no passado, bloquear edições genéricas
+            # Exceções permitidas:
+            #  - status -> 'done' (finalização)
+            #  - encurtar end_at (sem mover início)
+            inst_start = getattr(self.instance, 'start_at', None)
+            inst_end = getattr(self.instance, 'end_at', None)
+            if inst_start and inst_start < now:
+                allowed = False
+                # permitir marcar como done
+                if 'status' in attrs and attrs.get('status') == Appointment.Status.DONE:
+                    allowed = True
+                # permitir apenas encurtar o fim (novo end <= atual end) e não mover início
+                if 'end_at' in attrs and 'start_at' not in attrs:
+                    try:
+                        new_end = attrs.get('end_at')
+                        if new_end is not None and inst_end is not None and new_end <= inst_end:
+                            allowed = True
+                    except Exception:
+                        pass
+                if not allowed:
+                    raise serializers.ValidationError({
+                        'detail': 'Edição de compromissos iniciados no passado não é permitida.'
+                    })
+            # Não permitir mover o início para o passado APENAS quando o campo start_at for explicitamente alterado.
+            # Edits que não alteram start_at (por exemplo, encurtar end_at ou marcar como done) devem ser permitidos
+            # mesmo se o compromisso já tiver iniciado no passado.
+            if "start_at" in attrs:
+                try:
+                    new_start = attrs.get("start_at")
+                    if new_start is not None and new_start < now:
+                        raise serializers.ValidationError({
+                            "start_at": "Não é permitido reagendar para o passado."
+                        })
+                except Exception:
+                    # Se o start_at for inválido, deixe validações padrão tratarem adiante
+                    pass
 
         # Cliente não pode ser alterado após criação do agendamento
         if self.instance is not None and "client" in attrs:
@@ -112,3 +152,27 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Conflito de horário para o profissional.")
 
         return attrs
+
+
+class FinalizeAuditSerializer(serializers.ModelSerializer):
+    appointment_id = serializers.IntegerField(source="appointment.id", read_only=True)
+    professional_id = serializers.IntegerField(source="professional.id", read_only=True)
+    client_id = serializers.IntegerField(source="client.id", read_only=True)
+
+    class Meta:
+        model = FinalizeAudit
+        fields = [
+            "id",
+            "appointment_id",
+            "professional_id",
+            "client_id",
+            "device_id",
+            "device_info",
+            "client_now",
+            "server_now",
+            "drift_ms",
+            "adjusted_times",
+            "reason",
+            "created_at",
+        ]
+        read_only_fields = fields

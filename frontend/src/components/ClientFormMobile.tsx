@@ -32,6 +32,7 @@ interface Props {
     handleCancel: () => void;
     handleDelete: () => void;
     isEdit?: boolean;
+    onPhotoSelected?: (file: File | null) => void;
 }
 
 export default function ClientFormMobile({
@@ -41,6 +42,7 @@ export default function ClientFormMobile({
     handleCancel,
     handleDelete,
     isEdit = false,
+    onPhotoSelected,
 }: Props) {
     // Handler intermediário para radio fields (string)
     const handleRadioChange = (name: keyof ClientData) => (value: string) => {
@@ -55,11 +57,86 @@ export default function ClientFormMobile({
     const { names: cityNames, loading: citiesLoading } = useCitiesByUF(
         formData.state,
     );
+    const [photoPreview, setPhotoPreview] = React.useState<string | null>(null);
+    const fileRef = React.useRef<HTMLInputElement | null>(null);
+    const onPickPhoto = () => fileRef.current?.click();
+    const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const url = URL.createObjectURL(f);
+        setPhotoPreview(url);
+        try {
+            onPhotoSelected?.(f);
+        } catch {
+            /* noop */
+        }
+    };
     return (
-        <form onSubmit={handleSubmit} className={styles.clientForm}>
+        <form
+            onSubmit={handleSubmit}
+            className={styles.clientForm}
+            style={{ background: 'var(--color-bg)', minHeight: '100%' }}
+        >
             <h2 className={styles.formTitle}>Cadastro de Cliente</h2>
             <section>
                 <h3 className={styles.panelTitle}>Dados Pessoais</h3>
+                {/* Foto do cliente (opcional) */}
+                <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 6 }}>
+                        Foto (opcional)
+                    </label>
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: 64,
+                                height: 64,
+                                borderRadius: 8,
+                                background: '#f3f4f6',
+                                border: '1px solid #e5e7eb',
+                                display: 'grid',
+                                placeItems: 'center',
+                                overflow: 'hidden',
+                            }}
+                        >
+                            {photoPreview ? (
+                                <img
+                                    src={photoPreview}
+                                    alt='Foto do cliente'
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                    }}
+                                />
+                            ) : (
+                                <span style={{ fontSize: 12, opacity: 0.6 }}>
+                                    Sem foto
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            type='button'
+                            onClick={onPickPhoto}
+                            style={{ fontSize: 12 }}
+                        >
+                            Selecionar foto
+                        </button>
+                        <input
+                            ref={fileRef}
+                            type='file'
+                            accept='image/*'
+                            capture='environment'
+                            onChange={onFileChange}
+                            style={{ display: 'none' }}
+                        />
+                    </div>
+                </div>
                 <InputField
                     name='first_name'
                     value={formData.first_name}

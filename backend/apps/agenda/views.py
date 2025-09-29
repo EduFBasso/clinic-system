@@ -1,11 +1,11 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.conf import settings
 from django.utils import timezone
 
-from .models import Appointment
-from .serializers import AppointmentSerializer
+from .models import Appointment, FinalizeAudit
+from .serializers import AppointmentSerializer, FinalizeAuditSerializer
 
 
 class IsProfessionalOrReadOnly(permissions.BasePermission):
@@ -63,7 +63,25 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # profissional sempre é o usuário autenticado
         user = getattr(self.request, "user", None)
-        serializer.save(professional=user)
+        obj = serializer.save(professional=user)
+        # Marcar device de criação (não obrigatório)
+        try:
+            dev_id = self.request.headers.get("x-device-id") or self.request.headers.get("X-Device-Id") or None
+            dev_info = self.request.headers.get("x-device-info") or self.request.headers.get("X-Device-Info") or ""
+            if dev_id:
+                obj.created_device_id = dev_id[:64]
+            if dev_info:
+                # X-Device-Info pode vir como URL-encoded
+                try:
+                    from urllib.parse import unquote
+
+                    dev_info = unquote(dev_info)
+                except Exception:
+                    pass
+                obj.created_device_info = dev_info[:4000]
+            obj.save(update_fields=["created_device_id", "created_device_info", "updated_at"])
+        except Exception:
+            pass
 
     # Impede exclusão: histórico deve ser preservado. Fornecemos ação de cancelamento.
     def destroy(self, request, *args, **kwargs):
@@ -142,20 +160,116 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "compromisso cancelado não pode ser concluído"}, status=400)
 
         now = timezone.now()
+        # Capturar headers do dispositivo e horário do cliente
+        dev_id = request.headers.get("x-device-id") or request.headers.get("X-Device-Id") or None
+        dev_info = request.headers.get("x-device-info") or request.headers.get("X-Device-Info") or ""
+        client_now_iso = request.headers.get("x-client-now") or request.headers.get("X-Client-Now") or None
+        client_now_dt = None
+        if client_now_iso:
+            try:
+                from django.utils.dateparse import parse_datetime
+
+                client_now_dt = parse_datetime(client_now_iso)
+            except Exception:
+                client_now_dt = None
         if obj.start_at and now < obj.start_at:
             # 422 sinaliza regra de negócio
             return Response({"detail": "compromisso ainda não iniciou", "code": "too_early"}, status=422)
 
         # Marca como concluído; encurta end_at apenas se em andamento
         obj.status = obj.Status.DONE
+        adjusted = False
         if obj.end_at and now < obj.end_at:
             obj.end_at = now
+            adjusted = True
             if obj.start_at and obj.end_at <= obj.start_at:
                 obj.end_at = obj.start_at
-        obj.save(update_fields=["status", "end_at", "updated_at"])
+        # Gravar device que finalizou (opcional)
+        try:
+            if dev_id:
+                obj.ended_device_id = (dev_id or "")[:64]
+            if dev_info:
+                try:
+                    from urllib.parse import unquote
+
+                    dev_info = unquote(dev_info)
+                except Exception:
+                    pass
+                obj.ended_device_info = (dev_info or "")[:4000]
+            obj.save(update_fields=["status", "end_at", "ended_device_id", "ended_device_info", "updated_at"])
+        except Exception:
+            obj.save(update_fields=["status", "end_at", "updated_at"])
+
+        # Registrar auditoria
+        try:
+            drift_ms = None
+            if client_now_dt is not None:
+                # usar timezone-aware e converter se necessário
+                if timezone.is_naive(client_now_dt):
+                    client_now_dt = timezone.make_aware(client_now_dt, timezone=timezone.utc)
+                drift_ms = int((now - client_now_dt).total_seconds() * 1000)
+            FinalizeAudit.objects.create(
+                appointment=obj,
+                professional=obj.professional,
+                client=obj.client,
+                device_id=dev_id[:64] if dev_id else None,
+                device_info=(dev_info or "")[:4000],
+                client_now=client_now_dt,
+                server_now=now,
+                drift_ms=drift_ms,
+                adjusted_times=adjusted,
+                reason="in_window" if adjusted else "finished",
+            )
+        except Exception:
+            pass
+
         return Response(self.get_serializer(obj).data, status=200)
 
     @action(detail=True, methods=["post"], url_path="done")
     def done(self, request, pk=None):
         """Alias para finalize, por compatibilidade no frontend."""
         return self.finalize(request, pk)
+
+
+class IsStaffOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff)
+
+
+class FinalizeAuditListView(generics.ListAPIView):
+    """Admin-only list endpoint to inspect finalize audits with optional filters.
+
+    Query params:
+    - appointment: int
+    - device_id: str (exact)
+    - start: ISO datetime (created_at >=)
+    - end: ISO datetime (created_at <=)
+    """
+
+    serializer_class = FinalizeAuditSerializer
+    permission_classes = [IsStaffOnly]
+
+    def get_queryset(self):
+        qs = FinalizeAudit.objects.select_related("appointment", "professional", "client").all()
+        appt_id = self.request.query_params.get("appointment")
+        device_id = self.request.query_params.get("device_id")
+        start = self.request.query_params.get("start")
+        end = self.request.query_params.get("end")
+        if appt_id:
+            try:
+                qs = qs.filter(appointment_id=int(appt_id))
+            except Exception:
+                pass
+        if device_id:
+            qs = qs.filter(device_id=device_id)
+        if start:
+            try:
+                qs = qs.filter(created_at__gte=start)
+            except Exception:
+                pass
+        if end:
+            try:
+                qs = qs.filter(created_at__lte=end)
+            except Exception:
+                pass
+        return qs.order_by("-created_at")

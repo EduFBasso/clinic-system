@@ -149,6 +149,9 @@ class Client(models.Model):
     sensitivity_test = models.TextField("Teste de sensibilidade", null=True, blank=True)
     other_procedures = models.TextField("Outros procedimentos", null=True, blank=True)
 
+    # Foto do cliente (opcional)
+    photo = models.ImageField("Foto", upload_to="client_photos/", null=True, blank=True)
+
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
     

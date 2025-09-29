@@ -8,33 +8,36 @@ import Faixa from '../components/Faixa';
 import NavBar from '../components/NavBar';
 import MainContent from '../components/MainContent';
 import Footer from '../components/Footer';
+import UpdateBanner from '../components/UpdateBanner';
 import styles from '../styles/pages/Home.module.css';
-import ScheduleModal from '../components/ScheduleModal';
+// ScheduleModal removido — usamos apenas QuickScheduleModal
 import QuickScheduleModal from '../components/QuickScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
 import WeeklyAgendaModal from '../components/WeeklyPreviewModal';
 import SystemMessageModal from '../components/SystemMessageModal';
 import DailyAgendaModal from '../components/DailyAgendaModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
+import PendingActionsModal from '../components/PendingActionsModal';
+import type { SharedAppointmentLike } from '../components/shared/AppointmentCard';
 import type { ClientBasic } from '../types/ClientBasic';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import type { Appointment } from '../hooks/useAppointments';
+import { useAppVersionWatcher, acceptAndReload } from '../hooks/useAppVersion';
+import { useAppointmentsLivePing } from '../hooks/useAppointmentsLivePing';
 
 export default function Home() {
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
         null,
     );
     // Route-driven agenda modal states
-    const [scheduleOpen, setScheduleOpen] = useState(false);
+    // const [scheduleOpen, setScheduleOpen] = useState(false); // removido
     const [monthlyOpen, setMonthlyOpen] = useState(false);
     const [weeklyOpen, setWeeklyOpen] = useState(false);
     const [routeClient, setRouteClient] = useState<ClientBasic | undefined>(
         undefined,
     );
-    const [routeDefaultDate, setRouteDefaultDate] = useState<Date | undefined>(
-        undefined,
-    );
+    // routeDefaultDate removido com ScheduleModal
     const [routeEditAppt, setRouteEditAppt] = useState<Appointment | null>(
         null,
     );
@@ -51,7 +54,16 @@ export default function Home() {
     const [sysMsg, setSysMsg] = useState<{
         text: string;
         type: 'success' | 'error' | 'info';
+        autoCloseMs?: number;
     } | null>(null);
+    const version = useAppVersionWatcher();
+    // Live ping: simple heuristic — enable while the page is open.
+    // We can refine to enable only when there may be ongoing appointments by inspecting clients in future.
+    useAppointmentsLivePing({ enabled: true, pollIntervalMs: 30000 });
+    // Pending actions modal state (replaces ConfirmFinalizeModal flow)
+    const [pendingActionsOpen, setPendingActionsOpen] = useState(false);
+    const [pendingAppt, setPendingAppt] =
+        useState<SharedAppointmentLike | null>(null);
 
     // Aux: carrega nome básico do cliente dado um ID (cache localStorage se possível)
     async function ensureClientBasic(id: number): Promise<ClientBasic> {
@@ -128,10 +140,10 @@ export default function Home() {
                     ? new Date(dateStr + 'T00:00:00')
                     : undefined;
                 if (parsedDate && !Number.isNaN(parsedDate.getTime())) {
-                    setRouteDefaultDate(parsedDate);
+                    // setRouteDefaultDate(parsedDate);
                     setRouteInitialMonth(parsedDate);
                 } else {
-                    setRouteDefaultDate(undefined);
+                    // setRouteDefaultDate(undefined);
                     setRouteInitialMonth(undefined);
                 }
 
@@ -140,7 +152,7 @@ export default function Home() {
                 }
 
                 if (editId && cid) {
-                    // Carrega cliente e compromisso para abrir direto em edição (ScheduleModal)
+                    // Carrega cliente e compromisso para abrir direto em edição (QuickSchedule)
                     const clientBasic = await ensureClientBasic(Number(cid));
                     setRouteClient(clientBasic);
                     try {
@@ -163,14 +175,14 @@ export default function Home() {
                     } catch {
                         /* ignore fetch error */
                     }
-                    setScheduleOpen(true);
+                    setQuickOpen(true);
                     return;
                 }
 
                 if (isNew && cid) {
                     const clientBasic = await ensureClientBasic(Number(cid));
                     setRouteClient(clientBasic);
-                    setScheduleOpen(true);
+                    setQuickOpen(true);
                     return;
                 }
 
@@ -190,7 +202,14 @@ export default function Home() {
         function onSystemMessage(e: Event) {
             const det = (e as CustomEvent).detail || {};
             if (det && det.text) {
-                setSysMsg({ text: String(det.text), type: det.type || 'info' });
+                setSysMsg({
+                    text: String(det.text),
+                    type: det.type || 'info',
+                    autoCloseMs:
+                        typeof det.autoCloseMs === 'number'
+                            ? det.autoCloseMs
+                            : undefined,
+                });
             }
         }
         window.addEventListener(
@@ -201,6 +220,113 @@ export default function Home() {
             window.removeEventListener(
                 'systemMessage',
                 onSystemMessage as EventListener,
+            );
+    }, []);
+
+    // Mensagem pendente via localStorage (usada quando navegamos para a Home após salvar)
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('pendingSystemMessage');
+            if (raw) {
+                const obj = JSON.parse(raw);
+                if (obj && obj.text) {
+                    setSysMsg({
+                        text: String(obj.text),
+                        type: obj.type || 'info',
+                        autoCloseMs:
+                            typeof obj.autoCloseMs === 'number'
+                                ? obj.autoCloseMs
+                                : 10000,
+                    });
+                }
+                localStorage.removeItem('pendingSystemMessage');
+            }
+        } catch {
+            /* noop */
+        }
+    }, []);
+
+    // Listener global: ao clicar em "Finalizar", abre o PendingActionsModal
+    useEffect(() => {
+        async function onConfirmFinalize(e: Event) {
+            const ce = e as CustomEvent;
+            const det =
+                (ce && (ce as CustomEvent).detail) ||
+                ({} as {
+                    isEarly?: boolean;
+                    clientId?: number;
+                    appointmentId?: number | null;
+                    proceed?: () => void; // legacy, não usamos mais
+                });
+            // Bloqueia o default para impedir fallback com window.confirm
+            try {
+                (e as Event).preventDefault?.();
+            } catch {
+                /* noop */
+            }
+            const apptId = det.appointmentId;
+            if (!apptId) {
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('systemMessage', {
+                            detail: {
+                                text: 'Não foi possível identificar o agendamento para concluir.',
+                                type: 'error',
+                            },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+                return;
+            }
+            // Carrega dados do agendamento para exibir no modal de Ações Pendentes
+            try {
+                const token = localStorage.getItem('accessToken') || '';
+                const headers: Record<string, string> = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const r = await fetch(
+                    `${API_BASE}/agenda/appointments/${apptId}/`,
+                    { headers, cache: 'no-store' },
+                );
+                if (!r.ok) throw new Error('Falha ao carregar agendamento');
+                const data = await r.json();
+                const appt: SharedAppointmentLike = {
+                    id: data.id,
+                    start_at: data.start_at,
+                    end_at: data.end_at,
+                    status: data.status,
+                    notes: data.notes,
+                    client_name: data.client_name,
+                    client: data.client,
+                    title: data.title,
+                };
+                setPendingAppt(appt);
+                setPendingActionsOpen(true);
+            } catch (err) {
+                const msg =
+                    err instanceof Error
+                        ? err.message
+                        : 'Erro ao abrir ações pendentes';
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('systemMessage', {
+                            detail: { text: msg, type: 'error' },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+            }
+        }
+        window.addEventListener(
+            'confirmFinalizeAppointment',
+            onConfirmFinalize as EventListener,
+        );
+        return () =>
+            window.removeEventListener(
+                'confirmFinalizeAppointment',
+                onConfirmFinalize as EventListener,
             );
     }, []);
 
@@ -217,6 +343,39 @@ export default function Home() {
         }
     }, []);
 
+    // Cross-aba: ao detectar storage event da chave appointments.changed, disparar refresh local
+    useEffect(() => {
+        function onStorage(ev: StorageEvent) {
+            if (ev.key === 'appointments.changed') {
+                try {
+                    window.dispatchEvent(new Event('appointments:changed'));
+                    window.dispatchEvent(new Event('updateClients'));
+                } catch {
+                    /* noop */
+                }
+            } else if (ev.key === 'pendingSystemMessage' && ev.newValue) {
+                try {
+                    const obj = JSON.parse(ev.newValue);
+                    if (obj && obj.text) {
+                        setSysMsg({
+                            text: String(obj.text),
+                            type: obj.type || 'info',
+                            autoCloseMs:
+                                typeof obj.autoCloseMs === 'number'
+                                    ? obj.autoCloseMs
+                                    : 10000,
+                        });
+                    }
+                    localStorage.removeItem('pendingSystemMessage');
+                } catch {
+                    /* noop */
+                }
+            }
+        }
+        window.addEventListener('storage', onStorage);
+        return () => window.removeEventListener('storage', onStorage);
+    }, []);
+
     // Função para abrir o cadastro em nova janela
     const handleAddClient = () => {
         window.open(
@@ -227,39 +386,31 @@ export default function Home() {
     };
 
     // Aberturas diretas dos modais da Agenda (novo fluxo vindo do NavBar)
-    const openSchedule = async (
-        clientId?: number | null,
-        date?: Date,
-        edit?: Appointment | null,
-    ) => {
-        // Agora abre o QuickSchedule (mais completo visualmente) — requer cliente
-        if (!clientId) {
-            // Sem cliente: informa e não tenta abrir o Quick (evita prop obrigatória ausente)
-            setSysMsg({
-                text: 'Selecione um cliente para abrir o agendamento rápido.',
-                type: 'info',
-            });
-            setQuickOpen(false);
-            setRouteClient(undefined);
-            return;
-        }
-        const c = await ensureClientBasic(clientId);
-        setRouteClient(c);
-        setRouteDefaultDate(date);
-        setRouteEditAppt(edit ?? null);
-        setQuickOpen(true);
-        setScheduleOpen(false);
-        setMonthlyOpen(false);
-        setWeeklyOpen(false);
-    };
+    // openSchedule removido — consolidado no QuickSchedule
 
     const openMonthly = async (clientId: number, date?: Date) => {
+        // Evita abrir sem cliente válido
+        if (!clientId || clientId <= 0) {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: {
+                            text: 'Selecione um cliente para abrir a Agenda Mensal.',
+                            type: 'info',
+                            autoCloseMs: 6000,
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
         const c = await ensureClientBasic(clientId);
         setRouteClient(c);
         setRouteInitialMonth(date);
         setRouteEditAppt(null);
         setMonthlyOpen(true);
-        setScheduleOpen(false);
         setWeeklyOpen(false);
     };
 
@@ -268,7 +419,6 @@ export default function Home() {
         // WeeklyPreviewModal atual não usa data; reservado para evolução
         setRouteEditAppt(null);
         setWeeklyOpen(true);
-        setScheduleOpen(false);
         setMonthlyOpen(false);
     };
 
@@ -297,18 +447,16 @@ export default function Home() {
         }
     }
 
-    // Event bridge: abrir edição direta do ScheduleModal a partir do Monthly
+    // Event bridge: abrir edição direta do QuickSchedule a partir do Monthly
     useEffect(() => {
         function onOpenScheduleEdit(e: CustomEvent) {
             const det = (e && (e as CustomEvent).detail) || {};
             const c = det.client as ClientBasic | undefined;
-            const d = det.date as Date | undefined;
             const a = det.appointment as Appointment | undefined;
             if (!c || !c.id) return;
             setRouteClient(c);
-            setRouteDefaultDate(d);
             setRouteEditAppt(a ?? null);
-            setScheduleOpen(true);
+            setQuickOpen(true);
             setMonthlyOpen(false);
             setWeeklyOpen(false);
         }
@@ -349,6 +497,41 @@ export default function Home() {
     // Estado do Quick
     const [quickOpen, setQuickOpen] = useState(false);
 
+    // Safeguard: if any previous modal left the page locked, ensure unlock on mount
+    useEffect(() => {
+        try {
+            window.dispatchEvent(new Event('ensureScrollUnlocked'));
+        } catch {
+            /* noop */
+        }
+    }, []);
+    // Also ensure unlock whenever no agenda/system modal is open
+    useEffect(() => {
+        const anyOpen =
+            quickOpen ||
+            monthlyOpen ||
+            weeklyOpen ||
+            dailyOpen ||
+            detailsOpen ||
+            !!sysMsg ||
+            pendingActionsOpen;
+        if (!anyOpen) {
+            try {
+                window.dispatchEvent(new Event('ensureScrollUnlocked'));
+            } catch {
+                /* noop */
+            }
+        }
+    }, [
+        quickOpen,
+        monthlyOpen,
+        weeklyOpen,
+        dailyOpen,
+        detailsOpen,
+        sysMsg,
+        pendingActionsOpen,
+    ]);
+
     return (
         <div className={styles.container}>
             <Header />
@@ -357,7 +540,6 @@ export default function Home() {
                 openNewClientModal={handleAddClient}
                 selectedClientId={selectedClientId}
                 agendaOpeners={{
-                    openSchedule,
                     openMonthly,
                     openWeekly,
                 }}
@@ -366,17 +548,7 @@ export default function Home() {
                 setSelectedClientId={setSelectedClientId}
                 selectedClientId={selectedClientId}
             />
-            {/* Route-driven Agenda modals */}
-            <ScheduleModal
-                open={scheduleOpen}
-                onClose={() => {
-                    setScheduleOpen(false);
-                    clearAgendaRouteFlags();
-                }}
-                client={routeClient}
-                defaultDate={routeDefaultDate}
-                editAppointment={routeEditAppt}
-            />
+            {/* Route-driven Agenda modals (ScheduleModal removido) */}
             {routeClient && (
                 <QuickScheduleModal
                     open={quickOpen}
@@ -413,17 +585,33 @@ export default function Home() {
                 onClose={() => setDailyOpen(false)}
             />
             <Footer />
+            {version.hasUpdate && (
+                <UpdateBanner
+                    onReload={acceptAndReload}
+                    onDismiss={version.dismiss}
+                    message={
+                        version.latestSeen && version.currentAccepted
+                            ? `Nova versão disponível (${version.latestSeen}).`
+                            : 'Nova versão disponível.'
+                    }
+                />
+            )}
             <SystemMessageModal
                 open={!!sysMsg}
                 message={sysMsg?.text || null}
                 type={sysMsg?.type || 'info'}
                 onClose={() => setSysMsg(null)}
-                autoCloseMs={3000}
+                autoCloseMs={sysMsg?.autoCloseMs ?? 10000}
             />
             <AppointmentDetailsModal
                 open={detailsOpen}
                 appt={(detailsAppt as Appointment) || null}
                 onClose={() => setDetailsOpen(false)}
+            />
+            <PendingActionsModal
+                open={pendingActionsOpen}
+                appt={pendingAppt}
+                onClose={() => setPendingActionsOpen(false)}
             />
         </div>
     );

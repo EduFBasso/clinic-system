@@ -12,6 +12,25 @@ export default function ClientFormPage() {
     const [cliente, setCliente] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    // Refetch on bfcache restore to avoid stale form targeting wrong client
+    useEffect(() => {
+        const onPageShow = (e: Event) => {
+            const evt = e as unknown as { persisted?: boolean };
+            // When a page is restored from bfcache (persisted), redo the fetch or reset state
+            if (evt && evt.persisted) {
+                if (id) {
+                    // trigger refetch by toggling id state
+                    setCliente(null);
+                    setLoading(true);
+                } else {
+                    setCliente(null);
+                    setLoading(false);
+                }
+            }
+        };
+        window.addEventListener('pageshow', onPageShow);
+        return () => window.removeEventListener('pageshow', onPageShow);
+    }, [id]);
 
     useEffect(() => {
         if (id) {
@@ -50,7 +69,29 @@ export default function ClientFormPage() {
     }, [id]);
 
     return (
-        <div style={{ maxWidth: '900px', padding: '2rem', margin: 'auto' }}>
+        <div
+            style={{
+                maxWidth: '900px',
+                padding: '2rem',
+                margin: 'auto',
+                background: 'var(--color-bg)',
+                minHeight: '100vh',
+                boxSizing: 'border-box',
+                position: 'relative',
+            }}
+        >
+            <div
+                style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 'env(safe-area-inset-top, 0px)',
+                    background: 'var(--color-primary)',
+                    zIndex: 999,
+                    pointerEvents: 'none',
+                }}
+            />
             {loading && (
                 <div style={{ textAlign: 'center', padding: '2rem' }}>
                     <span>Carregando dados do cliente...</span>

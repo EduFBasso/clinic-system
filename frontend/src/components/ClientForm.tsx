@@ -3,10 +3,11 @@ import { API_BASE } from '../config/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { normalizeDOBForApi } from '../utils/dateOfBirth';
 import type { ClientData } from '../types/ClientData';
-import AppModal from './Modal';
+// Modal removido: mensagens de sucesso agora usam SystemMessageModal global
 import ClientFormDesktop from './ClientFormDesktop';
 import ClientFormMobile from './ClientFormMobile';
 import useIsMobile from './useIsMobile';
+import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
 import { useNavigate } from 'react-router-dom';
 
 export default function ClientForm({
@@ -141,7 +142,7 @@ export default function ClientForm({
         other_procedures: cliente?.other_procedures ?? '',
     });
 
-    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    // Modal de sucesso local removido (uso do SystemMessageModal global)
     // "Salvar e novo" (entrada rápida): quando true, após criar não navega; reseta formulário e foca o primeiro campo
     const quickModeRef = useRef(false);
     const formRef = useRef<HTMLFormElement | null>(null);
@@ -184,6 +185,41 @@ export default function ClientForm({
         type: 'error' | 'success';
         message: string;
     } | null>(null);
+    // Photo file selected in the mobile form (kept out of typed ClientData)
+    const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(
+        null,
+    );
+    // Track dirty state: any change vs initial values
+    const initialRef = useRef(JSON.stringify(formData));
+    const [dirty, setDirty] = useState(false);
+    useEffect(() => {
+        setDirty(JSON.stringify(formData) !== initialRef.current);
+    }, [formData]);
+    // Enable guard only when there are unsaved changes
+    useUnsavedChangesGuard(dirty, 'Há alterações não salvas. Deseja sair?');
+    const uploadPhotoIfNeeded = async (clientId: number, token: string) => {
+        if (!selectedPhotoFile) return null;
+        const fd = new FormData();
+        fd.append('photo', selectedPhotoFile);
+        const res = await fetch(`${API_BASE}/register/clients/${clientId}/`, {
+            method: 'PATCH',
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            body: fd,
+        });
+        if (!res.ok) {
+            let errTxt = '';
+            try {
+                errTxt = await res.text();
+            } catch {
+                /* noop */
+            }
+            throw new Error(errTxt || 'Falha ao enviar foto');
+        }
+        return await res.json();
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const token = localStorage.getItem('accessToken');
@@ -277,11 +313,30 @@ export default function ClientForm({
                     }
                     return res.json();
                 })
-                .then(createdClient => {
+                .then(async createdClient => {
                     setFeedback({
                         type: 'success',
                         message: 'Cliente cadastrado com sucesso!',
                     });
+                    // If a photo was selected, upload it now via multipart PATCH
+                    try {
+                        if (createdClient?.id) {
+                            await uploadPhotoIfNeeded(createdClient.id, token);
+                        }
+                    } catch (err) {
+                        console.warn(
+                            'Falha ao enviar foto (não bloqueante):',
+                            err,
+                        );
+                    }
+                    // Reset dirty baseline after successful create
+                    initialRef.current = JSON.stringify({
+                        ...formData,
+                        id: createdClient?.id,
+                    });
+                    setDirty(false);
+                    // Clear selected photo after successful create flow
+                    setSelectedPhotoFile(null);
                     // Salva o id do novo cliente para seleção automática
                     if (createdClient && createdClient.id) {
                         localStorage.setItem(
@@ -350,12 +405,79 @@ export default function ClientForm({
                                 /* noop */
                             }
                         }, 0);
+                        // Reset dirty baseline for the fresh form
+                        initialRef.current = JSON.stringify({
+                            first_name: '',
+                            last_name: '',
+                            email: '',
+                            phone: '',
+                            profession: '',
+                            address: '',
+                            neighborhood: '',
+                            city: 'Limeira',
+                            state: 'SP',
+                            postal_code: '',
+                            sport_activity: '',
+                            academic_activity: '',
+                            footwear_used: '',
+                            sock_used: '',
+                            takes_medication: 'Não',
+                            had_surgery: 'Não',
+                            is_pregnant: false,
+                            pain_sensitivity: '',
+                            clinical_history: '',
+                            plantar_view_left: '',
+                            plantar_view_right: '',
+                            dermatological_pathologies_left: '',
+                            dermatological_pathologies_right: '',
+                            nail_changes_left: '',
+                            nail_changes_right: '',
+                            deformities_left: '',
+                            deformities_right: '',
+                            sensitivity_test: '',
+                            other_procedures: '',
+                        });
+                        setDirty(false);
                         // Mantém na página, sem modal
                         return;
                     }
 
-                    // Fluxo normal: mostra modal de sucesso e depois sai
-                    setShowSuccessModal(true);
+                    // Fluxo normal: dispara mensagem padrão e fecha/navega
+                    try {
+                        // Envia evento global nesta janela e também persiste para leitura na Home/opener
+                        const detail = {
+                            text: 'Cliente cadastrado com sucesso!',
+                            type: 'success' as const,
+                            autoCloseMs: 10000,
+                        };
+                        const evt = new CustomEvent('systemMessage', {
+                            detail,
+                        });
+                        window.dispatchEvent(evt);
+                        try {
+                            localStorage.setItem(
+                                'pendingSystemMessage',
+                                JSON.stringify(detail),
+                            );
+                        } catch {
+                            /* noop */
+                        }
+                    } catch {
+                        try {
+                            localStorage.setItem(
+                                'pendingSystemMessage',
+                                JSON.stringify({
+                                    text: 'Cliente cadastrado com sucesso!',
+                                    type: 'success',
+                                    autoCloseMs: 10000,
+                                }),
+                            );
+                        } catch {
+                            /* noop */
+                        }
+                    }
+                    // Fecha popup se existir, senão navega para a Home
+                    closeSuccessAndExit();
                 })
                 .catch(async err => {
                     // Se já tratamos acima, não sobrescreve a mensagem específica
@@ -464,21 +586,59 @@ export default function ClientForm({
                 }
                 return res.json();
             })
-            .then(() => {
+            .then(async () => {
                 setFeedback({
                     type: 'success',
                     message: 'Cliente atualizado com sucesso!',
                 });
-                setTimeout(() => {
-                    if (window.opener) {
-                        window.opener.dispatchEvent(new Event('updateClients'));
-                        window.close();
-                    } else {
-                        window.dispatchEvent(new Event('updateClients'));
-                        // Não existe rota '/clients'; a home está em '/'
-                        navigate('/');
+                // If a new photo was selected, upload it now
+                try {
+                    if (cliente?.id) {
+                        await uploadPhotoIfNeeded(cliente.id, token);
                     }
-                }, 1500);
+                } catch (err) {
+                    console.warn('Falha ao enviar foto (não bloqueante):', err);
+                }
+                // Reset baseline after successful update
+                initialRef.current = JSON.stringify(formData);
+                setDirty(false);
+                // Clear selected photo after successful update
+                setSelectedPhotoFile(null);
+                // Dispara mensagem padrão e também persiste para consumo na Home
+                try {
+                    const detail = {
+                        text: 'Cliente atualizado com sucesso!',
+                        type: 'success' as const,
+                        autoCloseMs: 10000,
+                    };
+                    const evt = new CustomEvent('systemMessage', {
+                        detail,
+                    });
+                    window.dispatchEvent(evt);
+                    try {
+                        localStorage.setItem(
+                            'pendingSystemMessage',
+                            JSON.stringify(detail),
+                        );
+                    } catch {
+                        /* noop */
+                    }
+                } catch {
+                    try {
+                        localStorage.setItem(
+                            'pendingSystemMessage',
+                            JSON.stringify({
+                                text: 'Cliente atualizado com sucesso!',
+                                type: 'success',
+                                autoCloseMs: 10000,
+                            }),
+                        );
+                    } catch {
+                        /* noop */
+                    }
+                }
+                // Fecha/navega logo após sinalizar
+                closeSuccessAndExit();
             })
             .catch(async err => {
                 if (isHandledError(err) && err.handled) {
@@ -525,7 +685,6 @@ export default function ClientForm({
 
     // Fecha o modal de sucesso e retorna apropriado (fecha popup ou navega), notificando atualização
     const closeSuccessAndExit = () => {
-        setShowSuccessModal(false);
         try {
             if (window.opener) {
                 window.opener.dispatchEvent(new Event('updateClients'));
@@ -545,6 +704,12 @@ export default function ClientForm({
     };
 
     function handleCancel() {
+        if (dirty) {
+            const confirmExit = window.confirm(
+                'Há alterações não salvas. Deseja sair e descartar?',
+            );
+            if (!confirmExit) return;
+        }
         // Se o formulário está em uma janela separada:
         if (window.opener) {
             window.close();
@@ -693,32 +858,8 @@ export default function ClientForm({
                     handleCancel={handleCancel}
                     handleDelete={handleDelete}
                     isEdit={isEdit}
+                    onPhotoSelected={setSelectedPhotoFile}
                 />
-                {/* Modal de sucesso após cadastro */}
-                {showSuccessModal && (
-                    <AppModal open={true} onClose={closeSuccessAndExit}>
-                        <div style={{ textAlign: 'center', padding: '2rem' }}>
-                            <h2 style={{ color: '#388e3c' }}>
-                                Cliente cadastrado com sucesso!
-                            </h2>
-                            <button
-                                style={{
-                                    marginTop: '2rem',
-                                    padding: '0.7rem 2.5rem',
-                                    fontSize: '1.1rem',
-                                    background: '#388e3c',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                }}
-                                onClick={closeSuccessAndExit}
-                            >
-                                OK
-                            </button>
-                        </div>
-                    </AppModal>
-                )}
             </>
         );
     }
@@ -753,31 +894,7 @@ export default function ClientForm({
                 onQuickSubmit={onQuickSubmit}
                 formRef={formRef}
             />
-            {/* Modal de sucesso após cadastro */}
-            {showSuccessModal && (
-                <AppModal open={true} onClose={closeSuccessAndExit}>
-                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                        <h2 style={{ color: '#388e3c' }}>
-                            Cliente cadastrado com sucesso!
-                        </h2>
-                        <button
-                            style={{
-                                marginTop: '2rem',
-                                padding: '0.7rem 2.5rem',
-                                fontSize: '1.1rem',
-                                background: '#388e3c',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                            }}
-                            onClick={closeSuccessAndExit}
-                        >
-                            OK
-                        </button>
-                    </div>
-                </AppModal>
-            )}
+            {/* Modal de sucesso removido em favor do SystemMessageModal global */}
         </>
     );
 }
