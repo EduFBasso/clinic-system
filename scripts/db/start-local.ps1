@@ -14,8 +14,16 @@ function Require-Docker {
 }
 
 function Get-RepoRoot {
-    $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-    return (Split-Path -Parent (Split-Path -Parent $here))
+    # $PSScriptRoot points to scripts/db
+    if ($PSScriptRoot) {
+        return (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    }
+    # Fallback to MyInvocation if available
+    if ($MyInvocation -and $MyInvocation.MyCommand -and $MyInvocation.MyCommand.Path) {
+        $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+        return (Split-Path -Parent (Split-Path -Parent $here))
+    }
+    throw "Unable to determine repository root."
 }
 
 Require-Docker
