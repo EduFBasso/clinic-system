@@ -217,13 +217,15 @@ export default function WeeklyPreviewModal({
         const first = days[0];
         const last = days[6];
         const sameMonth = first.getMonth() === last.getMonth();
-        const monthName = (d: Date) =>
-            d.toLocaleDateString('pt-BR', { month: 'long' });
+        const monthShort = (d: Date) =>
+            d.toLocaleDateString('pt-BR', { month: 'short' }); // mantém ponto (set., out.)
         const d2 = (d: Date) =>
             d.toLocaleDateString('pt-BR', { day: '2-digit' });
         return sameMonth
-            ? `${d2(first)}–${d2(last)} ${monthName(first)}`
-            : `${d2(first)} ${monthName(first)} – ${d2(last)} ${monthName(
+            ? `${d2(first)} ${monthShort(first)} - ${d2(last)} ${monthShort(
+                  first,
+              )}`
+            : `${d2(first)} ${monthShort(first)} - ${d2(last)} ${monthShort(
                   last,
               )}`;
     }, [days]);
