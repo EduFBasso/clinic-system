@@ -8,6 +8,10 @@ import {
     getAppointmentOverride,
     subscribeOverrides,
 } from '../../utils/appointments/overrides';
+import {
+    statusStripeColor,
+    statusBackgroundColor,
+} from '../../utils/appointments/status';
 
 export interface SharedAppointmentLike {
     id: number;
@@ -46,6 +50,10 @@ export interface AppointmentCardProps<
     timeInline?: boolean;
     // Força layout com o NOME na primeira linha e o tipo de consulta abaixo
     stackName?: boolean;
+    // Esconde o nome do cliente no cabeçalho e o exibe no rodapé (junto com notas)
+    nameInFooter?: boolean;
+    // Exibe uma linha de rodapé contendo Nome (forte) + Notas, mantendo cabeçalho focado no tipo
+    showFooterLine?: boolean;
     className?: string;
     style?: React.CSSProperties;
     now?: Date;
@@ -69,6 +77,8 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     showTime = true,
     timeInline = false,
     stackName = false,
+    nameInFooter = false,
+    showFooterLine = false,
     className,
     style,
     now = new Date(),
@@ -112,16 +122,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         if (typeof c.name === 'string') clientName = c.name;
     }
     // Left color stripe by status, akin to QuickSchedule visuals
-    const stripeColor =
-        status === 'canceled'
-            ? 'var(--color-danger)'
-            : status === 'ongoing'
-            ? 'var(--color-ongoing)'
-            : status === 'past'
-            ? 'var(--color-pending)'
-            : status === 'done'
-            ? 'var(--color-done)'
-            : 'var(--color-success)';
+    const stripeColor = statusStripeColor(status);
 
     const isPending = status === 'past';
     const base: React.CSSProperties = {
@@ -131,16 +132,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         borderRadius: 8,
         padding: compact ? '6px 8px' : '8px 10px',
         // Fundo claro conforme status para padronização visual
-        background:
-            status === 'canceled'
-                ? 'var(--color-danger-bg)'
-                : status === 'ongoing'
-                ? 'var(--color-ongoing-bg)'
-                : status === 'past'
-                ? 'var(--color-pending-bg)'
-                : status === 'done'
-                ? 'var(--color-done-bg)'
-                : 'var(--color-success-bg)', // scheduled (ativo futuro)
+        background: statusBackgroundColor(status), // centralized mapping
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
@@ -205,99 +197,38 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
             />
             <div
                 style={{
-                    display: 'flex',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    columnGap: 8,
                     alignItems: 'center',
-                    gap: 8,
                     // Reserve a bit of vertical space to avoid micro layout shifts
                     minHeight: compact ? 20 : 24,
                 }}
             >
-                {/* Left text cluster that can shrink & wrap */}
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: stackName ? 'flex-start' : 'center',
-                        flexDirection: stackName ? 'column' : 'row',
-                        gap: stackName ? 2 : 8,
-                        flex: '1 1 auto',
-                        minWidth: 0,
-                    }}
-                >
-                    <span
-                        style={{
-                            fontWeight: 700,
-                            fontSize: 15,
-                            color:
-                                status === 'canceled'
-                                    ? 'var(--color-danger)'
-                                    : status === 'done'
-                                    ? 'var(--color-done)'
-                                    : status === 'ongoing'
-                                    ? 'var(--color-ongoing)'
-                                    : status === 'past'
-                                    ? 'var(--color-pending)'
-                                    : 'var(--color-success-dark)',
-                            // Sempre manter nome em uma linha com elipse
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            minWidth: 0,
-                            maxWidth: '100%',
-                            overflowWrap: 'normal',
-                            wordBreak: 'normal',
-                            // Permite que o nome ocupe o espaço livre do cluster esquerdo
-                            flex: stackName ? '0 0 auto' : 1,
-                            width: stackName ? '100%' : undefined,
-                        }}
-                        title={clientName || 'Cliente'}
-                    >
-                        {clientName || 'Cliente'}
-                    </span>
-                    {/* Visit type label: ao lado (padrão) ou abaixo do nome (stackName=true) */}
-                    {!compact && (
+                {/* Left: Client name (top-left) */}
+                <div style={{ minWidth: 0 }}>
+                    {!nameInFooter && (
                         <span
                             style={{
-                                fontSize: 13,
-                                fontWeight: 600,
-                                color:
-                                    status === 'done'
-                                        ? 'var(--color-done)'
-                                        : 'var(--color-text)',
-                                // Em layout empilhado, forçar quebra abaixo do nome e ocupar a largura toda
-                                ...(stackName
-                                    ? {
-                                          display: 'block',
-                                          width: '100%',
-                                      }
-                                    : {
-                                          minWidth: 0,
-                                          flexShrink: 1,
-                                          whiteSpace: 'nowrap',
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis',
-                                      }),
+                                fontWeight: 800,
+                                fontSize: 15,
+                                color: 'var(--color-heading)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                minWidth: 0,
+                                maxWidth: '100%',
+                                overflowWrap: 'normal',
+                                wordBreak: 'normal',
+                                display: 'block',
                             }}
+                            title={clientName || 'Cliente'}
                         >
-                            {(() => {
-                                const vt = (
-                                    appt as unknown as { visit_type?: string }
-                                ).visit_type;
-                                const map: Record<string, string> = {
-                                    avaliacao: 'Avaliação',
-                                    retorno: 'Retorno',
-                                    procedimento: 'Procedimento',
-                                    outro: 'Outro',
-                                    consulta: 'Consulta',
-                                };
-                                return (
-                                    (vt && map[vt]) ||
-                                    (appt as SharedAppointmentLike).title ||
-                                    'Consulta'
-                                );
-                            })()}
+                            {clientName || 'Cliente'}
                         </span>
                     )}
                 </div>
+                {/* Right: Actions + Status badge, with visit type below status */}
                 <span
                     style={{
                         marginLeft: 'auto',
@@ -305,7 +236,6 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                         alignItems: 'center',
                         gap: 6,
                         flexShrink: 0,
-                        // Keep a stable block for right-side controls + badge
                         minHeight: 20,
                     }}
                 >
@@ -427,7 +357,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                             border: '1px solid var(--color-border)',
                                             borderRadius: 6,
                                             background:
-                                                'var(--color-danger-bg)',
+                                                'var(--color-canceled-bg)',
                                             padding: 6,
                                             cursor: 'pointer',
                                             ...(showCancel
@@ -440,7 +370,9 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                             showCancel ? undefined : true
                                         }
                                     >
-                                        <FaBan color={'var(--color-danger)'} />
+                                        <FaBan
+                                            color={'var(--color-canceled)'}
+                                        />
                                     </button>,
                                 )}
                                 {maybeRender(
@@ -460,7 +392,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                             background:
                                                 status === 'done'
                                                     ? 'var(--color-done-bg)'
-                                                    : 'var(--color-danger-bg)',
+                                                    : 'var(--color-canceled-bg)',
                                             padding: 6,
                                             cursor: 'pointer',
                                             ...(showDetails
@@ -485,10 +417,115 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                             </>
                         );
                     })()}
-                    <StatusBadge status={status} size='md' />
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            minWidth: 0,
+                        }}
+                    >
+                        <StatusBadge status={status} size='md' />
+                        {!compact && (
+                            <span
+                                style={{
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    color: 'var(--color-heading)',
+                                    marginTop: 2,
+                                    maxWidth: 160,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                }}
+                                title={(() => {
+                                    const vt = (
+                                        appt as unknown as {
+                                            visit_type?: string;
+                                        }
+                                    ).visit_type;
+                                    const map: Record<string, string> = {
+                                        avaliacao: 'Avaliação',
+                                        retorno: 'Retorno',
+                                        procedimento: 'Procedimento',
+                                        outro: 'Outro',
+                                        consulta: 'Consulta',
+                                    };
+                                    return (
+                                        (vt && map[vt]) ||
+                                        (appt as SharedAppointmentLike).title ||
+                                        'Consulta'
+                                    );
+                                })()}
+                            >
+                                {(() => {
+                                    const vt = (
+                                        appt as unknown as {
+                                            visit_type?: string;
+                                        }
+                                    ).visit_type;
+                                    const map: Record<string, string> = {
+                                        avaliacao: 'Avaliação',
+                                        retorno: 'Retorno',
+                                        procedimento: 'Procedimento',
+                                        outro: 'Outro',
+                                        consulta: 'Consulta',
+                                    };
+                                    return (
+                                        (vt && map[vt]) ||
+                                        (appt as SharedAppointmentLike).title ||
+                                        'Consulta'
+                                    );
+                                })()}
+                            </span>
+                        )}
+                    </div>
                 </span>
             </div>
-            {!compact && showNotes && appt.notes && (
+            {/* Footer line: Nome (forte) + Comentários na última linha */}
+            {!compact && showFooterLine && (
+                <div
+                    style={{
+                        display: 'flex',
+                        gap: 6,
+                        alignItems: 'baseline',
+                        minWidth: 0,
+                    }}
+                >
+                    <span
+                        style={{
+                            fontWeight: 800,
+                            color: 'var(--color-heading)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '40%',
+                        }}
+                        title={clientName || 'Cliente'}
+                    >
+                        {clientName || 'Cliente'}
+                    </span>
+                    {appt.notes && (
+                        <span
+                            style={{
+                                fontSize: 12,
+                                color: 'var(--color-text)',
+                                lineHeight: 1.3,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                minWidth: 0,
+                                flex: 1,
+                            }}
+                            title={appt.notes}
+                        >
+                            {appt.notes}
+                        </span>
+                    )}
+                </div>
+            )}
+            {/* Back-compat notes block when footer is not used */}
+            {!compact && !showFooterLine && showNotes && appt.notes && (
                 <div
                     style={{
                         fontSize: 12,
@@ -497,11 +534,10 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                         whiteSpace: 'pre-wrap',
                         overflowWrap: 'anywhere',
                         wordBreak: 'break-word',
-                        // Prevent horizontal growth, allow wrapping and optionally clamp height
                         minWidth: 0,
                         overflow: 'hidden',
                         display: '-webkit-box',
-                        WebkitLineClamp: 10, // generous cap; adjust per surface
+                        WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
                     }}
                 >

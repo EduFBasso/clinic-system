@@ -27,7 +27,7 @@ export function deriveStatus(
 
 export function statusStripeColor(status: StatusKind): string {
     return status === 'canceled'
-        ? 'var(--color-danger)'
+        ? 'var(--color-canceled)'
         : status === 'ongoing'
         ? 'var(--color-ongoing)'
         : status === 'past'
@@ -39,7 +39,7 @@ export function statusStripeColor(status: StatusKind): string {
 
 export function statusBackgroundColor(status: StatusKind): string {
     return status === 'canceled'
-        ? 'var(--color-danger-bg)'
+        ? 'var(--color-canceled-bg)'
         : status === 'ongoing'
         ? 'var(--color-ongoing-bg)'
         : status === 'past'

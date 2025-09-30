@@ -232,47 +232,9 @@ export default function WeeklyAgendaModal({
                         paddingTop: 'env(safe-area-inset-top, 0px)',
                     }}
                 >
-                    <div style={{ display: 'grid', gap: 12, paddingBottom: 8 }}>
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                                minWidth: 0,
-                            }}
-                        >
-                            <div
-                                style={{
-                                    fontWeight: 800,
-                                    fontSize: 'var(--font-title-lg)',
-                                    color: 'var(--color-heading)',
-                                }}
-                            >
-                                Agenda semanal
-                            </div>
-                            <button
-                                type='button'
-                                aria-label='Fechar'
-                                onClick={onClose}
-                                style={{
-                                    width: 44,
-                                    height: 44,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    color: 'var(--color-heading)',
-                                    fontSize: 26,
-                                }}
-                            >
-                                ×
-                            </button>
-                        </div>
-                    </div>
+                    <div
+                        style={{ display: 'grid', gap: 12, paddingBottom: 8 }}
+                    />
                 </div>
 
                 {/* Header controls (Hoje + calendar, center arrows + label) */}
@@ -282,7 +244,8 @@ export default function WeeklyAgendaModal({
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 16,
+                            gap: 19.2, // +20% de 16px entre Hoje e calendário
+                            marginRight: 12, // mais espaço até o seletor da semana
                         }}
                     >
                         <button
@@ -397,7 +360,26 @@ export default function WeeklyAgendaModal({
                             ▶
                         </button>
                     </div>
-                    <div style={{ width: 48 }} />
+                    <button
+                        type='button'
+                        aria-label='Fechar'
+                        onClick={onClose}
+                        style={{
+                            width: 44,
+                            height: 44,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'transparent',
+                            border: 'none',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            color: 'var(--color-heading)',
+                            fontSize: 26,
+                        }}
+                    >
+                        ×
+                    </button>
                 </div>
 
                 {/* Weekday selector strip */}

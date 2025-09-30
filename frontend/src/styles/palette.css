@@ -26,17 +26,20 @@
     --color-error-border: #a31515;
 
     /* Semantic tokens - use estes em componentes */
-    /* Success (verdes) */
-    --color-success: #059669;
-    --color-success-dark: #065f46;
-    --color-success-darker: #064e3b; /* hover mais escuro */
-    --color-success-deep: #052e22; /* active/pressed */
-    --color-success-bg: #ecfdf5; /* fundo suave para sucesso */
+    /* Success (verdes) - azul/verde escuro para alto contraste + fundo claro */
+    --color-success: #065f46; /* mais escuro (antes: #059669) */
+    --color-success-dark: #064e3b;
+    --color-success-darker: #052e22; /* hover mais escuro */
+    --color-success-deep: #03261a; /* active/pressed */
+    --color-success-bg: #ecfdf5; /* mantém fundo claro */
 
     /* Danger (vermelhos) */
-    --color-danger: #b91c1c; /* principal - botões/ênfase */
+    --color-danger: #b91c1c; /* principal - botões/ênfase (genérico) */
     --color-danger-dark: #991b1b; /* bordas/textos */
     --color-danger-bg: #fef2f2; /* plano de fundo de alerta */
+    /* Canceled (derivado do danger) — vermelho vivo e alto contraste */
+    --color-canceled: #b91c1c; /* vermelho forte para textos/faixa de cancelado */
+    --color-canceled-bg: #fdf1f1; /* mais claro para facilitar leitura com mais textos vermelhos */
 
     /* Warning (ambar) */
     --color-warning: #f59e0b;
@@ -46,13 +49,13 @@
     --color-ongoing: #7c2d12; /* laranja escuro puxando para marrom */
     --color-ongoing-bg: #fff7ed; /* bege/laranja bem claro (alto contraste) */
 
-    /* Done (atendimento finalizado) - azul claro sugerido */
-    --color-done: #2563eb; /* azul médio para textos/bordas */
-    --color-done-bg: #eff6ff; /* azul clarinho de fundo */
+    /* Done (atendimento finalizado) - azul escuro (alto contraste) + fundo claro */
+    --color-done: #1e3a8a; /* azul bem escuro (antes: #2563eb) */
+    --color-done-bg: #eff6ff; /* mantém azul clarinho no fundo para conforto visual */
 
-    /* Pending (vencido/aguardando ação) - tons de cinza */
-    --color-pending: #6b7280; /* cinza médio para rótulo */
-    --color-pending-bg: #f3f4f6; /* cinza claro de fundo dos cartões */
+    /* Pending (vencido/aguardando ação) - cinza mais escuro para contraste + fundo claro */
+    --color-pending: #374151; /* mais escuro (antes: #6b7280) */
+    --color-pending-bg: #f3f4f6; /* mantém fundo claro */
 
     /* Ícones e bordas (linkar a tokens existentes) */
     --color-icon-default: var(--color-primary);

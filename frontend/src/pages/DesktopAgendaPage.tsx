@@ -1,9 +1,7 @@
 import React from 'react';
-import { getNow } from '../utils/now';
 import FloatingDatePicker from '../components/FloatingDatePicker';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
-import TimeRangeLabel from '../components/shared/TimeRangeLabel';
-import AppointmentCard from '../components/shared/AppointmentCard';
+import AppointmentRow from '../components/shared/AppointmentRow';
 import QuickScheduleModal from '../components/QuickScheduleModal';
 import PendingActionsModal from '../components/PendingActionsModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
@@ -11,6 +9,9 @@ import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import InlineAppointmentEditor from '../components/InlineAppointmentEditor';
+import TimeRangeLabel from '../components/shared/TimeRangeLabel';
+import { enrichList } from '../utils/appointments/status';
+import { getAppointmentOverride } from '../utils/appointments/overrides';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -26,7 +27,21 @@ function addDays(d: Date, n: number) {
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 const STATUS_ORDER: StatusKey[] = ['ongoing', 'scheduled', 'done', 'canceled'];
 
+interface ClientLike {
+    id: number;
+    name: string;
+}
+type RawClientField = ClientLike | number | undefined | null;
+type EnrichedAppt = Appointment & {
+    _start: Date;
+    _end: Date;
+    _isPast: boolean;
+    _isOngoing: boolean;
+    client?: ClientLike | number;
+};
+
 export default function DesktopAgendaPage() {
+    // Floating picker state/position
     const [showPicker, setShowPicker] = React.useState(false);
     const [pickerPos, setPickerPos] = React.useState<
         { x: number; y: number } | undefined
@@ -68,6 +83,7 @@ export default function DesktopAgendaPage() {
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+
     const dayStart = React.useMemo(
         () => startOfDay(selectedDay),
         [selectedDay],
@@ -83,36 +99,13 @@ export default function DesktopAgendaPage() {
         'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing'
     >('active');
 
-    interface ClientLike {
-        id: number;
-        name: string;
-    }
-    type RawClientField = ClientLike | number | undefined | null;
-    type EnrichedAppt = Appointment & {
-        _start: Date;
-        _end: Date;
-        _isPast: boolean;
-        _isOngoing: boolean;
-        client?: ClientLike | number;
-    };
-    const [now, setNow] = React.useState<Date>(getNow());
-    React.useEffect(() => {
-        // Tick only when viewing today
-        const isToday =
-            startOfDay(getNow()).getTime() ===
-            startOfDay(selectedDay).getTime();
-        if (!isToday) return;
-        const id = setInterval(() => setNow(getNow()), 5000);
-        return () => clearInterval(id);
-    }, [selectedDay]);
+    // Effective now reference (stable for one render lifecycle)
+    const effectiveNowRef = React.useMemo(() => new Date(), []);
 
     const enriched: EnrichedAppt[] = React.useMemo(() => {
-        const refNow = now;
-        return items.map(a => {
-            const _start = new Date(a.start_at);
-            const _end = new Date(a.end_at);
-            const _isPast = _end < refNow;
-            const _isOngoing = _start <= refNow && _end > refNow;
+        const nowRef = effectiveNowRef;
+        const base = enrichList(items, nowRef);
+        return base.map(a => {
             const rawClient = (a as unknown as { client?: RawClientField })
                 .client;
             let client: ClientLike | undefined = undefined;
@@ -121,34 +114,30 @@ export default function DesktopAgendaPage() {
                 if (
                     typeof candidate.id === 'number' &&
                     typeof candidate.name === 'string'
-                )
+                ) {
                     client = candidate;
+                }
             }
-            return {
-                ...a,
-                _start,
-                _end,
-                _isPast,
-                _isOngoing,
-                ...(client ? { client } : {}),
-            } as EnrichedAppt;
+            return { ...a, ...(client ? { client } : {}) } as EnrichedAppt;
         });
-    }, [items, now]);
+    }, [items, effectiveNowRef]);
 
     const filtered = enriched.filter(a => {
+        const ov = getAppointmentOverride(a.id)?.status;
+        const status = (ov as StatusKey) ?? a.status;
         switch (statusFilter) {
             case 'all':
                 return true;
             case 'active':
-                return a.status === 'scheduled' && !a._isPast;
+                return (status === 'scheduled' || a._isOngoing) && !a._isPast;
             case 'past':
-                return a.status === 'scheduled' && a._isPast;
+                return status === 'scheduled' && a._isPast;
             case 'done':
-                return a.status === 'done';
+                return status === 'done';
             case 'canceled':
-                return a.status === 'canceled';
+                return status === 'canceled';
             case 'ongoing':
-                return a._isOngoing && a.status === 'scheduled';
+                return a._isOngoing || status === 'ongoing';
             default:
                 return true;
         }
@@ -432,32 +421,33 @@ export default function DesktopAgendaPage() {
                 {!loading &&
                     sorted.map(a => {
                         const isActive = a.status === 'scheduled' && !a._isPast;
-                        const isPending = a.status === 'scheduled' && a._isPast;
                         const isEditing = inlineEditId === a.id;
                         return (
                             <div
                                 key={a.id}
                                 data-appt-id={a.id}
                                 style={{
-                                    display: 'flex',
-                                    gap: 10,
-                                    alignItems: 'flex-start',
+                                    // Keep outer wrapper for spacing; grid managed by row/editor
+                                    minWidth: 0,
+                                    width: '100%',
+                                    maxWidth: 'min(1024px, 96%)',
                                 }}
                             >
-                                <TimeRangeLabel
-                                    start={a.start_at}
-                                    end={a.end_at}
-                                    size='md'
-                                />
-                                <div
-                                    style={{
-                                        flex: 1,
-                                        minWidth: 0,
-                                        width: '100%',
-                                        maxWidth: 'min(1024px, 96%)',
-                                    }}
-                                >
-                                    {isEditing ? (
+                                {isEditing ? (
+                                    <div
+                                        style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '56px 1fr',
+                                            columnGap: 10,
+                                            alignItems: 'flex-start',
+                                        }}
+                                    >
+                                        <TimeRangeLabel
+                                            start={a.start_at}
+                                            end={a.end_at}
+                                            size='md'
+                                            order='end-top'
+                                        />
                                         <InlineAppointmentEditor
                                             appt={a}
                                             onCancel={() =>
@@ -468,74 +458,74 @@ export default function DesktopAgendaPage() {
                                                 setReloadKey(x => x + 1);
                                             }}
                                         />
-                                    ) : (
-                                        <div style={{ position: 'relative' }}>
-                                            <AppointmentCard
-                                                appt={a}
-                                                style={{ padding: '6px 8px' }}
-                                                showTime={false}
-                                                showEditAction={false}
-                                                onClick={
-                                                    isActive
-                                                        ? () => {
-                                                              const client =
-                                                                  makeClientBasic(
-                                                                      a,
-                                                                  );
-                                                              setQsClient(
-                                                                  client,
+                                    </div>
+                                ) : (
+                                    <div style={{ position: 'relative' }}>
+                                        <AppointmentRow
+                                            appt={a}
+                                            timeSize='md'
+                                            timeOrder='end-top'
+                                            cardContainerStyle={{
+                                                minWidth: 0,
+                                                width: '100%',
+                                            }}
+                                            style={{ padding: '6px 8px' }}
+                                            showEditAction={false}
+                                            onClick={
+                                                isActive
+                                                    ? () => {
+                                                          const client =
+                                                              makeClientBasic(
+                                                                  a,
                                                               );
-                                                              setQsEdit(a);
-                                                              setQsOpen(true);
-                                                          }
-                                                        : isPending
-                                                        ? () => {
-                                                              setPendingAppt(a);
-                                                              setPendingOpen(
-                                                                  true,
-                                                              );
-                                                          }
-                                                        : undefined
+                                                          setQsClient(client);
+                                                          setQsEdit(a);
+                                                          setQsOpen(true);
+                                                      }
+                                                    : undefined
+                                            }
+                                            onResolvePending={appt => {
+                                                setPendingAppt(
+                                                    appt as Appointment,
+                                                );
+                                                setPendingOpen(true);
+                                            }}
+                                            onDetails={
+                                                a.status === 'done'
+                                                    ? appt => {
+                                                          setDetailsAppt(
+                                                              appt as Appointment,
+                                                          );
+                                                          setDetailsOpen(true);
+                                                      }
+                                                    : undefined
+                                            }
+                                        />
+                                        {isActive && (
+                                            <button
+                                                type='button'
+                                                aria-label='Editar inline'
+                                                title='Editar inline'
+                                                onClick={() =>
+                                                    setInlineEditId(a.id)
                                                 }
-                                                onDetails={
-                                                    a.status === 'done'
-                                                        ? appt => {
-                                                              setDetailsAppt(
-                                                                  appt as Appointment,
-                                                              );
-                                                              setDetailsOpen(
-                                                                  true,
-                                                              );
-                                                          }
-                                                        : undefined
-                                                }
-                                            />
-                                            {isActive && (
-                                                <button
-                                                    type='button'
-                                                    aria-label='Editar inline'
-                                                    title='Editar inline'
-                                                    onClick={() =>
-                                                        setInlineEditId(a.id)
-                                                    }
-                                                    style={{
-                                                        position: 'absolute',
-                                                        top: 6,
-                                                        right: 6,
-                                                        padding: '4px 8px',
-                                                        borderRadius: 6,
-                                                        border: '1px solid var(--color-border)',
-                                                        background: '#fff',
-                                                        fontSize: 12,
-                                                        cursor: 'pointer',
-                                                    }}
-                                                >
-                                                    Editar
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: 6,
+                                                    right: 6,
+                                                    padding: '4px 8px',
+                                                    borderRadius: 6,
+                                                    border: '1px solid var(--color-border)',
+                                                    background: '#fff',
+                                                    fontSize: 12,
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                Editar
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}

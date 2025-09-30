@@ -1,4 +1,5 @@
 import React from 'react';
+import { statusStripeColor } from '../../utils/appointments/status';
 
 export type StatusKind = 'scheduled' | 'done' | 'canceled' | 'ongoing' | 'past';
 
@@ -18,23 +19,7 @@ const LABELS: Record<StatusKind, string> = {
     past: 'Pendente',
 };
 
-function color(status: StatusKind) {
-    switch (status) {
-        case 'canceled':
-            return 'var(--color-danger)';
-        case 'ongoing':
-            // Unify ongoing visuals using token
-            return 'var(--color-ongoing)';
-        case 'done':
-            return 'var(--color-done)';
-        case 'past':
-            // Pending should use tokenized grey
-            return 'var(--color-pending)';
-        case 'scheduled':
-        default:
-            return 'var(--color-success)';
-    }
-}
+const color = statusStripeColor;
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({
     status,

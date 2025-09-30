@@ -2,8 +2,7 @@ import React from 'react';
 import AppModal from './Modal';
 import FloatingDatePicker from './FloatingDatePicker';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
-import TimeRangeLabel from './shared/TimeRangeLabel';
-import AppointmentCard from './shared/AppointmentCard';
+import AppointmentRow from './shared/AppointmentRow';
 import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import QuickScheduleModal from './QuickScheduleModal';
@@ -527,53 +526,37 @@ export default function DailyAgendaModal({
                                         alignItems: 'flex-start',
                                     }}
                                 >
-                                    <TimeRangeLabel
-                                        start={a.start_at}
-                                        end={a.end_at}
-                                        size='md'
-                                    />
-                                    <div
-                                        style={{
-                                            flex: 1,
-                                            minWidth: 0,
-                                            width: '100%',
-                                            // ~10% wider and responsive to viewport: cap by min(px, %)
+                                    <AppointmentRow
+                                        appt={a}
+                                        timeSize='md'
+                                        timeOrder='end-top'
+                                        style={{ padding: '6px 8px' }}
+                                        cardContainerStyle={{
                                             maxWidth: 'min(704px, 94%)',
                                         }}
-                                    >
-                                        <AppointmentCard
-                                            appt={a}
-                                            style={{ padding: '6px 8px' }}
-                                            showTime={false}
-                                            showEditAction={false}
-                                            onClick={() => {
-                                                const client =
-                                                    makeClientBasic(a);
-                                                setQsClient(client);
-                                                setQsEdit(a);
-                                                setQsOpen(true);
-                                            }}
-                                            onResolvePending={appt => {
-                                                setPendingAppt(
-                                                    appt as Appointment,
-                                                );
-                                                setPendingOpen(true);
-                                            }}
-                                            onDetails={
-                                                a.status === 'done'
-                                                    ? appt => {
-                                                          setDetailsAppt(
-                                                              appt as Appointment,
-                                                          );
-                                                          setDetailsOpen(true);
-                                                      }
-                                                    : undefined
-                                            }
-                                            highlight={
-                                                focusAppointmentId === a.id
-                                            }
-                                        />
-                                    </div>
+                                        showEditAction={false}
+                                        onClick={() => {
+                                            const client = makeClientBasic(a);
+                                            setQsClient(client);
+                                            setQsEdit(a);
+                                            setQsOpen(true);
+                                        }}
+                                        onResolvePending={appt => {
+                                            setPendingAppt(appt as Appointment);
+                                            setPendingOpen(true);
+                                        }}
+                                        onDetails={
+                                            a.status === 'done'
+                                                ? appt => {
+                                                      setDetailsAppt(
+                                                          appt as Appointment,
+                                                      );
+                                                      setDetailsOpen(true);
+                                                  }
+                                                : undefined
+                                        }
+                                        highlight={focusAppointmentId === a.id}
+                                    />
                                 </div>
                             );
                         })}

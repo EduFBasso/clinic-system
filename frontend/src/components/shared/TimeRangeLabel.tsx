@@ -6,6 +6,8 @@ interface TimeRangeLabelProps {
     format?: 'arrow' | 'dash';
     size?: 'sm' | 'md' | 'lg';
     boldEndArrow?: boolean;
+    // Controls which value is on the first line
+    order?: 'start-top' | 'end-top';
     className?: string;
     style?: React.CSSProperties;
 }
@@ -23,6 +25,7 @@ export const TimeRangeLabel: React.FC<TimeRangeLabelProps> = ({
     format = 'arrow',
     size = 'md',
     boldEndArrow = true,
+    order = 'start-top',
     className,
     style,
 }) => {
@@ -46,10 +49,26 @@ export const TimeRangeLabel: React.FC<TimeRangeLabelProps> = ({
         ) : (
             '–'
         );
+    const top =
+        order === 'end-top' ? (
+            <>
+                {sep} {fmt(e)}
+            </>
+        ) : (
+            <>{fmt(s)}</>
+        );
+    const bottom =
+        order === 'end-top' ? (
+            <>{fmt(s)}</>
+        ) : (
+            <>
+                {sep} {fmt(e)}
+            </>
+        );
     return (
         <div className={className} style={baseStyle}>
-            {fmt(s)}
-            <br /> {sep} {fmt(e)}
+            {top}
+            <br /> {bottom}
         </div>
     );
 };

@@ -6,9 +6,8 @@ import {
     type Appointment,
 } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
-import AppointmentCard from './shared/AppointmentCard';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
-import TimeRangeLabel from './shared/TimeRangeLabel';
+import AppointmentRow from './shared/AppointmentRow';
 import PendingActionsModal from './PendingActionsModal';
 
 function startOfMonth(d: Date) {
@@ -291,15 +290,12 @@ export default function MonthlyAgendaModal({
                                         )
                                     }
                                     style={{
-                                        fontSize: 'var(--font-body)',
                                         padding: '8px 10px',
                                         background: 'var(--color-pending-bg)',
                                         border: '1px solid var(--color-border)',
                                         borderRadius: 6,
                                         color: 'var(--color-text)',
                                         fontWeight: 500,
-                                        minWidth: 140,
-                                        maxWidth: 220,
                                         width: 'auto',
                                     }}
                                     aria-label='Filtro de dia'
@@ -594,50 +590,38 @@ export default function MonthlyAgendaModal({
                                                     willChange: 'transform',
                                                 }}
                                             >
-                                                <TimeRangeLabel
-                                                    start={a.start_at}
-                                                    end={a.end_at}
-                                                    size='md'
-                                                />
-                                                <div
+                                                <AppointmentRow
+                                                    appt={a as Appointment}
+                                                    timeSize='md'
+                                                    timeOrder='end-top'
                                                     style={{
-                                                        minWidth: 0,
-                                                        width: '100%',
+                                                        padding: '6px 8px',
                                                     }}
-                                                >
-                                                    <AppointmentCard<Appointment>
-                                                        appt={a as Appointment}
-                                                        style={{
-                                                            padding: '6px 8px',
-                                                        }}
-                                                        showTime={false}
-                                                        stackName
-                                                        onClick={
-                                                            isPending
-                                                                ? () => {
-                                                                      setPendingAppt(
-                                                                          a as Appointment,
-                                                                      );
-                                                                      setPendingOpen(
-                                                                          true,
-                                                                      );
-                                                                  }
-                                                                : undefined
-                                                        }
-                                                        onDetails={
-                                                            a.status === 'done'
-                                                                ? appt => {
-                                                                      setDetailsAppt(
-                                                                          appt as Appointment,
-                                                                      );
-                                                                      setDetailsOpen(
-                                                                          true,
-                                                                      );
-                                                                  }
-                                                                : undefined
-                                                        }
-                                                    />
-                                                </div>
+                                                    onClick={
+                                                        isPending
+                                                            ? () => {
+                                                                  setPendingAppt(
+                                                                      a as Appointment,
+                                                                  );
+                                                                  setPendingOpen(
+                                                                      true,
+                                                                  );
+                                                              }
+                                                            : undefined
+                                                    }
+                                                    onDetails={
+                                                        a.status === 'done'
+                                                            ? appt => {
+                                                                  setDetailsAppt(
+                                                                      appt as Appointment,
+                                                                  );
+                                                                  setDetailsOpen(
+                                                                      true,
+                                                                  );
+                                                              }
+                                                            : undefined
+                                                    }
+                                                />
                                             </div>
                                         );
                                     })}

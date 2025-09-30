@@ -252,58 +252,19 @@ export default function WeeklyPreviewModal({
                         top: 0,
                         zIndex: 900,
                         background: 'var(--color-bg)',
-                        borderBottom: '1px solid var(--color-border)',
+                        borderBottom: 'none',
                         paddingTop: 'env(safe-area-inset-top, 0px)',
                     }}
                 >
                     <div style={{ display: 'grid', gap: 12, paddingBottom: 8 }}>
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                                minWidth: 0,
-                            }}
-                        >
-                            <div
-                                style={{
-                                    fontWeight: 800,
-                                    fontSize: 'var(--font-title-lg)',
-                                    color: 'var(--color-heading)',
-                                }}
-                            >
-                                Agenda semanal
-                            </div>
-                            <button
-                                type='button'
-                                aria-label='Fechar'
-                                onClick={onClose}
-                                style={{
-                                    width: 44,
-                                    height: 44,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    color: 'var(--color-heading)',
-                                    fontSize: 26,
-                                }}
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* Header controls (Hoje + calendar, center arrows + week label) */}
+                        {/* Header controls (Hoje + calendar, center arrows + week label + close) */}
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                             <div
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: 16,
+                                    gap: 19.2, // +20% de 16px entre Hoje e calendário
+                                    marginRight: 12, // mais espaço até o seletor da semana
                                 }}
                             >
                                 <button
@@ -314,7 +275,7 @@ export default function WeeklyPreviewModal({
                                         fontSize: 'var(--font-body)',
                                         fontWeight: 700,
                                         padding: '4px 10px',
-                                        border: '1px solid var(--color-success-darker)',
+                                        border: 'none',
                                         background: 'var(--color-success-dark)',
                                         borderRadius: 6,
                                         cursor: 'pointer',
@@ -336,7 +297,7 @@ export default function WeeklyPreviewModal({
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         background: 'none',
-                                        border: '1px solid var(--color-border)',
+                                        border: 'none',
                                         borderRadius: 6,
                                         cursor: 'pointer',
                                         color: 'var(--color-success-dark)',
@@ -419,7 +380,26 @@ export default function WeeklyPreviewModal({
                                     ▶
                                 </button>
                             </div>
-                            <div style={{ width: 48 }} />
+                            <button
+                                type='button'
+                                aria-label='Fechar'
+                                onClick={onClose}
+                                style={{
+                                    width: 44,
+                                    height: 44,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    color: 'var(--color-heading)',
+                                    fontSize: 26,
+                                }}
+                            >
+                                ×
+                            </button>
                         </div>
 
                         {/* Weekday selector strip */}
@@ -434,9 +414,13 @@ export default function WeeklyPreviewModal({
                             {days.map(d => {
                                 const iso = toISODate(d);
                                 const selected = iso === selectedDayISO;
-                                const label = d
+                                const weekday = d
                                     .toLocaleDateString('pt-BR', {
                                         weekday: 'short',
+                                    })
+                                    .replace('.', '');
+                                const dayNum = d
+                                    .toLocaleDateString('pt-BR', {
                                         day: '2-digit',
                                     })
                                     .replace('.', '');
@@ -451,21 +435,46 @@ export default function WeeklyPreviewModal({
                                             });
                                         }}
                                         style={{
-                                            padding: '6px 8px',
-                                            border: '1px solid var(--color-border)',
-                                            borderRadius: 8,
-                                            background: selected
-                                                ? 'var(--color-success-bg)'
-                                                : 'var(--color-bg-section)',
-                                            color: selected
-                                                ? 'var(--color-success-dark)'
-                                                : 'var(--color-text)',
-                                            fontWeight: selected ? 800 : 600,
+                                            padding: '8px 6px',
+                                            border: 'none',
+                                            borderRadius: 0,
+                                            background: 'transparent',
+                                            color: 'var(--color-text)',
+                                            fontWeight: 600,
                                             textTransform: 'capitalize',
                                         }}
                                         aria-pressed={selected}
                                     >
-                                        {label}
+                                        <div
+                                            style={{
+                                                display: 'grid',
+                                                justifyItems: 'center',
+                                                gap: 2,
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    fontSize: '0.8rem',
+                                                    color: 'var(--color-disabled)',
+                                                }}
+                                            >
+                                                {weekday}
+                                            </div>
+                                            <div
+                                                style={{
+                                                    fontSize: '1rem',
+                                                    fontWeight: 800,
+                                                    paddingBottom: 2,
+                                                    borderBottom: selected
+                                                        ? '3px solid var(--color-heading)'
+                                                        : '3px solid transparent',
+                                                    minWidth: 20,
+                                                    textAlign: 'center',
+                                                }}
+                                            >
+                                                {dayNum}
+                                            </div>
+                                        </div>
                                     </button>
                                 );
                             })}
@@ -480,7 +489,7 @@ export default function WeeklyPreviewModal({
                         overflowX: 'auto',
                         overflowY: 'hidden',
                         display: 'flex',
-                        gap: 10,
+                        gap: 16,
                         // Create a small spacing below the sticky header area
                         paddingTop: 6,
                         paddingBottom: 4,
@@ -490,7 +499,6 @@ export default function WeeklyPreviewModal({
                     {days.map(d => {
                         const iso = toISODate(d);
                         const list = grouped[iso] || [];
-                        const selected = iso === selectedDayISO;
                         return (
                             <div
                                 key={iso}
@@ -501,12 +509,10 @@ export default function WeeklyPreviewModal({
                                     flex: '0 0 auto',
                                     width: 240,
                                     maxWidth: 260,
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 10,
-                                    background: selected
-                                        ? 'var(--color-bg)'
-                                        : 'var(--color-bg-section)',
-                                    padding: 8,
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    background: 'transparent',
+                                    padding: 0,
                                     // Ensure scrollIntoView accounts for sticky bars
                                     scrollMarginTop: scrollMarginTopPx,
                                 }}

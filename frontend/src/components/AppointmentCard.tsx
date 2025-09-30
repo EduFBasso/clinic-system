@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Appointment } from '../hooks/useAppointments';
 import { FaEdit, FaBan, FaRegFileAlt } from 'react-icons/fa';
+// Use centralized tokens via CSS variables to match shared AppointmentCard
 
 export default function AppointmentCard({
     appt,
@@ -31,14 +32,14 @@ export default function AppointmentCard({
         !expired &&
         s.getTime() <= now.getTime() &&
         e.getTime() > now.getTime();
-    // Lateral color strip: canceled(red) > ongoing(orange) > expired(gray) > scheduled(green)
+    // Lateral color strip using centralized tokens
     const color = canceled
-        ? '#ef4444'
+        ? 'var(--color-danger)'
         : ongoing
-        ? '#f59e0b'
+        ? 'var(--color-ongoing)'
         : expired
-        ? '#9ca3af'
-        : '#10b981';
+        ? 'var(--color-pending)'
+        : 'var(--color-success)';
     const canEdit = appt.status === 'scheduled' && !expired && !canceled;
     const isDone = appt.status === 'done';
     const canCancel = appt.status === 'scheduled' && !expired && !canceled;
@@ -79,12 +80,12 @@ export default function AppointmentCard({
     // Mesma família de tom da faixa lateral, porém translúcido no fundo para manter legibilidade.
     // Fundo sutil para destacar o cartão em modo edição; um pouco mais forte para percepção clara
     const editingBg = canceled
-        ? 'rgba(239,68,68,0.12)'
+        ? 'var(--color-canceled-bg)'
         : expired
-        ? 'rgba(156,163,175,0.16)'
+        ? 'var(--color-pending-bg)'
         : ongoing
-        ? 'rgba(245,158,11,0.16)'
-        : 'rgba(16,185,129,0.16)';
+        ? 'var(--color-ongoing-bg)'
+        : 'var(--color-success-bg)';
     const editingBoxShadow = editingActive
         ? pulse
             ? '0 0 0 1px var(--pulse-color), 0 1px 3px rgba(0,0,0,0.08)'
@@ -93,14 +94,14 @@ export default function AppointmentCard({
     const creationHighlightBoxShadow = highlight
         ? '0 0 0 2px #3b82f6 inset, 0 1px 3px rgba(0,0,0,0.08)'
         : undefined;
-    const ongoingBg = 'rgba(245,158,11,0.10)';
+    const ongoingBg = 'var(--color-ongoing-bg)';
     const baseBackground = editingActive
         ? editingBg
         : highlight
         ? '#eef6ff'
         : ongoing
         ? ongoingBg
-        : '#fff';
+        : 'var(--card-bg)';
 
     const pulseColor = canceled
         ? 'rgba(185,28,28,0.55)'
@@ -123,7 +124,7 @@ export default function AppointmentCard({
                     // usando a mesma cor base na borda (ou aproximado via var(--pulse-color)).
                     border: editingActive
                         ? '1px solid ' + color
-                        : '1px solid #e5e7eb',
+                        : '1px solid var(--color-border)',
                     borderRadius: 8,
                     padding: '6px 10px 6px 12px',
                     display: 'grid',
@@ -216,8 +217,8 @@ export default function AppointmentCard({
                 {canceled && (
                     <span
                         style={{
-                            background: '#fee2e2',
-                            color: '#991b1b',
+                            background: 'var(--color-canceled-bg)',
+                            color: 'var(--color-danger-dark)',
                             padding: '2px 6px',
                             borderRadius: 4,
                             fontSize: 11,
@@ -230,13 +231,13 @@ export default function AppointmentCard({
                 {ongoing && !canceled && !expired && (
                     <span
                         style={{
-                            background: '#fff7ed',
-                            color: '#9a3412',
+                            background: 'var(--color-ongoing-bg)',
+                            color: 'var(--color-ongoing)',
                             padding: '2px 6px',
                             borderRadius: 4,
                             fontSize: 11,
                             fontWeight: 700,
-                            border: '1px solid #fed7aa',
+                            border: '1px solid color-mix(in srgb, var(--color-ongoing) 40%, #0000)',
                         }}
                     >
                         Em andamento
@@ -245,8 +246,8 @@ export default function AppointmentCard({
                 {expired && !canceled && (
                     <span
                         style={{
-                            background: '#f3f4f6',
-                            color: '#374151',
+                            background: 'var(--color-pending-bg)',
+                            color: 'var(--color-pending)',
                             padding: '2px 6px',
                             borderRadius: 4,
                             fontSize: 11,
@@ -275,7 +276,7 @@ export default function AppointmentCard({
                             onDetails?.(appt);
                         }}
                         style={{
-                            border: '1px solid #e5e7eb',
+                            border: '1px solid var(--color-border)',
                             borderRadius: 6,
                             background: 'var(--color-done-bg)',
                             padding: 6,
@@ -294,9 +295,11 @@ export default function AppointmentCard({
                     }}
                     disabled={!canEdit}
                     style={{
-                        border: '1px solid #e5e7eb',
+                        border: '1px solid var(--color-border)',
                         borderRadius: 6,
-                        background: canEdit ? '#f3f4f6' : '#f9fafb',
+                        background: canEdit
+                            ? 'var(--color-pending-bg)'
+                            : '#f9fafb',
                         padding: 6,
                         cursor: canEdit ? 'pointer' : 'not-allowed',
                     }}
@@ -321,14 +324,18 @@ export default function AppointmentCard({
                     }}
                     disabled={!canCancel}
                     style={{
-                        border: '1px solid #e5e7eb',
+                        border: '1px solid var(--color-border)',
                         borderRadius: 6,
-                        background: canCancel ? '#fef2f2' : '#f9fafb',
+                        background: canCancel
+                            ? 'var(--color-canceled-bg)'
+                            : '#f9fafb',
                         padding: 6,
                         cursor: canCancel ? 'pointer' : 'not-allowed',
                     }}
                 >
-                    <FaBan color={canCancel ? '#b91c1c' : '#9ca3af'} />
+                    <FaBan
+                        color={canCancel ? 'var(--color-danger)' : '#9ca3af'}
+                    />
                 </button>
             </div>
             {/* Linha 3: Observações (span full width) */}
