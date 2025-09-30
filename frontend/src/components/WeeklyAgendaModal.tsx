@@ -194,13 +194,13 @@ export default function WeeklyAgendaModal({
         const first = days[0];
         const last = days[6];
         const sameMonth = first.getMonth() === last.getMonth();
-        const monthName = (d: Date) =>
-            d.toLocaleDateString('pt-BR', { month: 'long' });
+        const monthShort = (d: Date) =>
+            d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
         const d2 = (d: Date) =>
             d.toLocaleDateString('pt-BR', { day: '2-digit' });
         return sameMonth
-            ? `${d2(first)}–${d2(last)} ${monthName(first)}`
-            : `${d2(first)} ${monthName(first)} – ${d2(last)} ${monthName(
+            ? `${d2(first)}–${d2(last)} ${monthShort(first)}`
+            : `${d2(first)} ${monthShort(first)}–${d2(last)} ${monthShort(
                   last,
               )}`;
     }, [days]);
@@ -226,7 +226,7 @@ export default function WeeklyAgendaModal({
                         top: 0,
                         zIndex: 900,
                         background: 'var(--color-bg)',
-                        borderBottom: '1px solid var(--color-border)',
+                        borderBottom: 'none',
                         paddingTop: 'env(safe-area-inset-top, 0px)',
                     }}
                 >
@@ -291,7 +291,7 @@ export default function WeeklyAgendaModal({
                                 fontSize: 'var(--font-body)',
                                 fontWeight: 700,
                                 padding: '4px 10px',
-                                border: '1px solid var(--color-success-darker)',
+                                border: 'none',
                                 background: 'var(--color-success-dark)',
                                 borderRadius: 6,
                                 cursor: 'pointer',
@@ -313,7 +313,7 @@ export default function WeeklyAgendaModal({
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 background: 'none',
-                                border: '1px solid var(--color-border)',
+                                border: 'none',
                                 borderRadius: 6,
                                 cursor: 'pointer',
                                 color: 'var(--color-success-dark)',
@@ -409,32 +409,57 @@ export default function WeeklyAgendaModal({
                     {days.map(d => {
                         const iso = toISODate(d);
                         const selected = iso === selectedDayISO;
-                        const label = d
-                            .toLocaleDateString('pt-BR', {
-                                weekday: 'short',
-                                day: '2-digit',
-                            })
+                        const weekday = d
+                            .toLocaleDateString('pt-BR', { weekday: 'short' })
+                            .replace('.', '');
+                        const dayNum = d
+                            .toLocaleDateString('pt-BR', { day: '2-digit' })
                             .replace('.', '');
                         return (
                             <button
                                 key={iso}
                                 onClick={() => setSelectedDayISO(iso)}
                                 style={{
-                                    padding: '6px 8px',
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 8,
-                                    background: selected
-                                        ? 'var(--color-success-bg)'
-                                        : 'var(--color-bg-section)',
-                                    color: selected
-                                        ? 'var(--color-success-dark)'
-                                        : 'var(--color-text)',
-                                    fontWeight: selected ? 800 : 600,
+                                    padding: '8px 6px',
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    background: 'transparent',
+                                    color: 'var(--color-text)',
+                                    fontWeight: 600,
                                     textTransform: 'capitalize',
                                 }}
                                 aria-pressed={selected}
                             >
-                                {label}
+                                <div
+                                    style={{
+                                        display: 'grid',
+                                        justifyItems: 'center',
+                                        gap: 2,
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            fontSize: '0.8rem',
+                                            color: 'var(--color-disabled)',
+                                        }}
+                                    >
+                                        {weekday}
+                                    </div>
+                                    <div
+                                        style={{
+                                            fontSize: '1rem',
+                                            fontWeight: 800,
+                                            paddingBottom: 2,
+                                            borderBottom: selected
+                                                ? '3px solid var(--color-heading)'
+                                                : '3px solid transparent',
+                                            minWidth: 20,
+                                            textAlign: 'center',
+                                        }}
+                                    >
+                                        {dayNum}
+                                    </div>
+                                </div>
                             </button>
                         );
                     })}
@@ -447,7 +472,7 @@ export default function WeeklyAgendaModal({
                         overflowX: 'auto',
                         overflowY: 'hidden',
                         display: 'flex',
-                        gap: 10,
+                        gap: 16,
                         paddingBottom: 4,
                         // Avoid content under the close X (Modal already reserves some right padding)
                         minHeight: 0,
@@ -456,7 +481,6 @@ export default function WeeklyAgendaModal({
                     {days.map(d => {
                         const iso = toISODate(d);
                         const list = grouped[iso] || [];
-                        const selected = iso === selectedDayISO;
                         return (
                             <div
                                 key={iso}
@@ -467,12 +491,10 @@ export default function WeeklyAgendaModal({
                                     flex: '0 0 auto',
                                     width: 240,
                                     maxWidth: 260,
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 10,
-                                    background: selected
-                                        ? 'var(--color-bg)'
-                                        : 'var(--color-bg-section)',
-                                    padding: 8,
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    background: 'transparent',
+                                    padding: 0,
                                     scrollMarginTop: scrollMarginTopPx,
                                 }}
                             >
