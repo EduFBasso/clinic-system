@@ -195,12 +195,14 @@ export default function WeeklyAgendaModal({
         const last = days[6];
         const sameMonth = first.getMonth() === last.getMonth();
         const monthShort = (d: Date) =>
-            d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+            d.toLocaleDateString('pt-BR', { month: 'short' }); // mantém o ponto: "set.", "out."
         const d2 = (d: Date) =>
             d.toLocaleDateString('pt-BR', { day: '2-digit' });
         return sameMonth
-            ? `${d2(first)}–${d2(last)} ${monthShort(first)}`
-            : `${d2(first)} ${monthShort(first)}–${d2(last)} ${monthShort(
+            ? `${d2(first)} ${monthShort(first)} - ${d2(last)} ${monthShort(
+                  first,
+              )}`
+            : `${d2(first)} ${monthShort(first)} - ${d2(last)} ${monthShort(
                   last,
               )}`;
     }, [days]);
