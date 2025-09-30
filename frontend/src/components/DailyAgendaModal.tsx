@@ -2,7 +2,7 @@ import React from 'react';
 import AppModal from './Modal';
 import FloatingDatePicker from './FloatingDatePicker';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
-import AppointmentRow from './shared/AppointmentRow';
+import ClientCardRow from './shared/ClientCardRow';
 import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import QuickScheduleModal from './QuickScheduleModal';
@@ -526,7 +526,7 @@ export default function DailyAgendaModal({
                                         alignItems: 'flex-start',
                                     }}
                                 >
-                                    <AppointmentRow
+                                    <ClientCardRow
                                         appt={a}
                                         timeSize='md'
                                         timeOrder='end-top'

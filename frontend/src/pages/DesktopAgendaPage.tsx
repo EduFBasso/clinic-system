@@ -1,7 +1,7 @@
 import React from 'react';
 import FloatingDatePicker from '../components/FloatingDatePicker';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
-import AppointmentRow from '../components/shared/AppointmentRow';
+import ClientCardRow from '../components/shared/ClientCardRow';
 import QuickScheduleModal from '../components/QuickScheduleModal';
 import PendingActionsModal from '../components/PendingActionsModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
@@ -461,7 +461,7 @@ export default function DesktopAgendaPage() {
                                     </div>
                                 ) : (
                                     <div style={{ position: 'relative' }}>
-                                        <AppointmentRow
+                                        <ClientCardRow
                                             appt={a}
                                             timeSize='md'
                                             timeOrder='end-top'

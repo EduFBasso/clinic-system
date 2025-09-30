@@ -28,6 +28,8 @@ export interface AppointmentCardProps<
     T extends SharedAppointmentLike = SharedAppointmentLike,
 > {
     appt: T;
+    // Tamanho lógico do cartão (ajusta tipografia via CSS vars). Largura/altura continuam fluindo pelo container/conteúdo.
+    size?: 'sm' | 'md';
     onClick?: (appt: T) => void; // legacy primary click
     onUseTime?: (appt: T) => void; // alias for primary click (QuickSchedule)
     // Novo: permite que o cartão "Pendente" ative um fluxo de resolução (ex: PendingActionsModal)
@@ -61,6 +63,7 @@ export interface AppointmentCardProps<
 
 function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     appt,
+    size = 'md',
     onClick,
     onUseTime,
     onResolvePending,
@@ -125,17 +128,33 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     const stripeColor = statusStripeColor(status);
 
     const isPending = status === 'past';
+    // Overrides de tamanho via variáveis CSS locais
+    const sizeVars: React.CSSProperties | undefined =
+        size === 'sm'
+            ? ((): React.CSSProperties => {
+                  const vars: React.CSSProperties = {};
+                  // reduções sutis para compactar tipografia
+                  (vars as Record<string, string>)['--card-name-size'] = '14px';
+                  (vars as Record<string, string>)['--card-type-size'] = '11px';
+                  (vars as Record<string, string>)['--card-text-size'] = '11px';
+                  return vars;
+              })()
+            : undefined;
+
     const base: React.CSSProperties = {
         border: selected
             ? '3px solid var(--color-success)'
             : '1px solid var(--color-border)',
-        borderRadius: 8,
-        padding: compact ? '6px 8px' : '8px 10px',
+        borderRadius: 'var(--card-radius)',
+        padding: compact
+            ? 'var(--card-padding-compact)'
+            : 'var(--card-padding-md)',
         // Fundo claro conforme status para padronização visual
         background: statusBackgroundColor(status), // centralized mapping
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
+        fontFamily: 'var(--card-font-family)',
         cursor:
             isPending && onResolvePending
                 ? 'pointer'
@@ -155,6 +174,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         ...(highlight
             ? { outline: '2px solid var(--color-primary)', outlineOffset: 2 }
             : null),
+        ...(sizeVars || {}),
         ...style,
     };
     // flags are derived by the shared hook
@@ -211,7 +231,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                         <span
                             style={{
                                 fontWeight: 800,
-                                fontSize: 15,
+                                fontSize: 'var(--card-name-size)',
                                 color: 'var(--color-heading)',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
@@ -429,7 +449,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                         {!compact && (
                             <span
                                 style={{
-                                    fontSize: 12,
+                                    fontSize: 'var(--card-type-size)',
                                     fontWeight: 800,
                                     color: 'var(--color-heading)',
                                     marginTop: 2,
@@ -528,7 +548,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
             {!compact && !showFooterLine && showNotes && appt.notes && (
                 <div
                     style={{
-                        fontSize: 12,
+                        fontSize: 'var(--card-text-size)',
                         color: 'var(--color-text)',
                         lineHeight: 1.3,
                         whiteSpace: 'pre-wrap',

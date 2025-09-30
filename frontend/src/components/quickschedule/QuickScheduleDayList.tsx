@@ -1,6 +1,5 @@
 import React from 'react';
-import TimeRangeLabel from '../shared/TimeRangeLabel';
-import AppointmentCard from '../shared/AppointmentCard';
+import ClientDayList from '../shared/ClientDayList';
 import type { Appointment } from '../../hooks/useAppointments';
 
 export type DayFilter = 'todos' | 'ativos' | 'cancelados';
@@ -34,14 +33,15 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
     onEdit,
     onCancel,
 }) => {
-    const filtered = React.useMemo(() => {
-        if (dayFilter === 'todos') return appointments;
-        if (dayFilter === 'ativos')
-            return appointments.filter(a => a.status === 'scheduled');
-        if (dayFilter === 'cancelados')
-            return appointments.filter(a => a.status === 'canceled');
-        return appointments;
-    }, [appointments, dayFilter]);
+    const filterFn = React.useCallback(
+        (a: Appointment) => {
+            if (dayFilter === 'todos') return true;
+            if (dayFilter === 'ativos') return a.status === 'scheduled';
+            if (dayFilter === 'cancelados') return a.status === 'canceled';
+            return true;
+        },
+        [dayFilter],
+    );
 
     return (
         <div
@@ -147,56 +147,41 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                 >
                     {sectionDateTitle}
                 </div>
-                {filtered
-                    .slice()
-                    .sort((a, b) => a.start_at.localeCompare(b.start_at))
-                    .map(appt => (
-                        <div
-                            key={appt.id}
-                            style={{
-                                display: 'flex',
-                                gap: 10,
-                                alignItems: 'flex-start',
-                            }}
-                        >
-                            <TimeRangeLabel
-                                start={appt.start_at}
-                                end={appt.end_at}
-                                size='md'
-                            />
-                            <div
-                                style={{
-                                    flex: 1,
-                                    minWidth: 0,
-                                    width: '100%',
-                                    maxWidth: 'min(704px, 94%)',
-                                }}
-                            >
-                                <AppointmentCard<Appointment>
-                                    appt={appt}
-                                    style={{ padding: '6px 8px' }}
-                                    showTime={false}
-                                    showEditAction={false}
-                                    highlight={highlightId === appt.id}
-                                    editingActive={
-                                        editingHighlightId === appt.id
-                                    }
-                                    pulse={
-                                        editingHighlightId === appt.id &&
-                                        currentEditId === appt.id
-                                    }
-                                    onUseTime={onUseTime}
-                                    onEdit={onEdit}
-                                    onCancel={onCancel}
-                                />
+                <ClientDayList<Appointment>
+                    appointments={appointments}
+                    filterFn={filterFn}
+                    sortBy={(a, b) =>
+                        new Date(a.start_at).getTime() -
+                        new Date(b.start_at).getTime()
+                    }
+                    timeSize='md'
+                    timeOrder='end-top'
+                    cardSize='md'
+                    cardContainerStyle={{
+                        minWidth: 0,
+                        width: '100%',
+                        maxWidth: 'min(704px, 94%)',
+                    }}
+                    getCardProps={appt => ({
+                        showEditAction: false,
+                        style: { padding: '6px 8px' },
+                        highlight: highlightId === appt.id,
+                        editingActive: editingHighlightId === appt.id,
+                        pulse:
+                            editingHighlightId === appt.id &&
+                            currentEditId === appt.id,
+                    })}
+                    onUseTime={onUseTime}
+                    onEdit={onEdit}
+                    onCancel={onCancel}
+                    emptyPlaceholder={
+                        !loading ? (
+                            <div style={{ color: '#6b7280', fontSize: 13 }}>
+                                Nenhum compromisso neste filtro.
                             </div>
-                        </div>
-                    ))}
-                {!loading && filtered.length === 0 && (
-                    <div style={{ color: '#6b7280', fontSize: 13 }}>
-                        Nenhum compromisso neste filtro.
-                    </div>
-                )}
+                        ) : null
+                    }
+                />
             </div>
         </div>
     );

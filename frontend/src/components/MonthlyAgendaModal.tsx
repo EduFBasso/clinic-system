@@ -7,7 +7,7 @@ import {
 } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
-import AppointmentRow from './shared/AppointmentRow';
+import ClientCardRow from './shared/ClientCardRow';
 import PendingActionsModal from './PendingActionsModal';
 
 function startOfMonth(d: Date) {
@@ -580,17 +580,12 @@ export default function MonthlyAgendaModal({
                                                 key={a.id}
                                                 data-appt-id={a.id}
                                                 style={{
-                                                    display: 'grid',
-                                                    gridTemplateColumns:
-                                                        '56px 1fr',
-                                                    columnGap: 10,
-                                                    alignItems: 'flex-start',
                                                     minWidth: 0,
                                                     width: '100%',
                                                     willChange: 'transform',
                                                 }}
                                             >
-                                                <AppointmentRow
+                                                <ClientCardRow
                                                     appt={a as Appointment}
                                                     timeSize='md'
                                                     timeOrder='end-top'

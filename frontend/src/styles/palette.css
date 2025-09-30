@@ -71,6 +71,16 @@
     --font-small: 12px; /* rótulos pequenos */
     --icon-size-md: 18px; /* ícones padrão */
     --icon-size-lg: 20px; /* ícones de cabeçalho */
+
+    /* Typography/layout tokens for minicards (AppointmentCard) */
+    --card-font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+        Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+    --card-name-size: 15px; /* tamanho do nome do cliente */
+    --card-type-size: 12px; /* tamanho do tipo de visita */
+    --card-text-size: 12px; /* tamanho do corpo/notas */
+    --card-radius: 8px; /* raio da borda do cartão */
+    --card-padding-md: 8px 10px; /* padding padrão */
+    --card-padding-compact: 6px 8px; /* padding compacto */
 }
 
 /* Removido override mobile para manter contraste entre cartões e fundo do main */
