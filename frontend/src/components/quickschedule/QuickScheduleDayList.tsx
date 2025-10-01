@@ -36,7 +36,8 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
     const filterFn = React.useCallback(
         (a: Appointment) => {
             if (dayFilter === 'todos') return true;
-            if (dayFilter === 'ativos') return a.status === 'scheduled';
+            if (dayFilter === 'ativos')
+                return a.status === 'scheduled' || a.status === 'ongoing';
             if (dayFilter === 'cancelados') return a.status === 'canceled';
             return true;
         },
@@ -96,7 +97,9 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                             Ativos (
                             {
                                 appointments.filter(
-                                    a => a.status === 'scheduled',
+                                    a =>
+                                        a.status === 'scheduled' ||
+                                        a.status === 'ongoing',
                                 ).length
                             }
                             )
@@ -155,7 +158,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                         new Date(b.start_at).getTime()
                     }
                     timeSize='md'
-                    timeOrder='end-top'
+                    timeOrder='start-top'
                     cardSize='md'
                     cardContainerStyle={{
                         minWidth: 0,

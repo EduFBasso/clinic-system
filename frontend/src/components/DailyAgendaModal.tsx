@@ -239,9 +239,11 @@ export default function DailyAgendaModal({
             | undefined;
         const displayName = (isClientLike(c) && c.name) || a.client_name || '';
         const { first, last } = splitName(displayName);
+        // Preserve the real client id when present; avoid defaulting to 0 (breaks QuickSchedule filtering)
         let clientId = 0;
         if (typeof c === 'number') clientId = c;
         else if (isClientLike(c)) clientId = c.id;
+        else if (typeof a.client === 'number') clientId = a.client as number;
         return {
             id: clientId,
             first_name: first,
@@ -302,7 +304,8 @@ export default function DailyAgendaModal({
                         >
                             <div
                                 style={{
-                                    fontWeight: 800,
+                                    fontWeight:
+                                        'var(--heading-weight-lg)' as unknown as number,
                                     fontSize: 'var(--font-title-lg)',
                                     color: 'var(--color-heading)',
                                 }}
@@ -423,8 +426,8 @@ export default function DailyAgendaModal({
                                 border: 'none',
                                 cursor: 'pointer',
                                 color: 'var(--color-success-dark)',
-                                fontWeight: 800,
-                                fontSize: 'var(--font-title-md)',
+                                fontWeight:
+                                    'var(--heading-weight-md)' as unknown as number,
                                 whiteSpace: 'nowrap',
                                 userSelect: 'none',
                             }}
@@ -529,7 +532,7 @@ export default function DailyAgendaModal({
                                     <ClientCardRow
                                         appt={a}
                                         timeSize='md'
-                                        timeOrder='end-top'
+                                        timeOrder='start-top'
                                         style={{ padding: '6px 8px' }}
                                         cardContainerStyle={{
                                             maxWidth: 'min(704px, 94%)',

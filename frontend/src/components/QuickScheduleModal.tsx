@@ -123,8 +123,10 @@ export default function QuickScheduleModal({
         return d;
     }, [dayStart]);
 
+    // Important: QuickSchedule shows the day grid like Daily/Weekly, irrespective of client.
+    // Do NOT filter by client here; the day list must show all appointments to avoid double-booking.
     const { items: dayAppointments, loading: dayLoading } =
-        useAppointmentsRange(dayStart, dayEnd, client.id, reloadKey);
+        useAppointmentsRange(dayStart, dayEnd, undefined, reloadKey);
 
     const [dayFilter, setDayFilter] = React.useState<DayFilter>('todos');
 

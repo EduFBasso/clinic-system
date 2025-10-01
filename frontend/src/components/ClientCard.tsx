@@ -18,7 +18,7 @@ import { FaEdit } from 'react-icons/fa';
 import '../styles/palette.css';
 import { parseDOB, calcAge } from '../utils/dateOfBirth';
 import MonthlyAgendaModal from './MonthlyAgendaModal';
-import WeeklyAgendaModal from './WeeklyPreviewModal';
+import WeeklyAgendaModal from './WeeklyAgendaModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
 import { useOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import { track } from '../utils/telemetry';
@@ -30,7 +30,9 @@ import FutureAppointmentsList from './clientCard/FutureAppointmentsList';
 import { useHysteresisBoolean } from '../hooks/useHysteresisBoolean';
 import { useAppointmentCardState } from '../hooks/useAppointmentCardState.ts';
 import { useFinalizeAppointment } from '../hooks/useFinalizeAppointment';
-import { useOngoingLatch } from '../hooks/useOngoingLatch';
+import { useOngoingLatch, readOngoingLatch } from '../hooks/useOngoingLatch';
+import { useOngoingSweep } from '../hooks/useOngoingSweep';
+import { useVisibilityResumeGrace } from '../hooks/useVisibilityResumeGrace';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
 
@@ -47,6 +49,9 @@ export default function ClientCard({
     selected,
     onSelect,
 }: ClientCardProps) {
+    // Feature flag: disable per-client ongoing probe unless explicitly enabled (reduces debug traffic)
+    const ENABLE_ONGOING_PROBE =
+        (import.meta as ImportMeta).env.VITE_ENABLE_ONGOING_PROBE === 'true';
     const [showMonthly, setShowMonthly] = React.useState(false);
     const [showWeekly, setShowWeekly] = React.useState(false);
     const [showQuick, setShowQuick] = React.useState(false);
@@ -92,6 +97,9 @@ export default function ClientCard({
         return now;
     }
     const now = useNowTick(5000);
+    const resumeGrace = useVisibilityResumeGrace(30000);
+    // Global ongoing sweep: one request for all clients
+    const sweepByClient = useOngoingSweep(now, 60_000);
     // start derivado como Date não é necessário; mantemos ISO para o snapshot
     // end derivado não é necessário para estilização; snapshot usa ISO strings
     // Idade calculada uma vez (se data válida) para exibir em linha própria
@@ -122,6 +130,14 @@ export default function ClientCard({
         React.useState<Appointment | null>(null);
     React.useEffect(() => {
         let cancelled = false;
+        if (!ENABLE_ONGOING_PROBE) {
+            // Use global sweep result if available
+            const ap = sweepByClient.get(client.id) || null;
+            setOverrideOngoing(ap);
+            return () => {
+                cancelled = true;
+            };
+        }
         async function probeOngoing() {
             if (isScheduled) {
                 setOverrideOngoing(null);
@@ -141,9 +157,11 @@ export default function ClientCard({
                 )}&end=${encodeURIComponent(
                     end.toISOString(),
                 )}&ts=${Date.now()}`;
+                const ac = new AbortController();
                 const r = await fetch(url, {
                     headers: { Authorization: `Bearer ${token}` },
                     cache: 'no-store',
+                    signal: ac.signal,
                 });
                 const data = (await r.json()) as Appointment[];
                 if (!cancelled) {
@@ -165,15 +183,22 @@ export default function ClientCard({
                         setOverrideOngoing(inWin ?? null);
                     }
                 }
+                return () => ac.abort();
             } catch {
                 if (!cancelled) setOverrideOngoing(null);
             }
         }
-        probeOngoing();
+        const cleanup = probeOngoing();
         return () => {
             cancelled = true;
+            try {
+                const fn = cleanup as unknown;
+                if (typeof fn === 'function') (fn as () => void)();
+            } catch {
+                /* noop */
+            }
         };
-    }, [client.id, isScheduled, now]);
+    }, [client.id, isScheduled, now, ENABLE_ONGOING_PROBE, sweepByClient]);
 
     // Latch: mantém estado "em andamento" persistente até finalizar/alterar
     const {
@@ -272,20 +297,46 @@ export default function ClientCard({
         if (!isFinite(endMs)) return;
         const nowMs = now.getTime();
         const CLEAR_GRACE_MS = 2 * 60 * 1000; // 2 minutes
-        if (nowMs >= endMs + CLEAR_GRACE_MS) {
+        if (!resumeGrace && nowMs >= endMs + CLEAR_GRACE_MS) {
             clearLatch();
             return;
         }
         const delay = endMs + CLEAR_GRACE_MS - nowMs;
         const t = window.setTimeout(() => {
             try {
-                clearLatch();
+                if (!resumeGrace) clearLatch();
             } catch {
                 /* noop */
             }
         }, Math.max(0, delay));
         return () => window.clearTimeout(t);
-    }, [latched, now, clearLatch]);
+    }, [latched, now, clearLatch, resumeGrace]);
+
+    // On resume (visibility/pageshow), refresh local latched state from storage in case iOS flushed memory
+    React.useEffect(() => {
+        function refreshFromStorage() {
+            try {
+                const snap = readOngoingLatch(client.id);
+                if (snap) {
+                    setLatched({
+                        id: snap.id,
+                        startAt: snap.startAt,
+                        endAt: snap.endAt,
+                    });
+                }
+            } catch {
+                /* noop */
+            }
+        }
+        const onVisibility = () => refreshFromStorage();
+        const onPageShow = () => refreshFromStorage();
+        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('pageshow', onPageShow as EventListener);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('pageshow', onPageShow as EventListener);
+        };
+    }, [client.id, setLatched]);
 
     // Aplicar histerese visual: aguarda 250ms para entrar em ongoing; saída é imediata
     const isOngoing = useHysteresisBoolean(isOngoingRaw, {

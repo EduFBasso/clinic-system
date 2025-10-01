@@ -331,7 +331,8 @@ export default function WeeklyAgendaModal({
                                 border: 'none',
                                 cursor: 'pointer',
                                 color: 'var(--color-success-dark)',
-                                fontWeight: 800,
+                                fontWeight:
+                                    'var(--heading-weight-md)' as unknown as number,
                                 fontSize: 'var(--font-title-md)',
                                 whiteSpace: 'nowrap',
                                 userSelect: 'none',

@@ -176,3 +176,103 @@ class FinalizeAuditSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class IntegrationConsultationSerializer(serializers.Serializer):
+    """Serializer de integração (read-only) que expõe compromissos concluídos
+    no formato esperado pelo ERP (ex.: Odoo).
+
+    Nota: consultation_id e appointment_id são aliases (mesmo valor).
+    """
+
+    consultation_id = serializers.IntegerField(source="id")
+    appointment_id = serializers.IntegerField(source="id")
+
+    client = serializers.SerializerMethodField()
+    professional = serializers.SerializerMethodField()
+
+    visit_type = serializers.CharField()
+    title = serializers.CharField()
+    notes = serializers.CharField()
+
+    performed_at = serializers.DateTimeField(source="end_at")
+    start_at = serializers.DateTimeField()
+    end_at = serializers.DateTimeField()
+    duration_minutes = serializers.SerializerMethodField()
+
+    status = serializers.CharField()
+    updated_at = serializers.DateTimeField()
+
+    external_invoice_id = serializers.SerializerMethodField()
+
+    # Optional provisional pricing fields for analytics/integration testing
+    amount_minor = serializers.SerializerMethodField()
+    currency = serializers.SerializerMethodField()
+    billable = serializers.SerializerMethodField()
+    pricing_mode = serializers.SerializerMethodField()
+    price_source = serializers.SerializerMethodField()
+
+    def get_client(self, obj: Appointment):
+        c = getattr(obj, "client", None)
+        if c and getattr(c, "id", None):
+            name = f"{getattr(c, 'first_name', '')} {getattr(c, 'last_name', '')}".strip()
+            return {"id": c.id, "name": name}
+        return None
+
+    def get_professional(self, obj: Appointment):
+        p = getattr(obj, "professional", None)
+        if p and getattr(p, "id", None):
+            name = f"{getattr(p, 'first_name', '')} {getattr(p, 'last_name', '')}".strip()
+            return {"id": p.id, "name": name}
+        return None
+
+    def get_duration_minutes(self, obj: Appointment) -> int:
+        try:
+            if obj.start_at and obj.end_at:
+                total_seconds = (obj.end_at - obj.start_at).total_seconds()
+                # Garantir não-negativo
+                if total_seconds < 0:
+                    total_seconds = 0
+                return int(total_seconds // 60)
+        except Exception:
+            pass
+        return 0
+
+    def get_external_invoice_id(self, obj: Appointment):
+        # Fase 1: não vinculamos a nenhum documento no ERP; manter nulo
+        return None
+
+    # --- Provisional pricing logic (optional) ---
+    _PRICE_TABLE = {
+        Appointment.VisitType.CONSULTA: 13000,
+        Appointment.VisitType.AVALIACAO: 5000,
+        Appointment.VisitType.PROCEDIMENTO: 16000,
+        Appointment.VisitType.RETORNO: 0,
+        Appointment.VisitType.OUTRO: None,  # exige valor manual, manter None
+    }
+
+    def _price_for(self, obj: Appointment):
+        try:
+            return self._PRICE_TABLE.get(obj.visit_type, None)
+        except Exception:
+            return None
+
+    def get_amount_minor(self, obj: Appointment):
+        return self._price_for(obj)
+
+    def get_currency(self, obj: Appointment):
+        return "BRL"
+
+    def get_billable(self, obj: Appointment):
+        # Retorno não é faturável (0)
+        try:
+            return obj.visit_type != Appointment.VisitType.RETORNO
+        except Exception:
+            return True
+
+    def get_pricing_mode(self, obj: Appointment):
+        # "suggested" para indicar que é uma sugestão provisória (não contábil)
+        return "suggested"
+
+    def get_price_source(self, obj: Appointment):
+        return "clinic-system-defaults"

@@ -81,6 +81,10 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     # 'x-app-version',  # reserve for future use
 ]
 
+# Cache preflight responses to reduce OPTIONS noise between Vite (5173) and Django (8000)
+# Browsers may reuse preflight results for requests with the same method and headers within this window.
+CORS_PREFLIGHT_MAX_AGE = config("CORS_PREFLIGHT_MAX_AGE", default=600, cast=int)
+
 ROOT_URLCONF = 'clinic_project.urls'
 
 TEMPLATES = [

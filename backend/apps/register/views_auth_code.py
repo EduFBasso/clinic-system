@@ -38,7 +38,8 @@ def request_otp_view(request):
 def verify_code(request):
     import re
     # Normaliza entradas vindas de dispositivos móveis (espaços, etc.)
-    email = (request.data.get("email") or "").strip().lower()
+    # normaliza porém mantém busca case-insensitive no banco
+    email = (request.data.get("email") or "").strip()
     raw_code = (request.data.get("code") or "").strip()
     # Mantém apenas dígitos e limita a 4 caracteres (formato do nosso OTP)
     code_digits = re.sub(r"\D", "", raw_code)
@@ -52,7 +53,7 @@ def verify_code(request):
     logger.info(f"[Verificação OTP] user=\"{red_email}\" code=\"{red_code}\"")
 
     try:
-        professional = Professional.objects.get(email=email)
+        professional = Professional.objects.get(email__iexact=email)
     except Professional.DoesNotExist:
         return Response(
             {"valid": False, "message": "Profissional não encontrado."},

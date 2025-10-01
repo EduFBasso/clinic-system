@@ -6,8 +6,10 @@ from django.conf import settings
 from django.utils import timezone
 
 def request_otp_code(email):
+    # Normaliza para evitar problemas de caixa/espaços
+    email = (email or "").strip()
     try:
-        profissional = Professional.objects.get(email=email)
+        profissional = Professional.objects.get(email__iexact=email)
         code_entry = generate_access_code(profissional)
         sent_ok = send_code_email(profissional, code_entry.code)
         # Em desenvolvimento, opcionalmente incluir o código na mensagem para agilizar testes
@@ -24,8 +26,9 @@ from django.utils import timezone
 from apps.register.models import AccessCode, Professional
 
 def validate_otp_code(email: str, code: str):
+    email = (email or "").strip()
     try:
-        professional = Professional.objects.get(email=email)
+        professional = Professional.objects.get(email__iexact=email)
     except Professional.DoesNotExist:
         return {"valid": False, "message": "Profissional não encontrado."}
 

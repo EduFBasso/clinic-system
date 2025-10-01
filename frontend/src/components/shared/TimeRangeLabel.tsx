@@ -36,13 +36,13 @@ export const TimeRangeLabel: React.FC<TimeRangeLabelProps> = ({
         fontSize,
         lineHeight: 1.25,
         textAlign: 'right',
-        fontWeight: 600,
+        fontWeight: 'var(--card-time-weight)',
         ...style,
     };
     const sep =
         format === 'arrow' ? (
             boldEndArrow ? (
-                <span style={{ fontWeight: 700 }}>→</span>
+                <span style={{ fontWeight: 'var(--card-time-weight)' }}>→</span>
             ) : (
                 '→'
             )

@@ -163,9 +163,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                 : 'default',
         position: 'relative',
         maxWidth: '100%',
-        // Hint compositor to keep this element on its own layer and reduce repaints
-        willChange: 'transform',
-        transform: 'translateZ(0)',
+        // Avoid forcing GPU compositing to keep text rendering crisp on Windows
         boxShadow: editingActive
             ? pulse
                 ? '0 0 0 1px var(--color-primary), 0 1px 3px rgba(0,0,0,0.08)'
@@ -230,7 +228,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                     {!nameInFooter && (
                         <span
                             style={{
-                                fontWeight: 800,
+                                fontWeight: 'var(--card-name-weight)',
                                 fontSize: 'var(--card-name-size)',
                                 color: 'var(--color-heading)',
                                 whiteSpace: 'nowrap',
@@ -266,7 +264,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                             <span
                                 style={{
                                     fontSize: 12,
-                                    fontWeight: 600,
+                                    fontWeight: 'var(--card-time-weight)',
                                     color: 'var(--color-text)',
                                     whiteSpace: 'nowrap',
                                 }}
@@ -450,7 +448,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                             <span
                                 style={{
                                     fontSize: 'var(--card-type-size)',
-                                    fontWeight: 800,
+                                    fontWeight: 'var(--card-type-weight)',
                                     color: 'var(--color-heading)',
                                     marginTop: 2,
                                     maxWidth: 160,

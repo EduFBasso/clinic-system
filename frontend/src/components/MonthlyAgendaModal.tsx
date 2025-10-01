@@ -588,7 +588,7 @@ export default function MonthlyAgendaModal({
                                                 <ClientCardRow
                                                     appt={a as Appointment}
                                                     timeSize='md'
-                                                    timeOrder='end-top'
+                                                    timeOrder='start-top'
                                                     style={{
                                                         padding: '6px 8px',
                                                     }}

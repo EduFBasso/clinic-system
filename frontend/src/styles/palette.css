@@ -72,12 +72,20 @@
     --icon-size-md: 18px; /* ícones padrão */
     --icon-size-lg: 20px; /* ícones de cabeçalho */
 
+    /* Heading weights (padronizar títulos entre telas) */
+    --heading-weight-lg: 700; /* título principal (evita bold excessivo) */
+    --heading-weight-md: 600; /* rótulos/headers médios */
+
     /* Typography/layout tokens for minicards (AppointmentCard) */
     --card-font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
         Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
     --card-name-size: 15px; /* tamanho do nome do cliente */
     --card-type-size: 12px; /* tamanho do tipo de visita */
     --card-text-size: 12px; /* tamanho do corpo/notas */
+    /* new: weight tokens to tune boldness across platforms */
+    --card-name-weight: 700; /* was 800 */
+    --card-type-weight: 600; /* label/type */
+    --card-time-weight: 600; /* time labels (left and inline) */
     --card-radius: 8px; /* raio da borda do cartão */
     --card-padding-md: 8px 10px; /* padding padrão */
     --card-padding-compact: 6px 8px; /* padding compacto */

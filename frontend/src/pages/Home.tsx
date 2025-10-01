@@ -13,7 +13,7 @@ import styles from '../styles/pages/Home.module.css';
 // ScheduleModal removido — usamos apenas QuickScheduleModal
 import QuickScheduleModal from '../components/QuickScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
-import WeeklyAgendaModal from '../components/WeeklyPreviewModal';
+import WeeklyAgendaModal from '../components/WeeklyAgendaModal';
 import SystemMessageModal from '../components/SystemMessageModal';
 import DailyAgendaModal from '../components/DailyAgendaModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
@@ -416,7 +416,7 @@ export default function Home() {
 
     const openWeekly = (_date?: Date) => {
         void _date;
-        // WeeklyPreviewModal atual não usa data; reservado para evolução
+        // WeeklyAgendaModal atual não usa data; reservado para evolução
         setRouteEditAppt(null);
         setWeeklyOpen(true);
         setMonthlyOpen(false);
