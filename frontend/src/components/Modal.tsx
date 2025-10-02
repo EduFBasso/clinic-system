@@ -508,17 +508,21 @@ export default function AppModal(props: AppModalProps) {
                               WebkitOverflowScrolling: 'touch',
                               pointerEvents: 'auto',
                               // A small fixed bar to paint the OS safe-area with the app's header blue
-                              '&::before': {
-                                  content: '""',
-                                  position: 'fixed',
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  height: 'env(safe-area-inset-top, 0px)',
-                                  background: 'var(--color-primary)',
-                                  zIndex: 1,
-                                  pointerEvents: 'none',
-                              },
+                              ...(showCloseButton
+                                  ? {
+                                        '&::before': {
+                                            content: '""',
+                                            position: 'fixed',
+                                            top: 0,
+                                            left: 0,
+                                            right: 0,
+                                            height: 'env(safe-area-inset-top, 0px)',
+                                            background: 'var(--color-primary)',
+                                            zIndex: 1,
+                                            pointerEvents: 'none',
+                                        },
+                                    }
+                                  : {}),
                           }
                         : {
                               ...style,

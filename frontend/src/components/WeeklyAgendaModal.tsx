@@ -1,6 +1,7 @@
 import React from 'react';
 import AppModal from './Modal';
 import FloatingDatePicker from './FloatingDatePicker';
+import DateControlsHeader from './shared/DateControlsHeader';
 // AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
 import ClientCardRow from './shared/ClientCardRow';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
@@ -196,32 +197,22 @@ export default function WeeklyAgendaModal({
     const scrollSelectedIntoView = React.useCallback(() => {
         const el = colRefs.current[selectedDayISO];
         if (!el) return;
-        // Only auto-scroll when selection came from explicit user action
+        // Only auto-scroll when selection came from explicit user action.
+        // We want to adjust ONLY the horizontal position and avoid vertical jumps under the sticky header.
         if (selectionSrcRef.current === 'user') {
+            // Preserve current vertical scroll position of the modal content container
+            const parent = getScrollParent(scrollerRef.current);
+            const prevTop = parent ? parent.scrollTop : null;
             try {
+                // Use scrollIntoView for horizontal centering, then restore vertical scrollTop
                 el.scrollIntoView({ block: 'nearest', inline: 'center' });
             } catch {
                 /* noop */
+            } finally {
+                if (parent != null && prevTop != null) {
+                    parent.scrollTop = prevTop;
+                }
             }
-        }
-        // Ensure vertical visibility below sticky header
-        try {
-            const parent = getScrollParent(scrollerRef.current);
-            if (!parent) return;
-            const buffer = 6;
-            const headerBottom = headerRef.current
-                ? headerRef.current.getBoundingClientRect().bottom
-                : 0;
-            const parentRect = parent.getBoundingClientRect();
-            const elRect = el.getBoundingClientRect();
-            if (elRect.top < headerBottom + buffer) {
-                parent.scrollTop += elRect.top - (headerBottom + buffer);
-            } else if (elRect.bottom > parentRect.bottom - buffer) {
-                parent.scrollTop +=
-                    elRect.bottom - (parentRect.bottom - buffer);
-            }
-        } catch {
-            /* noop */
         }
     }, [selectedDayISO]);
 
@@ -350,132 +341,27 @@ export default function WeeklyAgendaModal({
                     />
                 </div>
 
-                {/* Header controls (Hoje + calendar, center arrows + label) */}
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    {/* Left: Hoje + calendar */}
-                    <div
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 19.2, // +20% de 16px entre Hoje e calendário
-                            marginRight: 12, // mais espaço até o seletor da semana
+                {/* Header controls (shared) */}
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        alignItems: 'center',
+                        gap: 8,
+                    }}
+                >
+                    <DateControlsHeader
+                        currentDate={weekStart}
+                        label={weekLabel}
+                        onPrev={() => setAnchorDate(addDays(weekStart, -7))}
+                        onNext={() => setAnchorDate(addDays(weekStart, 7))}
+                        onToday={() => {
+                            const today = startOfDay(new Date());
+                            setSelected(toISODate(today), 'user');
+                            setAnchorDate(today);
                         }}
-                    >
-                        <button
-                            onClick={() => {
-                                const today = startOfDay(new Date());
-                                setSelected(toISODate(today), 'user');
-                                setAnchorDate(today);
-                            }}
-                            style={{
-                                fontSize: 'var(--font-body)',
-                                fontWeight: 700,
-                                padding: '4px 10px',
-                                border: 'none',
-                                background: 'var(--color-success-dark)',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                color: 'white',
-                            }}
-                            aria-label='Ir para hoje'
-                        >
-                            Hoje
-                        </button>
-                        <button
-                            type='button'
-                            onClick={openDatePicker}
-                            title='Abrir calendário'
-                            aria-label='Abrir calendário'
-                            style={{
-                                width: 32,
-                                height: 32,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: 'none',
-                                border: 'none',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
-                                fontSize: 'var(--icon-size-lg)',
-                                userSelect: 'none',
-                            }}
-                        >
-                            📆
-                        </button>
-                    </div>
-                    {/* Center: arrows + label */}
-                    <div
-                        style={{
-                            flex: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 8,
-                        }}
-                    >
-                        <button
-                            aria-label='Semana anterior'
-                            onClick={() =>
-                                setAnchorDate(addDays(weekStart, -7))
-                            }
-                            style={{
-                                width: 30,
-                                height: 30,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: 'transparent',
-                                border: 'none',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
-                                fontSize: 'var(--icon-size-lg)',
-                                userSelect: 'none',
-                            }}
-                        >
-                            ◀
-                        </button>
-                        <button
-                            type='button'
-                            onClick={openDatePicker}
-                            title='Selecionar data'
-                            aria-label='Selecionar data'
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
-                                fontWeight:
-                                    'var(--heading-weight-md)' as unknown as number,
-                                fontSize: 'var(--font-title-md)',
-                                whiteSpace: 'nowrap',
-                                userSelect: 'none',
-                            }}
-                        >
-                            {weekLabel}
-                        </button>
-                        <button
-                            aria-label='Próxima semana'
-                            onClick={() => setAnchorDate(addDays(weekStart, 7))}
-                            style={{
-                                width: 30,
-                                height: 30,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: 'transparent',
-                                border: 'none',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
-                                fontSize: 'var(--icon-size-lg)',
-                                userSelect: 'none',
-                            }}
-                        >
-                            ▶
-                        </button>
-                    </div>
+                        onOpenPicker={openDatePicker}
+                    />
                     <button
                         type='button'
                         aria-label='Fechar'

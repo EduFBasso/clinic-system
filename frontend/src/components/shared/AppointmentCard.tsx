@@ -141,6 +141,14 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
               })()
             : undefined;
 
+    const clickable =
+        // Pending with resolver or any of the click handlers present
+        (isPending && !!onResolvePending) ||
+        (!!onDetails && apptWithOverride.status === 'done') ||
+        !!onEdit ||
+        !!onUseTime ||
+        !!onClick;
+
     const base: React.CSSProperties = {
         border: selected
             ? '3px solid var(--color-success)'
@@ -156,9 +164,9 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         gap: 4,
         fontFamily: 'var(--card-font-family)',
         cursor:
-            isPending && onResolvePending
-                ? 'pointer'
-                : onClick || onUseTime
+            apptWithOverride.status === 'canceled' || isOngoing
+                ? 'default'
+                : clickable
                 ? 'pointer'
                 : 'default',
         position: 'relative',
@@ -184,7 +192,8 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
             className={className}
             style={base}
             onClick={() => {
-                if (isOngoing) return; // bloquear interações em andamento
+                // bloquear interações para cartões em andamento ou cancelados
+                if (isOngoing || apptWithOverride.status === 'canceled') return;
                 if (isPending && onResolvePending) {
                     onResolvePending(appt);
                     return;

@@ -4,10 +4,12 @@ import AppModal from './Modal';
 import TimePicker10 from './TimePicker10';
 import FloatingDatePicker from './FloatingDatePicker';
 import QuickScheduleHeader from './quickschedule/QuickScheduleHeader';
+import DateControlsHeader from './shared/DateControlsHeader';
 import QuickScheduleDayList, {
     type DayFilter,
 } from './quickschedule/QuickScheduleDayList';
 import PendingActionsModal from './PendingActionsModal';
+import AppointmentDetailsModal from './AppointmentDetailsModal';
 import ensureDeviceSession from '../services/sessions';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
@@ -93,7 +95,7 @@ export default function QuickScheduleModal({
             ? editAppointment.visit_type
             : 'consulta') as VisitType,
     );
-    const [setDefaultVisitType, setSetDefaultVisitType] = React.useState(false);
+    // removed: 'definir como padrão' toggle; managed in Agenda settings
     const [notes, setNotes] = React.useState<string>(
         (isEdit && editAppointment && editAppointment.notes) || '',
     );
@@ -131,11 +133,14 @@ export default function QuickScheduleModal({
 
     const [dayFilter, setDayFilter] = React.useState<DayFilter>('todos');
 
+    // Details modal for viewing completed (done) appointments
+    const [detailsOpen, setDetailsOpen] = React.useState(false);
+    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
+        null,
+    );
+
     // Title helpers
-    const subtitleAgenda = React.useMemo(() => {
-        const dateStr = selectedDate.toLocaleDateString('pt-BR');
-        return `${weekdayLabel(selectedDate)}, ${dateStr}`;
-    }, [selectedDate]);
+    // removed: separate subtitle; DateControlsHeader label covers the date context
     const sectionDateTitle = React.useMemo(() => {
         const d = selectedDate;
         const dd = `${pad2(d.getDate())}/${pad2(
@@ -492,415 +497,463 @@ export default function QuickScheduleModal({
     }, [saving]);
 
     return (
-        <AppModal
-            open={open}
-            onClose={handleImmediateClose}
-            closeOnEnter={false}
-            fullScreen
-            maxHeightVh={96}
-            actionsBarStyle={{
-                background: 'transparent',
-                borderBottom: 'none',
-            }}
-        >
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 16,
-                    position: 'relative',
-                    maxWidth: 'min(1600px, 96vw)',
-                    margin: '0 auto',
+        <>
+            <AppModal
+                open={open}
+                onClose={handleImmediateClose}
+                closeOnEnter={false}
+                showCloseButton={false}
+                fullScreen
+                disableTopSafePadding={true}
+                maxHeightVh={96}
+                actionsBarStyle={{
+                    background: 'transparent',
+                    borderBottom: 'none',
                 }}
             >
-                <QuickScheduleHeader
-                    isEdit={!!currentEdit}
-                    clientFullName={`${client.first_name} ${client.last_name}`}
-                    subtitleAgenda={subtitleAgenda}
-                    onToggleDatePicker={() => setShowPicker(v => !v)}
-                />
-
-                {!isEdit && isPending && (
-                    <div
-                        style={{
-                            background: '#f3f4f6',
-                            border: '1px solid #d1d5db',
-                            color: '#374151',
-                            padding: '8px 10px',
-                            borderRadius: 8,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 8,
-                        }}
-                    >
-                        <div>
-                            <strong>Atenção:</strong> há um compromisso pendente
-                            para este cliente. Finalize-o antes de criar um
-                            novo.
-                        </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        const id = (pendingFound?.id ||
-                                            (client as ClientMaybeNext)
-                                                .next_appointment_id) as
-                                            | number
-                                            | undefined;
-                                        if (!id) {
-                                            focusClientCard(client.id);
-                                            return;
-                                        }
-                                        const token =
-                                            localStorage.getItem('accessToken');
-                                        const headers: Record<string, string> =
-                                            {
-                                                'Content-Type':
-                                                    'application/json',
-                                            };
-                                        if (token)
-                                            headers[
-                                                'Authorization'
-                                            ] = `Bearer ${token}`;
-                                        const resp = await fetch(
-                                            `${API_BASE}/agenda/appointments/${id}/`,
-                                            { headers },
-                                        );
-                                        if (!resp.ok)
-                                            throw new Error(
-                                                'Falha ao carregar compromisso pendente',
-                                            );
-                                        const appt =
-                                            (await resp.json()) as Appointment;
-                                        setPendingAppt(appt);
-                                        setPendingOpen(true);
-                                    } catch (e) {
-                                        const msg =
-                                            e &&
-                                            typeof e === 'object' &&
-                                            'message' in e
-                                                ? String((e as Error).message)
-                                                : 'Erro ao abrir pendência';
-                                        try {
-                                            window.dispatchEvent(
-                                                new CustomEvent(
-                                                    'systemMessage',
-                                                    {
-                                                        detail: {
-                                                            text: msg,
-                                                            type: 'warning',
-                                                        },
-                                                    },
-                                                ),
-                                            );
-                                        } catch {
-                                            /* noop */
-                                        }
-                                    }
-                                }}
-                                style={{
-                                    padding: '6px 10px',
-                                    background: '#e5e7eb',
-                                }}
-                            >
-                                Resolver agora
-                            </button>
-                            <button
-                                onClick={handleImmediateClose}
-                                style={{
-                                    padding: '6px 10px',
-                                    background: '#e5e7eb',
-                                }}
-                            >
-                                Fechar
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {pendingOpen && pendingAppt && (
-                    <PendingActionsModal
-                        open={pendingOpen}
-                        onClose={() => {
-                            setPendingOpen(false);
-                            setPendingAppt(null);
-                            setReloadKey(k => k + 1);
-                            try {
-                                refreshPendingGuard();
-                            } catch {
-                                /* noop */
-                            }
-                            try {
-                                dispatchers.updateClients();
-                                dispatchers.appointmentsChanged();
-                            } catch {
-                                /* noop */
-                            }
-                        }}
-                        appt={pendingAppt}
-                    />
-                )}
-
                 <div
                     style={{
                         display: 'flex',
-                        gap: 12,
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        marginTop: 8,
+                        flexDirection: 'column',
+                        gap: 16,
+                        position: 'relative',
+                        width: '100%',
                     }}
                 >
-                    <TimePicker10
-                        label='Início'
-                        value={startHM}
-                        onChange={val => {
-                            setStartHM(val);
-                            const sMin = toMinutes(val);
-                            let newEnd = sMin + getDefaultDuration();
-                            const max =
-                                workTimes.endHour * 60 + workTimes.endMin;
-                            if (newEnd > max) newEnd = max;
-                            setEndHM(fromMinutes(newEnd));
-                        }}
-                        minHour={workTimes.startHour}
-                        maxHour={workTimes.endHour}
-                        minHM={`${pad2(workTimes.startHour)}:${pad2(
-                            workTimes.startMin,
-                        )}`}
-                        maxHM={`${pad2(workTimes.endHour)}:${pad2(
-                            workTimes.endMin,
-                        )}`}
-                        stepMinutes={getSlotInterval() as 5 | 10 | 15 | 20 | 30}
+                    {/* Title + client info remain; date controls standardized below */}
+                    <QuickScheduleHeader
+                        clientFullName={`${client.first_name} ${client.last_name}`}
+                        onClose={handleImmediateClose}
                     />
-                    <TimePicker10
-                        label='Fim'
-                        value={endHM}
-                        onChange={val => setEndHM(val)}
-                        minHour={workTimes.startHour}
-                        maxHour={workTimes.endHour}
-                        minHM={`${pad2(workTimes.startHour)}:${pad2(
-                            workTimes.startMin,
-                        )}`}
-                        maxHM={`${pad2(workTimes.endHour)}:${pad2(
-                            workTimes.endMin,
-                        )}`}
-                        stepMinutes={getSlotInterval() as 5 | 10 | 15 | 20 | 30}
+
+                    <DateControlsHeader
+                        currentDate={selectedDate}
+                        label={sectionDateTitle}
+                        onPrev={() =>
+                            setSelectedDate(
+                                d =>
+                                    new Date(
+                                        d.getFullYear(),
+                                        d.getMonth(),
+                                        d.getDate() - 1,
+                                    ),
+                            )
+                        }
+                        onNext={() =>
+                            setSelectedDate(
+                                d =>
+                                    new Date(
+                                        d.getFullYear(),
+                                        d.getMonth(),
+                                        d.getDate() + 1,
+                                    ),
+                            )
+                        }
+                        onToday={() => setSelectedDate(new Date())}
+                        onOpenPicker={() => setShowPicker(true)}
                     />
-                    <label style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
-                            Tipo
-                        </span>
-                        <select
-                            value={visitType}
-                            onChange={e =>
-                                setVisitType(e.target.value as VisitType)
-                            }
-                            style={{ padding: '6px 8px' }}
-                        >
-                            <option value='consulta'>Consulta</option>
-                            <option value='avaliacao'>Avaliação</option>
-                            <option value='retorno'>Retorno</option>
-                            <option value='procedimento'>Procedimento</option>
-                            <option value='outro'>Outro</option>
-                        </select>
-                    </label>
-                    <label
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            marginTop: 18,
-                        }}
-                    >
-                        <input
-                            type='checkbox'
-                            checked={setDefaultVisitType}
-                            onChange={e =>
-                                setSetDefaultVisitType(e.target.checked)
-                            }
-                        />
-                        <span
+
+                    {/** Compact status switch moved next to the minicards (inside QuickScheduleDayList). Removed big toggle here to save space. **/}
+
+                    {!isEdit && isPending && (
+                        <div
                             style={{
-                                fontSize: 12,
-                                color: 'var(--color-text-light)',
+                                background: '#f3f4f6',
+                                border: '1px solid #d1d5db',
+                                color: '#374151',
+                                padding: '8px 10px',
+                                borderRadius: 8,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
                             }}
                         >
-                            Definir como padrão
-                        </span>
-                    </label>
-                </div>
+                            <div>
+                                <strong>Atenção:</strong> há um compromisso
+                                pendente para este cliente. Finalize-o antes de
+                                criar um novo.
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const id = (pendingFound?.id ||
+                                                (client as ClientMaybeNext)
+                                                    .next_appointment_id) as
+                                                | number
+                                                | undefined;
+                                            if (!id) {
+                                                focusClientCard(client.id);
+                                                return;
+                                            }
+                                            const token =
+                                                localStorage.getItem(
+                                                    'accessToken',
+                                                );
+                                            const headers: Record<
+                                                string,
+                                                string
+                                            > = {
+                                                'Content-Type':
+                                                    'application/json',
+                                            };
+                                            if (token)
+                                                headers[
+                                                    'Authorization'
+                                                ] = `Bearer ${token}`;
+                                            const resp = await fetch(
+                                                `${API_BASE}/agenda/appointments/${id}/`,
+                                                { headers },
+                                            );
+                                            if (!resp.ok)
+                                                throw new Error(
+                                                    'Falha ao carregar compromisso pendente',
+                                                );
+                                            const appt =
+                                                (await resp.json()) as Appointment;
+                                            setPendingAppt(appt);
+                                            setPendingOpen(true);
+                                        } catch (e) {
+                                            const msg =
+                                                e &&
+                                                typeof e === 'object' &&
+                                                'message' in e
+                                                    ? String(
+                                                          (e as Error).message,
+                                                      )
+                                                    : 'Erro ao abrir pendência';
+                                            try {
+                                                window.dispatchEvent(
+                                                    new CustomEvent(
+                                                        'systemMessage',
+                                                        {
+                                                            detail: {
+                                                                text: msg,
+                                                                type: 'warning',
+                                                            },
+                                                        },
+                                                    ),
+                                                );
+                                            } catch {
+                                                /* noop */
+                                            }
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '6px 10px',
+                                        background: '#e5e7eb',
+                                    }}
+                                >
+                                    Resolver agora
+                                </button>
+                                <button
+                                    onClick={handleImmediateClose}
+                                    style={{
+                                        padding: '6px 10px',
+                                        background: '#e5e7eb',
+                                    }}
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
-                <label style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span
+                    {pendingOpen && pendingAppt && (
+                        <PendingActionsModal
+                            open={pendingOpen}
+                            onClose={() => {
+                                setPendingOpen(false);
+                                setPendingAppt(null);
+                                setReloadKey(k => k + 1);
+                                try {
+                                    refreshPendingGuard();
+                                } catch {
+                                    /* noop */
+                                }
+                                try {
+                                    dispatchers.updateClients();
+                                    dispatchers.appointmentsChanged();
+                                } catch {
+                                    /* noop */
+                                }
+                            }}
+                            appt={pendingAppt}
+                        />
+                    )}
+
+                    <div
                         style={{
-                            fontSize: 12,
-                            color: 'var(--color-text-light)',
+                            display: 'flex',
+                            gap: 12,
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            marginTop: 8,
                         }}
                     >
-                        Observações
-                    </span>
+                        <TimePicker10
+                            label='Início'
+                            value={startHM}
+                            onChange={val => {
+                                setStartHM(val);
+                                const sMin = toMinutes(val);
+                                let newEnd = sMin + getDefaultDuration();
+                                const max =
+                                    workTimes.endHour * 60 + workTimes.endMin;
+                                if (newEnd > max) newEnd = max;
+                                setEndHM(fromMinutes(newEnd));
+                            }}
+                            minHour={workTimes.startHour}
+                            maxHour={workTimes.endHour}
+                            minHM={`${pad2(workTimes.startHour)}:${pad2(
+                                workTimes.startMin,
+                            )}`}
+                            maxHM={`${pad2(workTimes.endHour)}:${pad2(
+                                workTimes.endMin,
+                            )}`}
+                            stepMinutes={
+                                getSlotInterval() as 5 | 10 | 15 | 20 | 30
+                            }
+                        />
+                        <TimePicker10
+                            label='Fim'
+                            value={endHM}
+                            onChange={val => setEndHM(val)}
+                            minHour={workTimes.startHour}
+                            maxHour={workTimes.endHour}
+                            minHM={`${pad2(workTimes.startHour)}:${pad2(
+                                workTimes.startMin,
+                            )}`}
+                            maxHM={`${pad2(workTimes.endHour)}:${pad2(
+                                workTimes.endMin,
+                            )}`}
+                            stepMinutes={
+                                getSlotInterval() as 5 | 10 | 15 | 20 | 30
+                            }
+                        />
+                        <label
+                            style={{ display: 'flex', flexDirection: 'column' }}
+                        >
+                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                Tipo
+                            </span>
+                            <select
+                                value={visitType}
+                                onChange={e =>
+                                    setVisitType(e.target.value as VisitType)
+                                }
+                                style={{ padding: '6px 8px' }}
+                            >
+                                <option value='consulta'>Consulta</option>
+                                <option value='avaliacao'>Avaliação</option>
+                                <option value='retorno'>Retorno</option>
+                                <option value='procedimento'>
+                                    Procedimento
+                                </option>
+                                <option value='outro'>Outro</option>
+                            </select>
+                        </label>
+                        {/** Removed 'Definir como padrão' toggle (managed in settings) **/}
+                    </div>
+
                     <textarea
                         value={notes}
                         onChange={e => setNotes(e.target.value)}
                         rows={3}
-                        style={{ padding: '8px', resize: 'vertical' }}
+                        style={{
+                            padding: '8px',
+                            resize: 'vertical',
+                            background: '#f8fafc',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 8,
+                        }}
                         placeholder='Anotações rápidas...'
                     />
-                </label>
 
-                <div
-                    style={{
-                        display: 'flex',
-                        gap: 8,
-                        justifyContent: 'flex-end',
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 5,
-                        paddingTop: 6,
-                        paddingBottom: 6,
-                        background: 'var(--color-bg)',
-                    }}
-                >
-                    <button
-                        onClick={handleImmediateClose}
-                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
-                        disabled={saving}
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={handleSave}
+                    <div
                         style={{
-                            padding: '8px 12px',
-                            background: '#059669',
-                            color: '#fff',
-                            display: 'inline-flex',
-                            alignItems: 'center',
+                            display: 'flex',
                             gap: 8,
+                            justifyContent: 'flex-end',
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 5,
+                            paddingTop: 6,
+                            paddingBottom: 6,
+                            background: 'var(--color-bg)',
                         }}
-                        disabled={saving}
                     >
-                        {saving && (
-                            <span
-                                style={{
-                                    width: 14,
-                                    height: 14,
-                                    borderRadius: '50%',
-                                    border: '2px solid rgba(255,255,255,0.6)',
-                                    borderTopColor: 'rgba(255,255,255,1)',
-                                    animation: 'qsSpin 0.8s linear infinite',
-                                }}
-                            />
-                        )}
-                        {saving ? 'Salvando...' : isEdit ? 'Salvar' : 'Criar'}
-                    </button>
-                </div>
-
-                <QuickScheduleDayList
-                    appointments={dayAppointments}
-                    loading={dayLoading}
-                    dayFilter={dayFilter}
-                    onChangeFilter={setDayFilter}
-                    sectionDateTitle={sectionDateTitle}
-                    highlightId={highlightId}
-                    editingHighlightId={editingHighlightId}
-                    currentEditId={currentEdit?.id ?? null}
-                    listRef={listRef}
-                    onUseTime={a => {
-                        const sd = new Date(a.start_at);
-                        const ed = new Date(a.end_at);
-                        setSelectedDate(sd);
-                        setStartHM(
-                            `${pad2(sd.getHours())}:${pad2(sd.getMinutes())}`,
-                        );
-                        setEndHM(
-                            `${pad2(ed.getHours())}:${pad2(ed.getMinutes())}`,
-                        );
-                        setCurrentEdit(null);
-                    }}
-                    onEdit={a => {
-                        setCurrentEdit(a);
-                        setEditingHighlightId(a.id);
-                    }}
-                    onCancel={async a => {
-                        try {
-                            const token = localStorage.getItem('accessToken');
-                            const headers: Record<string, string> = {
-                                'Content-Type': 'application/json',
-                            };
-                            if (token)
-                                headers['Authorization'] = `Bearer ${token}`;
-                            const resp = await fetch(
-                                `${API_BASE}/agenda/appointments/${a.id}/cancel/`,
-                                { method: 'POST', headers },
-                            );
-                            if (!resp.ok) {
-                                const text = await resp.text();
-                                throw new Error(text || 'Erro ao cancelar');
-                            }
-                            setReloadKey(k => k + 1);
-                            try {
-                                track({
-                                    type: 'appointment_cancel_succeeded',
-                                    payload: { id: a.id },
-                                });
-                            } catch {
-                                /* noop */
-                            }
-                            try {
-                                dispatchers.updateClients();
-                                dispatchers.appointmentsChanged();
-                            } catch {
-                                /* noop */
-                            }
-                            setTimeout(() => focusClientCard(client.id), 120);
-                            if (currentEdit?.id === a.id) setCurrentEdit(null);
-                            if (lastEditedId === a.id) {
-                                setLastEditedId(null);
-                                setHighlightId(null);
-                            }
-                            try {
-                                handleImmediateClose();
-                            } catch {
-                                /* noop */
-                            }
-                        } catch (err) {
-                            const msg =
-                                err &&
-                                typeof err === 'object' &&
-                                'message' in err
-                                    ? String((err as Error).message)
-                                    : 'Erro ao cancelar';
-                            setError(msg);
-                            try {
-                                track({
-                                    type: 'appointment_cancel_failed',
-                                    payload: { id: a.id, error: msg },
-                                });
-                            } catch {
-                                /* noop */
-                            }
-                        }
-                    }}
-                />
-
-                {error && (
-                    <div style={{ color: '#b91c1c', fontSize: 14 }}>
-                        {error}
+                        <button
+                            onClick={handleImmediateClose}
+                            style={{
+                                padding: '8px 12px',
+                                background: '#e5e7eb',
+                            }}
+                            disabled={saving}
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            style={{
+                                padding: '8px 12px',
+                                background: '#059669',
+                                color: '#fff',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 8,
+                            }}
+                            disabled={saving}
+                        >
+                            {saving && (
+                                <span
+                                    style={{
+                                        width: 14,
+                                        height: 14,
+                                        borderRadius: '50%',
+                                        border: '2px solid rgba(255,255,255,0.6)',
+                                        borderTopColor: 'rgba(255,255,255,1)',
+                                        animation:
+                                            'qsSpin 0.8s linear infinite',
+                                    }}
+                                />
+                            )}
+                            {saving
+                                ? 'Salvando...'
+                                : isEdit
+                                ? 'Salvar'
+                                : 'Criar'}
+                        </button>
                     </div>
-                )}
-                <style>{`@keyframes qsSpin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
-                <FloatingDatePicker
-                    open={showPicker}
-                    onClose={() => setShowPicker(false)}
-                    selectedDate={selectedDate}
-                    onChange={d => {
-                        setSelectedDate(d);
-                        setShowPicker(false);
+
+                    <QuickScheduleDayList
+                        appointments={dayAppointments}
+                        loading={dayLoading}
+                        dayFilter={dayFilter}
+                        onChangeFilter={setDayFilter}
+                        sectionDateTitle={sectionDateTitle}
+                        highlightId={highlightId}
+                        editingHighlightId={editingHighlightId}
+                        currentEditId={currentEdit?.id ?? null}
+                        listRef={listRef}
+                        minimal={true}
+                        onUseTime={a => {
+                            const sd = new Date(a.start_at);
+                            const ed = new Date(a.end_at);
+                            setSelectedDate(sd);
+                            setStartHM(
+                                `${pad2(sd.getHours())}:${pad2(
+                                    sd.getMinutes(),
+                                )}`,
+                            );
+                            setEndHM(
+                                `${pad2(ed.getHours())}:${pad2(
+                                    ed.getMinutes(),
+                                )}`,
+                            );
+                            setCurrentEdit(null);
+                        }}
+                        onEdit={a => {
+                            setCurrentEdit(a);
+                            setEditingHighlightId(a.id);
+                        }}
+                        onCancel={async a => {
+                            try {
+                                const token =
+                                    localStorage.getItem('accessToken');
+                                const headers: Record<string, string> = {
+                                    'Content-Type': 'application/json',
+                                };
+                                if (token)
+                                    headers[
+                                        'Authorization'
+                                    ] = `Bearer ${token}`;
+                                const resp = await fetch(
+                                    `${API_BASE}/agenda/appointments/${a.id}/cancel/`,
+                                    { method: 'POST', headers },
+                                );
+                                if (!resp.ok) {
+                                    const text = await resp.text();
+                                    throw new Error(text || 'Erro ao cancelar');
+                                }
+                                setReloadKey(k => k + 1);
+                                try {
+                                    track({
+                                        type: 'appointment_cancel_succeeded',
+                                        payload: { id: a.id },
+                                    });
+                                } catch {
+                                    /* noop */
+                                }
+                                try {
+                                    dispatchers.updateClients();
+                                    dispatchers.appointmentsChanged();
+                                } catch {
+                                    /* noop */
+                                }
+                                setTimeout(
+                                    () => focusClientCard(client.id),
+                                    120,
+                                );
+                                if (currentEdit?.id === a.id)
+                                    setCurrentEdit(null);
+                                if (lastEditedId === a.id) {
+                                    setLastEditedId(null);
+                                    setHighlightId(null);
+                                }
+                                try {
+                                    handleImmediateClose();
+                                } catch {
+                                    /* noop */
+                                }
+                            } catch (err) {
+                                const msg =
+                                    err &&
+                                    typeof err === 'object' &&
+                                    'message' in err
+                                        ? String((err as Error).message)
+                                        : 'Erro ao cancelar';
+                                setError(msg);
+                                try {
+                                    track({
+                                        type: 'appointment_cancel_failed',
+                                        payload: { id: a.id, error: msg },
+                                    });
+                                } catch {
+                                    /* noop */
+                                }
+                            }
+                        }}
+                    />
+
+                    {error && (
+                        <div style={{ color: '#b91c1c', fontSize: 14 }}>
+                            {error}
+                        </div>
+                    )}
+                    <style>{`@keyframes qsSpin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
+                    <FloatingDatePicker
+                        open={showPicker}
+                        onClose={() => setShowPicker(false)}
+                        selectedDate={selectedDate}
+                        onChange={d => {
+                            setSelectedDate(d);
+                            setShowPicker(false);
+                        }}
+                    />
+                </div>
+            </AppModal>
+            {detailsOpen && detailsAppt && (
+                <AppointmentDetailsModal
+                    open={detailsOpen}
+                    onClose={() => {
+                        setDetailsOpen(false);
+                        setDetailsAppt(null);
                     }}
+                    appt={detailsAppt}
                 />
-            </div>
-        </AppModal>
+            )}
+        </>
     );
 }

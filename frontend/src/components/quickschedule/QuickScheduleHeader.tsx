@@ -1,18 +1,14 @@
 import React from 'react';
-import { FaCalendarAlt } from 'react-icons/fa';
+import { FaTimes } from 'react-icons/fa';
 
 export interface QuickScheduleHeaderProps {
-    isEdit: boolean;
     clientFullName: string;
-    subtitleAgenda: string;
-    onToggleDatePicker: () => void;
+    onClose?: () => void;
 }
 
 export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
-    isEdit,
     clientFullName,
-    subtitleAgenda,
-    onToggleDatePicker,
+    onClose,
 }) => {
     return (
         <div
@@ -28,52 +24,64 @@ export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
             <div
                 style={{
                     display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'space-between',
-                    alignItems: 'flex-start',
+                    padding: '8px 0',
                     gap: 12,
                     flexWrap: 'wrap',
-                    paddingBottom: 8,
                 }}
             >
-                <h2
-                    style={{
-                        margin: '0 0 4px 0',
-                        fontSize: 28,
-                        fontWeight: 800,
-                        color: '#111827',
-                    }}
-                >
-                    {isEdit ? 'Editar compromisso' : 'Agendar compromisso'}
-                </h2>
-            </div>
-            <div style={{ color: '#374151', paddingBottom: 8 }}>
-                <div style={{ marginBottom: 4 }}>
-                    <strong>Nome:</strong> {clientFullName}
-                </div>
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                    }}
-                >
-                    <span style={{ whiteSpace: 'nowrap' }}>
-                        <strong>Agenda:</strong> {subtitleAgenda}
-                    </span>
-                    <button
-                        type='button'
-                        onClick={onToggleDatePicker}
-                        title='Selecionar dia'
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2
                         style={{
-                            border: 'none',
-                            background: 'transparent',
-                            cursor: 'pointer',
-                            padding: 4,
+                            margin: 0,
+                            fontSize: 22,
+                            fontWeight: 800,
+                            color: '#111827',
+                        }}
+                        title={clientFullName}
+                    >
+                        {clientFullName}
+                    </h2>
+                    <span
+                        aria-hidden
+                        title='Novo agendamento'
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 22,
+                            height: 22,
+                            borderRadius: 999,
+                            background: '#059669',
+                            color: '#fff',
+                            fontWeight: 900,
+                            lineHeight: 1,
                         }}
                     >
-                        <FaCalendarAlt color='#2563eb' />
-                    </button>
+                        +
+                    </span>
                 </div>
+                <button
+                    type='button'
+                    aria-label='Fechar'
+                    onClick={onClose}
+                    style={{
+                        width: 36,
+                        height: 36,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        color: 'var(--color-heading)',
+                        fontSize: 20,
+                    }}
+                >
+                    <FaTimes />
+                </button>
             </div>
         </div>
     );

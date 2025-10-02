@@ -99,4 +99,25 @@ describe('QuickScheduleModal', () => {
             expect(headers['x-device-info']).toBeTruthy();
         });
     });
+
+    it('time dropdown interaction does not affect visit type select', async () => {
+        (globalThis.fetch as unknown as Mock).mockResolvedValueOnce({
+            ok: true,
+            json: async () => [],
+        } as unknown as Response);
+        openModal();
+        // Find the visit type select by label 'Tipo'
+        const tipo = await screen.findByLabelText(/tipo/i);
+        // Assert initial value 'Consulta'
+        expect((tipo as HTMLSelectElement).value).toBe('consulta');
+        // Interact with the TimePicker hour select (label 'Início')
+        const hourSelect = await screen.findByLabelText(/início/i, {
+            selector: 'label select',
+        });
+        fireEvent.mouseDown(hourSelect);
+        fireEvent.click(hourSelect);
+        fireEvent.keyDown(hourSelect, { key: 'ArrowDown' });
+        // The visit type should remain unchanged
+        expect((tipo as HTMLSelectElement).value).toBe('consulta');
+    });
 });

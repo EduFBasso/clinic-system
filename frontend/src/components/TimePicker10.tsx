@@ -103,6 +103,10 @@ export const TimePicker10: React.FC<TimePicker10Props> = ({
     function handleMinuteChange(e: React.ChangeEvent<HTMLSelectElement>) {
         onChange(`${hour}:${e.target.value}`);
     }
+    // Prevent bubbling that could interfere with sibling dropdowns (e.g., visit type)
+    function stop(e: React.SyntheticEvent) {
+        e.stopPropagation();
+    }
 
     return (
         <label style={{ display: 'flex', flexDirection: 'column', ...style }}>
@@ -113,6 +117,9 @@ export const TimePicker10: React.FC<TimePicker10Props> = ({
                 <select
                     value={hour}
                     onChange={handleHourChange}
+                    onMouseDown={stop}
+                    onClick={stop}
+                    onKeyDown={stop}
                     disabled={disabled}
                     style={{ padding: '6px 8px' }}
                 >
@@ -126,6 +133,9 @@ export const TimePicker10: React.FC<TimePicker10Props> = ({
                 <select
                     value={minute}
                     onChange={handleMinuteChange}
+                    onMouseDown={stop}
+                    onClick={stop}
+                    onKeyDown={stop}
                     disabled={disabled}
                     style={{ padding: '6px 8px' }}
                 >
