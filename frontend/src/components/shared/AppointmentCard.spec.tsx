@@ -120,4 +120,133 @@ describe('AppointmentCard', () => {
             expect(pastCancel).not.toBeInTheDocument();
         }
     });
+
+    it('pending (past scheduled) prioritizes onResolvePending over other handlers', () => {
+        const past = makeAppt({
+            start_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+            end_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+        });
+        const onResolvePending = vi.fn();
+        const onEdit = vi.fn();
+        const onUseTime = vi.fn();
+        const onClick = vi.fn();
+        render(
+            <AppointmentCard
+                appt={past}
+                onResolvePending={onResolvePending}
+                onEdit={onEdit}
+                onUseTime={onUseTime}
+                onClick={onClick}
+                now={new Date()}
+            />,
+        );
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(onResolvePending).toHaveBeenCalledTimes(1);
+        expect(onEdit).not.toHaveBeenCalled();
+        expect(onUseTime).not.toHaveBeenCalled();
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('pending without onResolvePending falls back to onEdit if provided', () => {
+        const past = makeAppt({
+            start_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+            end_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+        });
+        const onEdit = vi.fn();
+        render(
+            <AppointmentCard appt={past} onEdit={onEdit} now={new Date()} />,
+        );
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(onEdit).toHaveBeenCalledTimes(1);
+    });
+
+    it('ongoing blocks all interactions (no handlers called)', () => {
+        const s = new Date(Date.now() - 60_000).toISOString();
+        const e = new Date(Date.now() + 60_000).toISOString();
+        const appt = makeAppt({ start_at: s, end_at: e });
+        const onResolvePending = vi.fn();
+        const onEdit = vi.fn();
+        const onUseTime = vi.fn();
+        const onClick = vi.fn();
+        render(
+            <AppointmentCard
+                appt={appt}
+                onResolvePending={onResolvePending}
+                onEdit={onEdit}
+                onUseTime={onUseTime}
+                onClick={onClick}
+                now={new Date()}
+            />,
+        );
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(onResolvePending).not.toHaveBeenCalled();
+        expect(onEdit).not.toHaveBeenCalled();
+        expect(onUseTime).not.toHaveBeenCalled();
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('scheduled: prioritizes onEdit over onUseTime and onClick', () => {
+        const appt = makeAppt({
+            start_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+            end_at: new Date(Date.now() + 20 * 60_000).toISOString(),
+        });
+        const onEdit = vi.fn();
+        const onUseTime = vi.fn();
+        const onClick = vi.fn();
+        render(
+            <AppointmentCard
+                appt={appt}
+                onEdit={onEdit}
+                onUseTime={onUseTime}
+                onClick={onClick}
+                now={new Date()}
+            />,
+        );
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(onEdit).toHaveBeenCalledTimes(1);
+        expect(onUseTime).not.toHaveBeenCalled();
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('scheduled: prioritizes onUseTime over onClick when onEdit is absent', () => {
+        const appt = makeAppt({
+            start_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+            end_at: new Date(Date.now() + 20 * 60_000).toISOString(),
+        });
+        const onUseTime = vi.fn();
+        const onClick = vi.fn();
+        render(
+            <AppointmentCard
+                appt={appt}
+                onUseTime={onUseTime}
+                onClick={onClick}
+                now={new Date()}
+            />,
+        );
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(onUseTime).toHaveBeenCalledTimes(1);
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('done: prioritizes onDetails over onEdit and others', () => {
+        const appt = makeAppt({ status: 'done' });
+        const onDetails = vi.fn();
+        const onEdit = vi.fn();
+        const onUseTime = vi.fn();
+        const onClick = vi.fn();
+        render(
+            <AppointmentCard
+                appt={appt}
+                onDetails={onDetails}
+                onEdit={onEdit}
+                onUseTime={onUseTime}
+                onClick={onClick}
+            />,
+        );
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(onDetails).toHaveBeenCalledTimes(1);
+        expect(onEdit).not.toHaveBeenCalled();
+        expect(onUseTime).not.toHaveBeenCalled();
+        expect(onClick).not.toHaveBeenCalled();
+    });
 });
