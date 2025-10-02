@@ -219,9 +219,10 @@ export default function DesktopAgendaPage() {
                 style={{
                     position: 'sticky',
                     top: 0,
-                    zIndex: 10,
+                    zIndex: 20,
                     background: 'var(--color-bg)',
                     borderBottom: '1px solid var(--color-border)',
+                    boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
                     paddingTop: 'env(safe-area-inset-top, 0px)',
                 }}
             >
@@ -249,7 +250,16 @@ export default function DesktopAgendaPage() {
             </div>
 
             {/* Linha 2: Hoje + calendário à esquerda, navegação central */}
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    position: 'sticky',
+                    top: 54,
+                    zIndex: 15,
+                    background: 'var(--color-bg)',
+                }}
+            >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <button
                         onClick={() => setSelectedDay(startOfDay(new Date()))}
@@ -364,10 +374,16 @@ export default function DesktopAgendaPage() {
             {/* Filtro de status (default: Ativos) */}
             <div
                 style={{
+                    position: 'sticky',
+                    top: 98,
+                    zIndex: 12,
+                    background: 'var(--color-bg)',
+                    borderBottom: '1px solid var(--color-border)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
                     flexWrap: 'wrap',
+                    paddingBottom: 6,
                 }}
             >
                 <label htmlFor='status-filter' style={{ fontWeight: 600 }}>

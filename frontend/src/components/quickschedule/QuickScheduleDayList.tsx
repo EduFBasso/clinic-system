@@ -167,11 +167,17 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                 {minimal && appointments.length > 0 && (
                     <div
                         style={{
+                            // Overlay the list content to mask selected card borders underneath
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 3,
+                            background: 'var(--color-bg)',
+                            borderBottom: '1px solid var(--color-border)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'flex-end',
                             gap: 10,
-                            padding: '0 2px',
+                            padding: '6px 2px',
                         }}
                     >
                         <span style={{ fontSize: 12, color: '#6b7280' }}>
