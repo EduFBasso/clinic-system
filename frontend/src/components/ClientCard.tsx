@@ -1,5 +1,6 @@
 // frontend/src/components/ClientCard.tsx
 import React from 'react';
+import { focusClientCard } from '../utils/focusClientCard';
 import styles from '../styles/components/ClientCard.module.css';
 import {
     FaEye,
@@ -371,11 +372,7 @@ export default function ClientCard({
             }
             // Ao entrar em andamento, rolar até o cartão do cliente
             try {
-                window.dispatchEvent(
-                    new CustomEvent('scrollToClientCard', {
-                        detail: { clientId: client.id },
-                    }),
-                );
+                focusClientCard(client.id);
             } catch {
                 /* noop */
             }
@@ -1309,24 +1306,8 @@ export default function ClientCard({
                         }
                         // Reancora a lista no cartão do cliente, reutilizando o mesmo mecanismo do filtro dinâmico
                         // e do latch de "em andamento". Fazemos após o ciclo de fechamento para garantir layout estável.
-                        try {
-                            const detail = { detail: { clientId: client.id } };
-                            // Pequeno atraso para deixar o MUI desmontar e a lista assentar
-                            setTimeout(() => {
-                                try {
-                                    window.dispatchEvent(
-                                        new CustomEvent(
-                                            'scrollToClientCard',
-                                            detail as CustomEventInit,
-                                        ),
-                                    );
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 60);
-                        } catch {
-                            /* noop */
-                        }
+                        // Pequeno atraso para deixar o MUI desmontar e a lista assentar
+                        setTimeout(() => focusClientCard(client.id), 60);
                     }}
                     client={client}
                 />

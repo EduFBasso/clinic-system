@@ -1,4 +1,5 @@
 import React from 'react';
+import { focusClientCard } from '../utils/focusClientCard';
 import { getNow } from '../utils/now';
 import type { ClientBasic } from '../types/ClientBasic';
 import { useAppointments } from '../hooks/useAppointments';
@@ -499,13 +500,7 @@ export default function ScheduleEditorCore({
                 );
                 setTimeout(() => {
                     try {
-                        if (client) {
-                            window.dispatchEvent(
-                                new CustomEvent('scrollToClientCard', {
-                                    detail: { clientId: client.id },
-                                }),
-                            );
-                        }
+                        if (client) focusClientCard(client.id);
                         window.dispatchEvent(
                             new CustomEvent('systemMessage', {
                                 detail: {

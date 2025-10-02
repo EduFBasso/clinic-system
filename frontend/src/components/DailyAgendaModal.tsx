@@ -11,6 +11,7 @@ import AppointmentDetailsModal from './AppointmentDetailsModal';
 import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
+import { focusClientCard } from '../utils/focusClientCard';
 
 interface DailyAgendaModalProps {
     open: boolean;
@@ -153,13 +154,7 @@ export default function DailyAgendaModal({
                     | number
                     | undefined;
                 const clientId = typeof c === 'number' ? c : c?.id;
-                if (clientId) {
-                    window.dispatchEvent(
-                        new CustomEvent('scrollToClientCard', {
-                            detail: { clientId },
-                        }),
-                    );
-                }
+                if (clientId) focusClientCard(clientId);
             }
         } catch {
             /* noop */

@@ -418,6 +418,11 @@ export default function Home() {
         void _date;
         // WeeklyAgendaModal atual não usa data; reservado para evolução
         setRouteEditAppt(null);
+        try {
+            console.debug('[Home] Opening WeeklyAgendaModal');
+        } catch {
+            /* noop */
+        }
         setWeeklyOpen(true);
         setMonthlyOpen(false);
     };

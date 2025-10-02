@@ -38,6 +38,13 @@ export function clearOngoingSnapshot(clientId: number | string) {
     }
 }
 
+// Non-hook accessor for current snapshot state (for services)
+export function getOngoingSnapshot(
+    clientId: number | string,
+): OngoingSnapshot | null {
+    return readSnapshot(clientId);
+}
+
 function isInWindow(
     now: Date,
     startISO?: string | null,

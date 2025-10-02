@@ -2,7 +2,7 @@ import React from 'react';
 import StatusBadge from './StatusBadge';
 // StatusKind is exported from StatusBadge; not needed explicitly here
 import TimeRangeLabel from './TimeRangeLabel';
-import { FaRegFileAlt, FaEdit, FaBan } from 'react-icons/fa';
+import { FaEdit, FaBan } from 'react-icons/fa';
 import { useAppointmentCardState } from '../../hooks/useAppointmentCardState.ts';
 import {
     getAppointmentOverride,
@@ -189,6 +189,11 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                     onResolvePending(appt);
                     return;
                 }
+                // Novo: para concluídos, o clique do cartão abre detalhes (ícone removido)
+                if (onDetails && status === 'done') {
+                    onDetails(appt);
+                    return;
+                }
                 // Prioriza edição quando disponível
                 if (onEdit) {
                     onEdit(appt);
@@ -286,7 +291,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                 size='sm'
                             />
                         ))}
-                    {/* Optional edit/cancel/details action buttons: keep placeholders for stability */}
+                    {/* Optional edit/cancel buttons (details icon removido; clique do cartão cobre 'done') */}
                     {(() => {
                         const showEdit = !!(
                             onEdit &&
@@ -294,10 +299,6 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                             canEdit
                         );
                         const showCancel = !!(onCancel && canCancel);
-                        const showDetails = !!(
-                            onDetails &&
-                            (status === 'done' || status === 'canceled')
-                        );
                         // Só preservar placeholders de layout quando for útil (cards não compactos, sem stack e com ações visíveis)
                         const preserveActionsLayout =
                             !compact && !stackName && showEditAction !== false;
@@ -390,45 +391,6 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                     >
                                         <FaBan
                                             color={'var(--color-canceled)'}
-                                        />
-                                    </button>,
-                                )}
-                                {maybeRender(
-                                    showDetails,
-                                    <button
-                                        type='button'
-                                        title='Resumo da consulta'
-                                        aria-label='Resumo da consulta'
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            if (showDetails && onDetails)
-                                                onDetails(appt);
-                                        }}
-                                        style={{
-                                            border: '1px solid var(--color-border)',
-                                            borderRadius: 6,
-                                            background:
-                                                status === 'done'
-                                                    ? 'var(--color-done-bg)'
-                                                    : 'var(--color-canceled-bg)',
-                                            padding: 6,
-                                            cursor: 'pointer',
-                                            ...(showDetails
-                                                ? undefined
-                                                : hiddenStyle),
-                                        }}
-                                        disabled={!showDetails}
-                                        tabIndex={showDetails ? 0 : -1}
-                                        aria-hidden={
-                                            showDetails ? undefined : true
-                                        }
-                                    >
-                                        <FaRegFileAlt
-                                            color={
-                                                status === 'done'
-                                                    ? 'var(--color-done)'
-                                                    : 'var(--color-danger)'
-                                            }
                                         />
                                     </button>,
                                 )}

@@ -1,7 +1,8 @@
 import React from 'react';
 import AppModal from './Modal';
 import FloatingDatePicker from './FloatingDatePicker';
-import AppointmentCard from './shared/AppointmentCard';
+// AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
+import ClientCardRow from './shared/ClientCardRow';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import PendingActionsModal from './PendingActionsModal';
 import {
@@ -84,21 +85,57 @@ export default function WeeklyAgendaModal({
     );
     const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
     const [reloadKey, setReloadKey] = React.useState(0);
-    const { items, loading } = useAppointmentsRange(
+    const { items, loading, error } = useAppointmentsRange(
         weekStart,
         weekEnd,
         undefined,
         reloadKey,
     );
 
+    // Dev diagnostics to trace open/range/fetch lifecycle
+    React.useEffect(() => {
+        try {
+            // Log only when opening or week range changes to avoid noise
+            console.debug('[WeeklyAgenda] open:', open, {
+                weekStart: weekStart.toISOString(),
+                weekEnd: weekEnd.toISOString(),
+            });
+        } catch {
+            /* noop */
+        }
+    }, [open, weekStart, weekEnd]);
+    React.useEffect(() => {
+        try {
+            console.debug(
+                '[WeeklyAgenda] items:',
+                items.length,
+                'loading:',
+                loading,
+                'error:',
+                error || null,
+            );
+        } catch {
+            /* noop */
+        }
+    }, [items, loading, error]);
+
     // Selected day (for highlight/filtering UI)
     const [selectedDayISO, setSelectedDayISO] = React.useState<string>(() =>
         toISODate(anchorDate),
     );
+    // Track whether selection came from user (click/controls) or auto (observer)
+    const selectionSrcRef = React.useRef<'user' | 'auto'>('user');
+    const setSelected = React.useCallback(
+        (iso: string, src: 'user' | 'auto' = 'user') => {
+            selectionSrcRef.current = src;
+            setSelectedDayISO(iso);
+        },
+        [],
+    );
     React.useEffect(() => {
-        // If anchorDate moves to another week, reset selected to new Monday
-        setSelectedDayISO(toISODate(anchorDate));
-    }, [anchorDate]);
+        // If anchorDate moves to another week, reset selected to new Monday (user-driven)
+        setSelected(toISODate(anchorDate), 'user');
+    }, [anchorDate, setSelected]);
 
     const days: Date[] = React.useMemo(
         () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -154,10 +191,13 @@ export default function WeeklyAgendaModal({
     React.useEffect(() => {
         const el = colRefs.current[selectedDayISO];
         if (!el) return;
-        try {
-            el.scrollIntoView({ block: 'nearest', inline: 'center' });
-        } catch {
-            /* noop */
+        // Only auto-scroll when selection came from explicit user action
+        if (selectionSrcRef.current === 'user') {
+            try {
+                el.scrollIntoView({ block: 'nearest', inline: 'center' });
+            } catch {
+                /* noop */
+            }
         }
         // Ensure vertical visibility below sticky header
         try {
@@ -178,6 +218,47 @@ export default function WeeklyAgendaModal({
         } catch {
             /* noop */
         }
+    }, [selectedDayISO, setSelected]);
+
+    // Auto-select the day whose column is at least 70% visible within the horizontal scroller
+    React.useEffect(() => {
+        const root = scrollerRef.current;
+        if (!root) return;
+        const observer = new IntersectionObserver(
+            entries => {
+                let bestIso: string | null = null;
+                let bestRatio = 0;
+                for (const entry of entries) {
+                    const iso = (entry.target as HTMLElement).dataset.iso;
+                    const ratio = entry.intersectionRatio || 0;
+                    if (iso && ratio >= 0.7 && ratio > bestRatio) {
+                        bestIso = iso;
+                        bestRatio = ratio;
+                    }
+                }
+                if (bestIso && bestIso !== selectedDayISO) {
+                    setSelected(bestIso, 'auto');
+                }
+            },
+            { root, threshold: [0, 0.25, 0.5, 0.7, 0.75, 1] },
+        );
+        // Observe each existing column element
+        const toObserve: HTMLElement[] = [];
+        Object.entries(colRefs.current).forEach(([iso, el]) => {
+            if (el) {
+                el.dataset.iso = iso;
+                observer.observe(el);
+                toObserve.push(el);
+            }
+        });
+        return () => {
+            try {
+                toObserve.forEach(el => observer.unobserve(el));
+                observer.disconnect();
+            } catch {
+                /* noop */
+            }
+        };
     }, [selectedDayISO]);
 
     // Details modal (only for done)
@@ -403,7 +484,7 @@ export default function WeeklyAgendaModal({
                         return (
                             <button
                                 key={iso}
-                                onClick={() => setSelectedDayISO(iso)}
+                                onClick={() => setSelected(iso, 'user')}
                                 style={{
                                     padding: '8px 6px',
                                     border: 'none',
@@ -450,6 +531,23 @@ export default function WeeklyAgendaModal({
                     })}
                 </div>
 
+                {/* Error state (surface hook error to user) */}
+                {error && (
+                    <div
+                        role='alert'
+                        style={{
+                            background: '#fde8e8',
+                            border: '1px solid #f5c2c2',
+                            color: '#7f1d1d',
+                            borderRadius: 8,
+                            padding: '8px 10px',
+                            fontSize: 13,
+                        }}
+                    >
+                        Falha ao carregar a agenda semanal. {String(error)}
+                    </div>
+                )}
+
                 {/* Columns scroller */}
                 <div
                     ref={scrollerRef}
@@ -474,8 +572,8 @@ export default function WeeklyAgendaModal({
                                 }}
                                 style={{
                                     flex: '0 0 auto',
-                                    width: 240,
-                                    maxWidth: 260,
+                                    width: 320,
+                                    maxWidth: 340,
                                     border: 'none',
                                     borderRadius: 0,
                                     background: 'transparent',
@@ -512,36 +610,40 @@ export default function WeeklyAgendaModal({
                                 ) : (
                                     <div style={{ display: 'grid', gap: 8 }}>
                                         {list.map(a => (
-                                            <AppointmentCard<Appointment>
-                                                key={a.id}
-                                                appt={a as Appointment}
-                                                compact
-                                                showNotes={false}
-                                                onClick={() =>
-                                                    setSelectedDayISO(iso)
-                                                }
-                                                onResolvePending={appt => {
-                                                    setDetailsOpen(false);
-                                                    setPendingAppt(
-                                                        appt as Appointment,
-                                                    );
-                                                    setPendingOpen(true);
-                                                }}
-                                                onDetails={appt => {
-                                                    // Só abre detalhes para done/canceled; o card bloqueia ongoing
-                                                    if (
-                                                        appt.status ===
-                                                            'done' ||
-                                                        appt.status ===
-                                                            'canceled'
-                                                    ) {
-                                                        setDetailsAppt(
+                                            <div key={a.id}>
+                                                <ClientCardRow<Appointment>
+                                                    appt={a as Appointment}
+                                                    timeSize='sm'
+                                                    cardContainerStyle={{
+                                                        // Allow full column width for better name readability
+                                                        maxWidth: '100%',
+                                                        width: '100%',
+                                                    }}
+                                                    showEditAction={false}
+                                                    onClick={() =>
+                                                        setSelected(iso, 'user')
+                                                    }
+                                                    onResolvePending={appt => {
+                                                        setDetailsOpen(false);
+                                                        setPendingAppt(
                                                             appt as Appointment,
                                                         );
-                                                        setDetailsOpen(true);
+                                                        setPendingOpen(true);
+                                                    }}
+                                                    onDetails={
+                                                        a.status === 'done'
+                                                            ? appt => {
+                                                                  setDetailsAppt(
+                                                                      appt as Appointment,
+                                                                  );
+                                                                  setDetailsOpen(
+                                                                      true,
+                                                                  );
+                                                              }
+                                                            : undefined
                                                     }
-                                                }}
-                                            />
+                                                />
+                                            </div>
                                         ))}
                                     </div>
                                 )}

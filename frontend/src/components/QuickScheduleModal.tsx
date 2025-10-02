@@ -23,6 +23,7 @@ import { API_BASE } from '../config/api';
 import { track } from '../utils/telemetry';
 import { buildDeviceHeaders } from '../services/device';
 import { usePendingGuard } from '../hooks/usePendingGuard';
+import { focusClientCard } from '../utils/focusClientCard';
 
 type VisitType = Appointment['visit_type'];
 type ClientMaybeNext = ClientBasic & { next_appointment_id?: number };
@@ -548,21 +549,7 @@ export default function QuickScheduleModal({
                                             | number
                                             | undefined;
                                         if (!id) {
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'scrollToClientCard',
-                                                        {
-                                                            detail: {
-                                                                clientId:
-                                                                    client.id,
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
+                                            focusClientCard(client.id);
                                             return;
                                         }
                                         const token =
@@ -867,17 +854,7 @@ export default function QuickScheduleModal({
                             } catch {
                                 /* noop */
                             }
-                            setTimeout(() => {
-                                try {
-                                    window.dispatchEvent(
-                                        new CustomEvent('scrollToClientCard', {
-                                            detail: { clientId: client.id },
-                                        }),
-                                    );
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 120);
+                            setTimeout(() => focusClientCard(client.id), 120);
                             if (currentEdit?.id === a.id) setCurrentEdit(null);
                             if (lastEditedId === a.id) {
                                 setLastEditedId(null);
