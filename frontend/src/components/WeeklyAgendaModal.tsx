@@ -193,7 +193,7 @@ export default function WeeklyAgendaModal({
         window.addEventListener('resize', measure);
         return () => window.removeEventListener('resize', measure);
     }, []);
-    React.useEffect(() => {
+    const scrollSelectedIntoView = React.useCallback(() => {
         const el = colRefs.current[selectedDayISO];
         if (!el) return;
         // Only auto-scroll when selection came from explicit user action
@@ -223,7 +223,22 @@ export default function WeeklyAgendaModal({
         } catch {
             /* noop */
         }
-    }, [selectedDayISO, setSelected]);
+    }, [selectedDayISO]);
+
+    // Scroll when selected day changes
+    React.useEffect(() => {
+        scrollSelectedIntoView();
+    }, [selectedDayISO, scrollSelectedIntoView]);
+
+    // Also scroll on open, to align the visible column with the initially selected day
+    React.useEffect(() => {
+        if (!open) return;
+        // Defer to allow refs/layout to settle
+        const id = window.setTimeout(() => {
+            scrollSelectedIntoView();
+        }, 0);
+        return () => window.clearTimeout(id);
+    }, [open, scrollSelectedIntoView]);
 
     // Auto-select the day whose column is at least 70% visible within the horizontal scroller
     React.useEffect(() => {

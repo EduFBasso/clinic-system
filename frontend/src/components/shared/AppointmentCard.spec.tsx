@@ -51,12 +51,12 @@ describe('AppointmentCard', () => {
         expect(onClick).toHaveBeenCalledWith(appt);
     });
 
-    it('shows details button for done and calls onDetails', () => {
+    it('clicking a done card calls onDetails (details icon removed)', () => {
         const appt = makeAppt({ status: 'done' });
         const onDetails = vi.fn();
         render(<AppointmentCard appt={appt} onDetails={onDetails} />);
-        const btn = screen.getByRole('button', { name: /Resumo da consulta/i });
-        fireEvent.click(btn);
+        // Clicking on the client name (card area)
+        fireEvent.click(screen.getByText('Fulano'));
         expect(onDetails).toHaveBeenCalledTimes(1);
         expect(onDetails).toHaveBeenCalledWith(appt);
     });
