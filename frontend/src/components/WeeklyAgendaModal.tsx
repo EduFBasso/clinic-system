@@ -125,9 +125,14 @@ export default function WeeklyAgendaModal({
     );
     // Track whether selection came from user (click/controls) or auto (observer)
     const selectionSrcRef = React.useRef<'user' | 'auto'>('user');
+    // Cooldown to avoid auto-selection overriding a fresh user choice (Hoje/click)
+    const lastUserSelectAtRef = React.useRef<number>(Date.now());
     const setSelected = React.useCallback(
         (iso: string, src: 'user' | 'auto' = 'user') => {
             selectionSrcRef.current = src;
+            if (src === 'user') {
+                lastUserSelectAtRef.current = Date.now();
+            }
             setSelectedDayISO(iso);
         },
         [],
@@ -242,6 +247,11 @@ export default function WeeklyAgendaModal({
             },
             { root, threshold: [0, 0.25, 0.5, 0.7, 0.75, 1] },
         );
+        const suppressMs = 600; // grace period after user actions/open
+        // Respect cooldown after user-driven selection or modal open
+        if (Date.now() - lastUserSelectAtRef.current < suppressMs) {
+            return;
+        }
         // Observe each existing column element
         const toObserve: HTMLElement[] = [];
         Object.entries(colRefs.current).forEach(([iso, el]) => {
@@ -259,7 +269,14 @@ export default function WeeklyAgendaModal({
                 /* noop */
             }
         };
-    }, [selectedDayISO]);
+    }, [selectedDayISO, setSelected]);
+
+    // On open, briefly suppress auto-selection to avoid overriding the initial selection
+    React.useEffect(() => {
+        if (open) {
+            lastUserSelectAtRef.current = Date.now();
+        }
+    }, [open]);
 
     // Details modal (only for done)
     const [detailsOpen, setDetailsOpen] = React.useState(false);
@@ -330,9 +347,11 @@ export default function WeeklyAgendaModal({
                         }}
                     >
                         <button
-                            onClick={() =>
-                                setAnchorDate(startOfDay(new Date()))
-                            }
+                            onClick={() => {
+                                const today = startOfDay(new Date());
+                                setSelected(toISODate(today), 'user');
+                                setAnchorDate(today);
+                            }}
                             style={{
                                 fontSize: 'var(--font-body)',
                                 fontWeight: 700,
