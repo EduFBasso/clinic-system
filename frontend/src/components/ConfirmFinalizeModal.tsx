@@ -1,3 +1,7 @@
+/**
+ * @deprecated Substituído por `PendingActionsModal.tsx` que agrega cancel + finalize + regras de tempo.
+ * Manter temporariamente para rollback rápido se necessário; remover após período de estabilização.
+ */
 import React from 'react';
 import AppModal from './Modal';
 

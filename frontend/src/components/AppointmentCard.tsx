@@ -1,3 +1,8 @@
+/**
+ * @deprecated Usar `components/shared/AppointmentCard.tsx`.
+ * Motivo: versão antiga não aplica overrides (status/end_at) e possui lógica duplicada de estado.
+ * Plano: migrar todas as importações remanescentes e remover este arquivo após validação.
+ */
 import React from 'react';
 import type { Appointment } from '../hooks/useAppointments';
 import { FaEdit, FaBan, FaRegFileAlt } from 'react-icons/fa';

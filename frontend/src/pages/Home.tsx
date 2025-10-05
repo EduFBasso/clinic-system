@@ -64,6 +64,8 @@ export default function Home() {
     const [pendingActionsOpen, setPendingActionsOpen] = useState(false);
     const [pendingAppt, setPendingAppt] =
         useState<SharedAppointmentLike | null>(null);
+    // Suppress rapid reopen of PendingActions for a short window after closing
+    const lastPendingCloseRef = React.useRef<number>(0);
 
     // Aux: carrega nome básico do cliente dado um ID (cache localStorage se possível)
     async function ensureClientBasic(id: number): Promise<ClientBasic> {
@@ -280,6 +282,27 @@ export default function Home() {
                 }
                 return;
             }
+            // Debounce/suppress: if we just closed pendingActions, ignore a rapid duplicate open
+            const nowTs = Date.now();
+            if (nowTs - lastPendingCloseRef.current < 1500) {
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('debug:log', {
+                            detail: {
+                                label: 'Home: suppressed confirmFinalize due to recent forceClose',
+                                data: {
+                                    deltaMs:
+                                        nowTs - lastPendingCloseRef.current,
+                                },
+                                ts: nowTs,
+                            },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+                return;
+            }
             // Carrega dados do agendamento para exibir no modal de Ações Pendentes
             try {
                 const token = localStorage.getItem('accessToken') || '';
@@ -327,6 +350,208 @@ export default function Home() {
             window.removeEventListener(
                 'confirmFinalizeAppointment',
                 onConfirmFinalize as EventListener,
+            );
+    }, []);
+
+    // Novo handler global: qualquer componente pode abrir Ações Pendentes via evento
+    useEffect(() => {
+        // Mantém supressões temporárias pós-cancel
+        const recentCanceled = new Map<number, number>(); // apptId -> timestamp
+        // Listener auxiliar para marcar cancelamentos concluídos
+        function onCancelFinalizeFlag(ev: Event) {
+            const ce = ev as CustomEvent;
+            const det = (ce?.detail || {}) as { id?: number; status?: string };
+            if (det?.id && det.status === 'canceled') {
+                recentCanceled.set(det.id, Date.now());
+            }
+        }
+        window.addEventListener(
+            'appointment:statusChanged',
+            onCancelFinalizeFlag,
+        );
+
+        async function onOpenPending(e: Event) {
+            const ce = e as CustomEvent;
+            const det =
+                (ce && (ce as CustomEvent).detail) ||
+                ({} as {
+                    appt?: SharedAppointmentLike;
+                    appointmentId?: number | null;
+                });
+            try {
+                const stack = new Error().stack;
+                window.dispatchEvent(
+                    new CustomEvent('debug:log', {
+                        detail: {
+                            label: 'Home: pendingActions:open received',
+                            data: {
+                                hasApptInDetail: !!det.appt,
+                                appointmentId:
+                                    det.appt?.id ?? det.appointmentId,
+                                triggeredAt: new Date().toISOString(),
+                                stack,
+                            },
+                            ts: Date.now(),
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            try {
+                (e as Event).preventDefault?.();
+            } catch {
+                /* noop */
+            }
+            const nowTs = Date.now();
+            if (nowTs - lastPendingCloseRef.current < 1500) {
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('debug:log', {
+                            detail: {
+                                label: 'Home: suppressed pendingActions:open due to recent forceClose',
+                                data: {
+                                    deltaMs:
+                                        nowTs - lastPendingCloseRef.current,
+                                },
+                                ts: nowTs,
+                            },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+                return;
+            }
+            if (det.appt) {
+                // Se acabou de ser cancelado, suprimir reabertura
+                const rcTs = det.appt.id
+                    ? recentCanceled.get(det.appt.id)
+                    : undefined;
+                if (rcTs && Date.now() - rcTs < 8000) {
+                    try {
+                        window.dispatchEvent(
+                            new CustomEvent('debug:log', {
+                                detail: {
+                                    label: 'Home: suppressed reopen (recent canceled appt object)',
+                                    data: {
+                                        apptId: det.appt.id,
+                                        deltaMs: Date.now() - rcTs,
+                                    },
+                                    ts: Date.now(),
+                                },
+                            }),
+                        );
+                    } catch {
+                        /* noop */
+                    }
+                    return;
+                }
+                setPendingAppt(det.appt);
+                setPendingActionsOpen(true);
+                return;
+            }
+            const apptId = det.appointmentId;
+            if (!apptId) return;
+            const rcTs = recentCanceled.get(apptId);
+            if (rcTs && Date.now() - rcTs < 8000) {
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('debug:log', {
+                            detail: {
+                                label: 'Home: suppressed reopen (recent canceled apptId)',
+                                data: { apptId, deltaMs: Date.now() - rcTs },
+                                ts: Date.now(),
+                            },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+                return;
+            }
+            try {
+                const token = localStorage.getItem('accessToken') || '';
+                const headers: Record<string, string> = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const r = await fetch(
+                    `${API_BASE}/agenda/appointments/${apptId}/`,
+                    { headers, cache: 'no-store' },
+                );
+                if (!r.ok) throw new Error('Falha ao carregar agendamento');
+                const data = await r.json();
+                if (data.status && data.status !== 'scheduled') {
+                    // Não abrir para status cancelado/concluído
+                    try {
+                        window.dispatchEvent(
+                            new CustomEvent('debug:log', {
+                                detail: {
+                                    label: 'Home: skipped open (status not scheduled)',
+                                    data: { apptId, status: data.status },
+                                    ts: Date.now(),
+                                },
+                            }),
+                        );
+                    } catch {
+                        /* noop */
+                    }
+                    return;
+                }
+                const appt: SharedAppointmentLike = {
+                    id: data.id,
+                    start_at: data.start_at,
+                    end_at: data.end_at,
+                    status: data.status,
+                    notes: data.notes,
+                    client_name: data.client_name,
+                    client: data.client,
+                    title: data.title,
+                };
+                setPendingAppt(appt);
+                setPendingActionsOpen(true);
+            } catch (err) {
+                const msg =
+                    err instanceof Error
+                        ? err.message
+                        : 'Erro ao abrir ações pendentes';
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('systemMessage', {
+                            detail: { text: msg, type: 'error' },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+            }
+        }
+        window.addEventListener(
+            'pendingActions:open',
+            onOpenPending as EventListener,
+        );
+        return () => {
+            window.removeEventListener(
+                'pendingActions:open',
+                onOpenPending as EventListener,
+            );
+            window.removeEventListener(
+                'appointment:statusChanged',
+                onCancelFinalizeFlag as EventListener,
+            );
+        };
+    }, []);
+
+    // Failsafe: se algum modal PendingActions disparar forceClose, alinhe o estado local
+    useEffect(() => {
+        const onForceClose = () => {
+            setPendingActionsOpen(false);
+            lastPendingCloseRef.current = Date.now();
+        };
+        window.addEventListener('pendingActions:forceClose', onForceClose);
+        return () =>
+            window.removeEventListener(
+                'pendingActions:forceClose',
+                onForceClose,
             );
     }, []);
 
@@ -538,86 +763,88 @@ export default function Home() {
     ]);
 
     return (
-        <div className={styles.container}>
-            <Header />
-            <Faixa />
-            <NavBar
-                openNewClientModal={handleAddClient}
-                selectedClientId={selectedClientId}
-                agendaOpeners={{
-                    openMonthly,
-                    openWeekly,
-                }}
-            />
-            <MainContent
-                setSelectedClientId={setSelectedClientId}
-                selectedClientId={selectedClientId}
-            />
-            {/* Route-driven Agenda modals (ScheduleModal removido) */}
-            {routeClient && (
-                <QuickScheduleModal
-                    open={quickOpen}
+        <>
+            <div className={styles.container}>
+                <Header />
+                <Faixa />
+                <NavBar
+                    openNewClientModal={handleAddClient}
+                    selectedClientId={selectedClientId}
+                    agendaOpeners={{
+                        openMonthly,
+                        openWeekly,
+                    }}
+                />
+                <MainContent
+                    setSelectedClientId={setSelectedClientId}
+                    selectedClientId={selectedClientId}
+                />
+                {/* Route-driven Agenda modals (ScheduleModal removido) */}
+                {routeClient && (
+                    <QuickScheduleModal
+                        open={quickOpen}
+                        onClose={() => {
+                            setQuickOpen(false);
+                            clearAgendaRouteFlags();
+                        }}
+                        client={routeClient}
+                        editAppointment={routeEditAppt}
+                    />
+                )}
+                {routeClient && (
+                    <MonthlyAgendaModal
+                        open={monthlyOpen}
+                        onClose={() => {
+                            setMonthlyOpen(false);
+                            clearAgendaRouteFlags();
+                        }}
+                        client={routeClient}
+                        initialMonth={routeInitialMonth}
+                    />
+                )}
+                <WeeklyAgendaModal
+                    open={weeklyOpen}
                     onClose={() => {
-                        setQuickOpen(false);
+                        setWeeklyOpen(false);
                         clearAgendaRouteFlags();
                     }}
-                    client={routeClient}
-                    editAppointment={routeEditAppt}
                 />
-            )}
-            {routeClient && (
-                <MonthlyAgendaModal
-                    open={monthlyOpen}
-                    onClose={() => {
-                        setMonthlyOpen(false);
-                        clearAgendaRouteFlags();
-                    }}
-                    client={routeClient}
-                    initialMonth={routeInitialMonth}
+                <DailyAgendaModal
+                    open={dailyOpen}
+                    date={dailyDate}
+                    focusAppointmentId={dailyFocusId}
+                    onClose={() => setDailyOpen(false)}
                 />
-            )}
-            <WeeklyAgendaModal
-                open={weeklyOpen}
-                onClose={() => {
-                    setWeeklyOpen(false);
-                    clearAgendaRouteFlags();
-                }}
-            />
-            <DailyAgendaModal
-                open={dailyOpen}
-                date={dailyDate}
-                focusAppointmentId={dailyFocusId}
-                onClose={() => setDailyOpen(false)}
-            />
-            <Footer />
-            {version.hasUpdate && (
-                <UpdateBanner
-                    onReload={acceptAndReload}
-                    onDismiss={version.dismiss}
-                    message={
-                        version.latestSeen && version.currentAccepted
-                            ? `Nova versão disponível (${version.latestSeen}).`
-                            : 'Nova versão disponível.'
-                    }
+                <Footer />
+                {version.hasUpdate && (
+                    <UpdateBanner
+                        onReload={acceptAndReload}
+                        onDismiss={version.dismiss}
+                        message={
+                            version.latestSeen && version.currentAccepted
+                                ? `Nova versão disponível (${version.latestSeen}).`
+                                : 'Nova versão disponível.'
+                        }
+                    />
+                )}
+                <SystemMessageModal
+                    open={!!sysMsg}
+                    message={sysMsg?.text || null}
+                    type={sysMsg?.type || 'info'}
+                    onClose={() => setSysMsg(null)}
+                    autoCloseMs={sysMsg?.autoCloseMs ?? 10000}
                 />
-            )}
-            <SystemMessageModal
-                open={!!sysMsg}
-                message={sysMsg?.text || null}
-                type={sysMsg?.type || 'info'}
-                onClose={() => setSysMsg(null)}
-                autoCloseMs={sysMsg?.autoCloseMs ?? 10000}
-            />
-            <AppointmentDetailsModal
-                open={detailsOpen}
-                appt={(detailsAppt as Appointment) || null}
-                onClose={() => setDetailsOpen(false)}
-            />
-            <PendingActionsModal
-                open={pendingActionsOpen}
-                appt={pendingAppt}
-                onClose={() => setPendingActionsOpen(false)}
-            />
-        </div>
+                <AppointmentDetailsModal
+                    open={detailsOpen}
+                    appt={(detailsAppt as Appointment) || null}
+                    onClose={() => setDetailsOpen(false)}
+                />
+                <PendingActionsModal
+                    open={pendingActionsOpen}
+                    appt={pendingAppt}
+                    onClose={() => setPendingActionsOpen(false)}
+                />
+            </div>
+        </>
     );
 }
