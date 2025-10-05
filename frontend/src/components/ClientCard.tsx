@@ -983,10 +983,7 @@ export default function ClientCard({
                     <div className={styles.infoRow}>
                         <span
                             className={styles.label}
-                            style={{
-                                color: labelColor,
-                                fontWeight: 'bold',
-                            }}
+                            style={{ color: labelColor, fontWeight: 'bold' }}
                         >
                             Data:
                         </span>
@@ -995,37 +992,36 @@ export default function ClientCard({
                             style={{ color: labelColor }}
                         >
                             {(() => {
-                                const s = client.next_appointment_start_at
-                                    ? new Date(client.next_appointment_start_at)
-                                    : null;
-                                const e = client.next_appointment_end_at
-                                    ? new Date(client.next_appointment_end_at)
-                                    : s
-                                    ? new Date(s.getTime() + 60 * 60 * 1000)
-                                    : null;
+                                // Usar sempre displayStartISO/displayEndISO se presentes (integram latch/overrides)
+                                const sIso =
+                                    displayStartISO ||
+                                    client.next_appointment_start_at ||
+                                    null;
+                                const eIso =
+                                    displayEndISO ||
+                                    client.next_appointment_end_at ||
+                                    null;
+                                if (!sIso || !eIso) return '—';
+                                const s = new Date(sIso);
+                                const e = new Date(eIso);
+                                if (isNaN(s.getTime()) || isNaN(e.getTime()))
+                                    return '—';
                                 const wd = s
-                                    ? s
-                                          .toLocaleDateString('pt-BR', {
-                                              weekday: 'short',
-                                          })
-                                          .replace('.', '')
-                                          .replace(/\b(\w)/, c =>
-                                              c.toUpperCase(),
-                                          )
-                                    : '--';
-                                const dd = s
-                                    ? String(s.getDate()).padStart(2, '0')
-                                    : '--';
-                                const mm = s
-                                    ? String(s.getMonth() + 1).padStart(2, '0')
-                                    : '--';
-                                const fmt = (d: Date | null) =>
-                                    d
-                                        ? d.toLocaleTimeString('pt-BR', {
-                                              hour: '2-digit',
-                                              minute: '2-digit',
-                                          })
-                                        : '--:--';
+                                    .toLocaleDateString('pt-BR', {
+                                        weekday: 'short',
+                                    })
+                                    .replace('.', '')
+                                    .replace(/\b(\w)/, c => c.toUpperCase());
+                                const dd = String(s.getDate()).padStart(2, '0');
+                                const mm = String(s.getMonth() + 1).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const fmt = (d: Date) =>
+                                    d.toLocaleTimeString('pt-BR', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                    });
                                 return `${wd} ${dd}/${mm}, ${fmt(s)} - ${fmt(
                                     e,
                                 )}`;
@@ -1149,52 +1145,7 @@ export default function ClientCard({
                 </>
             )}
 
-            {/* Fallback: durante a janela em andamento (snapshot), manter a linha de Data visível */}
-            {!isScheduled && isOngoing && (
-                <div className={styles.infoRow}>
-                    <span
-                        className={styles.label}
-                        style={{ color: labelColor, fontWeight: 'bold' }}
-                    >
-                        Data:
-                    </span>
-                    <span
-                        className={styles.value}
-                        style={{ color: labelColor }}
-                    >
-                        {(() => {
-                            const s = displayStartISO
-                                ? new Date(displayStartISO)
-                                : null;
-                            const e = displayEndISO
-                                ? new Date(displayEndISO)
-                                : null;
-                            const wd = s
-                                ? s
-                                      .toLocaleDateString('pt-BR', {
-                                          weekday: 'short',
-                                      })
-                                      .replace('.', '')
-                                      .replace(/\b(\w)/, c => c.toUpperCase())
-                                : '--';
-                            const dd = s
-                                ? String(s.getDate()).padStart(2, '0')
-                                : '--';
-                            const mm = s
-                                ? String(s.getMonth() + 1).padStart(2, '0')
-                                : '--';
-                            const fmt = (d: Date | null) =>
-                                d
-                                    ? d.toLocaleTimeString('pt-BR', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                      })
-                                    : '--:--';
-                            return `${wd} ${dd}/${mm}, ${fmt(s)} - ${fmt(e)}`;
-                        })()}
-                    </span>
-                </div>
-            )}
+            {/* Fallback bloco removido: Data agora unificada acima usando displayStartISO/displayEndISO */}
 
             {!isScheduled && !isOngoing && (
                 <div className={styles.infoRow}>
