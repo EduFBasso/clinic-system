@@ -74,6 +74,8 @@ export default function AppModal(props: AppModalProps) {
     const prevWindowScrollRef = React.useRef<number>(0);
     const prevScrollElRef = React.useRef<HTMLElement | null>(null);
     const prevActiveElRef = React.useRef<HTMLElement | null>(null);
+    // Track last touch Y to detect overscroll direction (iOS rubber-band guard)
+    const lastTouchYRef = React.useRef<number | null>(null);
 
     const isIOS = React.useMemo(() => {
         if (typeof navigator === 'undefined') return false;
@@ -309,6 +311,12 @@ export default function AppModal(props: AppModalProps) {
         // Função de restauração idempotente (múltiplas tentativas em timers diferentes)
         const restore = (source?: string) => {
             try {
+                // Remover foco de dentro do conteúdo do modal imediatamente
+                try {
+                    contentRef.current?.blur?.();
+                } catch {
+                    /* noop */
+                }
                 const body = document.body as HTMLBodyElement;
                 const html = document.documentElement as HTMLElement;
                 // Se a página marcou que o scroll deve permanecer como está, não tentar restaurar
@@ -394,6 +402,17 @@ export default function AppModal(props: AppModalProps) {
                         )({
                             preventScroll: true,
                         });
+                    } else {
+                        // Garanta foco fora do modal para evitar foco retido em container aria-hidden
+                        try {
+                            (
+                                document.body as unknown as {
+                                    focus?: () => void;
+                                }
+                            ).focus?.();
+                        } catch {
+                            /* noop */
+                        }
                     }
                 } catch {
                     /* noop */
@@ -441,6 +460,187 @@ export default function AppModal(props: AppModalProps) {
         return () => timeouts.forEach(t => clearTimeout(t));
     }, [open]);
 
+    // Interaction watchdog: garante remoção de travas residuais (pointer-events / backdrops órfãos)
+    React.useEffect(() => {
+        function inspect(reason: string) {
+            try {
+                const body = document.body;
+                const html = document.documentElement;
+                const orphanBackdrops = Array.from(
+                    document.querySelectorAll('.MuiBackdrop-root'),
+                ).filter(b => !b.closest('[role="dialog"]'));
+                // Detect stale modal root containers (MuiModal-root) that remain in DOM after close but keep high z-index
+                const staleModalRoots = Array.from(
+                    document.querySelectorAll('.MuiModal-root'),
+                ) as HTMLElement[];
+                const filteredStaleModalRoots: HTMLElement[] =
+                    staleModalRoots.filter(root => {
+                        const hasDialog =
+                            !!root.querySelector('[role="dialog"]');
+                        const style = window.getComputedStyle(root);
+                        const z = parseInt(style.zIndex || '0', 10);
+                        // Consider stale if no dialog inside OR pointer-events none mismatch and high z-index
+                        return !hasDialog && z >= 1200;
+                    });
+                // Captura elemento sob o centro da viewport (se nada recebe click, elementFromPoint ajuda)
+                const cx = window.innerWidth / 2;
+                const cy = window.innerHeight / 2;
+                const elCenter = document.elementFromPoint(
+                    cx,
+                    cy,
+                ) as HTMLElement | null;
+                // Caminha ancestrais para detectar travas
+                const lockedAncestors: string[] = [];
+                let walker: HTMLElement | null = elCenter;
+                type InertEl = HTMLElement & { inert?: boolean };
+                while (walker) {
+                    const style = window.getComputedStyle(walker);
+                    const inertWalker = walker as InertEl;
+                    const inertAttr = inertWalker.inert ? 'inert' : '';
+                    if (
+                        style.pointerEvents === 'none' ||
+                        inertAttr ||
+                        walker.classList.contains('MuiModal-open')
+                    ) {
+                        lockedAncestors.push(
+                            `${walker.tagName.toLowerCase()}#${
+                                walker.id || ''
+                            }.$${walker.className}|pe:${
+                                style.pointerEvents
+                            }|inert:${inertAttr}`,
+                        );
+                        // Tentativa de limpeza
+                        if (style.pointerEvents === 'none') {
+                            (walker as HTMLElement).style.pointerEvents = '';
+                        }
+                        try {
+                            inertWalker.inert = false;
+                        } catch {
+                            /* noop */
+                        }
+                        walker.classList.remove('MuiModal-open');
+                    }
+                    walker = walker.parentElement;
+                }
+                const snapshot = {
+                    reason,
+                    bodyOverflow: body.style.overflow,
+                    bodyPosition: body.style.position,
+                    bodyPE: (body as HTMLElement).style.pointerEvents,
+                    htmlOverflow: html.style.overflow,
+                    htmlPE: (html as HTMLElement).style.pointerEvents,
+                    hasMuiModalOpenClass:
+                        body.classList.contains('MuiModal-open'),
+                    orphanBackdrops: orphanBackdrops.length,
+                    centerEl: elCenter?.tagName.toLowerCase(),
+                    centerElClasses: elCenter?.className || '',
+                    lockedAncestors,
+                };
+                // Correções forçadas globais
+                body.style.pointerEvents = '';
+                html.style.pointerEvents = '';
+                body.classList.remove('MuiModal-open');
+                html.classList.remove('MuiModal-open');
+                orphanBackdrops.forEach(b => b.parentElement?.removeChild(b));
+                filteredStaleModalRoots.forEach(r => {
+                    // Remove or neutralize overlays that might intercept clicks
+                    try {
+                        r.style.pointerEvents = 'none';
+                        r.style.zIndex = '0';
+                        // If empty, remove to keep DOM clean
+                        if (!r.firstElementChild)
+                            r.parentElement?.removeChild(r);
+                    } catch {
+                        /* noop */
+                    }
+                });
+                // Remove qualquer backdrop com pointer-events ainda ativo
+                const strayPeNone = document.querySelectorAll(
+                    '[style*="pointer-events: none"]',
+                );
+                strayPeNone.forEach(el => {
+                    if (el === body || el === html) return;
+                    (el as HTMLElement).style.pointerEvents = '';
+                });
+                window.dispatchEvent(
+                    new CustomEvent('debug:log', {
+                        detail: {
+                            label: 'Modal: interaction watchdog',
+                            data: snapshot,
+                            ts: Date.now(),
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        }
+        const multipointScan = (tag: string) => {
+            try {
+                const points: Array<[number, number]> = [
+                    [window.innerWidth * 0.25, window.innerHeight * 0.5],
+                    [window.innerWidth * 0.5, window.innerHeight * 0.5],
+                    [window.innerWidth * 0.75, window.innerHeight * 0.5],
+                    [window.innerWidth * 0.5, window.innerHeight * 0.25],
+                    [window.innerWidth * 0.5, window.innerHeight * 0.75],
+                ];
+                const overlays: string[] = [];
+                points.forEach(([x, y]) => {
+                    const el = document.elementFromPoint(
+                        x,
+                        y,
+                    ) as HTMLElement | null;
+                    if (!el) return;
+                    const z = window.getComputedStyle(el).zIndex;
+                    const pe = window.getComputedStyle(el).pointerEvents;
+                    if (pe === 'none') return; // não bloqueia interação
+                    if (z && Number(z) >= 1000) {
+                        overlays.push(
+                            `${tag}:${el.tagName.toLowerCase()}#${el.id}.${
+                                el.className
+                            }.z${z}`,
+                        );
+                    }
+                });
+                if (overlays.length) {
+                    window.dispatchEvent(
+                        new CustomEvent('debug:log', {
+                            detail: {
+                                label: 'Modal: multipoint overlay scan',
+                                data: { overlays },
+                                ts: Date.now(),
+                            },
+                        }),
+                    );
+                }
+            } catch {
+                /* noop */
+            }
+        };
+        const onClosed = (e: Event) => {
+            const ce = e as CustomEvent;
+            inspect('modal:closed:' + (ce?.detail?.type || 'unknown'));
+            setTimeout(() => inspect('post-closed-120ms'), 120);
+            setTimeout(() => {
+                inspect('post-closed-400ms');
+                multipointScan('scan-400ms');
+            }, 400);
+        };
+        window.addEventListener('modal:closed', onClosed);
+        // Atalho emergencial: Ctrl+Shift+U para liberar travas manualmente
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.ctrlKey && ev.shiftKey && ev.key.toLowerCase() === 'u') {
+                inspect('manual-unlock-hotkey');
+                multipointScan('manual-unlock-hotkey');
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('modal:closed', onClosed);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, []);
+
     // Restauração imediata também no ciclo de desmontagem (caso o componente seja removido rapidamente)
     React.useEffect(() => {
         return () => {
@@ -467,6 +667,57 @@ export default function AppModal(props: AppModalProps) {
         };
     }, [open]);
 
+    // (Removed inert toggling) — inert causava estados 'aria-hidden' residuais combinados com pointer-events inconsistentes.
+    // Mantemos o conteúdo montado mas confiamos em aria-hidden/open e watchdog para desbloqueio.
+
+    // Extra stale-root watchdog (rápido): se existir .MuiModal-root[aria-hidden="true"] contendo role=dialog visível, corrigir atributos.
+    React.useEffect(() => {
+        if (!open) return;
+        const fix = () => {
+            try {
+                const roots = Array.from(
+                    document.querySelectorAll('.MuiModal-root'),
+                ) as HTMLElement[];
+                roots.forEach(r => {
+                    const dialog = r.querySelector('[role="dialog"]') as
+                        | (HTMLElement & { inert?: boolean })
+                        | null;
+                    if (!dialog) return;
+                    const hidden = r.getAttribute('aria-hidden') === 'true';
+                    const inertAttr = dialog.inert === true;
+                    if (hidden || inertAttr) {
+                        r.removeAttribute('aria-hidden');
+                        try {
+                            dialog.inert = false;
+                        } catch {
+                            /* noop */
+                        }
+                        r.style.pointerEvents = 'auto';
+                        dialog.style.pointerEvents = 'auto';
+                        window.dispatchEvent(
+                            new CustomEvent('debug:log', {
+                                detail: {
+                                    label: 'Modal: stale root fixed',
+                                    data: {
+                                        hidden,
+                                        inert: inertAttr,
+                                        classes: r.className,
+                                    },
+                                    ts: Date.now(),
+                                },
+                            }),
+                        );
+                    }
+                });
+            } catch {
+                /* noop */
+            }
+        };
+        // Tentativas rápidas para capturar transição
+        const timeouts = [0, 30, 90, 180, 360].map(ms => setTimeout(fix, ms));
+        return () => timeouts.forEach(t => clearTimeout(t));
+    }, [open]);
+
     return (
         <Modal
             open={open}
@@ -478,13 +729,76 @@ export default function AppModal(props: AppModalProps) {
             <Box
                 ref={contentRef}
                 role='dialog'
-                aria-modal='true'
+                aria-modal={open ? true : undefined}
+                aria-hidden={open ? undefined : true}
+                // inert evita foco em conteúdo mantido no DOM quando o Modal está fechado
+                // Atributo 'inert' é aplicado via efeito para evitar warnings do React
+                onTouchStart={e => {
+                    // Guard contra scroll elástico propagando para o body no iOS
+                    const el = e.currentTarget as HTMLElement;
+                    try {
+                        // Memoriza posição Y do toque para detectar direção no touchmove
+                        const t = (e.touches && e.touches[0]) || null;
+                        lastTouchYRef.current = t ? t.clientY : null;
+                        if (el.scrollHeight <= el.clientHeight + 1) return;
+                        const atTop = el.scrollTop <= 0;
+                        const atBottom =
+                            el.scrollTop + el.clientHeight >=
+                            el.scrollHeight - 1;
+                        if (atTop) {
+                            // Nudge para fora do topo para habilitar scroll interno
+                            el.scrollTop = 1;
+                        } else if (atBottom) {
+                            // Nudge para dentro do final
+                            el.scrollTop =
+                                el.scrollHeight - el.clientHeight - 1;
+                        }
+                    } catch {
+                        /* noop */
+                    }
+                }}
+                onTouchMove={e => {
+                    // Se o conteúdo não consegue rolar ou está numa borda e o gesto tenta exceder, previne a propagação (impede scroll da página)
+                    const el = e.currentTarget as HTMLElement;
+                    try {
+                        const t = (e.touches && e.touches[0]) || null;
+                        const currentY = t ? t.clientY : null;
+                        const lastY = lastTouchYRef.current;
+                        if (currentY != null && lastY != null) {
+                            const dy = currentY - lastY; // positivo: arrastando para baixo
+                            const canScroll =
+                                el.scrollHeight > el.clientHeight + 1;
+                            const atTop = el.scrollTop <= 0;
+                            const atBottom =
+                                el.scrollTop + el.clientHeight >=
+                                el.scrollHeight - 1;
+                            const tryingPastTop = dy > 0 && atTop;
+                            const tryingPastBottom = dy < 0 && atBottom;
+                            if (
+                                !canScroll ||
+                                tryingPastTop ||
+                                tryingPastBottom
+                            ) {
+                                // Previne o rubber-band atingir o body/viewport
+                                e.preventDefault();
+                                return;
+                            }
+                        }
+                        // Atualiza última posição
+                        lastTouchYRef.current = currentY;
+                    } catch {
+                        /* noop */
+                    }
+                }}
                 sx={
                     fullScreen
                         ? {
                               position: 'fixed',
+                              // Cobertura total da viewport (inclusive iOS com toolbars dinâmicas)
                               top: 0,
                               left: 0,
+                              right: 0,
+                              bottom: 0,
                               transform: 'none',
                               bgcolor: 'var(--color-bg)',
                               borderRadius: 0,
@@ -500,12 +814,14 @@ export default function AppModal(props: AppModalProps) {
                               boxSizing: 'border-box',
                               width: '100%',
                               maxWidth: '100%',
-                              // usar viewport dinâmico para contornar toolbars do Safari
-                              height: 'calc(var(--appmodal-vh, 1vh) * 100)',
-                              maxHeight: 'calc(var(--appmodal-vh, 1vh) * 100)',
+                              // Garante altura mínima para preencher a viewport dinâmica
+                              minHeight: 'calc(var(--appmodal-vh, 1vh) * 100)',
                               overflowY: 'auto',
                               overflowX: 'hidden',
                               WebkitOverflowScrolling: 'touch',
+                              // Impede scroll chaining/scroll da página abaixo
+                              overscrollBehaviorY: 'contain',
+                              overscrollBehaviorX: 'none',
                               pointerEvents: 'auto',
                               // A small fixed bar to paint the OS safe-area with the app's header blue
                               ...(showCloseButton
