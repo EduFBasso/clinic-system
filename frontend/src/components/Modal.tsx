@@ -460,6 +460,40 @@ export default function AppModal(props: AppModalProps) {
         return () => timeouts.forEach(t => clearTimeout(t));
     }, [open]);
 
+    // MutationObserver: remove aria-hidden reintroduzido no dialog durante estado aberto
+    React.useEffect(() => {
+        if (!open) return;
+        const dialog = contentRef.current;
+        if (!dialog) return;
+        const observer = new MutationObserver(muts => {
+            muts.forEach(m => {
+                if (
+                    m.type === 'attributes' &&
+                    m.attributeName === 'aria-hidden'
+                ) {
+                    if (dialog.getAttribute('aria-hidden') === 'true') {
+                        dialog.removeAttribute('aria-hidden');
+                        dialog.style.pointerEvents = 'auto';
+                        window.dispatchEvent(
+                            new CustomEvent('debug:log', {
+                                detail: {
+                                    label: 'Modal: dialog aria-hidden auto-removed',
+                                    data: { classes: dialog.className },
+                                    ts: Date.now(),
+                                },
+                            }),
+                        );
+                    }
+                }
+            });
+        });
+        observer.observe(dialog, {
+            attributes: true,
+            attributeFilter: ['aria-hidden'],
+        });
+        return () => observer.disconnect();
+    }, [open]);
+
     // Interaction watchdog: garante remoção de travas residuais (pointer-events / backdrops órfãos)
     React.useEffect(() => {
         function inspect(reason: string) {
@@ -730,9 +764,7 @@ export default function AppModal(props: AppModalProps) {
                 ref={contentRef}
                 role='dialog'
                 aria-modal={open ? true : undefined}
-                aria-hidden={open ? undefined : true}
-                // inert evita foco em conteúdo mantido no DOM quando o Modal está fechado
-                // Atributo 'inert' é aplicado via efeito para evitar warnings do React
+                // Removido aria-hidden dinâmico: causava conflito com foco e gerava estado read-only.
                 onTouchStart={e => {
                     // Guard contra scroll elástico propagando para o body no iOS
                     const el = e.currentTarget as HTMLElement;
