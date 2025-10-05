@@ -23,7 +23,7 @@ import WeeklyAgendaModal from './WeeklyAgendaModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
 import { useOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import { track } from '../utils/telemetry';
-import PendingActionsModal from './PendingActionsModal';
+// PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
 import { findFirstPendingForClient } from '../services/pending';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
 import FinalizeButton from './clientCard/FinalizeButton';
@@ -56,9 +56,7 @@ export default function ClientCard({
     const [showMonthly, setShowMonthly] = React.useState(false);
     const [showWeekly, setShowWeekly] = React.useState(false);
     const [showQuick, setShowQuick] = React.useState(false);
-    const [showPendingActions, setShowPendingActions] = React.useState(false);
-    const [pendingAppt, setPendingAppt] =
-        React.useState<SharedAppointmentLike | null>(null);
+    // Removido: PendingActions local — usar evento global
     const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
         null,
     );
@@ -100,7 +98,8 @@ export default function ClientCard({
     const now = useNowTick(5000);
     const resumeGrace = useVisibilityResumeGrace(30000);
     // Global ongoing sweep: one request for all clients
-    const sweepByClient = useOngoingSweep(now, 60_000);
+    // Varredura global: usa uma janela ampla (±1h) para capturar atendimentos iniciados antes
+    const sweepByClient = useOngoingSweep(now, 2 * 60 * 60 * 1000);
     // start derivado como Date não é necessário; mantemos ISO para o snapshot
     // end derivado não é necessário para estilização; snapshot usa ISO strings
     // Idade calculada uma vez (se data válida) para exibir em linha própria
@@ -147,13 +146,13 @@ export default function ClientCard({
             try {
                 const token = localStorage.getItem('accessToken') || '';
                 if (!token) return;
-                // Usa uma janela pequena ao redor de "agora" para capturar bordas start==now
+                // Usa uma janela ampla ao redor de "agora" para capturar atendimentos iniciados antes
                 const probeNow = now.getTime();
-                const start = new Date(probeNow - 30 * 1000);
-                const end = new Date(probeNow + 30 * 1000);
+                const start = new Date(probeNow - 120 * 60 * 1000); // 2h antes
+                const end = new Date(probeNow + 30 * 60 * 1000); // 30min depois
                 const url = `${API_BASE}/agenda/appointments/?client=${
                     client.id
-                }&status=scheduled&start=${encodeURIComponent(
+                }&start=${encodeURIComponent(
                     start.toISOString(),
                 )}&end=${encodeURIComponent(
                     end.toISOString(),
@@ -208,14 +207,6 @@ export default function ClientCard({
         clear: clearLatch,
     } = useOngoingLatch(client.id);
 
-    // Preferir dados confiáveis do servidor/override; snapshot apenas como último recurso
-    const baseDisplayStartISO =
-        startISO ?? overrideOngoing?.start_at ?? snapshot?.startAt ?? null;
-    const baseDisplayEndISO =
-        endISO ?? overrideOngoing?.end_at ?? snapshot?.endAt ?? null;
-    const baseEffectiveApptId =
-        client.next_appointment_id ?? overrideOngoing?.id ?? null;
-
     // Quando tivermos uma janela confiável e status scheduled, usamos o hook compartilhado
     const windowFromServer = !!(isScheduled && startISO && endISO);
     const windowFromOverride = React.useMemo(() => {
@@ -236,6 +227,34 @@ export default function ClientCard({
         : windowFromOverride
         ? overrideOngoing?.end_at ?? null
         : null;
+
+    // Preferir dados confiáveis do servidor OU da varredura global quando houver janela atual
+    // Se houver um agendamento em andamento detectado pela varredura (windowFromOverride),
+    // usamos esse horário/ID em prioridade para refletir corretamente o estado "Em andamento".
+    const baseDisplayStartISO = React.useMemo(() => {
+        if (windowFromOverride && overrideOngoing?.start_at)
+            return overrideOngoing.start_at;
+        if (startISO) return startISO;
+        return snapshot?.startAt ?? null;
+    }, [
+        windowFromOverride,
+        overrideOngoing?.start_at,
+        startISO,
+        snapshot?.startAt,
+    ]);
+    const baseDisplayEndISO = React.useMemo(() => {
+        if (windowFromOverride && overrideOngoing?.end_at)
+            return overrideOngoing.end_at;
+        if (endISO) return endISO;
+        return snapshot?.endAt ?? null;
+    }, [windowFromOverride, overrideOngoing?.end_at, endISO, snapshot?.endAt]);
+    const baseEffectiveApptId = React.useMemo(() => {
+        if (windowFromOverride && overrideOngoing?.id)
+            return overrideOngoing.id;
+        if (client.next_appointment_id != null)
+            return client.next_appointment_id;
+        return null;
+    }, [windowFromOverride, overrideOngoing?.id, client.next_appointment_id]);
     // Preferir latch para exibição/ID se corresponder ao agendamento vigente
     const effectiveApptId = React.useMemo(() => {
         if (baseEffectiveApptId != null) return baseEffectiveApptId;
@@ -435,8 +454,16 @@ export default function ClientCard({
             client_name: `${client.first_name} ${client.last_name}`.trim(),
             client: client.id,
         };
-        setPendingAppt(appt);
-        setShowPendingActions(true);
+        try {
+            window.dispatchEvent(
+                new CustomEvent('pendingActions:open', {
+                    detail: { appt },
+                }),
+            );
+        } catch {
+            /* noop */
+        }
+        // Modal global aberto via evento
     }, [client]);
 
     // Verifica no servidor se existe ALGUM compromisso agendado que já terminou (pendente)
@@ -453,8 +480,16 @@ export default function ClientCard({
         }
         const appt = await detectAnyPendingFromServer();
         if (appt) {
-            setPendingAppt(appt);
-            setShowPendingActions(true);
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('pendingActions:open', {
+                        detail: { appt },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            // Modal global aberto via evento
             return;
         }
         setEditingAppt(null);
@@ -473,6 +508,9 @@ export default function ClientCard({
     } = useClientCardStyle({ isOngoing, selected, pressed, isScheduled });
     const cardRef = React.useRef<HTMLDivElement | null>(null);
 
+    // Align with global forceClose: ensure any ClientCard modal closes too
+    // PendingActions global — sem necessidade de listener local
+
     // Finalização com encapsulamento via hook
     const finalizeEarlyAware = React.useCallback(async () => {
         const apptId = effectiveApptId;
@@ -482,8 +520,16 @@ export default function ClientCard({
             openPendingAfter: async () => {
                 const appt = await detectAnyPendingFromServer();
                 if (appt) {
-                    setPendingAppt(appt);
-                    setShowPendingActions(true);
+                    try {
+                        window.dispatchEvent(
+                            new CustomEvent('pendingActions:open', {
+                                detail: { appt },
+                            }),
+                        );
+                    } catch {
+                        /* noop */
+                    }
+                    // Modal global aberto via evento
                 }
             },
         });
@@ -829,8 +875,8 @@ export default function ClientCard({
                 />
             )}
 
-            {/* Agenda section below E-mail. Quando agendado pelo servidor, mostra detalhes completos. */}
-            {isScheduled && (
+            {/* Agenda section below E-mail. Exibe durante agendamento OU enquanto em andamento (hasAgendaLine). */}
+            {hasAgendaLine && (
                 <>
                     <div className={styles.infoRow}>
                         <span
@@ -1150,46 +1196,6 @@ export default function ClientCard({
                 </div>
             )}
 
-            {/* Ongoing badge below the date (fallback case) */}
-            {!isScheduled && isOngoing && (
-                <div className={styles.infoRow} style={{ paddingTop: 0 }}>
-                    <span
-                        style={{
-                            background: 'var(--color-ongoing)',
-                            color: '#fff',
-                            borderRadius: 6,
-                            padding: '2px 8px',
-                            fontWeight: 700,
-                            fontSize: 12,
-                        }}
-                    >
-                        Em andamento
-                    </span>
-                </div>
-            )}
-
-            {/* Linha de ações para fallback (somente quando em andamento) */}
-            {!isScheduled && isOngoing && (
-                <div className={styles.infoRow} style={{ gap: 8 }}>
-                    <span
-                        className={styles.label}
-                        style={{ color: labelColor, fontWeight: 'bold' }}
-                    >
-                        Ações:
-                    </span>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <FinalizeButton
-                            finishing={finishing}
-                            disabled={!effectiveApptId}
-                            isEarly={isOngoing}
-                            clientId={client.id}
-                            appointmentId={effectiveApptId}
-                            onFinalize={finalizeEarlyAware}
-                        />
-                    </div>
-                </div>
-            )}
-
             {!isScheduled && !isOngoing && (
                 <div className={styles.infoRow}>
                     <span
@@ -1374,13 +1380,7 @@ export default function ClientCard({
                     }}
                 />
             )}
-            {showPendingActions && pendingAppt && (
-                <PendingActionsModal
-                    open={showPendingActions}
-                    onClose={() => setShowPendingActions(false)}
-                    appt={pendingAppt}
-                />
-            )}
+            {/* PendingActionsModal é global (Home) */}
             {/* QuickScheduleModal é agora o único fluxo de agendamento (ScheduleModal legacy removido) */}
             {futureAppointments.length > 0 && (
                 <div
