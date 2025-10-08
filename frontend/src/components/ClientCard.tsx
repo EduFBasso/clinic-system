@@ -9,6 +9,7 @@ import {
     FaCalendarAlt,
     FaPlus,
 } from 'react-icons/fa';
+import { useClientCreateAction } from '../hooks/useClientCreateAction';
 import { getMaxScheduledPerClient } from '../config/limits';
 import { API_BASE } from '../config/api';
 import type { Appointment } from '../hooks/useAppointments';
@@ -21,19 +22,20 @@ import { parseDOB, calcAge } from '../utils/dateOfBirth';
 import MonthlyAgendaModal from './MonthlyAgendaModal';
 import WeeklyAgendaModal from './WeeklyAgendaModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
-import { useOngoingSnapshot } from '../hooks/useOngoingSnapshot';
-import { track } from '../utils/telemetry';
 // PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
-import { findFirstPendingForClient } from '../services/pending';
-import type { SharedAppointmentLike } from './shared/AppointmentCard';
+import { useClientPendingState } from '../hooks/useClientPendingState';
+// import type { SharedAppointmentLike } from './shared/AppointmentCard'; // no longer needed after pending hook extraction
 import FinalizeButton from './clientCard/FinalizeButton';
+// SolveButton lives in clientCard folder along with FinalizeButton
+import SolveButton from './clientCard/SolveButton';
 import FutureAppointmentsList from './clientCard/FutureAppointmentsList';
-import { useHysteresisBoolean } from '../hooks/useHysteresisBoolean';
-import { useAppointmentCardState } from '../hooks/useAppointmentCardState.ts';
+// (hysteresis & appointment state consolidated inside hooks)
 import { useFinalizeAppointment } from '../hooks/useFinalizeAppointment';
-import { useOngoingLatch, readOngoingLatch } from '../hooks/useOngoingLatch';
-import { useOngoingSweep } from '../hooks/useOngoingSweep';
-import { useVisibilityResumeGrace } from '../hooks/useVisibilityResumeGrace';
+// Replaced latch/snapshot/sweep logic by consolidated hook
+import { useClientOngoingState } from '../hooks/useClientOngoingState';
+import { formatTime } from '../utils/timeFormat';
+import { useClientFutureAppointments } from '../hooks/useClientFutureAppointments';
+import { openClientForm } from '../utils/openClientForm';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
 
@@ -60,14 +62,14 @@ export default function ClientCard({
     const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
         null,
     );
-    const [futureAppointments, setFutureAppointments] = React.useState<
-        Appointment[]
-    >([]);
-    const [loadingFuture, setLoadingFuture] = React.useState(false);
+    const isScheduled = client.next_appointment_status === 'scheduled';
+    // Futuros agora gerenciados por hook dedicado
+    const { futureAppointments, loadingFuture, dynLimit } =
+        useClientFutureAppointments({ client, isScheduled });
     const [pressed, setPressed] = React.useState(false);
     const { finishing, finalize } = useFinalizeAppointment(client.id);
     // Suprimir visual de "em andamento" por alguns segundos após finalizar/cancelar
-    const [suppressOngoingUntil, setSuppressOngoingUntil] = React.useState(0);
+    // suppressOngoingUntil removido (gestão dentro do hook de ongoing)
     // Simplificado: usar hora local, mas com tick para refletir mudanças de estado (scheduled→ongoing) sem interação do usuário
     function useNowTick(intervalMs: number) {
         const [now, setNow] = React.useState<Date>(() => new Date());
@@ -96,10 +98,8 @@ export default function ClientCard({
         return now;
     }
     const now = useNowTick(5000);
-    const resumeGrace = useVisibilityResumeGrace(30000);
-    // Global ongoing sweep: one request for all clients
-    // Varredura global: usa uma janela ampla (±1h) para capturar atendimentos iniciados antes
-    const sweepByClient = useOngoingSweep(now, 2 * 60 * 60 * 1000);
+    // Removed resumeGrace (was used for previous ongoing suppression logic)
+    // const resumeGrace = useVisibilityResumeGrace(30000);
     // start derivado como Date não é necessário; mantemos ISO para o snapshot
     // end derivado não é necessário para estilização; snapshot usa ISO strings
     // Idade calculada uma vez (se data válida) para exibir em linha própria
@@ -111,392 +111,91 @@ export default function ClientCard({
             ? parsed.age
             : calcAge(parsed.year, parsed.month, parsed.day);
     }, [client.date_of_birth]);
-    const isScheduled = client.next_appointment_status === 'scheduled';
+    // isScheduled já definido acima (reordenado para hook de futuros)
     // Base: informações vindas do servidor (se disponíveis)
-    const startISO = client.next_appointment_start_at ?? null;
-    const endISO = client.next_appointment_end_at ?? null;
-    // Snapshot: mantém o estilo de atendimento ativo durante quedas breves do backend
-    const { snapshot } = useOngoingSnapshot({
-        clientId: client.id,
-        startAt: startISO,
-        endAt: endISO,
-        serverIsScheduled: isScheduled,
-        now,
-        graceMs: 0, // alinhar com Monthly/AppointmentCard: sem tolerância extra
-        useSnapshotWhenServerNotScheduled: false, // após finalizar, não manter estilo via snapshot
-    });
-    // Fallback: se o servidor não populou o próximo agendamento em andamento, buscamos um que contenha "agora"
-    const [overrideOngoing, setOverrideOngoing] =
-        React.useState<Appointment | null>(null);
-    React.useEffect(() => {
-        let cancelled = false;
-        if (!ENABLE_ONGOING_PROBE) {
-            // Use global sweep result if available
-            const ap = sweepByClient.get(client.id) || null;
-            setOverrideOngoing(ap);
-            return () => {
-                cancelled = true;
-            };
-        }
-        async function probeOngoing() {
-            if (isScheduled) {
-                setOverrideOngoing(null);
-                return;
-            }
-            try {
-                const token = localStorage.getItem('accessToken') || '';
-                if (!token) return;
-                // Usa uma janela ampla ao redor de "agora" para capturar atendimentos iniciados antes
-                const probeNow = now.getTime();
-                const start = new Date(probeNow - 120 * 60 * 1000); // 2h antes
-                const end = new Date(probeNow + 30 * 60 * 1000); // 30min depois
-                const url = `${API_BASE}/agenda/appointments/?client=${
-                    client.id
-                }&start=${encodeURIComponent(
-                    start.toISOString(),
-                )}&end=${encodeURIComponent(
-                    end.toISOString(),
-                )}&ts=${Date.now()}`;
-                const ac = new AbortController();
-                const r = await fetch(url, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    cache: 'no-store',
-                    signal: ac.signal,
-                });
-                const data = (await r.json()) as Appointment[];
-                if (!cancelled) {
-                    if (!Array.isArray(data) || !data.length) {
-                        setOverrideOngoing(null);
-                    } else {
-                        // Só considera override quando já estiver dentro da janela [start,end)
-                        const nowMs = now.getTime();
-                        const inWin = data.find(ap => {
-                            const s = new Date(ap.start_at).getTime();
-                            const e = new Date(ap.end_at).getTime();
-                            return (
-                                isFinite(s) &&
-                                isFinite(e) &&
-                                s <= nowMs &&
-                                nowMs < e
-                            );
-                        });
-                        setOverrideOngoing(inWin ?? null);
-                    }
-                }
-                return () => ac.abort();
-            } catch {
-                if (!cancelled) setOverrideOngoing(null);
-            }
-        }
-        const cleanup = probeOngoing();
-        return () => {
-            cancelled = true;
-            try {
-                const fn = cleanup as unknown;
-                if (typeof fn === 'function') (fn as () => void)();
-            } catch {
-                /* noop */
-            }
-        };
-    }, [client.id, isScheduled, now, ENABLE_ONGOING_PROBE, sweepByClient]);
-
-    // Latch: mantém estado "em andamento" persistente até finalizar/alterar
+    // startISO / endISO no longer directly used after ongoing refactor
+    // const startISO = client.next_appointment_start_at ?? null;
+    // const endISO = client.next_appointment_end_at ?? null;
     const {
-        latched,
-        setLatched,
-        clear: clearLatch,
-    } = useOngoingLatch(client.id);
+        isOngoing,
+        // isOngoingRaw (raw signal) not needed in card after refactor
+        displayStartISO,
+        displayEndISO,
+        effectiveApptId,
+        afterFinalizeSuccess,
+    } = useClientOngoingState({
+        client,
+        now,
+        enableProbe: ENABLE_ONGOING_PROBE,
+        debug: false,
+    });
 
     // Quando tivermos uma janela confiável e status scheduled, usamos o hook compartilhado
-    const windowFromServer = !!(isScheduled && startISO && endISO);
-    const windowFromOverride = React.useMemo(() => {
-        if (!overrideOngoing) return false;
-        const s = new Date(overrideOngoing.start_at).getTime();
-        const e = new Date(overrideOngoing.end_at).getTime();
-        const t = now.getTime();
-        return isFinite(s) && isFinite(e) && s <= t && t < e;
-    }, [overrideOngoing, now]);
-    const hasTrustedWindow = windowFromServer || windowFromOverride;
-    const trustedStartISO = windowFromServer
-        ? startISO
-        : windowFromOverride
-        ? overrideOngoing?.start_at ?? null
-        : null;
-    const trustedEndISO = windowFromServer
-        ? endISO
-        : windowFromOverride
-        ? overrideOngoing?.end_at ?? null
-        : null;
+    // legacy variables now derived via hook (kept for potential future use) startISO/endISO still used for future fetch logic
 
     // Preferir dados confiáveis do servidor OU da varredura global quando houver janela atual
     // Se houver um agendamento em andamento detectado pela varredura (windowFromOverride),
     // usamos esse horário/ID em prioridade para refletir corretamente o estado "Em andamento".
-    const baseDisplayStartISO = React.useMemo(() => {
-        if (windowFromOverride && overrideOngoing?.start_at)
-            return overrideOngoing.start_at;
-        if (startISO) return startISO;
-        return snapshot?.startAt ?? null;
-    }, [
-        windowFromOverride,
-        overrideOngoing?.start_at,
-        startISO,
-        snapshot?.startAt,
-    ]);
-    const baseDisplayEndISO = React.useMemo(() => {
-        if (windowFromOverride && overrideOngoing?.end_at)
-            return overrideOngoing.end_at;
-        if (endISO) return endISO;
-        return snapshot?.endAt ?? null;
-    }, [windowFromOverride, overrideOngoing?.end_at, endISO, snapshot?.endAt]);
-    const baseEffectiveApptId = React.useMemo(() => {
-        if (windowFromOverride && overrideOngoing?.id)
-            return overrideOngoing.id;
-        if (client.next_appointment_id != null)
-            return client.next_appointment_id;
-        return null;
-    }, [windowFromOverride, overrideOngoing?.id, client.next_appointment_id]);
-    // Preferir latch para exibição/ID se corresponder ao agendamento vigente
-    const effectiveApptId = React.useMemo(() => {
-        if (baseEffectiveApptId != null) return baseEffectiveApptId;
-        return latched?.id ?? null;
-    }, [baseEffectiveApptId, latched?.id]);
-    // Consider latch valid only until a small grace after end
-    const latchedValid = React.useMemo(() => {
-        if (!latched) return false;
-        const endMs = new Date(latched.endAt).getTime();
-        if (!isFinite(endMs)) return false;
-        const nowMs = now.getTime();
-        const GRACE_MS = 90 * 1000; // 90s grace to cover tick skew
-        return nowMs < endMs + GRACE_MS;
-    }, [latched, now]);
-    const displayStartISO = React.useMemo(() => {
-        if (latched && latchedValid && effectiveApptId === latched.id)
-            return latched.startAt;
-        return baseDisplayStartISO;
-    }, [latched, latchedValid, effectiveApptId, baseDisplayStartISO]);
-    const displayEndISO = React.useMemo(() => {
-        if (latched && latchedValid && effectiveApptId === latched.id)
-            return latched.endAt;
-        return baseDisplayEndISO;
-    }, [latched, latchedValid, effectiveApptId, baseDisplayEndISO]);
-    const apptLike = React.useMemo(
-        () => ({
-            start_at: displayStartISO || new Date(0).toISOString(),
-            end_at: displayEndISO || new Date(0).toISOString(),
-            status: 'scheduled' as const,
-        }),
-        [displayStartISO, displayEndISO],
-    );
-    const apptState = useAppointmentCardState(apptLike, now);
-    const isOngoingRaw = React.useMemo(() => {
-        const t = now.getTime();
-        if (suppressOngoingUntil > t) return false;
-        // Prefer latch (mantém visual até finalizar), senão confia na janela/estado compartilhado
-        if (
-            latchedValid &&
-            latched &&
-            (!baseEffectiveApptId || latched.id === effectiveApptId)
-        )
-            return true;
-        return hasTrustedWindow ? apptState.isOngoing : false;
-    }, [
-        hasTrustedWindow,
-        apptState,
-        now,
-        suppressOngoingUntil,
-        latched,
-        latchedValid,
-        baseEffectiveApptId,
-        effectiveApptId,
-    ]);
+    // removed: local derivations now handled by useClientOngoingState
 
     // Auto-clear latch some time after the end to avoid sticky ongoing if finalize didn't fire
-    React.useEffect(() => {
-        if (!latched) return;
-        const endMs = new Date(latched.endAt).getTime();
-        if (!isFinite(endMs)) return;
-        const nowMs = now.getTime();
-        const CLEAR_GRACE_MS = 2 * 60 * 1000; // 2 minutes
-        if (!resumeGrace && nowMs >= endMs + CLEAR_GRACE_MS) {
-            clearLatch();
-            return;
-        }
-        const delay = endMs + CLEAR_GRACE_MS - nowMs;
-        const t = window.setTimeout(() => {
-            try {
-                if (!resumeGrace) clearLatch();
-            } catch {
-                /* noop */
-            }
-        }, Math.max(0, delay));
-        return () => window.clearTimeout(t);
-    }, [latched, now, clearLatch, resumeGrace]);
+    // removed auto-clear effect (handled inside hook)
+
+    // Novo: limpar latch imediatamente se detectarmos que o appointment latched foi finalizado/cancelado, expirado ou janela deixou de ser confiável
+    // removed immediate-clear effect (handled in hook)
 
     // On resume (visibility/pageshow), refresh local latched state from storage in case iOS flushed memory
-    React.useEffect(() => {
-        function refreshFromStorage() {
-            try {
-                const snap = readOngoingLatch(client.id);
-                if (snap) {
-                    setLatched({
-                        id: snap.id,
-                        startAt: snap.startAt,
-                        endAt: snap.endAt,
-                    });
-                }
-            } catch {
-                /* noop */
-            }
-        }
-        const onVisibility = () => refreshFromStorage();
-        const onPageShow = () => refreshFromStorage();
-        document.addEventListener('visibilitychange', onVisibility);
-        window.addEventListener('pageshow', onPageShow as EventListener);
-        return () => {
-            document.removeEventListener('visibilitychange', onVisibility);
-            window.removeEventListener('pageshow', onPageShow as EventListener);
-        };
-    }, [client.id, setLatched]);
+    // removed visibility storage refresh (handled in hook)
 
     // Aplicar histerese visual: aguarda 250ms para entrar em ongoing; saída é imediata
-    const isOngoing = useHysteresisBoolean(isOngoingRaw, {
-        enterDelayMs: 500,
-        exitDelayMs: 0,
-    });
+    // hysteresis now inside hook (isOngoing already stabilized)
+
+    // Instrumentação de diagnóstico opcional: loga decisão de ongoing/latch
+    // removed debug effect (handled via hook's debug option)
 
     // Telemetry: entering ongoing window
-    const prevOngoingRef = React.useRef(false);
-    React.useEffect(() => {
-        if (
-            !prevOngoingRef.current &&
-            isOngoing &&
-            effectiveApptId &&
-            displayStartISO
-        ) {
-            track({
-                type: 'appointment_entered_ongoing',
-                payload: {
-                    id: effectiveApptId,
-                    start_at: displayStartISO,
-                    client_id: client.id,
-                },
-            });
-            // Latch ao entrar em andamento via janela confiável
-            if (hasTrustedWindow && trustedStartISO && trustedEndISO) {
-                setLatched({
-                    id: effectiveApptId,
-                    startAt: trustedStartISO,
-                    endAt: trustedEndISO,
-                });
-            }
-            // Ao entrar em andamento, rolar até o cartão do cliente
-            try {
-                focusClientCard(client.id);
-            } catch {
-                /* noop */
-            }
-        }
-        prevOngoingRef.current = isOngoing;
-    }, [
+    // removed telemetry enter effect (done inside hook)
+
+    // Hook centralizado de pendência
+    const {
+        effectivePending: isPending,
+        openPendingActions,
+        tryOpenPendingElseQuick,
+    } = useClientPendingState({ client, now });
+
+    // Mostrar seção de agenda somente se há algo concreto (agendamento atual ou em andamento) ou futuros carregados.
+    // Estado pendente isolado não exibe cabeçalho/tipo para manter UI minimalista.
+    // Agenda line (tipo / horário) é suprimida se pendente para manter visual minimalista.
+    // Porém queremos ainda exibir a linha 'Data:' com o botão Solucionar mesmo que haja um agendamento (scheduled+pending).
+    const hasAgendaLine =
+        !isPending &&
+        (isScheduled || isOngoing || futureAppointments.length > 0);
+
+    // Ações unificadas (+) para agenda e fallback
+    const createActionAgenda = useClientCreateAction({
         isOngoing,
-        effectiveApptId,
-        displayStartISO,
-        client.id,
-        hasTrustedWindow,
-        trustedStartISO,
-        trustedEndISO,
-        setLatched,
-    ]);
-
-    // Derived pending: when the next appointment from server is scheduled but already ended in the past
-    const isPending = React.useMemo(() => {
-        if (!isScheduled) return false;
-        const sISO = client.next_appointment_start_at;
-        const eISO = client.next_appointment_end_at;
-        if (!sISO || !eISO) return false;
-        const e = new Date(eISO).getTime();
-        return e <= now.getTime();
-    }, [
+        isPending,
+        futureAppointmentsCount: futureAppointments.length,
         isScheduled,
-        client.next_appointment_start_at,
-        client.next_appointment_end_at,
-        now,
-    ]);
-
-    // Helper para abrir o modal de pendência com os dados do próximo compromisso pendente
-    const openPendingActions = React.useCallback(() => {
-        const sISO = client.next_appointment_start_at;
-        const eISO = client.next_appointment_end_at;
-        const id = client.next_appointment_id ?? undefined;
-        if (!sISO || !eISO || !id) {
-            // Fallback: mensagem caso dados estejam inconsistentes
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: {
-                            text: 'Há uma pendência, mas não foi possível carregar os detalhes. Atualize a página.',
-                            type: 'warning',
-                        },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-            return;
-        }
-        const appt: SharedAppointmentLike = {
-            id,
-            title: client.next_appointment_title ?? undefined,
-            start_at: sISO,
-            end_at: eISO,
-            status: 'scheduled',
-            notes: client.next_appointment_notes ?? undefined,
-            client_name: `${client.first_name} ${client.last_name}`.trim(),
-            client: client.id,
-        };
-        try {
-            window.dispatchEvent(
-                new CustomEvent('pendingActions:open', {
-                    detail: { appt },
-                }),
-            );
-        } catch {
-            /* noop */
-        }
-        // Modal global aberto via evento
-    }, [client]);
-
-    // Verifica no servidor se existe ALGUM compromisso agendado que já terminou (pendente)
-    const detectAnyPendingFromServer = React.useCallback(
-        () => findFirstPendingForClient(client.id, now),
-        [client.id, now],
-    );
-
-    // Fluxo: tenta abrir pendência; se não houver, cai para QuickSchedule
-    const tryOpenPendingElseQuick = React.useCallback(async () => {
-        if (isPending) {
-            openPendingActions();
-            return;
-        }
-        const appt = await detectAnyPendingFromServer();
-        if (appt) {
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('pendingActions:open', {
-                        detail: { appt },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-            // Modal global aberto via evento
-            return;
-        }
-        setEditingAppt(null);
-        setShowQuick(true);
-    }, [isPending, openPendingActions, detectAnyPendingFromServer]);
-
-    const hasAgendaLine = isScheduled || isOngoing; // mantém a linha visível durante a janela em andamento
+        dynLimit,
+        openPendingActions,
+        tryOpenPendingElseQuick,
+        setEditing: setEditingAppt,
+        openQuick: () => setShowQuick(true),
+        baseTitle: 'Novo agendamento',
+    });
+    const createActionFallback = useClientCreateAction({
+        isOngoing,
+        isPending,
+        futureAppointmentsCount: futureAppointments.length,
+        isScheduled,
+        dynLimit,
+        openPendingActions,
+        tryOpenPendingElseQuick,
+        setEditing: setEditingAppt,
+        openQuick: () => setShowQuick(true),
+        baseTitle: 'Agendar',
+    });
     // Estilos centralizados via hook: mantém regra de cartão branco durante atendimento
     const {
         containerStyle,
@@ -505,7 +204,13 @@ export default function ClientCard({
         valueColor,
         separatorColor,
         separatorOpacity,
-    } = useClientCardStyle({ isOngoing, selected, pressed, isScheduled });
+    } = useClientCardStyle({
+        isOngoing,
+        selected,
+        pressed,
+        isScheduled,
+        isPending,
+    });
     const cardRef = React.useRef<HTMLDivElement | null>(null);
 
     // Align with global forceClose: ensure any ClientCard modal closes too
@@ -518,34 +223,16 @@ export default function ClientCard({
         const ok = await finalize(apptId, {
             preferEarly: isOngoing,
             openPendingAfter: async () => {
-                const appt = await detectAnyPendingFromServer();
-                if (appt) {
-                    try {
-                        window.dispatchEvent(
-                            new CustomEvent('pendingActions:open', {
-                                detail: { appt },
-                            }),
-                        );
-                    } catch {
-                        /* noop */
-                    }
-                    // Modal global aberto via evento
-                }
+                await tryOpenPendingElseQuick(() => {});
             },
         });
-        if (ok) {
-            // Otimismo local: remove override e suprime estilo ongoing por alguns segundos
-            setOverrideOngoing(null);
-            clearLatch();
-            setSuppressOngoingUntil(now.getTime() + 8000);
-        }
+        if (ok) afterFinalizeSuccess();
     }, [
         effectiveApptId,
         isOngoing,
         finalize,
-        detectAnyPendingFromServer,
-        now,
-        clearLatch,
+        tryOpenPendingElseQuick,
+        afterFinalizeSuccess,
     ]);
     // Fechar modo edição ao clicar fora do card
     // Efeito de clique fora removido enquanto editor inline está desativado
@@ -574,7 +261,6 @@ export default function ClientCard({
                 Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
             );
             const ratio = overlapTop / rect.height;
-            // Se menos de 70% visível ou topo muito acima (< -32) ou bottom cortado > 32px, ajusta
             const needsScroll =
                 ratio < 0.7 || rect.top < 8 || rect.bottom > vh - 8;
             if (needsScroll) {
@@ -630,97 +316,18 @@ export default function ClientCard({
             window.removeEventListener('touchstart', cancelByUser);
             window.removeEventListener('wheel', cancelByUser);
         };
-    }, [client.id, onSelect]);
-
-    React.useEffect(() => {
-        if (!isScheduled) {
-            setFutureAppointments([]);
-            return;
-        }
-        function fetchFuture() {
-            const token = localStorage.getItem('accessToken');
-            if (!token) return;
-            const startRef = client.next_appointment_start_at;
-            if (!startRef) return;
-            setLoadingFuture(true);
-            const dynLimit = getMaxScheduledPerClient();
-            const overfetchLimit = dynLimit + 5;
-            const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
-                startRef,
-            )}&limit=${overfetchLimit}&ordering=start_at&client=${client.id}`;
-            fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-                .then(r => (r.ok ? r.json() : []))
-                .then((data: Appointment[]) => {
-                    const list = (Array.isArray(data) ? data : [])
-                        .filter(a => a.status === 'scheduled')
-                        .filter(a => a.id !== client.next_appointment_id);
-                    const total = (isScheduled ? 1 : 0) + list.length;
-                    if (total > dynLimit) {
-                        try {
-                            window.dispatchEvent(
-                                new CustomEvent('systemMessage', {
-                                    detail: {
-                                        text: `Excedido limite de ${dynLimit} compromissos (total atual: ${total}). Ajuste/cancelamento necessário.`,
-                                        type: 'warning',
-                                    },
-                                }),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                    }
-                    setFutureAppointments(list);
-                })
-                .catch(() => setFutureAppointments([]))
-                .finally(() => setLoadingFuture(false));
-        }
-        fetchFuture();
-        const listener = () => {
-            // Mudanças de compromissos: limpar overrides e suprimir estilo se estava em andamento
-            setOverrideOngoing(null);
-            clearLatch();
-            fetchFuture();
-        };
-        window.addEventListener(
-            'appointments:changed',
-            listener as EventListener,
-        );
-        return () => {
-            window.removeEventListener(
-                'appointments:changed',
-                listener as EventListener,
-            );
-        };
     }, [
         client.id,
+        onSelect,
+        futureAppointments.length,
+        isOngoing,
         isScheduled,
-        client.next_appointment_start_at,
-        client.next_appointment_id,
-        clearLatch,
     ]);
 
+    // Inline effect de futuros removido (substituído pelo hook)
+
     // Clear ongoing visual immediately when a targeted event is dispatched (same-tab UX)
-    React.useEffect(() => {
-        function onClearOngoing(e: Event) {
-            const ce = e as CustomEvent<{ clientId?: number }>;
-            const cid = ce?.detail?.clientId;
-            if (cid && cid === client.id) {
-                setOverrideOngoing(null);
-                clearLatch();
-                setSuppressOngoingUntil(Date.now() + 5000);
-            }
-        }
-        window.addEventListener(
-            'client:clearOngoing',
-            onClearOngoing as EventListener,
-        );
-        return () => {
-            window.removeEventListener(
-                'client:clearOngoing',
-                onClearOngoing as EventListener,
-            );
-        };
-    }, [client.id, clearLatch]);
+    // Clear ongoing event handling moved to hook; listener removed
 
     const cardClassNames = [styles.card, selected ? styles.cardSelected : '']
         .filter(Boolean)
@@ -758,16 +365,81 @@ export default function ClientCard({
                         {client.first_name} {client.last_name}
                     </span>
                 </div>
-                <button
-                    className={styles.iconButton}
-                    title='Visualizar detalhes'
-                    onClick={e => {
-                        e.stopPropagation();
-                        onView(client);
-                    }}
-                >
-                    <FaEye color={iconColor} />
-                </button>
+                <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                        className={styles.iconButton}
+                        title='Editar cliente'
+                        onClick={e => {
+                            e.stopPropagation();
+                            const token = localStorage.getItem('accessToken');
+                            if (!token) {
+                                onView(client);
+                                return;
+                            }
+                            openClientForm({ id: client.id });
+                        }}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 32,
+                            height: 32,
+                        }}
+                    >
+                        <FaEdit color={iconColor} />
+                    </button>
+                    <button
+                        className={styles.iconButton}
+                        title='Visualizar detalhes'
+                        onClick={e => {
+                            e.stopPropagation();
+                            onView(client);
+                        }}
+                        style={{
+                            // Se houver foto, remove padding extra para encaixar círculo
+                            padding: client.photo ? 0 : undefined,
+                            borderRadius: client.photo ? '50%' : undefined,
+                            width: client.photo ? 40 : undefined,
+                            height: client.photo ? 40 : undefined,
+                            overflow: client.photo ? 'hidden' : undefined,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: client.photo
+                                ? 'var(--color-surface-strong)'
+                                : undefined,
+                            boxShadow: client.photo
+                                ? '0 0 0 1px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.12)'
+                                : undefined,
+                        }}
+                    >
+                        {client.photo ? (
+                            <img
+                                src={client.photo}
+                                alt={`Foto de ${client.first_name} ${client.last_name}`}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    display: 'block',
+                                }}
+                                loading='lazy'
+                                decoding='async'
+                                onError={ev => {
+                                    try {
+                                        (
+                                            ev.currentTarget as HTMLImageElement
+                                        ).style.display = 'none';
+                                    } catch {
+                                        /* noop */
+                                    }
+                                }}
+                            />
+                        ) : (
+                            <FaEye color={iconColor} />
+                        )}
+                    </button>
+                </div>
             </div>
             {ageYears !== null && (
                 <div className={styles.infoRow}>
@@ -878,108 +550,71 @@ export default function ClientCard({
             {/* Agenda section below E-mail. Exibe durante agendamento OU enquanto em andamento (hasAgendaLine). */}
             {hasAgendaLine && (
                 <>
-                    <div className={styles.infoRow}>
-                        <span
-                            className={styles.label}
-                            style={{ color: labelColor, fontWeight: 'bold' }}
-                        >
-                            Agenda (tipo):
-                        </span>
-                        <span
-                            className={styles.value}
-                            style={{ color: valueColor }}
-                        >
-                            {client.next_appointment_title || 'Consulta'}
-                        </span>
-                        {(() => {
-                            const dynLimit = getMaxScheduledPerClient();
-                            const totalScheduled =
-                                (isScheduled ? 1 : 0) +
-                                futureAppointments.length;
-                            const limitReached = totalScheduled >= dynLimit;
-                            const title = isPending
-                                ? 'Há um compromisso pendente. Finalize antes de criar outro.'
-                                : isOngoing
-                                ? 'Em andamento: finalize para criar um novo.'
-                                : limitReached
-                                ? `Limite de ${dynLimit} compromissos (atual: ${totalScheduled})`
-                                : 'Novo agendamento';
-                            return (
-                                <button
-                                    className={styles.iconButton}
-                                    title={title}
-                                    disabled={limitReached || isOngoing}
-                                    style={
-                                        limitReached || isOngoing
-                                            ? {
-                                                  opacity: 0.45,
-                                                  cursor: 'not-allowed',
-                                              }
-                                            : undefined
-                                    }
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        if (isOngoing) {
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'systemMessage',
-                                                        {
-                                                            detail: {
-                                                                text: 'Finalize o atendimento em andamento antes de criar outro.',
-                                                                type: 'warning',
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
-                                            return;
+                    {(isScheduled ||
+                        isOngoing ||
+                        futureAppointments.length > 0) && (
+                        <div className={styles.infoRow}>
+                            <span
+                                className={styles.label}
+                                style={{
+                                    color: labelColor,
+                                    fontWeight: 'bold',
+                                }}
+                            >
+                                Agenda (tipo):
+                            </span>
+                            <span
+                                className={styles.value}
+                                style={{ color: valueColor }}
+                            >
+                                {client.next_appointment_title || 'Consulta'}
+                            </span>
+                            {isPending ? (
+                                <SolveButton
+                                    onSolve={async () => {
+                                        try {
+                                            onSelect?.();
+                                        } catch {
+                                            /* noop */
                                         }
-                                        if (isPending) {
-                                            openPendingActions();
-                                            return;
-                                        }
-                                        if (limitReached) {
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'systemMessage',
-                                                        {
-                                                            detail: {
-                                                                text: `Limite de ${dynLimit} compromissos atingido (total: ${totalScheduled})`,
-                                                                type: 'warning',
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
-                                            return;
-                                        }
-                                        // Verifica no servidor se há pendência; se não houver, abre QuickSchedule
-                                        (async () => {
-                                            await tryOpenPendingElseQuick();
-                                        })();
+                                        // Usa mesma lógica do minicard daily: tenta abrir pendente ou fallback rápido
+                                        await tryOpenPendingElseQuick(() => {
+                                            // Se não houver nada pendente inesperadamente, apenas não faz nada (ou poderíamos abrir criação)
+                                        });
                                     }}
-                                >
-                                    <FaPlus color={iconColor} />
-                                </button>
-                            );
-                        })()}
-                        <button
-                            className={styles.iconButton}
-                            title='Agenda mensal'
-                            onClick={e => {
-                                e.stopPropagation();
-                                setShowMonthly(true);
-                            }}
-                        >
-                            <FaCalendarAlt color={iconColor} />
-                        </button>
-                    </div>
+                                />
+                            ) : (
+                                <>
+                                    <button
+                                        className={styles.iconButton}
+                                        title={createActionAgenda.title}
+                                        disabled={createActionAgenda.disabled}
+                                        style={
+                                            createActionAgenda.disabled
+                                                ? {
+                                                      opacity: 0.45,
+                                                      cursor: 'not-allowed',
+                                                  }
+                                                : undefined
+                                        }
+                                        onClick={createActionAgenda.onClick}
+                                    >
+                                        <FaPlus color={iconColor} />
+                                    </button>
+                                    <button
+                                        className={styles.iconButton}
+                                        title='Agenda mensal'
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            setShowMonthly(true);
+                                        }}
+                                    >
+                                        <FaCalendarAlt color={iconColor} />
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
                     <div className={styles.infoRow}>
                         <span
                             className={styles.label}
@@ -989,10 +624,9 @@ export default function ClientCard({
                         </span>
                         <span
                             className={styles.value}
-                            style={{ color: labelColor }}
+                            style={{ color: labelColor, fontWeight: 'bold' }}
                         >
                             {(() => {
-                                // Usar sempre displayStartISO/displayEndISO se presentes (integram latch/overrides)
                                 const sIso =
                                     displayStartISO ||
                                     client.next_appointment_start_at ||
@@ -1017,14 +651,9 @@ export default function ClientCard({
                                     2,
                                     '0',
                                 );
-                                const fmt = (d: Date) =>
-                                    d.toLocaleTimeString('pt-BR', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    });
-                                return `${wd} ${dd}/${mm}, ${fmt(s)} - ${fmt(
-                                    e,
-                                )}`;
+                                const fs = formatTime(sIso);
+                                const fe = formatTime(eIso);
+                                return `${wd} ${dd}/${mm}, ${fs} - ${fe}`;
                             })()}
                         </span>
                         {client.next_appointment_id && !isOngoing && (
@@ -1060,41 +689,55 @@ export default function ClientCard({
                             </button>
                         )}
                     </div>
+                    {(isScheduled || isOngoing) &&
+                        client.next_appointment_notes?.trim() && (
+                            <div
+                                className={styles.infoRow}
+                                style={{ paddingTop: 2 }}
+                            >
+                                <span
+                                    className={styles.value}
+                                    style={{
+                                        color: valueColor,
+                                        fontSize: 13,
+                                        lineHeight: 1.35,
+                                        whiteSpace: 'pre-wrap',
+                                        overflowWrap: 'anywhere',
+                                    }}
+                                >
+                                    <span className={styles.notesText}>
+                                        {client.next_appointment_notes.trim()}
+                                    </span>
+                                </span>
+                            </div>
+                        )}
                     {isOngoing && (
                         <div
                             className={styles.infoRow}
-                            style={{ paddingTop: 0 }}
+                            style={{ paddingTop: 2 }}
                         >
-                            <span
+                            <div
                                 style={{
-                                    background: 'var(--color-ongoing)',
-                                    color: '#fff',
-                                    borderRadius: 6,
-                                    padding: '2px 8px',
-                                    fontWeight: 700,
-                                    fontSize: 12,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    gap: 12,
                                 }}
                             >
-                                Em andamento
-                            </span>
-                        </div>
-                    )}
-                    {/* Linha de ações: abaixo da Data */}
-                    <div className={styles.infoRow} style={{ gap: 8 }}>
-                        <span
-                            className={styles.label}
-                            style={{ color: labelColor, fontWeight: 'bold' }}
-                        >
-                            Ações:
-                        </span>
-                        <div
-                            style={{
-                                display: 'flex',
-                                gap: 8,
-                                flexWrap: 'wrap',
-                            }}
-                        >
-                            {isOngoing && (
+                                <span
+                                    style={{
+                                        background: 'var(--color-ongoing)',
+                                        color: '#fff',
+                                        borderRadius: 6,
+                                        padding: '2px 8px',
+                                        fontWeight: 700,
+                                        fontSize: 12,
+                                        lineHeight: 1.2,
+                                    }}
+                                >
+                                    Em andamento
+                                </span>
                                 <FinalizeButton
                                     finishing={finishing}
                                     disabled={!effectiveApptId}
@@ -1103,51 +746,22 @@ export default function ClientCard({
                                     appointmentId={effectiveApptId}
                                     onFinalize={finalizeEarlyAware}
                                 />
-                            )}
-                            {/* Botão 'Editar' removido: editar agora via ícone na linha de Data */}
+                            </div>
                         </div>
-                    </div>
-                    <div
-                        className={styles.infoRow}
-                        style={{ cursor: 'default' }}
-                    >
-                        <div
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                flex: 1,
-                            }}
-                        >
-                            <span
-                                className={styles.label}
-                                style={{
-                                    color: labelColor,
-                                    fontWeight: 'bold',
-                                    marginBottom: 4,
-                                }}
-                            >
-                                Observações:
-                            </span>
-                            <span
-                                className={styles.value}
-                                style={{ color: valueColor }}
-                            >
-                                {client.next_appointment_notes?.trim() ? (
-                                    <span className={styles.notesText}>
-                                        {client.next_appointment_notes.trim()}
-                                    </span>
-                                ) : (
-                                    '—'
-                                )}
-                            </span>
-                        </div>
-                    </div>
+                    )}
                 </>
             )}
 
             {/* Fallback bloco removido: Data agora unificada acima usando displayStartISO/displayEndISO */}
 
-            {!isScheduled && !isOngoing && (
+            {/* Bloco 'Sem agendamento' apenas quando não há agendamento, não está em andamento e NÃO está pendente (evita duplicação). */}
+            {/* A linha 'Data:' funciona como fallback geral quando NÃO mostramos a linha de agenda acima.
+                Mostramos também quando está pendente (mesmo se scheduled) para expor o botão Solucionar em posição consistente.
+                Regras:
+                  - Se há agenda line (hasAgendaLine) => já mostramos horário; evitamos duplicar exceto caso pendente.
+                  - Caso pendente e scheduled: hasAgendaLine é false (porque !isPending exigido), então esta linha aparece.
+            */}
+            {(!hasAgendaLine || isPending) && !isOngoing && (
                 <div className={styles.infoRow}>
                     <span
                         className={styles.label}
@@ -1159,77 +773,55 @@ export default function ClientCard({
                         className={styles.value}
                         style={{ color: valueColor }}
                     >
-                        Sem agendamento
+                        {isPending
+                            ? 'Compromisso pendente'
+                            : isScheduled
+                            ? 'Agendado'
+                            : 'Sem agendamento'}
                     </span>
-                    {(() => {
-                        const dynLimit = getMaxScheduledPerClient();
-                        const totalScheduled =
-                            (isScheduled ? 1 : 0) + futureAppointments.length;
-                        const limitReached = totalScheduled >= dynLimit;
-                        const title = isPending
-                            ? 'Há um compromisso pendente. Finalize antes de criar outro.'
-                            : limitReached
-                            ? `Limite de ${dynLimit} compromissos (atual: ${totalScheduled})`
-                            : 'Agendar';
-                        return (
-                            <>
-                                <button
-                                    className={styles.iconButton}
-                                    title={title}
-                                    disabled={limitReached}
-                                    style={
-                                        limitReached
-                                            ? {
-                                                  opacity: 0.45,
-                                                  cursor: 'not-allowed',
-                                              }
-                                            : undefined
-                                    }
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        if (isPending) {
-                                            openPendingActions();
-                                            return;
-                                        }
-                                        if (limitReached) {
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'systemMessage',
-                                                        {
-                                                            detail: {
-                                                                text: `Limite de ${dynLimit} compromissos atingido (total: ${totalScheduled})`,
-                                                                type: 'warning',
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
-                                            return;
-                                        }
-                                        // Verifica no servidor se há pendência; se não houver, abre QuickSchedule
-                                        (async () => {
-                                            await tryOpenPendingElseQuick();
-                                        })();
-                                    }}
-                                >
-                                    <FaPlus color={iconColor} />
-                                </button>
-                                <button
-                                    className={styles.iconButton}
-                                    title='Agenda mensal'
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        setShowMonthly(true);
-                                    }}
-                                >
-                                    <FaCalendarAlt color={iconColor} />
-                                </button>
-                            </>
-                        );
-                    })()}
+                    {isPending ? (
+                        <SolveButton
+                            onSolve={async () => {
+                                try {
+                                    onSelect?.();
+                                } catch {
+                                    /* noop */
+                                }
+                                await tryOpenPendingElseQuick(() => {
+                                    /* noop fallback */
+                                });
+                            }}
+                        />
+                    ) : (
+                        <>
+                            <button
+                                className={styles.iconButton}
+                                title={createActionFallback.title}
+                                disabled={createActionFallback.disabled}
+                                style={
+                                    createActionFallback.disabled
+                                        ? {
+                                              opacity: 0.45,
+                                              cursor: 'not-allowed',
+                                          }
+                                        : undefined
+                                }
+                                onClick={createActionFallback.onClick}
+                            >
+                                <FaPlus color={iconColor} />
+                            </button>
+                            <button
+                                className={styles.iconButton}
+                                title='Agenda mensal'
+                                onClick={e => {
+                                    e.stopPropagation();
+                                    setShowMonthly(true);
+                                }}
+                            >
+                                <FaCalendarAlt color={iconColor} />
+                            </button>
+                        </>
+                    )}
                 </div>
             )}
 
