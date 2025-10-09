@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import ClientCard from '../ClientCard';
 import type { ClientBasic } from '../../types/ClientBasic';
 
@@ -12,6 +12,19 @@ vi.mock('../../utils/focusClientCard', () => ({
 // Simplified mock for hook dependencies that might rely on timers/network
 vi.mock('../../hooks/useFinalizeAppointment', () => ({
     useFinalizeAppointment: () => ({ finishing: false, finalize: vi.fn() }),
+}));
+// Mock fetch de pendência para cenário com janela futura
+vi.mock('../../services/pending', () => ({
+    findFirstPendingForClient: vi.fn(async () => ({
+        id: 555,
+        start_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+        end_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+        status: 'scheduled',
+        title: 'Sessão passada correta',
+        notes: 'Notas',
+        client: 1,
+        client_name: 'Maria Silva',
+    })),
 }));
 vi.mock('../../hooks/useOngoingSnapshot', () => ({
     useOngoingSnapshot: () => ({ snapshot: null }),
@@ -67,8 +80,9 @@ describe('ClientCard pending state', () => {
         };
     }
 
-    it('exibe texto "Compromisso pendente" na linha Data (fallback) e + abre pendingActions (sem scheduled atual)', () => {
-        const client = makeClient(); // status 'none' + janela encerrada => heurística pendente isolado
+    it('exibe bloco de pendência compacto (Status + texto) sem ícones de agendar quando pendente isolado', async () => {
+        vi.useFakeTimers();
+        const client = makeClient();
         const onView = vi.fn();
         const listener = vi.fn();
         window.addEventListener(
@@ -76,21 +90,25 @@ describe('ClientCard pending state', () => {
             listener as EventListener,
         );
         render(<ClientCard client={client} onView={onView} />);
-
-        // Texto na linha Data
+        await act(async () => {
+            vi.advanceTimersByTime(200); // surpass hysteresis 140ms
+        });
+        // Use synchronous query after flushing timers to avoid waitFor with fake timers
         const pendingText = screen.getByText('Compromisso pendente');
         expect(pendingText).toBeInTheDocument();
-
-        // Botão + com título de resolver pendência
-        const plus = screen.getAllByTitle(
-            /Resolver pendência deste cliente/i,
-        )[0] as HTMLButtonElement;
-        expect(plus.disabled).toBe(false);
-        fireEvent.click(plus);
+        // Não deve haver botão + ou calendário enquanto pendente
+        expect(
+            screen.queryByTitle(/Novo agendamento|Agenda mensal/i),
+        ).toBeNull();
+        // Usa createAction fallback internamente: título para resolver pendência NÃO aparece como botão +
+        // Acionamos a resolução via SolveButton (que não tem title específico; buscamos por role button contendo texto 'Solucionar' se houver)
+        const solveBtn = screen.getByTitle('Resolver pendência');
+        fireEvent.click(solveBtn);
         expect(listener).toHaveBeenCalledOnce();
     });
 
-    it('detecta pendência via flag has_pending_appointment mesmo com compromisso futuro (fallback isolado ausente, então força uso da flag => ajustar para não scheduled)', () => {
+    it('exibe bloco de pendência mesmo com compromisso futuro (flag has_pending_appointment) e sem ícones de agendar', async () => {
+        vi.useFakeTimers();
         const futureStart = new Date(Date.now() + 60 * 60 * 1000);
         const futureEnd = new Date(Date.now() + 90 * 60 * 1000);
         const client = makeClient({
@@ -98,6 +116,7 @@ describe('ClientCard pending state', () => {
             next_appointment_end_at: futureEnd.toISOString(),
             // Mantemos status null para forçar linha fallback; flag garante effectivePending
             next_appointment_status: null,
+            next_appointment_id: 999,
             // @ts-expect-error forward-compatible test field (campo ainda não tipado)
             has_pending_appointment: true,
         });
@@ -107,21 +126,34 @@ describe('ClientCard pending state', () => {
             listener as EventListener,
         );
         render(<ClientCard client={client} onView={() => {}} />);
+        await act(async () => {
+            vi.advanceTimersByTime(200);
+        });
         const pendingText = screen.getByText('Compromisso pendente');
         expect(pendingText).toBeInTheDocument();
-        const plus = screen.getAllByTitle(
-            /Resolver pendência deste cliente/i,
-        )[0];
-        fireEvent.click(plus);
-        expect(listener).toHaveBeenCalledOnce();
+        expect(
+            screen.queryByTitle(/Novo agendamento|Agenda mensal/i),
+        ).toBeNull();
+        const solveBtn = screen.getByTitle('Resolver pendência');
+        await act(async () => {
+            fireEvent.click(solveBtn);
+            // Avança timers para permitir fetch mock assíncrono e dispatch
+            vi.advanceTimersByTime(10);
+        });
+        expect(listener).toHaveBeenCalled();
     });
 
-    it('não mostra "Compromisso pendente" quando ainda há próximo agendamento scheduled (texto fallback suprimido)', () => {
+    it('não mostra bloco de pendência quando scheduled e não está pendente', () => {
         const client = makeClient({
             next_appointment_status: 'scheduled',
+            next_appointment_start_at: new Date(
+                Date.now() + 30 * 60 * 1000,
+            ).toISOString(),
+            next_appointment_end_at: new Date(
+                Date.now() + 60 * 60 * 1000,
+            ).toISOString(),
         });
         render(<ClientCard client={client} onView={() => {}} />);
-        // A linha fallback de Data não deve aparecer, portanto o texto não é encontrado
         expect(screen.queryByText('Compromisso pendente')).toBeNull();
     });
     // Botão específico de resolver foi removido; a ação agora está no +

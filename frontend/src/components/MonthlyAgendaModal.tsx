@@ -8,7 +8,9 @@ import {
 import type { ClientBasic } from '../types/ClientBasic';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import ClientCardRow from './shared/ClientCardRow';
-import PendingActionsModal from './PendingActionsModal';
+// PendingActionsModal é global (Home)
+import StickyModalHeader from './shared/StickyModalHeader';
+import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -25,32 +27,25 @@ function endOfMonth(d: Date) {
 function toISODate(d: Date) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 function parseISODateLocal(iso: string) {
-    const [y, m, d] = iso.split('-').map(n => parseInt(n, 10));
+    const [y, m, d] = iso.split('-').map(Number);
     return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
 }
 
-function groupByDay(items: Appointment[]) {
-    const map: Record<string, Appointment[]> = {};
-    for (const a of items) {
-        const key = toISODate(new Date(a.start_at));
-        if (!map[key]) map[key] = [];
-        map[key].push(a);
-    }
-    for (const k of Object.keys(map)) {
-        map[k].sort(
-            (a, b) =>
-                new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
-        );
-    }
-    return map;
-}
-
 type StatusFilter = 'all' | 'active' | 'ongoing' | 'past' | 'done' | 'canceled';
+
+function groupByDay(items: Appointment[]) {
+    const out: Record<string, Appointment[]> = {};
+    for (const a of items) {
+        const day = toISODate(new Date(a.start_at));
+        (out[day] ||= []).push(a);
+    }
+    return out;
+}
 
 export default function MonthlyAgendaModal({
     open,
@@ -67,10 +62,10 @@ export default function MonthlyAgendaModal({
     const [month, setMonth] = React.useState<Date>(() =>
         startOfMonth(initialMonth ? new Date(initialMonth) : new Date()),
     );
-    const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
+    const [statusFilter] = React.useState<StatusFilter>('all');
+    // dayFilter agora é interno (UI removida). Mantemos para possível scroll focado.
     const [dayFilter, setDayFilter] = React.useState<'all' | string>('all');
     const [reloadKey, setReloadKey] = React.useState(0);
-    // Limit rendering for heavy clients (many appointments/days)
     const [visibleDaysCount, setVisibleDaysCount] = React.useState<number>(14);
 
     const monthStart = React.useMemo(() => startOfMonth(month), [month]);
@@ -82,10 +77,9 @@ export default function MonthlyAgendaModal({
         reloadKey,
     );
 
-    const [pendingOpen, setPendingOpen] = React.useState(false);
-    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    // PendingActions é global — sem estado local
+
+    // Removido listener local — Home coordena
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
@@ -123,7 +117,6 @@ export default function MonthlyAgendaModal({
         [filteredItems],
     );
 
-    // All calendar days for the current month (for the day dropdown)
     const allMonthDays = React.useMemo(() => {
         const days: string[] = [];
         const d = new Date(monthStart);
@@ -136,22 +129,17 @@ export default function MonthlyAgendaModal({
 
     React.useEffect(() => {
         if (!open) return;
-        // Ao abrir: sempre mostrar "Todos os dias" por padrão
         setDayFilter('all');
     }, [open]);
 
     React.useEffect(() => {
         if (!open) return;
-        // Ao trocar de mês, se um dia específico estiver selecionado e for inválido no novo mês,
-        // voltamos para 'all'.  Caso contrário, preservamos a escolha do usuário.
         if (dayFilter !== 'all' && !allMonthDays.includes(dayFilter)) {
             setDayFilter('all');
         }
     }, [month, allMonthDays, open, dayFilter]);
 
-    // Reload when external appointment changes happen
     React.useEffect(() => {
-        // Debounce external refresh events to avoid rapid re-renders (helps mobile stability)
         let t: number | undefined;
         const onChanged = () => {
             if (t) window.clearTimeout(t);
@@ -171,15 +159,13 @@ export default function MonthlyAgendaModal({
     const y = month.getFullYear();
     const monthValue = `${y}-${String(month.getMonth() + 1).padStart(2, '0')}`;
 
-    // Compute which days to render based on filter and virtualization
     const sortedDays = React.useMemo(
         () => Object.keys(groupedFiltered).sort(),
         [groupedFiltered],
     );
-    // Heuristic: reduce initial visible days for very heavy lists
+
     React.useEffect(() => {
         if (!open) return;
-        // If many appointments in this month, start smaller to improve iOS performance
         const total = items.length;
         if (total > 400) setVisibleDaysCount(5);
         else if (total > 250) setVisibleDaysCount(8);
@@ -199,6 +185,170 @@ export default function MonthlyAgendaModal({
             fullScreen
             disableTopSafePadding
         >
+            <StickyModalHeader
+                title={`Agenda mensal — ${client.first_name} ${client.last_name}`}
+                onClose={onClose}
+            >
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 16,
+                        flexWrap: 'wrap',
+                    }}
+                >
+                    <button
+                        onClick={() => {
+                            const now = new Date();
+                            setMonth(startOfMonth(now));
+                            setDayFilter(toISODate(now));
+                            // Scroll até o dia de hoje se listado (após frame)
+                            requestAnimationFrame(() => {
+                                const id = toISODate(now);
+                                const el = document.querySelector(
+                                    `[data-day="${id}"]`,
+                                );
+                                if (el) el.scrollIntoView({ block: 'start' });
+                            });
+                        }}
+                        style={{
+                            fontSize: 'var(--font-body)',
+                            fontWeight: 700,
+                            padding: '4px 10px',
+                            border: '1px solid var(--color-success-darker)',
+                            background: 'var(--color-success-dark)',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            color: 'white',
+                        }}
+                        aria-label='Ir para hoje'
+                    >
+                        Hoje
+                    </button>
+                    <button
+                        type='button'
+                        onClick={() =>
+                            document
+                                .getElementById('hiddenMonthPicker')
+                                ?.click()
+                        }
+                        title='Abrir calendário'
+                        aria-label='Abrir calendário'
+                        style={{
+                            width: 32,
+                            height: 32,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-success-dark)',
+                            fontSize: 'var(--icon-size-lg)',
+                            userSelect: 'none',
+                        }}
+                    >
+                        <FaCalendarAlt />
+                    </button>
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                        }}
+                    >
+                        <button
+                            onClick={() => {
+                                const d = new Date(month);
+                                d.setMonth(d.getMonth() - 1);
+                                setMonth(d);
+                            }}
+                            title='Mês anterior'
+                            aria-label='Mês anterior'
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-success-dark)',
+                                width: 36,
+                                height: 36,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 'var(--icon-size-lg)',
+                            }}
+                        >
+                            <FaArrowLeft />
+                        </button>
+                        <button
+                            onClick={() =>
+                                document
+                                    .getElementById('hiddenMonthPicker')
+                                    ?.click()
+                            }
+                            title={`Selecionar mês — ${client.first_name} ${client.last_name}`}
+                            aria-label='Selecionar mês'
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-success-dark)',
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                                userSelect: 'none',
+                            }}
+                        >
+                            {mName.charAt(0).toUpperCase() + mName.slice(1)} {y}
+                        </button>
+                        <button
+                            onClick={() => {
+                                const d = new Date(month);
+                                d.setMonth(d.getMonth() + 1);
+                                setMonth(d);
+                            }}
+                            title='Próximo mês'
+                            aria-label='Próximo mês'
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-success-dark)',
+                                width: 36,
+                                height: 36,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 'var(--icon-size-lg)',
+                            }}
+                        >
+                            <FaArrowRight />
+                        </button>
+                    </div>
+                </div>
+                <input
+                    id='hiddenMonthPicker'
+                    type='month'
+                    value={monthValue}
+                    onChange={e => {
+                        const [yy, mm] = e.target.value.split('-').map(Number);
+                        const d = new Date(month);
+                        d.setFullYear(yy);
+                        d.setMonth((mm || 1) - 1);
+                        d.setDate(1);
+                        setMonth(d);
+                    }}
+                    style={{
+                        position: 'absolute',
+                        opacity: 0,
+                        width: 0,
+                        height: 0,
+                        pointerEvents: 'none',
+                    }}
+                    aria-hidden='true'
+                    tabIndex={-1}
+                />
+            </StickyModalHeader>
+
             <div
                 style={{
                     display: 'grid',
@@ -211,325 +361,6 @@ export default function MonthlyAgendaModal({
                     boxSizing: 'border-box',
                 }}
             >
-                <div
-                    style={{
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 900,
-                        background: 'var(--color-bg)',
-                        borderBottom: '1px solid var(--color-border)',
-                        paddingTop: 'env(safe-area-inset-top, 0px)',
-                    }}
-                >
-                    <div style={{ display: 'grid', gap: 12, paddingBottom: 8 }}>
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                                minWidth: 0,
-                            }}
-                        >
-                            <div
-                                style={{
-                                    fontWeight: 800,
-                                    fontSize:
-                                        'clamp(18px, 4.6vw, var(--font-title-lg))',
-                                    color: 'var(--color-heading)',
-                                    // Truncation for long names
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                    minWidth: 0,
-                                    flex: '1 1 auto',
-                                }}
-                                aria-label='Título: Agenda mensal por cliente'
-                            >
-                                {`Agenda — ${client.first_name} ${client.last_name}`}
-                            </div>
-                            <button
-                                type='button'
-                                aria-label='Fechar'
-                                onClick={onClose}
-                                style={{
-                                    width: 44,
-                                    height: 44,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    color: 'var(--color-heading)',
-                                    fontSize: 26,
-                                }}
-                            >
-                                ×
-                            </button>
-                        </div>
-                        {/* Nome do cliente agora está incorporado ao título acima */}
-
-                        {/* Linha de data (segunda linha): Dia (esquerda) + Navegação de mês/ano (direita) */}
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                                minWidth: 0,
-                            }}
-                        >
-                            <div>
-                                <select
-                                    value={dayFilter}
-                                    onChange={e =>
-                                        setDayFilter(
-                                            e.target.value as 'all' | string,
-                                        )
-                                    }
-                                    style={{
-                                        padding: '8px 10px',
-                                        background: 'var(--color-pending-bg)',
-                                        border: '1px solid var(--color-border)',
-                                        borderRadius: 6,
-                                        color: 'var(--color-text)',
-                                        fontWeight: 500,
-                                        width: 'auto',
-                                    }}
-                                    aria-label='Filtro de dia'
-                                    title='Escolha um dia do mês'
-                                >
-                                    <option value='all'>Todos os dias</option>
-                                    {allMonthDays.map(dISO => {
-                                        const d = parseISODateLocal(dISO);
-                                        const label = d.toLocaleDateString(
-                                            'pt-BR',
-                                            {
-                                                weekday: 'short',
-                                                day: '2-digit',
-                                                month: '2-digit',
-                                            },
-                                        );
-                                        return (
-                                            <option key={dISO} value={dISO}>
-                                                {label}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                            </div>
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'flex-end',
-                                    gap: 6,
-                                    minWidth: 0,
-                                    flex: 1,
-                                }}
-                            >
-                                <button
-                                    aria-label='Mês anterior'
-                                    onClick={() => {
-                                        const d = new Date(month);
-                                        d.setMonth(d.getMonth() - 1);
-                                        setMonth(d);
-                                    }}
-                                    style={{
-                                        width: 30,
-                                        height: 30,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        borderRadius: 6,
-                                        cursor: 'pointer',
-                                        color: 'var(--color-success-dark)',
-                                        fontSize: 'var(--icon-size-lg)',
-                                        userSelect: 'none',
-                                    }}
-                                >
-                                    ◀
-                                </button>
-                                <button
-                                    onClick={() =>
-                                        document
-                                            .getElementById('hiddenMonthPicker')
-                                            ?.click()
-                                    }
-                                    style={{
-                                        padding: '2px 6px',
-                                        textAlign: 'center',
-                                        fontWeight: 800,
-                                        color: 'var(--color-success-dark)',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        maxWidth: '100%',
-                                        fontSize: 'var(--font-body)',
-                                    }}
-                                    title='Selecionar mês'
-                                >
-                                    {mName.charAt(0).toUpperCase() +
-                                        mName.slice(1)}{' '}
-                                    {y}
-                                </button>
-                                <input
-                                    id='hiddenMonthPicker'
-                                    type='month'
-                                    value={monthValue}
-                                    onChange={e => {
-                                        const [yy, mm] = e.target.value
-                                            .split('-')
-                                            .map(Number);
-                                        const d = new Date(month);
-                                        d.setFullYear(yy);
-                                        d.setMonth((mm || 1) - 1);
-                                        d.setDate(1);
-                                        setMonth(d);
-                                    }}
-                                    style={{
-                                        position: 'absolute',
-                                        opacity: 0,
-                                        width: 0,
-                                        height: 0,
-                                        pointerEvents: 'none',
-                                    }}
-                                    aria-hidden='true'
-                                    tabIndex={-1}
-                                />
-                                <button
-                                    aria-label='Próximo mês'
-                                    onClick={() => {
-                                        const d = new Date(month);
-                                        d.setMonth(d.getMonth() + 1);
-                                        setMonth(d);
-                                    }}
-                                    style={{
-                                        width: 30,
-                                        height: 30,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        borderRadius: 6,
-                                        cursor: 'pointer',
-                                        color: 'var(--color-success-dark)',
-                                        fontSize: 'var(--icon-size-lg)',
-                                        userSelect: 'none',
-                                    }}
-                                >
-                                    ▶
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Linha de status (terceira linha): botão Hoje à esquerda e Status à direita */}
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                                flexWrap: 'wrap',
-                            }}
-                        >
-                            <div>
-                                <button
-                                    onClick={() => {
-                                        const now = new Date();
-                                        const targetMonth = startOfMonth(now);
-                                        // Ir para o mês atual, se necessário
-                                        if (
-                                            targetMonth.getFullYear() !==
-                                                month.getFullYear() ||
-                                            targetMonth.getMonth() !==
-                                                month.getMonth()
-                                        ) {
-                                            setMonth(targetMonth);
-                                        }
-                                        // Selecionar o dia de hoje
-                                        setDayFilter(toISODate(now));
-                                    }}
-                                    style={{
-                                        padding: '8px 10px',
-                                        background:
-                                            'var(--color-primary-bg, var(--color-pending-bg))',
-                                        border: '1px solid var(--color-border)',
-                                        borderRadius: 6,
-                                        color: 'var(--color-text)',
-                                        fontWeight: 600,
-                                    }}
-                                    aria-label='Ir para hoje'
-                                >
-                                    Hoje
-                                </button>
-                            </div>
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                }}
-                            >
-                                <label
-                                    htmlFor='statusFilterSelect'
-                                    style={{
-                                        fontSize: 'var(--font-body)',
-                                        color: 'var(--color-heading)',
-                                        fontWeight: 600,
-                                    }}
-                                >
-                                    Status:
-                                </label>
-                                <div>
-                                    <select
-                                        id='statusFilterSelect'
-                                        value={statusFilter}
-                                        onChange={e =>
-                                            setStatusFilter(
-                                                e.target.value as StatusFilter,
-                                            )
-                                        }
-                                        style={{
-                                            fontSize: 'var(--font-body)',
-                                            padding: '8px 10px',
-                                            background:
-                                                'var(--color-pending-bg)',
-                                            border: '1px solid var(--color-border)',
-                                            borderRadius: 6,
-                                            color: 'var(--color-text)',
-                                            fontWeight: 500,
-                                            minWidth: 120,
-                                            maxWidth: 180,
-                                            width: 'auto',
-                                        }}
-                                        aria-label='Filtro de status'
-                                    >
-                                        <option value='all'>Todos</option>
-                                        <option value='active'>Ativos</option>
-                                        <option value='ongoing'>
-                                            Em andamento
-                                        </option>
-                                        <option value='past'>Pendentes</option>
-                                        <option value='done'>Concluídos</option>
-                                        <option value='canceled'>
-                                            Cancelados
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 {loading ? (
                     <div>Carregando…</div>
                 ) : items.length === 0 ? (
@@ -549,6 +380,7 @@ export default function MonthlyAgendaModal({
                             return (
                                 <div
                                     key={dayISO}
+                                    data-day={dayISO}
                                     style={{ display: 'grid', gap: 8 }}
                                 >
                                     <div
@@ -582,7 +414,11 @@ export default function MonthlyAgendaModal({
                                                 style={{
                                                     minWidth: 0,
                                                     width: '100%',
-                                                    willChange: 'transform',
+                                                    // Evita flicker por reflow quando hover ou pill aparece
+                                                    willChange: 'auto',
+                                                    // Reserva espaço horizontal para pill + nome
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
                                                 }}
                                             >
                                                 <ClientCardRow
@@ -591,16 +427,95 @@ export default function MonthlyAgendaModal({
                                                     timeOrder='start-top'
                                                     style={{
                                                         padding: '6px 8px',
+                                                        // Garante que nome + pill não quebrem em layout estreito
+                                                        minWidth: 0,
                                                     }}
                                                     onClick={
                                                         isPending
                                                             ? () => {
-                                                                  setPendingAppt(
-                                                                      a as Appointment,
-                                                                  );
-                                                                  setPendingOpen(
-                                                                      true,
-                                                                  );
+                                                                  try {
+                                                                      const x =
+                                                                          a as Appointment;
+                                                                      const anyAppt =
+                                                                          x as unknown as Record<
+                                                                              string,
+                                                                              unknown
+                                                                          >;
+                                                                      const clientName =
+                                                                          (():
+                                                                              | string
+                                                                              | undefined => {
+                                                                              if (
+                                                                                  typeof anyAppt.client_name ===
+                                                                                  'string'
+                                                                              )
+                                                                                  return anyAppt.client_name as string;
+                                                                              const c =
+                                                                                  anyAppt.client as unknown;
+                                                                              if (
+                                                                                  c &&
+                                                                                  typeof c ===
+                                                                                      'object' &&
+                                                                                  'name' in
+                                                                                      (c as Record<
+                                                                                          string,
+                                                                                          unknown
+                                                                                      >)
+                                                                              ) {
+                                                                                  const n =
+                                                                                      (
+                                                                                          c as {
+                                                                                              name?: unknown;
+                                                                                          }
+                                                                                      )
+                                                                                          .name;
+                                                                                  if (
+                                                                                      typeof n ===
+                                                                                      'string'
+                                                                                  )
+                                                                                      return n;
+                                                                              }
+                                                                              return undefined;
+                                                                          })();
+                                                                      const clientField =
+                                                                          ((): unknown => {
+                                                                              const c =
+                                                                                  anyAppt.client as unknown;
+                                                                              if (
+                                                                                  typeof c ===
+                                                                                      'number' ||
+                                                                                  typeof c ===
+                                                                                      'object'
+                                                                              )
+                                                                                  return c;
+                                                                              return undefined;
+                                                                          })();
+                                                                      const payload =
+                                                                          {
+                                                                              id: x.id,
+                                                                              start_at:
+                                                                                  x.start_at,
+                                                                              end_at: x.end_at,
+                                                                              status: x.status,
+                                                                              notes: x.notes,
+                                                                              client_name:
+                                                                                  clientName,
+                                                                              client: clientField,
+                                                                              title: x.title,
+                                                                          } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
+                                                                      window.dispatchEvent(
+                                                                          new CustomEvent(
+                                                                              'pendingActions:open',
+                                                                              {
+                                                                                  detail: {
+                                                                                      appt: payload,
+                                                                                  },
+                                                                              },
+                                                                          ),
+                                                                      );
+                                                                  } catch {
+                                                                      /* noop */
+                                                                  }
                                                               }
                                                             : undefined
                                                     }
@@ -616,6 +531,10 @@ export default function MonthlyAgendaModal({
                                                               }
                                                             : undefined
                                                     }
+                                                    cardContainerStyle={{
+                                                        // Evita que o stripe + conteúdo comprimam o closed pill
+                                                        minWidth: 0,
+                                                    }}
                                                 />
                                             </div>
                                         );
@@ -650,17 +569,7 @@ export default function MonthlyAgendaModal({
                     </div>
                 )}
 
-                {pendingOpen && pendingAppt && (
-                    <PendingActionsModal
-                        open={pendingOpen}
-                        onClose={() => {
-                            setPendingOpen(false);
-                            setPendingAppt(null);
-                            setReloadKey(x => x + 1);
-                        }}
-                        appt={pendingAppt}
-                    />
-                )}
+                {/* PendingActionsModal é global (Home) */}
                 {detailsOpen && detailsAppt && (
                     <AppointmentDetailsModal
                         open={detailsOpen}

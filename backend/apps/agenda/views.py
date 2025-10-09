@@ -100,7 +100,13 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         if obj.status == Appointment.Status.CANCELED:
             return Response({"detail": "já cancelado"}, status=200)
         obj.status = Appointment.Status.CANCELED
-        obj.save(update_fields=["status", "updated_at"])
+        from django.utils import timezone as _tz
+        if not getattr(obj, "canceled_at", None):
+            obj.canceled_at = _tz.now()
+            update_fields = ["status", "canceled_at", "updated_at"]
+        else:
+            update_fields = ["status", "updated_at"]
+        obj.save(update_fields=update_fields)
         return Response(self.get_serializer(obj).data, status=200)
 
     @action(detail=False, methods=["post"], url_path="purge")
@@ -188,6 +194,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             adjusted = True
             if obj.start_at and obj.end_at <= obj.start_at:
                 obj.end_at = obj.start_at
+        # Definir finalized_at uma única vez (idempotente)
+        if not getattr(obj, "finalized_at", None):
+            obj.finalized_at = now
         # Gravar device que finalizou (opcional)
         try:
             if dev_id:
@@ -200,9 +209,16 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
                 obj.ended_device_info = (dev_info or "")[:4000]
-            obj.save(update_fields=["status", "end_at", "ended_device_id", "ended_device_info", "updated_at"])
+            obj.save(update_fields=[
+                "status",
+                "end_at",
+                "finalized_at",
+                "ended_device_id",
+                "ended_device_info",
+                "updated_at",
+            ])
         except Exception:
-            obj.save(update_fields=["status", "end_at", "updated_at"])
+            obj.save(update_fields=["status", "end_at", "finalized_at", "updated_at"])
 
         # Registrar auditoria
         try:

@@ -67,8 +67,13 @@ export function useClients() {
                 debounceRef.current = null;
             }, 160);
         };
+        let lastLog = 0;
         const handleUpdateClients = () => {
-            console.log('Evento updateClients recebido!');
+            const now = Date.now();
+            if (now - lastLog > 500) {
+                console.log('Evento updateClients recebido!');
+                lastLog = now;
+            }
             scheduleFetch();
         };
         // Handler para atualizar clientes ao focar na janela

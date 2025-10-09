@@ -9,7 +9,8 @@ interface TimePicker10Props {
     disabled?: boolean;
     style?: React.CSSProperties;
     // Novo: passo dos minutos (5,10,15,20,30) e limites precisos HH:MM
-    stepMinutes?: 5 | 10 | 15 | 20 | 30;
+    // Allow 1-minute granularity when needed (flex mode)
+    stepMinutes?: 1 | 5 | 10 | 15 | 20 | 30;
     minHM?: string; // 'HH:MM' mínimo permitido (prioritário sobre minHour)
     maxHM?: string; // 'HH:MM' máximo permitido (prioritário sobre maxHour)
 }
@@ -76,7 +77,9 @@ export const TimePicker10: React.FC<TimePicker10Props> = ({
     // Gera opções de minuto com step configurável
     const baseMinutes = React.useMemo(() => {
         const opts: string[] = [];
-        for (let m = 0; m < 60; m += stepMinutes) {
+        // If stepMinutes is 1, show full 0-59 range
+        const step = !stepMinutes || stepMinutes < 1 ? 1 : stepMinutes;
+        for (let m = 0; m < 60; m += step) {
             opts.push(String(m).padStart(2, '0'));
         }
         return opts;

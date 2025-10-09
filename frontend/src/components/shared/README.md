@@ -45,6 +45,32 @@ Single source of truth for the mini card visuals and behavior.
     -   `size='sm'` applies local overrides to `--card-*-size` variables,
         reducing typography without affecting layout.
 
+### Early finalize e `original_end_at`
+
+Quando um agendamento é finalizado antes do horário previsto, o backend (ou um
+PATCH de ajuste) pode encurtar o `end_at` para o horário real de fechamento. Sem
+tratamento extra isso impede detectar que houve encerramento antecipado, pois
+`end_at` deixa de representar o término planejado.
+
+Para preservar a semântica:
+
+1. O primeiro override que sinaliza estado final (`done` ou `canceled`) pode
+   incluir `original_end_at`.
+2. Se um override subsequente alterar `end_at` e ainda não existir
+   `original_end_at`, armazenamos o valor anterior automaticamente em
+   `overrides.ts`.
+3. O `AppointmentCard` usa `original_end_at` (quando disponível) para:
+    - Comparar `real_closed_at` vs término planejado (com margem de 30s) e
+      decidir se exibe o pill “Finalizado às HH:MM”.
+    - Renderizar a faixa de horário (TimeRangeLabel) com o término ORIGINAL
+      mesmo após encurtamento.
+
+Resultado: o usuário vê a janela planejada intacta e, adicionalmente, a hora
+real de finalização quando o atendimento terminou antes do previsto.
+
+Se no futuro precisarmos exibir também cancelamentos com lógica similar, basta
+reutilizar `original_end_at` e ajustar a condicional do pill.
+
 ## ClientCardRow
 
 High-level row wrapper combining the time block on the left and the

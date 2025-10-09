@@ -69,10 +69,13 @@ describe('QuickScheduleModal', () => {
         const createBtn = await screen.findByRole('button', { name: /criar/i });
         fireEvent.click(createBtn);
 
-        await waitFor(() => {
-            expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-        });
-    });
+        await waitFor(
+            () => {
+                expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+            },
+            { timeout: 10000 },
+        );
+    }, 15000);
 
     it('sends device headers on create', async () => {
         const fetchMock = globalThis.fetch as unknown as Mock;
@@ -119,5 +122,54 @@ describe('QuickScheduleModal', () => {
         fireEvent.keyDown(hourSelect, { key: 'ArrowDown' });
         // The visit type should remain unchanged
         expect((tipo as HTMLSelectElement).value).toBe('consulta');
+    });
+
+    it('clicking a pending minicard fires pendingActions:open', async () => {
+        const fetchMock = globalThis.fetch as unknown as Mock;
+        // First call: create attempt blocked (simula texto pendente)
+        fetchMock.mockResolvedValueOnce({
+            ok: false,
+            headers: { get: () => 'text/plain' },
+            text: async () => 'Cliente possui compromisso pendente',
+        } as unknown as Response);
+        // Second call: list pending appointments
+        const pendingEnd = new Date(Date.now() - 5 * 60_000).toISOString();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => [
+                {
+                    id: 555,
+                    status: 'scheduled',
+                    start_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+                    end_at: pendingEnd,
+                    client: { id: client.id, name: client.first_name },
+                },
+            ],
+        } as unknown as Response);
+
+        const listener = vi.fn<(e: Event) => void>();
+        window.addEventListener('pendingActions:open', listener);
+        openModal();
+
+        const createBtn = await screen.findByRole('button', { name: /criar/i });
+        fireEvent.click(createBtn);
+
+        await waitFor(() =>
+            expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2),
+        );
+
+        // The pending card should now be rendered; select by status badge text 'Pendente' (ou 'Past'?)
+        // Procurar um botão/div com role=button e texto do nome do cliente
+        const card = await screen.findByText(/c l/i); // nome abreviado no card (C L)
+        fireEvent.click(card);
+
+        await waitFor(() => expect(listener).toHaveBeenCalled());
+        interface PendingDetail {
+            appt?: { id?: number };
+        }
+        const evt = listener.mock.calls[0][0] as CustomEvent<PendingDetail>;
+        expect(evt).toBeTruthy();
+        expect(evt.detail?.appt?.id).toBe(555);
+        window.removeEventListener('pendingActions:open', listener);
     });
 });

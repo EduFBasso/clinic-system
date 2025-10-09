@@ -63,6 +63,20 @@ class Appointment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Timestamp real de conclusão (finalize) e de cancelamento
+    # Mantidos separados para permitir auditoria distinta: quando finalizou vs quando cancelou.
+    # Ambos opcionais; somente definidos na primeira ocorrência para preservar histórico.
+    finalized_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Momento em que o compromisso foi marcado como concluído (primeira vez).",
+    )
+    canceled_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Momento em que o compromisso foi cancelado (primeira vez).",
+    )
+
     # Dispositivo que criou e que finalizou (opcional)
     created_device_id = models.CharField(
         max_length=64, blank=True, null=True, help_text="Identificador do dispositivo que criou o compromisso"
@@ -80,6 +94,8 @@ class Appointment(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["created_device_id"]),
             models.Index(fields=["ended_device_id"]),
+            models.Index(fields=["finalized_at"]),
+            models.Index(fields=["canceled_at"]),
         ]
         ordering = ["start_at"]
 

@@ -1,8 +1,7 @@
 import React from 'react';
-import {
-    finalizeWithFallback,
-    optionsFinalizeSupported,
-} from '../services/appointments';
+import { optionsFinalizeSupported } from '../services/appointments';
+import { finalizeFlow } from '../services/flows/finalizeFlow';
+import { dispatchers } from '../events/dispatchers';
 import { clearOngoingSnapshot } from './useOngoingSnapshot';
 import { track } from '../utils/telemetry';
 import { setAppointmentOverride } from '../utils/appointments/overrides';
@@ -36,7 +35,8 @@ export function useFinalizeAppointment(clientId: number) {
                         /* noop */
                     }
                 }
-                const ok = await finalizeWithFallback(appointmentId);
+                const res = await finalizeFlow(appointmentId);
+                const ok = res.ok;
                 if (!ok) throw new Error('Não foi possível finalizar.');
 
                 // Optimistically mark as done immediately to avoid transient 'ongoing' visuals
@@ -46,15 +46,18 @@ export function useFinalizeAppointment(clientId: number) {
                     /* noop */
                 }
 
+                // Só mostra mensagem de finalização se não for abrir o fluxo de pendências em seguida
                 try {
-                    window.dispatchEvent(
-                        new CustomEvent('systemMessage', {
-                            detail: {
-                                text: 'Atendimento finalizado',
-                                type: 'success',
-                            },
-                        }),
-                    );
+                    if (!openPendingAfter) {
+                        window.dispatchEvent(
+                            new CustomEvent('systemMessage', {
+                                detail: {
+                                    text: 'Atendimento finalizado',
+                                    type: 'success',
+                                },
+                            }),
+                        );
+                    }
                 } catch {
                     /* noop */
                 }
@@ -67,7 +70,7 @@ export function useFinalizeAppointment(clientId: number) {
                 try {
                     clearOngoingSnapshot(clientId);
                     window.dispatchEvent(new Event('appointments:changed'));
-                    window.dispatchEvent(new Event('updateClients'));
+                    dispatchers.updateClients();
                     // Clear ongoing latch for this client immediately in this tab
                     try {
                         window.dispatchEvent(

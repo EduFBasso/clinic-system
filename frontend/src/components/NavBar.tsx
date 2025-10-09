@@ -13,6 +13,7 @@ import AboutModal from './AboutModal';
 import { useSessionsSummary } from '../hooks/useSessions';
 import SessionExpiredModal from './SessionExpiredModal';
 import { API_BASE } from '../config/api';
+import { openClientForm } from '../utils/openClientForm';
 import { getOrCreateDeviceId } from '../utils/device';
 type VerifyResponse = {
     access?: string;
@@ -26,6 +27,7 @@ import { useProfessionals } from '../hooks/useProfessionals';
 import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
 import AgendaSettingsModal from './AgendaSettingsModal';
+// formatTime removido: não exibimos mais relógio no header
 import AppModal from './Modal';
 import '../styles/modal-message.css';
 import { isTokenExpired } from '../utils/jwt';
@@ -128,17 +130,12 @@ const NavBar: React.FC<NavBarProps> = ({
             setSessionExpiredOpen(true);
             return;
         }
-        if (isMobileDevice()) {
-            window.location.href = '/clients/new';
-        } else if (openNewClientModal) {
+        if (openNewClientModal && isMobileDevice()) {
+            // Caso específico: se houver modal especial mobile
             openNewClientModal();
-        } else {
-            window.open(
-                '/clients/new',
-                '_blank',
-                'width=900,height=700,toolbar=no,menubar=no,location=no',
-            );
+            return;
         }
+        openClientForm({});
     }
 
     // Handler para editar cliente (integração futura)
@@ -146,19 +143,11 @@ const NavBar: React.FC<NavBarProps> = ({
 
     function handleEditClient() {
         setDropdownOpen(false);
-        if (selectedClientId) {
-            if (isMobileDevice()) {
-                window.location.href = `/clients/edit/${selectedClientId}`;
-            } else {
-                window.open(
-                    `/clients/edit/${selectedClientId}`,
-                    '_blank',
-                    'width=900,height=700,toolbar=no,menubar=no,location=no',
-                );
-            }
-        } else {
+        if (!selectedClientId) {
             alert('Selecione um cliente antes de editar.');
+            return;
         }
+        openClientForm({ id: selectedClientId });
     }
 
     // Helpers Agenda
@@ -458,6 +447,7 @@ const NavBar: React.FC<NavBarProps> = ({
                 {loggedProfessional ? (
                     <div className={styles.loggedInfo}>
                         <div className={styles.proNameBlock}>
+                            {/* Relógio removido por decisão de produto */}
                             <span className={styles.nameLine}>
                                 Dr(a) {loggedProfessional.first_name}{' '}
                                 {loggedProfessional.last_name}
@@ -753,6 +743,7 @@ const NavBar: React.FC<NavBarProps> = ({
                     }
                     setModalOpen(false);
                 }}
+                unmountOnClose
             >
                 <div className='modal-message'>
                     <h3>{modalMessage}</h3>

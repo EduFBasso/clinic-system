@@ -24,9 +24,17 @@ export function usePendingGuard({
 }: UsePendingGuardArgs) {
     const [found, setFound] = React.useState<PendingLike | null>(null);
     const [done, setDone] = React.useState<boolean>(!!isEdit);
+    const isMountedRef = React.useRef(true);
+    React.useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
     const refresh = React.useCallback(() => {
         let cancelled = false;
-        if (!open || isEdit) {
+        // Avoid scheduling work in non-DOM contexts or when not open
+        if (typeof window === 'undefined' || !open || isEdit) {
             setDone(true);
             setFound(null);
             return () => {};
@@ -34,7 +42,7 @@ export function usePendingGuard({
         (async () => {
             try {
                 const res = await findFirstPendingForClient(clientId, getNow());
-                if (!cancelled) {
+                if (!cancelled && isMountedRef.current) {
                     if (!res) setFound(null);
                     else
                         setFound({
@@ -50,9 +58,9 @@ export function usePendingGuard({
                         });
                 }
             } catch {
-                if (!cancelled) setFound(null);
+                if (!cancelled && isMountedRef.current) setFound(null);
             } finally {
-                if (!cancelled) setDone(true);
+                if (!cancelled && isMountedRef.current) setDone(true);
             }
         })();
         return () => {

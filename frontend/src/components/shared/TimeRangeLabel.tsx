@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatTime } from '../../utils/timeFormat';
 
 interface TimeRangeLabelProps {
     start: Date | string;
@@ -12,11 +13,9 @@ interface TimeRangeLabelProps {
     style?: React.CSSProperties;
 }
 
+// Centraliza formatação via formatTime (modo local por padrão)
 function fmt(d: Date) {
-    return d.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
+    return formatTime(d, { mode: 'local' });
 }
 
 export const TimeRangeLabel: React.FC<TimeRangeLabelProps> = ({

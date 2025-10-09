@@ -32,4 +32,5 @@ export interface ClientData {
     deformities_right: string;
     sensitivity_test: string;
     other_procedures: string;
+    photo?: string | null; // URL da foto existente (somente leitura na edição)
 }

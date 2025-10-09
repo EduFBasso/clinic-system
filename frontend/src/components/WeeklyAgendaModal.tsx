@@ -1,11 +1,12 @@
 import React from 'react';
+import { useStickyHeaderHeight } from '../hooks/useStickyHeaderHeight';
 import AppModal from './Modal';
+import StickyModalHeader from './shared/StickyModalHeader';
 import FloatingDatePicker from './FloatingDatePicker';
 import DateControlsHeader from './shared/DateControlsHeader';
 // AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
 import ClientCardRow from './shared/ClientCardRow';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
-import PendingActionsModal from './PendingActionsModal';
 import {
     useAppointmentsRange,
     type Appointment,
@@ -85,7 +86,7 @@ export default function WeeklyAgendaModal({
         [anchorDate],
     );
     const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
-    const [reloadKey, setReloadKey] = React.useState(0);
+    const [reloadKey] = React.useState(0);
     const { items, loading, error } = useAppointmentsRange(
         weekStart,
         weekEnd,
@@ -182,18 +183,9 @@ export default function WeeklyAgendaModal({
     // Scroll to selected column when it changes
     const scrollerRef = React.useRef<HTMLDivElement | null>(null);
     const colRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
-    const headerRef = React.useRef<HTMLDivElement | null>(null);
-    const [scrollMarginTopPx, setScrollMarginTopPx] =
-        React.useState<number>(96);
-    React.useLayoutEffect(() => {
-        function measure() {
-            const h = headerRef.current?.offsetHeight ?? 0;
-            setScrollMarginTopPx(h + 6);
-        }
-        measure();
-        window.addEventListener('resize', measure);
-        return () => window.removeEventListener('resize', measure);
-    }, []);
+    // Altura do header sticky via hook reutilizável
+    const { ref: headerRef, height: headerHeight } = useStickyHeaderHeight();
+    const scrollMarginTopPx = headerHeight + 6;
     const scrollSelectedIntoView = React.useCallback(() => {
         const el = colRefs.current[selectedDayISO];
         if (!el) return;
@@ -289,17 +281,17 @@ export default function WeeklyAgendaModal({
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
-    const [pendingOpen, setPendingOpen] = React.useState(false);
-    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    // PendingActions é global — nenhum estado local necessário
 
-    const weekLabel = React.useMemo(() => {
+    // Título constante "Agenda Semanal" e label dinâmico (intervalo) para o seletor entre setas.
+    const headerTitle = 'Agenda Semanal';
+    const weekRangeLabel = React.useMemo(() => {
         const first = days[0];
         const last = days[6];
+        if (!first || !last) return '';
         const sameMonth = first.getMonth() === last.getMonth();
         const monthShort = (d: Date) =>
-            d.toLocaleDateString('pt-BR', { month: 'short' }); // mantém o ponto: "set.", "out."
+            d.toLocaleDateString('pt-BR', { month: 'short' });
         const d2 = (d: Date) =>
             d.toLocaleDateString('pt-BR', { day: '2-digit' });
         return sameMonth
@@ -324,132 +316,103 @@ export default function WeeklyAgendaModal({
             showCloseButton={false}
         >
             <div style={{ display: 'grid', gap: 16, height: '100%' }}>
-                {/* Sticky header with title + inline close button */}
-                <div
-                    ref={headerRef}
-                    style={{
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 900,
-                        background: 'var(--color-bg)',
-                        borderBottom: 'none',
-                        paddingTop: 'env(safe-area-inset-top, 0px)',
-                    }}
+                <StickyModalHeader
+                    ref={headerRef as React.Ref<HTMLDivElement>}
+                    title={headerTitle}
+                    onClose={onClose}
+                    style={{ borderBottom: 'none' }}
                 >
                     <div
-                        style={{ display: 'grid', gap: 12, paddingBottom: 8 }}
-                    />
-                </div>
-
-                {/* Header controls (shared) */}
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto',
-                        alignItems: 'center',
-                        gap: 8,
-                    }}
-                >
-                    <DateControlsHeader
-                        currentDate={weekStart}
-                        label={weekLabel}
-                        onPrev={() => setAnchorDate(addDays(weekStart, -7))}
-                        onNext={() => setAnchorDate(addDays(weekStart, 7))}
-                        onToday={() => {
-                            const today = startOfDay(new Date());
-                            setSelected(toISODate(today), 'user');
-                            setAnchorDate(today);
-                        }}
-                        onOpenPicker={openDatePicker}
-                    />
-                    <button
-                        type='button'
-                        aria-label='Fechar'
-                        onClick={onClose}
                         style={{
-                            width: 44,
-                            height: 44,
-                            display: 'inline-flex',
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            background: 'transparent',
-                            border: 'none',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            color: 'var(--color-heading)',
-                            fontSize: 26,
+                            gap: 8,
                         }}
                     >
-                        ×
-                    </button>
-                </div>
-
-                {/* Weekday selector strip */}
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                        gap: 6,
-                    }}
-                >
-                    {days.map(d => {
-                        const iso = toISODate(d);
-                        const selected = iso === selectedDayISO;
-                        const weekday = d
-                            .toLocaleDateString('pt-BR', { weekday: 'short' })
-                            .replace('.', '');
-                        const dayNum = d
-                            .toLocaleDateString('pt-BR', { day: '2-digit' })
-                            .replace('.', '');
-                        return (
-                            <button
-                                key={iso}
-                                onClick={() => setSelected(iso, 'user')}
-                                style={{
-                                    padding: '8px 6px',
-                                    border: 'none',
-                                    borderRadius: 0,
-                                    background: 'transparent',
-                                    color: 'var(--color-text)',
-                                    fontWeight: 600,
-                                    textTransform: 'capitalize',
-                                }}
-                                aria-pressed={selected}
-                            >
-                                <div
+                        <DateControlsHeader
+                            currentDate={anchorDate}
+                            label={weekRangeLabel}
+                            onPrev={() => setAnchorDate(addDays(weekStart, -7))}
+                            onNext={() => setAnchorDate(addDays(weekStart, 7))}
+                            onToday={() => {
+                                const today = startOfDay(new Date());
+                                setSelected(toISODate(today), 'user');
+                                setAnchorDate(today);
+                            }}
+                            onOpenPicker={openDatePicker}
+                        />
+                    </div>
+                    {/* Weekday selector strip agora dentro do header para ficar fixo */}
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                            gap: 6,
+                            paddingTop: 4,
+                        }}
+                    >
+                        {days.map(d => {
+                            const iso = toISODate(d);
+                            const selected = iso === selectedDayISO;
+                            const weekday = d
+                                .toLocaleDateString('pt-BR', {
+                                    weekday: 'short',
+                                })
+                                .replace('.', '');
+                            const dayNum = d
+                                .toLocaleDateString('pt-BR', { day: '2-digit' })
+                                .replace('.', '');
+                            return (
+                                <button
+                                    key={iso}
+                                    onClick={() => setSelected(iso, 'user')}
                                     style={{
-                                        display: 'grid',
-                                        justifyItems: 'center',
-                                        gap: 2,
+                                        padding: '8px 6px',
+                                        border: 'none',
+                                        borderRadius: 0,
+                                        background: 'transparent',
+                                        color: 'var(--color-text)',
+                                        fontWeight: 600,
+                                        textTransform: 'capitalize',
                                     }}
+                                    aria-pressed={selected}
                                 >
                                     <div
                                         style={{
-                                            fontSize: '0.8rem',
-                                            color: 'var(--color-disabled)',
+                                            display: 'grid',
+                                            justifyItems: 'center',
+                                            gap: 2,
                                         }}
                                     >
-                                        {weekday}
+                                        <div
+                                            style={{
+                                                fontSize: '0.8rem',
+                                                color: 'var(--color-disabled)',
+                                            }}
+                                        >
+                                            {weekday}
+                                        </div>
+                                        <div
+                                            style={{
+                                                fontSize: '1rem',
+                                                fontWeight: 800,
+                                                paddingBottom: 2,
+                                                borderBottom: selected
+                                                    ? '3px solid var(--color-heading)'
+                                                    : '3px solid transparent',
+                                                minWidth: 20,
+                                                textAlign: 'center',
+                                            }}
+                                        >
+                                            {dayNum}
+                                        </div>
                                     </div>
-                                    <div
-                                        style={{
-                                            fontSize: '1rem',
-                                            fontWeight: 800,
-                                            paddingBottom: 2,
-                                            borderBottom: selected
-                                                ? '3px solid var(--color-heading)'
-                                                : '3px solid transparent',
-                                            minWidth: 20,
-                                            textAlign: 'center',
-                                        }}
-                                    >
-                                        {dayNum}
-                                    </div>
-                                </div>
-                            </button>
-                        );
-                    })}
-                </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </StickyModalHeader>
 
                 {/* Error state (surface hook error to user) */}
                 {error && (
@@ -544,11 +507,88 @@ export default function WeeklyAgendaModal({
                                                         setSelected(iso, 'user')
                                                     }
                                                     onResolvePending={appt => {
-                                                        setDetailsOpen(false);
-                                                        setPendingAppt(
-                                                            appt as Appointment,
-                                                        );
-                                                        setPendingOpen(true);
+                                                        try {
+                                                            const a =
+                                                                appt as Appointment;
+                                                            const anyAppt =
+                                                                a as unknown as Record<
+                                                                    string,
+                                                                    unknown
+                                                                >;
+                                                            const clientName =
+                                                                (():
+                                                                    | string
+                                                                    | undefined => {
+                                                                    if (
+                                                                        typeof anyAppt.client_name ===
+                                                                        'string'
+                                                                    )
+                                                                        return anyAppt.client_name as string;
+                                                                    const c =
+                                                                        anyAppt.client as unknown;
+                                                                    if (
+                                                                        c &&
+                                                                        typeof c ===
+                                                                            'object' &&
+                                                                        'name' in
+                                                                            (c as Record<
+                                                                                string,
+                                                                                unknown
+                                                                            >)
+                                                                    ) {
+                                                                        const n =
+                                                                            (
+                                                                                c as {
+                                                                                    name?: unknown;
+                                                                                }
+                                                                            )
+                                                                                .name;
+                                                                        if (
+                                                                            typeof n ===
+                                                                            'string'
+                                                                        )
+                                                                            return n;
+                                                                    }
+                                                                    return undefined;
+                                                                })();
+                                                            const clientField =
+                                                                ((): unknown => {
+                                                                    const c =
+                                                                        anyAppt.client as unknown;
+                                                                    if (
+                                                                        typeof c ===
+                                                                            'number' ||
+                                                                        typeof c ===
+                                                                            'object'
+                                                                    )
+                                                                        return c;
+                                                                    return undefined;
+                                                                })();
+                                                            const payload = {
+                                                                id: a.id,
+                                                                start_at:
+                                                                    a.start_at,
+                                                                end_at: a.end_at,
+                                                                status: a.status,
+                                                                notes: a.notes,
+                                                                client_name:
+                                                                    clientName,
+                                                                client: clientField,
+                                                                title: a.title,
+                                                            } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
+                                                            window.dispatchEvent(
+                                                                new CustomEvent(
+                                                                    'pendingActions:open',
+                                                                    {
+                                                                        detail: {
+                                                                            appt: payload,
+                                                                        },
+                                                                    },
+                                                                ),
+                                                            );
+                                                        } catch {
+                                                            /* noop */
+                                                        }
                                                     }}
                                                     onDetails={
                                                         a.status === 'done'
@@ -595,17 +635,7 @@ export default function WeeklyAgendaModal({
                         appt={detailsAppt}
                     />
                 )}
-                {pendingOpen && pendingAppt && (
-                    <PendingActionsModal
-                        open={pendingOpen}
-                        onClose={() => {
-                            setPendingOpen(false);
-                            setPendingAppt(null);
-                            setReloadKey(x => x + 1);
-                        }}
-                        appt={pendingAppt}
-                    />
-                )}
+                {/* PendingActionsModal é global (Home) */}
             </div>
         </AppModal>
     );

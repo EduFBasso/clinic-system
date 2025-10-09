@@ -8,7 +8,7 @@ import DateControlsHeader from './shared/DateControlsHeader';
 import QuickScheduleDayList, {
     type DayFilter,
 } from './quickschedule/QuickScheduleDayList';
-import PendingActionsModal from './PendingActionsModal';
+// PendingActionsModal é global (Home)
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import ensureDeviceSession from '../services/sessions';
 import type { ClientBasic } from '../types/ClientBasic';
@@ -113,6 +113,7 @@ export default function QuickScheduleModal({
     const [showPicker, setShowPicker] = React.useState(false);
     const listRef = React.useRef<HTMLDivElement | null>(null);
     const workTimes = getWorkTimes();
+    // Removed: flexible minute mode (minuto livre) — simplificação: sempre respeita intervalo configurado
 
     // Day range for list
     const dayStart = React.useMemo(() => {
@@ -157,10 +158,9 @@ export default function QuickScheduleModal({
             clientId: client.id,
         });
     const isPending = !!pendingFound;
-    const [pendingOpen, setPendingOpen] = React.useState(false);
-    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    // PendingActions é global — sem estado local
+
+    // Removido alinhamento local — Home coordena
     React.useEffect(() => {
         if (!dayLoading && lastEditedId) {
             const exists = dayAppointments.some(a => a.id === lastEditedId);
@@ -193,11 +193,7 @@ export default function QuickScheduleModal({
             window.removeEventListener('appointments:changed', onChanged);
     }, [open]);
 
-    function buildDateStr(d: Date) {
-        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(
-            d.getDate(),
-        )}`;
-    }
+    // buildDateStr no longer needed; we construct dates via Date API
 
     const handleImmediateClose = React.useCallback(() => {
         try {
@@ -217,9 +213,40 @@ export default function QuickScheduleModal({
         setError(null);
         setSaving(true);
         const t0 = performance.now();
-        const dateStr = buildDateStr(selectedDate);
-        const startISO = new Date(`${dateStr}T${startHM}:00`).toISOString();
-        const endISO = new Date(`${dateStr}T${endHM}:00`).toISOString();
+        // Normalize minutes if flex mode is off to respect slot interval
+        const slot = getSlotInterval();
+        function snapIfNeeded(hm: string): string {
+            const [h, m] = hm.split(':').map(n => parseInt(n, 10));
+            if (isNaN(h) || isNaN(m)) return hm;
+            const snapped = Math.round(m / slot) * slot;
+            const finalM = Math.min(59, Math.max(0, snapped));
+            return `${pad2(h)}:${pad2(finalM)}`;
+        }
+        const normalizedStartHM = snapIfNeeded(startHM);
+        let normalizedEndHM = snapIfNeeded(endHM);
+        // Ensure end >= start
+        if (toMinutes(normalizedEndHM) <= toMinutes(normalizedStartHM)) {
+            const mins = toMinutes(normalizedStartHM) + getDefaultDuration();
+            normalizedEndHM = fromMinutes(mins);
+        }
+        // Build start/end using Date API to avoid invalid strings like "24:00"
+        // and clamp to the same-day window [00:00, 23:59]. Ensure end > start.
+        const MAX_MINUTE = 23 * 60 + 59;
+        const startMin0 = toMinutes(normalizedStartHM);
+        const endMin0 = toMinutes(normalizedEndHM);
+        const startMin = Math.max(0, Math.min(MAX_MINUTE, startMin0));
+        let endMin = Math.max(0, Math.min(MAX_MINUTE, endMin0));
+        if (endMin <= startMin) {
+            // Guarantee at least 1 minute duration if clamping caused equality
+            endMin = Math.min(MAX_MINUTE, startMin + 1);
+        }
+        const baseDate = new Date(selectedDate);
+        const startDate = new Date(baseDate);
+        startDate.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+        const endDate = new Date(baseDate);
+        endDate.setHours(Math.floor(endMin / 60), endMin % 60, 0, 0);
+        const startISO = startDate.toISOString();
+        const endISO = endDate.toISOString();
         const visitTitles: Record<string, string> = {
             consulta: 'Consulta',
             avaliacao: 'Avaliação',
@@ -338,8 +365,66 @@ export default function QuickScheduleModal({
                                       })
                                     : null;
                                 if (pending) {
-                                    setPendingAppt(pending);
-                                    setPendingOpen(true);
+                                    try {
+                                        const a = pending as Appointment;
+                                        const anyAppt = a as unknown as Record<
+                                            string,
+                                            unknown
+                                        >;
+                                        const clientName = (():
+                                            | string
+                                            | undefined => {
+                                            if (
+                                                typeof anyAppt.client_name ===
+                                                'string'
+                                            )
+                                                return anyAppt.client_name as string;
+                                            const c = anyAppt.client as unknown;
+                                            if (
+                                                c &&
+                                                typeof c === 'object' &&
+                                                'name' in
+                                                    (c as Record<
+                                                        string,
+                                                        unknown
+                                                    >)
+                                            ) {
+                                                const n = (
+                                                    c as { name?: unknown }
+                                                ).name;
+                                                if (typeof n === 'string')
+                                                    return n;
+                                            }
+                                            return undefined;
+                                        })();
+                                        const clientField = ((): unknown => {
+                                            const c = anyAppt.client as unknown;
+                                            if (
+                                                typeof c === 'number' ||
+                                                typeof c === 'object'
+                                            )
+                                                return c;
+                                            return undefined;
+                                        })();
+                                        const payload = {
+                                            id: a.id,
+                                            start_at: a.start_at,
+                                            end_at: a.end_at,
+                                            status: a.status,
+                                            notes: a.notes,
+                                            client_name: clientName,
+                                            client: clientField,
+                                            title: a.title,
+                                        } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
+                                        window.dispatchEvent(
+                                            new CustomEvent(
+                                                'pendingActions:open',
+                                                { detail: { appt: payload } },
+                                            ),
+                                        );
+                                    } catch {
+                                        /* noop */
+                                    }
                                     try {
                                         window.dispatchEvent(
                                             new CustomEvent('systemMessage', {
@@ -612,8 +697,81 @@ export default function QuickScheduleModal({
                                                 );
                                             const appt =
                                                 (await resp.json()) as Appointment;
-                                            setPendingAppt(appt);
-                                            setPendingOpen(true);
+                                            try {
+                                                const a = appt as Appointment;
+                                                const anyAppt =
+                                                    a as unknown as Record<
+                                                        string,
+                                                        unknown
+                                                    >;
+                                                const clientName = (():
+                                                    | string
+                                                    | undefined => {
+                                                    if (
+                                                        typeof anyAppt.client_name ===
+                                                        'string'
+                                                    )
+                                                        return anyAppt.client_name as string;
+                                                    const c =
+                                                        anyAppt.client as unknown;
+                                                    if (
+                                                        c &&
+                                                        typeof c === 'object' &&
+                                                        'name' in
+                                                            (c as Record<
+                                                                string,
+                                                                unknown
+                                                            >)
+                                                    ) {
+                                                        const n = (
+                                                            c as {
+                                                                name?: unknown;
+                                                            }
+                                                        ).name;
+                                                        if (
+                                                            typeof n ===
+                                                            'string'
+                                                        )
+                                                            return n;
+                                                    }
+                                                    return undefined;
+                                                })();
+                                                const clientField =
+                                                    ((): unknown => {
+                                                        const c =
+                                                            anyAppt.client as unknown;
+                                                        if (
+                                                            typeof c ===
+                                                                'number' ||
+                                                            typeof c ===
+                                                                'object'
+                                                        )
+                                                            return c;
+                                                        return undefined;
+                                                    })();
+                                                const payload = {
+                                                    id: a.id,
+                                                    start_at: a.start_at,
+                                                    end_at: a.end_at,
+                                                    status: a.status,
+                                                    notes: a.notes,
+                                                    client_name: clientName,
+                                                    client: clientField,
+                                                    title: a.title,
+                                                } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
+                                                window.dispatchEvent(
+                                                    new CustomEvent(
+                                                        'pendingActions:open',
+                                                        {
+                                                            detail: {
+                                                                appt: payload,
+                                                            },
+                                                        },
+                                                    ),
+                                                );
+                                            } catch {
+                                                /* noop */
+                                            }
                                         } catch (e) {
                                             const msg =
                                                 e &&
@@ -660,28 +818,7 @@ export default function QuickScheduleModal({
                         </div>
                     )}
 
-                    {pendingOpen && pendingAppt && (
-                        <PendingActionsModal
-                            open={pendingOpen}
-                            onClose={() => {
-                                setPendingOpen(false);
-                                setPendingAppt(null);
-                                setReloadKey(k => k + 1);
-                                try {
-                                    refreshPendingGuard();
-                                } catch {
-                                    /* noop */
-                                }
-                                try {
-                                    dispatchers.updateClients();
-                                    dispatchers.appointmentsChanged();
-                                } catch {
-                                    /* noop */
-                                }
-                            }}
-                            appt={pendingAppt}
-                        />
-                    )}
+                    {/* PendingActionsModal é global (Home) */}
 
                     <div
                         style={{
@@ -713,7 +850,7 @@ export default function QuickScheduleModal({
                                 workTimes.endMin,
                             )}`}
                             stepMinutes={
-                                getSlotInterval() as 5 | 10 | 15 | 20 | 30
+                                getSlotInterval() as 1 | 5 | 10 | 15 | 20 | 30
                             }
                         />
                         <TimePicker10
@@ -729,9 +866,10 @@ export default function QuickScheduleModal({
                                 workTimes.endMin,
                             )}`}
                             stepMinutes={
-                                getSlotInterval() as 5 | 10 | 15 | 20 | 30
+                                getSlotInterval() as 1 | 5 | 10 | 15 | 20 | 30
                             }
                         />
+                        {/* Removed: "Minuto livre" checkbox (flexible minute mode) */}
                         <label
                             style={{ display: 'flex', flexDirection: 'column' }}
                         >
@@ -775,7 +913,8 @@ export default function QuickScheduleModal({
                         style={{
                             display: 'flex',
                             gap: 8,
-                            justifyContent: 'flex-end',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
                             position: 'sticky',
                             top: 0,
                             zIndex: 5,
@@ -784,47 +923,115 @@ export default function QuickScheduleModal({
                             background: 'var(--color-bg)',
                         }}
                     >
-                        <button
-                            onClick={handleImmediateClose}
+                        {/* Mini toggle "Todos" alinhado à esquerda, pequeno para não competir com os botões */}
+                        <div
                             style={{
-                                padding: '8px 12px',
-                                background: '#e5e7eb',
-                            }}
-                            disabled={saving}
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            onClick={handleSave}
-                            style={{
-                                padding: '8px 12px',
-                                background: '#059669',
-                                color: '#fff',
-                                display: 'inline-flex',
+                                display: 'flex',
                                 alignItems: 'center',
                                 gap: 8,
                             }}
-                            disabled={saving}
                         >
-                            {saving && (
+                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                Todos
+                            </span>
+                            <button
+                                type='button'
+                                role='switch'
+                                aria-checked={dayFilter !== 'ativos'}
+                                onClick={() =>
+                                    setDayFilter(
+                                        dayFilter === 'ativos'
+                                            ? 'todos'
+                                            : 'ativos',
+                                    )
+                                }
+                                aria-label='Alternar entre todos os status e apenas ativos'
+                                title='Alternar entre todos os status e apenas ativos'
+                                style={{
+                                    position: 'relative',
+                                    width: 40,
+                                    height: 24,
+                                    borderRadius: 999,
+                                    border: '1px solid var(--color-border)',
+                                    background:
+                                        dayFilter === 'ativos'
+                                            ? '#e5e7eb'
+                                            : '#059669',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    outline: 'none',
+                                }}
+                            >
                                 <span
+                                    aria-hidden
                                     style={{
-                                        width: 14,
-                                        height: 14,
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: dayFilter === 'ativos' ? 2 : 20,
+                                        transform: 'translateY(-50%)',
+                                        width: 18,
+                                        height: 18,
                                         borderRadius: '50%',
-                                        border: '2px solid rgba(255,255,255,0.6)',
-                                        borderTopColor: 'rgba(255,255,255,1)',
-                                        animation:
-                                            'qsSpin 0.8s linear infinite',
+                                        background: '#fff',
+                                        boxShadow:
+                                            '0 1px 2px rgba(0,0,0,0.1), 0 1px 1px rgba(0,0,0,0.06)',
+                                        transition:
+                                            'left 150ms ease, transform 150ms ease',
                                     }}
                                 />
-                            )}
-                            {saving
-                                ? 'Salvando...'
-                                : isEdit
-                                ? 'Salvar'
-                                : 'Criar'}
-                        </button>
+                            </button>
+                        </div>
+                        {/* Right actions: Cancel + Create/Save grouped together */}
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                            }}
+                        >
+                            <button
+                                onClick={handleImmediateClose}
+                                style={{
+                                    padding: '8px 12px',
+                                    background: '#e5e7eb',
+                                }}
+                                disabled={saving}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                style={{
+                                    padding: '8px 12px',
+                                    background: '#059669',
+                                    color: '#fff',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                }}
+                                disabled={saving}
+                            >
+                                {saving && (
+                                    <span
+                                        style={{
+                                            width: 14,
+                                            height: 14,
+                                            borderRadius: '50%',
+                                            border: '2px solid rgba(255,255,255,0.6)',
+                                            borderTopColor:
+                                                'rgba(255,255,255,1)',
+                                            animation:
+                                                'qsSpin 0.8s linear infinite',
+                                        }}
+                                    />
+                                )}
+                                {saving
+                                    ? 'Salvando...'
+                                    : isEdit
+                                    ? 'Salvar'
+                                    : 'Criar'}
+                            </button>
+                        </div>
                     </div>
 
                     <QuickScheduleDayList
@@ -838,6 +1045,7 @@ export default function QuickScheduleModal({
                         currentEditId={currentEdit?.id ?? null}
                         listRef={listRef}
                         minimal={true}
+                        renderMinimalToggle={false}
                         onUseTime={a => {
                             const sd = new Date(a.start_at);
                             const ed = new Date(a.end_at);
@@ -860,22 +1068,14 @@ export default function QuickScheduleModal({
                         }}
                         onCancel={async a => {
                             try {
-                                const token =
-                                    localStorage.getItem('accessToken');
-                                const headers: Record<string, string> = {
-                                    'Content-Type': 'application/json',
-                                };
-                                if (token)
-                                    headers[
-                                        'Authorization'
-                                    ] = `Bearer ${token}`;
-                                const resp = await fetch(
-                                    `${API_BASE}/agenda/appointments/${a.id}/cancel/`,
-                                    { method: 'POST', headers },
+                                const { cancelAppointment } = await import(
+                                    '../services/appointments'
                                 );
-                                if (!resp.ok) {
-                                    const text = await resp.text();
-                                    throw new Error(text || 'Erro ao cancelar');
+                                const res = await cancelAppointment(a.id);
+                                if (!res.ok) {
+                                    throw new Error(
+                                        res.text || 'Erro ao cancelar',
+                                    );
                                 }
                                 setReloadKey(k => k + 1);
                                 try {
@@ -914,6 +1114,14 @@ export default function QuickScheduleModal({
                                     'message' in err
                                         ? String((err as Error).message)
                                         : 'Erro ao cancelar';
+                                try {
+                                    console.warn(
+                                        '[QuickSchedule] cancel failed',
+                                        { id: a.id, msg },
+                                    );
+                                } catch {
+                                    /* noop */
+                                }
                                 setError(msg);
                                 try {
                                     track({

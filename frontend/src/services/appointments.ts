@@ -79,6 +79,226 @@ export async function patchStatus(
     }
 }
 
+/**
+ * Cancela um compromisso com reforços de sessão e log opcional.
+ * - Tenta com o token atual.
+ * - Em caso de 401/403, força ensureDeviceSession e repete uma vez.
+ */
+export async function cancelAppointment(
+    apptId: number,
+): Promise<{ ok: boolean; status: number; text?: string }> {
+    // Best-effort: garanta que a sessão do dispositivo exista antes de bater no endpoint
+    try {
+        await ensureDeviceSession();
+    } catch {
+        /* continue anyway */
+    }
+    async function attempt(): Promise<{
+        ok: boolean;
+        status: number;
+        text?: string;
+    }> {
+        const token = localStorage.getItem('accessToken') || '';
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        Object.assign(headers, buildDeviceHeaders());
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const url = `${API_BASE}/agenda/appointments/${apptId}/cancel/`;
+        try {
+            const r = await fetch(url, {
+                method: 'POST',
+                headers,
+                cache: 'no-store',
+            });
+            const text = await r.text().catch(() => '');
+            return { ok: r.ok, status: r.status, text };
+        } catch (e) {
+            return {
+                ok: false,
+                status: 0,
+                text: String((e as Error)?.message || e),
+            };
+        }
+    }
+    let res = await attempt();
+    if (res.status === 401 || res.status === 403) {
+        try {
+            await ensureDeviceSession(true);
+        } catch {
+            /* ignore */
+        }
+        res = await attempt();
+    }
+    return res;
+}
+
+/**
+ * Cancela um compromisso e, se estiver em andamento, ajusta o end_at para o horário atual.
+ * - Usa hora do servidor quando disponível para consistência.
+ * - Após POST /cancel/, faz PATCH no recurso principal com end_at encurtado e status 'canceled'.
+ */
+export async function cancelWithAdjust(
+    apptId: number,
+): Promise<{ ok: boolean; status: number; text?: string }> {
+    // Helper para obter dados do compromisso
+    async function getAppt() {
+        try {
+            const token = localStorage.getItem('accessToken') || '';
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const url = `${API_BASE}/agenda/appointments/${apptId}/?ts=${Date.now()}`;
+            const r = await fetch(url, { headers, cache: 'no-store' });
+            if (!r.ok) return null;
+            const d = (await r.json()) as {
+                id: number;
+                start_at: string;
+                end_at: string;
+                status: 'scheduled' | 'done' | 'canceled';
+            };
+            return d;
+        } catch {
+            return null;
+        }
+    }
+
+    const cancelRes = await cancelAppointment(apptId);
+    if (!cancelRes.ok) return cancelRes;
+    // Tente ajustar o end_at quando fizer sentido, mas não falhe o fluxo se não conseguir
+    try {
+        const appt = await getAppt();
+        if (!appt) return cancelRes; // sem dados, apenas retorne ok do cancel
+        // Usar hora do servidor se disponível
+        const serverNow = await getServerNowOnce();
+        const now = serverNow ?? new Date();
+        const start = new Date(appt.start_at);
+        const end = new Date(appt.end_at);
+        const nowMs = now.getTime();
+        const startMs = start.getTime();
+        const endMs = end.getTime();
+        let patchBody: Record<string, unknown> | null = null;
+        if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
+            if (nowMs < startMs) {
+                // Agora antes do início: mantenha end = start + 1s
+                const newEnd = new Date(startMs + 1000);
+                patchBody = {
+                    status: 'canceled',
+                    end_at: newEnd.toISOString(),
+                };
+            } else if (startMs <= nowMs && nowMs < endMs) {
+                // Em andamento: encurte o fim para agora
+                const newEnd = new Date(nowMs);
+                patchBody = {
+                    status: 'canceled',
+                    end_at: newEnd.toISOString(),
+                };
+            } else {
+                // Já no passado: garantir status cancelado
+                patchBody = { status: 'canceled' };
+            }
+        } else {
+            patchBody = { status: 'canceled' };
+        }
+        const token = localStorage.getItem('accessToken') || '';
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        Object.assign(headers, buildDeviceHeaders());
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const url = `${API_BASE}/agenda/appointments/${apptId}/`;
+        const patchResp = await fetch(url, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify(patchBody),
+        });
+        let patchErrorBody: unknown = null;
+        if (!patchResp.ok) {
+            try {
+                const txt = await patchResp.text();
+                try {
+                    patchErrorBody = JSON.parse(txt);
+                } catch {
+                    patchErrorBody = txt;
+                }
+            } catch {
+                /* noop */
+            }
+        }
+        try {
+            window.dispatchEvent(
+                new CustomEvent('debug:log', {
+                    detail: {
+                        label: 'cancelWithAdjust: patch sent',
+                        data: {
+                            ok: patchResp.ok,
+                            status: patchResp.status,
+                            body: patchBody,
+                            error: patchErrorBody,
+                        },
+                        ts: Date.now(),
+                    },
+                }),
+            );
+        } catch {
+            /* noop */
+        }
+        // Fallback strategy: if PATCH 400 with both status + end_at provided, retry with only end_at (some backends reject redundant status update after /cancel/)
+        if (
+            !patchResp.ok &&
+            patchResp.status === 400 &&
+            patchBody &&
+            'end_at' in patchBody
+        ) {
+            try {
+                const fallbackBody = {
+                    end_at: (patchBody as { end_at: string }).end_at,
+                };
+                const fallbackResp = await fetch(url, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify(fallbackBody),
+                });
+                let fbErr: unknown = null;
+                if (!fallbackResp.ok) {
+                    try {
+                        const t = await fallbackResp.text();
+                        try {
+                            fbErr = JSON.parse(t);
+                        } catch {
+                            fbErr = t;
+                        }
+                    } catch {
+                        /* noop */
+                    }
+                }
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('debug:log', {
+                            detail: {
+                                label: 'cancelWithAdjust: fallback patch',
+                                data: {
+                                    ok: fallbackResp.ok,
+                                    status: fallbackResp.status,
+                                    body: fallbackBody,
+                                    error: fbErr,
+                                },
+                                ts: Date.now(),
+                            },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+            } catch {
+                /* noop fallback */
+            }
+        }
+    } catch {
+        // silenciar: o cancel já ocorreu
+    }
+    return cancelRes;
+}
+
 export async function finalizeWithFallback(apptId: number): Promise<boolean> {
     // Best-effort: ensure device session exists before hitting protected endpoints
     try {

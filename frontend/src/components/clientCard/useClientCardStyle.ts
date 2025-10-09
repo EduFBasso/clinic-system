@@ -5,6 +5,7 @@ export type ClientCardStyleInput = {
     selected?: boolean;
     pressed: boolean;
     isScheduled: boolean;
+    isPending?: boolean; // novo: aplicar tema cinza discreto quando pendente
 };
 
 export type ClientCardStyle = {
@@ -24,6 +25,7 @@ export function useClientCardStyle({
     isOngoing,
     selected,
     pressed,
+    isPending,
 }: ClientCardStyleInput): ClientCardStyle {
     // Paleta base (variáveis do CSS)
     const valueColor = 'var(--color-text)';
@@ -33,38 +35,62 @@ export function useClientCardStyle({
     const cardBg = 'var(--card-bg)';
 
     // Definição de cores de label/ícone por estado
-    const labelColor = isOngoing ? ongoingColor : primaryColor;
-    const iconColor = isOngoing ? ongoingColor : primaryColor;
+    const pendingColor = 'var(--color-pending)';
+    const pendingBg = 'var(--color-pending-bg)';
+    const labelColor = isOngoing
+        ? ongoingColor
+        : isPending
+        ? pendingColor
+        : primaryColor;
+    const iconColor = isOngoing
+        ? ongoingColor
+        : isPending
+        ? pendingColor
+        : primaryColor;
 
-    // Fundo e borda
-    // - Em atendimento: fundo bege/laranja claro e borda na cor laranja escuro
-    // - Seleção durante atendimento: apenas engrossa a borda (não aplica fill azul)
-    // - Fora do atendimento: seleção (fill azul) fica a cargo da classe CSS selecionada
-    const baseBorderWidth = isOngoing ? 1 : 1;
-    const borderWidth =
-        isOngoing && selected ? (pressed ? 3 : 3) : baseBorderWidth;
-    const borderColor = isOngoing ? ongoingColor : 'var(--color-border)';
+    // Fundo e borda (padronização solicitada):
+    // - Pending e Ongoing: sempre exibem borda sólida 1px na cor de estado (ongoingColor para ongoing, pendingColor para pending).
+    // - Quando selecionados (pending ou ongoing): borda 2px mesma cor (não muda cor ao selecionar, apenas engrossa).
+    // - Outros estados: borda somente se selecionado (1px primary) para consistência visual.
+    // - Removida borda tracejada de pendente.
+    const baseStateColor = isOngoing
+        ? ongoingColor
+        : isPending
+        ? pendingColor
+        : primaryColor;
+    const showStateBorder = isOngoing || isPending;
+    const borderWidth = showStateBorder ? (selected ? 2 : 1) : selected ? 1 : 0;
+    const borderColor = showStateBorder ? baseStateColor : primaryColor;
 
     const containerStyle: React.CSSProperties = {
         position: 'relative',
         cursor: 'pointer',
         userSelect: 'none',
-        // Em atendimento: usar fundo bege/laranja claro e suprimir fill azul da seleção
-        background: isOngoing ? ongoingBg : selected ? undefined : cardBg,
-        border: isOngoing
-            ? `${borderWidth}px solid ${borderColor}`
+        // Prioridades de fundo:
+        // 1. Em andamento
+        // 2. Pendente (cinza claro discreto — NÃO deve sobrescrever selected azul se selecionado explicitamente)
+        // 3. Selecionado padrão
+        // 4. Card padrão
+        background: isOngoing
+            ? ongoingBg
+            : isPending
+            ? pendingBg
             : selected
             ? undefined
-            : `${borderWidth}px solid ${borderColor}`,
-        boxShadow: selected && isOngoing ? 'none' : undefined,
+            : cardBg,
+        border:
+            borderWidth > 0
+                ? `${borderWidth}px solid ${borderColor}`
+                : undefined,
+        boxShadow: selected && showStateBorder ? 'none' : undefined,
         transform: pressed ? 'scale(0.995)' : 'scale(1)',
         transition:
-            'background 0.3s, border 0.25s, box-shadow 0.4s, transform 0.07s',
+            'background 0.3s, border 0.2s ease, box-shadow 0.35s, transform 0.07s',
     };
 
     // Separador entre dados pessoais e agenda
     const separatorColor = labelColor;
-    const separatorOpacity = isOngoing ? 0.6 : 0.5; // um pouco mais forte durante atendimento
+    const separatorOpacity = isOngoing ? 0.6 : isPending ? 0.55 : 0.5;
 
     return {
         containerStyle,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatTime } from '../utils/timeFormat';
 import { focusClientCard } from '../utils/focusClientCard';
 import { getNow } from '../utils/now';
 import type { ClientBasic } from '../types/ClientBasic';
@@ -38,9 +39,8 @@ function toISODate(d: Date) {
     return `${y}-${m}-${dd}`;
 }
 function toHHMM(d: Date) {
-    return d
-        .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-        .slice(0, 5);
+    // Centraliza via util para consistência e futura UTC/locale troca
+    return formatTime(d, { mode: 'local' });
 }
 function addMinutes(d: Date, mins: number) {
     const x = new Date(d);
@@ -308,10 +308,7 @@ export default function ScheduleEditorCore({
     ]);
 
     function fmtHM(d: Date) {
-        return d.toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
+        return formatTime(d, { mode: 'local' });
     }
 
     const startCandidate = React.useMemo(

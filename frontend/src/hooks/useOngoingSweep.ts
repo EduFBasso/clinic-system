@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import type { Appointment } from './useAppointments';
@@ -63,7 +63,7 @@ async function runSweep(defaultWindowMs: number) {
         const end = new Date(nowMs + half);
         const url = `${API_BASE}/agenda/appointments/?status=scheduled&start=${encodeURIComponent(
             start.toISOString(),
-        )}&end=${encodeURIComponent(end.toISOString())}`; // no ts param: allow preflight caching
+        )}&end=${encodeURIComponent(end.toISOString())}`; // restrict to scheduled to avoid canceled/done
         abortCtl = new AbortController();
         const r = await fetch(url, {
             headers: { Authorization: `Bearer ${token}` },
@@ -72,9 +72,14 @@ async function runSweep(defaultWindowMs: number) {
         });
         if (!r.ok) return;
         const list: unknown = await r.json();
-        const arr = (Array.isArray(list) ? list : []) as Appointment[];
+        const arr = (Array.isArray(list) ? list : []) as Array<
+            Appointment & { status?: 'scheduled' | 'done' | 'canceled' }
+        >;
         const m = new Map<number, Appointment>();
         for (const ap of arr) {
+            if (ap.status && ap.status !== 'scheduled') {
+                continue; // extra guard in case backend ignores the filter
+            }
             const s = new Date(ap.start_at).getTime();
             const e = new Date(ap.end_at).getTime();
             if (
@@ -168,10 +173,6 @@ export function useOngoingSweep(_now?: Date, windowMs: number = 60_000) {
         };
     }, [windowMs]);
 
-    return useMemo(
-        () => sharedMap,
-        [
-            /* update on version change via state */
-        ],
-    );
+    // Return the current shared map; local state change triggers re-render in consumers
+    return sharedMap;
 }

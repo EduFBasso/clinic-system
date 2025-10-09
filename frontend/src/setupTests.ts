@@ -19,7 +19,7 @@ if (
         .IntersectionObserver === 'undefined'
 ) {
     class MockIntersectionObserver {
-        constructor(_cb: unknown, _opts?: unknown) {
+        constructor() {
             // swallow
         }
         observe(): void {}
@@ -32,4 +32,19 @@ if (
     (
         globalThis as unknown as { IntersectionObserver: unknown }
     ).IntersectionObserver = MockIntersectionObserver as unknown;
+}
+
+// Minimal ResizeObserver stub for jsdom
+if (
+    typeof (globalThis as unknown as { ResizeObserver?: unknown })
+        .ResizeObserver === 'undefined'
+) {
+    class MockResizeObserver {
+        constructor() {}
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    }
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
+        MockResizeObserver as unknown;
 }

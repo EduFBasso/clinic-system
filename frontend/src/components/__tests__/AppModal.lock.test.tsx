@@ -1,6 +1,7 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import AppModal from '../Modal';
 
 // Utility wrapper to control open prop
@@ -30,7 +31,28 @@ function getBodyStyles() {
 }
 
 describe('AppModal scroll lock', () => {
+    // Silence React act(...) warnings from transition timing in tests
+    let originalError: (...args: unknown[]) => void;
+    beforeAll(() => {
+        originalError = console.error as unknown as (
+            ...args: unknown[]
+        ) => void;
+        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+            const msg = args[0];
+            if (
+                typeof msg === 'string' &&
+                msg.includes('not wrapped in act(')
+            ) {
+                return;
+            }
+            originalError.apply(console, args as unknown[]);
+        });
+    });
+    afterAll(() => {
+        vi.restoreAllMocks();
+    });
     it('locks and unlocks body scroll correctly', async () => {
+        const user = userEvent.setup();
         // Initial render open
         render(<ModalHarness initiallyOpen={true} />);
 
@@ -45,40 +67,74 @@ describe('AppModal scroll lock', () => {
         // Close modal
         // Existem dois botões com nome Fechar (X e nosso). Pegamos o de texto simples.
         const closeBtn = await screen.findByText(/^fechar$/i);
-        fireEvent.click(closeBtn);
+        await user.click(closeBtn);
 
-        // Allow effects + timeouts to run (AppModal schedules multiple restores)
-        await new Promise(r => setTimeout(r, 500));
-
-        const closedStyles = getBodyStyles();
-        // Scroll should be restored: neither body nor html should keep hidden (unless another modal stayed open)
-        const stillLocked =
-            closedStyles.bodyOverflow === 'hidden' ||
-            closedStyles.htmlOverflow === 'hidden';
-        expect(stillLocked).toBe(false);
+        // Wait until scroll is restored (neither html nor body overflow remains hidden)
+        await waitFor(() => {
+            const s = getBodyStyles();
+            const stillLocked =
+                s.bodyOverflow === 'hidden' || s.htmlOverflow === 'hidden';
+            expect(stillLocked).toBe(false);
+        });
     });
 
     it('relocks when reopened and restores again', async () => {
+        const user = userEvent.setup();
         render(<ModalHarness initiallyOpen={false} />);
         const opener = screen.getByRole('button', { name: /open/i });
 
         // Open
-        fireEvent.click(opener);
-        await new Promise(r => setTimeout(r, 50));
-        let styles = getBodyStyles();
-        const locked =
-            styles.bodyOverflow === 'hidden' ||
-            styles.htmlOverflow === 'hidden';
-        expect(locked).toBe(true);
+        await user.click(opener);
+        await waitFor(() => {
+            const styles = getBodyStyles();
+            const locked =
+                styles.bodyOverflow === 'hidden' ||
+                styles.htmlOverflow === 'hidden';
+            expect(locked).toBe(true);
+        });
 
         // Close
         const closeBtn = await screen.findByText(/^fechar$/i);
-        fireEvent.click(closeBtn);
-        await new Promise(r => setTimeout(r, 400));
-        styles = getBodyStyles();
-        const unlocked = !(
-            styles.bodyOverflow === 'hidden' || styles.htmlOverflow === 'hidden'
+        await user.click(closeBtn);
+        await waitFor(() => {
+            const styles = getBodyStyles();
+            const unlocked = !(
+                styles.bodyOverflow === 'hidden' ||
+                styles.htmlOverflow === 'hidden'
+            );
+            expect(unlocked).toBe(true);
+        });
+    });
+
+    it('prevents outside scroll while open (wheel)', async () => {
+        const user = userEvent.setup();
+        render(
+            <div>
+                <div data-testid='below-page' style={{ height: 2000 }} />
+                <ModalHarness initiallyOpen={true} />
+            </div>,
         );
-        expect(unlocked).toBe(true);
+
+        // Spy on preventDefault via a synthetic wheel event dispatched on document
+        const ev = new WheelEvent('wheel', { cancelable: true });
+        const preventedBefore = !document.dispatchEvent(ev);
+        // If our listener called preventDefault, dispatchEvent returns false
+        expect(preventedBefore).toBe(true);
+
+        // Close modal
+        const closeBtn = await screen.findByText(/^fechar$/i);
+        await user.click(closeBtn);
+        await waitFor(() => {
+            const styles = getBodyStyles();
+            const unlocked = !(
+                styles.bodyOverflow === 'hidden' ||
+                styles.htmlOverflow === 'hidden'
+            );
+            expect(unlocked).toBe(true);
+        });
+
+        const ev2 = new WheelEvent('wheel', { cancelable: true });
+        const preventedAfter = !document.dispatchEvent(ev2);
+        expect(preventedAfter).toBe(false);
     });
 });

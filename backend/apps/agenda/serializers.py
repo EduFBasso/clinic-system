@@ -25,6 +25,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "location",
             "notes",
             "status",
+            "finalized_at",
+            "canceled_at",
             "created_device_id",
             "created_device_info",
             "ended_device_id",
@@ -40,7 +42,15 @@ class AppointmentSerializer(serializers.ModelSerializer):
         "created_device_info",
         "ended_device_id",
         "ended_device_info",
+        "finalized_at",
+        "canceled_at",
     ]
+
+    # Semântica de tempos:
+    # - end_at: término planejado OU real (se finalize antecipado encurta end_at = now).
+    # - finalized_at: momento em que o profissional marcou como concluído (primeira vez; imutável).
+    #   Pode ser > end_at quando a finalização ocorreu depois do horário planejado.
+    #   Duração efetiva -> (end_at - start_at); atraso de registro -> max(0, finalized_at - end_at).
 
     def get_professional_name(self, obj):
         p = obj.professional

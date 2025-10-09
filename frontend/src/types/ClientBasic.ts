@@ -4,6 +4,8 @@ export interface ClientBasic {
     last_name: string;
     phone: string;
     email: string;
+    // URL (absoluta ou relativa) da foto do cliente retornada pelo backend (campo ImageField). Pode ser null.
+    photo?: string | null;
     address?: string;
     address_number?: string;
     neighborhood?: string;

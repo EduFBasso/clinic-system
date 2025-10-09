@@ -18,6 +18,7 @@ import SystemMessageModal from '../components/SystemMessageModal';
 import DailyAgendaModal from '../components/DailyAgendaModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import PendingActionsModal from '../components/PendingActionsModal';
+import { getAppointmentOverride } from '../utils/appointments/overrides';
 import type { SharedAppointmentLike } from '../components/shared/AppointmentCard';
 import type { ClientBasic } from '../types/ClientBasic';
 import { API_BASE } from '../config/api';
@@ -25,6 +26,7 @@ import { isTokenExpired } from '../utils/jwt';
 import type { Appointment } from '../hooks/useAppointments';
 import { useAppVersionWatcher, acceptAndReload } from '../hooks/useAppVersion';
 import { useAppointmentsLivePing } from '../hooks/useAppointmentsLivePing';
+import { dispatchers } from '../events/dispatchers';
 
 export default function Home() {
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
@@ -64,6 +66,14 @@ export default function Home() {
     const [pendingActionsOpen, setPendingActionsOpen] = useState(false);
     const [pendingAppt, setPendingAppt] =
         useState<SharedAppointmentLike | null>(null);
+    // Após fechamento, limpa o objeto pendente pouco depois para evitar manter props antigas vivas
+    useEffect(() => {
+        if (pendingActionsOpen) return;
+        const t = setTimeout(() => {
+            setPendingAppt(pa => (pendingActionsOpen ? pa : null));
+        }, 80);
+        return () => clearTimeout(t);
+    }, [pendingActionsOpen]);
     // Suppress rapid reopen of PendingActions for a short window after closing
     const lastPendingCloseRef = React.useRef<number>(0);
 
@@ -554,6 +564,65 @@ export default function Home() {
                 onForceClose,
             );
     }, []);
+    // Auto-close if an override terminal status appears for the currently open pending appointment
+    useEffect(() => {
+        if (!pendingActionsOpen || !pendingAppt) return;
+        try {
+            const ov = getAppointmentOverride(pendingAppt.id as number);
+            if (ov && (ov.status === 'done' || ov.status === 'canceled')) {
+                setPendingActionsOpen(false);
+            }
+        } catch {
+            /* noop */
+        }
+    }, [pendingActionsOpen, pendingAppt]);
+
+    // Debug instrumentation: expose helper functions to window for diagnosing stuck PendingActionsModal
+    useEffect(() => {
+        const w = window as unknown as Record<string, unknown>;
+        w.__closePendingActions = () => {
+            try {
+                setPendingActionsOpen(false);
+                console.debug('[PendingDebug] __closePendingActions called');
+            } catch (e) {
+                console.warn('[PendingDebug] close error', e);
+            }
+        };
+        w.__dumpPendingActions = () => {
+            try {
+                const id = pendingAppt?.id;
+                const ov = id ? getAppointmentOverride(id) : undefined;
+                console.debug('[PendingDebug] dump', {
+                    pendingActionsOpen,
+                    apptId: id,
+                    apptStatus: pendingAppt?.status,
+                    override: ov,
+                });
+                return {
+                    pendingActionsOpen,
+                    id,
+                    status: pendingAppt?.status,
+                    override: ov,
+                };
+            } catch (e) {
+                console.warn('[PendingDebug] dump error', e);
+                return null;
+            }
+        };
+        const onDebugDump = () => {
+            (w.__dumpPendingActions as () => unknown)();
+        };
+        window.addEventListener('pendingActions:debugDump', onDebugDump);
+        return () => {
+            try {
+                delete w.__closePendingActions;
+                delete w.__dumpPendingActions;
+            } catch {
+                /* noop */
+            }
+            window.removeEventListener('pendingActions:debugDump', onDebugDump);
+        };
+    }, [pendingActionsOpen, pendingAppt]);
 
     // Mensagem ao voltar da Agenda sem cliente selecionado
     useEffect(() => {
@@ -574,7 +643,7 @@ export default function Home() {
             if (ev.key === 'appointments.changed') {
                 try {
                     window.dispatchEvent(new Event('appointments:changed'));
-                    window.dispatchEvent(new Event('updateClients'));
+                    dispatchers.updateClients();
                 } catch {
                     /* noop */
                 }
@@ -839,11 +908,15 @@ export default function Home() {
                     appt={(detailsAppt as Appointment) || null}
                     onClose={() => setDetailsOpen(false)}
                 />
-                <PendingActionsModal
-                    open={pendingActionsOpen}
-                    appt={pendingAppt}
-                    onClose={() => setPendingActionsOpen(false)}
-                />
+                {pendingActionsOpen && pendingAppt && (
+                    <PendingActionsModal
+                        open
+                        appt={pendingAppt}
+                        onClose={() => {
+                            setPendingActionsOpen(false);
+                        }}
+                    />
+                )}
             </div>
         </>
     );

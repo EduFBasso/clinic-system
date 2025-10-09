@@ -89,6 +89,14 @@ function formatAddress(address?: string, number?: string): string {
 }
 
 const ClientView: React.FC<ClientViewProps> = ({ client }) => {
+    const photoUrl = client.photo || null;
+    const initials = React.useMemo(() => {
+        const fn = String(client.first_name || '').trim();
+        const ln = String(client.last_name || '').trim();
+        const a = fn ? fn[0] : '';
+        const b = ln ? ln[0] : '';
+        return (a + b || 'C').toUpperCase();
+    }, [client.first_name, client.last_name]);
     return (
         <div
             className={styles.clientViewCard}
@@ -101,6 +109,43 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                 transition: 'background 0.2s, border 0.2s, box-shadow 0.2s',
             }}
         >
+            {/* Foto do cliente (se houver) */}
+            <div className={styles.headerRow}>
+                {photoUrl ? (
+                    <img
+                        src={photoUrl}
+                        alt={`Foto de ${client.first_name} ${client.last_name}`}
+                        className={styles.avatar}
+                        loading='lazy'
+                        decoding='async'
+                        onError={ev => {
+                            try {
+                                (
+                                    ev.currentTarget as HTMLImageElement
+                                ).style.display = 'none';
+                            } catch {
+                                /* noop */
+                            }
+                        }}
+                    />
+                ) : (
+                    <div
+                        className={styles.avatarFallback}
+                        aria-hidden
+                        title={`${client.first_name} ${client.last_name}`}
+                    >
+                        {initials}
+                    </div>
+                )}
+                <div style={{ minWidth: 0 }}>
+                    <div
+                        className={styles.clientName}
+                        title={`${client.first_name} ${client.last_name}`}
+                    >
+                        {client.first_name} {client.last_name}
+                    </div>
+                </div>
+            </div>
             <div className={styles.fieldRow}>
                 <span className={styles.fieldLabel}>Código:</span>
                 <span className={styles.fieldValue}>{client.id}</span>

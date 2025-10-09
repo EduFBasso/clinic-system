@@ -10,10 +10,12 @@
 
 .cardSelected {
     background-color: var(--color-selected-bg);
-    border: 2px solid var(--color-selected-border);
+    /* Uniformiza espessura com estado normal para evitar salto visual em ongoing */
+    border: 1px solid var(--color-selected-border);
+    /* Shadow mais sutil mantendo foco */
     box-shadow: 0 0 0 2px var(--color-selected-border),
-        0 4px 10px rgba(0, 0, 0, 0.18);
-    transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+        0 3px 8px rgba(0, 0, 0, 0.16);
+    transition: background 0.25s, box-shadow 0.25s, border-color 0.25s;
 }
 
 .flashBorder {
@@ -97,8 +99,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 30px; /* uniform size for leading action icons */
+    height: 30px;
     border-radius: 6px;
 }
 /* On touch/coarse pointers, increase tap target for better ergonomics */
@@ -170,6 +172,24 @@
     flex: 1;
 }
 
+/* Specific grouping for name-line action icons to ensure vertical alignment */
+.nameActions {
+    display: flex;
+    gap: 4px;
+    align-items: center; /* centers eye/edit on same vertical line */
+    margin-left: 4px;
+}
+
+/* Circular client thumbnail (small) */
+.clientThumb {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    background: var(--color-surface-strong);
+}
+
 /* Ações do card: botões de texto com sensação de pressionar */
 .actionButton {
     -webkit-appearance: button;
@@ -226,5 +246,27 @@
     /* Preferred: keep hue, slightly lighter on press */
     background-color: color-mix(in srgb, var(--color-ongoing) 94%, white 6%);
     /* Avoid visual size shift on press for primary action */
+    transform: none !important;
+}
+
+/* Pending action variant (similar weight to primary but using pending color) */
+.actionPending {
+    border-color: var(--color-pending);
+    background: var(--color-pending);
+    color: #ffffff;
+}
+.actionPending:hover {
+    background-image: linear-gradient(
+        rgba(255, 255, 255, 0.04),
+        rgba(255, 255, 255, 0.04)
+    );
+    background-color: color-mix(in srgb, var(--color-pending) 97%, white 3%);
+}
+.actionPending:active {
+    background-image: linear-gradient(
+        rgba(255, 255, 255, 0.07),
+        rgba(255, 255, 255, 0.07)
+    );
+    background-color: color-mix(in srgb, var(--color-pending) 94%, white 6%);
     transform: none !important;
 }

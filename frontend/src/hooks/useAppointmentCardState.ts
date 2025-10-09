@@ -20,9 +20,13 @@ export function useAppointmentCardState(
 ): AppointmentCardState {
     const start = React.useMemo(() => new Date(appt.start_at), [appt.start_at]);
     const end = React.useMemo(() => new Date(appt.end_at), [appt.end_at]);
+    // Visual status derived from timing + server status
     const status = React.useMemo(() => deriveStatus(appt, now), [appt, now]);
     const isOngoing = status === 'ongoing';
+    // Edição permanece restrita a agendados futuros (antes do início)
     const canEdit = status === 'scheduled' && end > now;
-    const canCancel = status === 'scheduled' && end > now;
+    // Cancelamento deve ser permitido enquanto estiver agendado ou em andamento (antes do fim)
+    const canCancel =
+        (status === 'scheduled' || status === 'ongoing') && end > now;
     return { status, isOngoing, canEdit, canCancel, start, end };
 }

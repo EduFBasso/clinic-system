@@ -19,6 +19,7 @@ export interface QuickScheduleDayListProps {
     onCancel: (a: Appointment) => Promise<void>;
     onDetails?: (a: Appointment) => void;
     minimal?: boolean; // when true, hide header/select and section title; show only minicards
+    renderMinimalToggle?: boolean; // when minimal, whether to render the inline sticky toggle bar (default true)
 }
 
 export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
@@ -36,6 +37,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
     onCancel,
     onDetails,
     minimal = false,
+    renderMinimalToggle = true,
 }) => {
     const filterFn = React.useCallback(
         (a: Appointment) => {
@@ -164,70 +166,93 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                 }}
                 ref={listRef}
             >
-                {minimal && appointments.length > 0 && (
-                    <div
-                        style={{
-                            // Overlay the list content to mask selected card borders underneath
-                            position: 'sticky',
-                            top: 0,
-                            zIndex: 3,
-                            background: 'var(--color-bg)',
-                            borderBottom: '1px solid var(--color-border)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            gap: 10,
-                            padding: '6px 2px',
-                        }}
-                    >
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
-                            Todos
-                        </span>
-                        <button
-                            type='button'
-                            role='switch'
-                            aria-checked={dayFilter !== 'ativos'}
-                            onClick={() =>
-                                onChangeFilter(
-                                    dayFilter === 'ativos' ? 'todos' : 'ativos',
-                                )
-                            }
-                            aria-label='Alternar entre todos os status e apenas ativos'
-                            title='Alternar entre todos os status e apenas ativos'
+                {minimal && (
+                    <>
+                        {/* Sticky top mask to ensure no card border leaks above */}
+                        <div
+                            aria-hidden
                             style={{
-                                position: 'relative',
-                                width: 44,
-                                height: 26,
-                                borderRadius: 999,
-                                border: '1px solid var(--color-border)',
-                                background:
-                                    dayFilter === 'ativos'
-                                        ? '#e5e7eb'
-                                        : '#059669',
-                                cursor: 'pointer',
-                                padding: 0,
-                                outline: 'none',
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 95,
+                                height: 8,
+                                background: 'var(--color-bg)',
+                                pointerEvents: 'none',
+                                // Pull the mask out of the flow so it doesn't push content
+                                marginBottom: -8,
                             }}
-                        >
-                            <span
-                                aria-hidden
+                        />
+                        {renderMinimalToggle && appointments.length > 0 && (
+                            <div
                                 style={{
-                                    position: 'absolute',
-                                    top: '50%',
-                                    left: dayFilter === 'ativos' ? 3 : 22,
-                                    transform: 'translateY(-50%)',
-                                    width: 20,
-                                    height: 20,
-                                    borderRadius: '50%',
-                                    background: '#fff',
-                                    boxShadow:
-                                        '0 1px 2px rgba(0,0,0,0.1), 0 1px 1px rgba(0,0,0,0.06)',
-                                    transition:
-                                        'left 150ms ease, transform 150ms ease',
+                                    position: 'sticky',
+                                    top: 0,
+                                    zIndex: 96,
+                                    background: 'var(--color-bg)',
+                                    borderBottom:
+                                        '1px solid var(--color-border)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-end',
+                                    gap: 10,
+                                    padding: '8px 4px',
                                 }}
-                            />
-                        </button>
-                    </div>
+                            >
+                                <span
+                                    style={{ fontSize: 12, color: '#6b7280' }}
+                                >
+                                    Todos
+                                </span>
+                                <button
+                                    type='button'
+                                    role='switch'
+                                    aria-checked={dayFilter !== 'ativos'}
+                                    onClick={() =>
+                                        onChangeFilter(
+                                            dayFilter === 'ativos'
+                                                ? 'todos'
+                                                : 'ativos',
+                                        )
+                                    }
+                                    aria-label='Alternar entre todos os status e apenas ativos'
+                                    title='Alternar entre todos os status e apenas ativos'
+                                    style={{
+                                        position: 'relative',
+                                        width: 44,
+                                        height: 26,
+                                        borderRadius: 999,
+                                        border: '1px solid var(--color-border)',
+                                        background:
+                                            dayFilter === 'ativos'
+                                                ? '#e5e7eb'
+                                                : '#059669',
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                        outline: 'none',
+                                    }}
+                                >
+                                    <span
+                                        aria-hidden
+                                        style={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            left:
+                                                dayFilter === 'ativos' ? 3 : 22,
+                                            transform: 'translateY(-50%)',
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: '50%',
+                                            background: '#fff',
+                                            boxShadow:
+                                                '0 1px 2px rgba(0,0,0,0.1), 0 1px 1px rgba(0,0,0,0.06)',
+                                            transition:
+                                                'left 150ms ease, transform 150ms ease',
+                                        }}
+                                    />
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
                 {!minimal && (
                     <div
@@ -265,6 +290,17 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                             editingHighlightId === appt.id &&
                             currentEditId === appt.id,
                     })}
+                    onResolvePending={appt => {
+                        try {
+                            window.dispatchEvent(
+                                new CustomEvent('pendingActions:open', {
+                                    detail: { appt },
+                                }),
+                            );
+                        } catch {
+                            /* noop */
+                        }
+                    }}
                     onUseTime={onUseTime}
                     onEdit={onEdit}
                     onCancel={onCancel}

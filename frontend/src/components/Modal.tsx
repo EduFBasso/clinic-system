@@ -1,5 +1,6 @@
 // frontend\src\components\Modal.tsx
 import React from 'react';
+import { emitModalViewportMetric } from '../utils/telemetry/modalViewport';
 
 // Augmenta Window global (deve estar em nível de módulo)
 declare global {
@@ -28,6 +29,12 @@ interface AppModalProps {
     maxHeightVh?: number;
     // Se true, não aplica o padding-top de safe-area no container fullScreen (útil quando o conteúdo já possui header com safe-area)
     disableTopSafePadding?: boolean;
+    // Quando true, desmonta completamente o conteúdo ao fechar (evita manter root oculto no DOM; útil para modais flash como mensagens).
+    unmountOnClose?: boolean;
+    // Quando true em fullScreen, o container principal não terá overflowY:auto;
+    // cabe ao conteúdo interno definir uma região rolável. Útil para cenários onde queremos
+    // que um inner wrapper (que inclui o header sticky) seja o único scroll ancestor.
+    disableOuterScroll?: boolean;
 }
 
 const style = {
@@ -67,6 +74,8 @@ export default function AppModal(props: AppModalProps) {
         fullScreen = false,
         maxHeightVh = 90,
         disableTopSafePadding = false,
+        unmountOnClose = false,
+        disableOuterScroll = false,
     } = props;
 
     const contentRef = React.useRef<HTMLDivElement | null>(null);
@@ -76,6 +85,125 @@ export default function AppModal(props: AppModalProps) {
     const prevActiveElRef = React.useRef<HTMLElement | null>(null);
     // Track last touch Y to detect overscroll direction (iOS rubber-band guard)
     const lastTouchYRef = React.useRef<number | null>(null);
+    // Delta adicional para cobrir barra inferior translucida (iOS / PWA) quando 100dvh não pinta totalmente.
+    const [bottomComp, setBottomComp] = React.useState(0);
+    // Identificador estável por instância para correlação de métricas
+    const modalIdRef = React.useRef<string>('');
+    if (!modalIdRef.current) {
+        modalIdRef.current = `m-${Date.now().toString(36)}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`;
+    }
+
+    // Função extraída para (re)calcular compensação inferior e emitir métrica.
+    const recomputeBottomCompRef = React.useRef<() => void>(() => {});
+    const computeBottomComp = React.useCallback(() => {
+        try {
+            const vv = window.visualViewport;
+            if (!vv) {
+                setBottomComp(0);
+                emitModalViewportMetric({
+                    modalId: modalIdRef.current,
+                    bottomComp: 0,
+                    vhUnit:
+                        (window.visualViewport?.height || window.innerHeight) /
+                            100 || 0,
+                    innerHeight: window.innerHeight,
+                    visualViewportHeight: window.visualViewport?.height,
+                    timestamp: Date.now(),
+                    phase: 'update',
+                    userAgent:
+                        typeof navigator !== 'undefined'
+                            ? navigator.userAgent
+                            : undefined,
+                });
+                return;
+            }
+            const delta = window.innerHeight - vv.height;
+            const safe = Number(
+                getComputedStyle(document.documentElement)
+                    .getPropertyValue('--_fake_safe_area_bottom')
+                    .replace(/px/, '') || 0,
+            );
+            const adj = delta > 8 ? Math.max(0, delta - safe) : 0;
+            setBottomComp(prev => (prev !== adj ? adj : prev));
+            emitModalViewportMetric({
+                modalId: modalIdRef.current,
+                bottomComp: adj,
+                vhUnit:
+                    (window.visualViewport?.height || window.innerHeight) /
+                        100 || 0,
+                innerHeight: window.innerHeight,
+                visualViewportHeight: window.visualViewport?.height,
+                timestamp: Date.now(),
+                phase: 'update',
+                userAgent:
+                    typeof navigator !== 'undefined'
+                        ? navigator.userAgent
+                        : undefined,
+            });
+        } catch {
+            setBottomComp(0);
+            emitModalViewportMetric({
+                modalId: modalIdRef.current,
+                bottomComp: 0,
+                vhUnit:
+                    (window.visualViewport?.height || window.innerHeight) /
+                        100 || 0,
+                innerHeight: window.innerHeight,
+                visualViewportHeight: window.visualViewport?.height,
+                timestamp: Date.now(),
+                phase: 'update',
+                userAgent:
+                    typeof navigator !== 'undefined'
+                        ? navigator.userAgent
+                        : undefined,
+            });
+        }
+    }, []);
+    recomputeBottomCompRef.current = computeBottomComp;
+
+    // Observa mudanças de visualViewport e eventos customizados para recalcular compensação.
+    React.useEffect(() => {
+        if (!open || !props.fullScreen) return;
+        computeBottomComp();
+        const vv = window.visualViewport;
+        const onVV = () => computeBottomComp();
+        vv?.addEventListener('resize', onVV);
+        vv?.addEventListener('scroll', onVV); // iOS toolbar show/hide
+        window.addEventListener('orientationchange', onVV);
+        // Eventos customizados disparados por outros componentes quando layout interno muda.
+        const onRecompute = () => computeBottomComp();
+        window.addEventListener('modal:recompute-bottom-comp', onRecompute);
+        window.addEventListener('modal:layout-changed', onRecompute);
+        // Recalcular sob primeiro scroll (throttled) para capturar possíveis diffs após imagens/fontes.
+        let scheduled = false;
+        const onScroll = () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                computeBottomComp();
+            });
+        };
+        const contentEl = contentRef.current;
+        if (contentEl && props.fullScreen) {
+            contentEl.addEventListener('scroll', onScroll, { passive: true });
+        }
+        return () => {
+            vv?.removeEventListener('resize', onVV);
+            vv?.removeEventListener('scroll', onVV);
+            window.removeEventListener('orientationchange', onVV);
+            window.removeEventListener(
+                'modal:recompute-bottom-comp',
+                onRecompute,
+            );
+            window.removeEventListener('modal:layout-changed', onRecompute);
+            if (contentEl && props.fullScreen) {
+                contentEl.removeEventListener('scroll', onScroll);
+            }
+        };
+    }, [open, props.fullScreen, computeBottomComp]);
 
     const isIOS = React.useMemo(() => {
         if (typeof navigator === 'undefined') return false;
@@ -276,6 +404,53 @@ export default function AppModal(props: AppModalProps) {
             }
         };
     }, [open, isIOS, updateVhVar]);
+
+    // Telemetria de fase 'open' (executa após montagem / abertura)
+    React.useEffect(() => {
+        if (!open) return;
+        // rAF garante que efeitos de layout (vh var / compute inicial) já ocorreram
+        const id = modalIdRef.current;
+        const currentBottomComp = bottomComp; // captura valor estável
+        const raf = requestAnimationFrame(() => {
+            emitModalViewportMetric({
+                modalId: id,
+                bottomComp: currentBottomComp,
+                vhUnit:
+                    (window.visualViewport?.height || window.innerHeight) /
+                        100 || 0,
+                innerHeight: window.innerHeight,
+                visualViewportHeight: window.visualViewport?.height,
+                timestamp: Date.now(),
+                phase: 'open',
+                userAgent:
+                    typeof navigator !== 'undefined'
+                        ? navigator.userAgent
+                        : undefined,
+            });
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [open, bottomComp]);
+
+    // Telemetria de fase 'close'
+    React.useEffect(() => {
+        if (open) return; // dispara somente na transição para fechado
+        if (!modalIdRef.current) return;
+        emitModalViewportMetric({
+            modalId: modalIdRef.current,
+            bottomComp,
+            vhUnit:
+                (window.visualViewport?.height || window.innerHeight) / 100 ||
+                0,
+            innerHeight: window.innerHeight,
+            visualViewportHeight: window.visualViewport?.height,
+            timestamp: Date.now(),
+            phase: 'close',
+            userAgent:
+                typeof navigator !== 'undefined'
+                    ? navigator.userAgent
+                    : undefined,
+        });
+    }, [open, bottomComp]);
     // Hotkeys reutilizáveis para fechar modal
     useModalCloseHotkeys({
         open,
@@ -431,6 +606,41 @@ export default function AppModal(props: AppModalProps) {
             setTimeout(() => restore('close-timeout-' + ms), ms),
         );
 
+        // Guard adicional: remover aria-hidden de um root que ainda contenha o elemento focado
+        const focusGuard = () => {
+            try {
+                const active = document.activeElement as HTMLElement | null;
+                if (!active) return;
+                const staleRoot = active.closest(
+                    '.MuiModal-root[aria-hidden="true"]',
+                ) as HTMLElement | null;
+                if (staleRoot) {
+                    staleRoot.removeAttribute('aria-hidden');
+                    staleRoot.style.pointerEvents = 'none';
+                    staleRoot.style.zIndex = '0';
+                    // Move foco para body para evitar novo lock
+                    try {
+                        (document.body as HTMLElement).focus?.();
+                    } catch {
+                        /* noop */
+                    }
+                    window.dispatchEvent(
+                        new CustomEvent('debug:log', {
+                            detail: {
+                                label: 'Modal: focusGuard cleaned hidden root',
+                                ts: Date.now(),
+                            },
+                        }),
+                    );
+                }
+            } catch {
+                /* noop */
+            }
+        };
+        const fgTimeouts = [0, 40, 90, 180, 360, 600].map(ms =>
+            setTimeout(focusGuard, ms),
+        );
+
         // Registrar fallback listeners uma única vez (singleton)
         if (!window.__ensureScrollUnlockInstalled) {
             window.__ensureScrollUnlockInstalled = true;
@@ -457,7 +667,10 @@ export default function AppModal(props: AppModalProps) {
                 }),
             );
         }
-        return () => timeouts.forEach(t => clearTimeout(t));
+        return () => {
+            timeouts.forEach(t => clearTimeout(t));
+            fgTimeouts.forEach(t => clearTimeout(t));
+        };
     }, [open]);
 
     // MutationObserver: remove aria-hidden reintroduzido no dialog durante estado aberto
@@ -757,149 +970,216 @@ export default function AppModal(props: AppModalProps) {
             open={open}
             onClose={handleMuiClose}
             disableEscapeKeyDown={disableEscapeKeyDown || !closeOnEscape}
-            keepMounted
+            // Apenas mantém montado quando não pedimos unmount explícito
+            keepMounted={!unmountOnClose}
             disableScrollLock
         >
-            <Box
-                ref={contentRef}
-                role='dialog'
-                aria-modal={open ? true : undefined}
-                // Removido aria-hidden dinâmico: causava conflito com foco e gerava estado read-only.
-                onTouchStart={e => {
-                    // Guard contra scroll elástico propagando para o body no iOS
-                    const el = e.currentTarget as HTMLElement;
-                    try {
-                        // Memoriza posição Y do toque para detectar direção no touchmove
-                        const t = (e.touches && e.touches[0]) || null;
-                        lastTouchYRef.current = t ? t.clientY : null;
-                        if (el.scrollHeight <= el.clientHeight + 1) return;
-                        const atTop = el.scrollTop <= 0;
-                        const atBottom =
-                            el.scrollTop + el.clientHeight >=
-                            el.scrollHeight - 1;
-                        if (atTop) {
-                            // Nudge para fora do topo para habilitar scroll interno
-                            el.scrollTop = 1;
-                        } else if (atBottom) {
-                            // Nudge para dentro do final
-                            el.scrollTop =
-                                el.scrollHeight - el.clientHeight - 1;
-                        }
-                    } catch {
-                        /* noop */
-                    }
+            <div
+                style={{
+                    position: fullScreen ? 'fixed' : undefined,
+                    inset: fullScreen ? 0 : undefined,
                 }}
-                onTouchMove={e => {
-                    // Se o conteúdo não consegue rolar ou está numa borda e o gesto tenta exceder, previne a propagação (impede scroll da página)
-                    const el = e.currentTarget as HTMLElement;
-                    try {
-                        const t = (e.touches && e.touches[0]) || null;
-                        const currentY = t ? t.clientY : null;
-                        const lastY = lastTouchYRef.current;
-                        if (currentY != null && lastY != null) {
-                            const dy = currentY - lastY; // positivo: arrastando para baixo
-                            const canScroll =
-                                el.scrollHeight > el.clientHeight + 1;
+            >
+                {fullScreen && open && (
+                    <div
+                        data-appmodal-page-overlay='1'
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'var(--color-bg)',
+                            // Overlay fica atrás do conteúdo principal
+                            zIndex: 1300,
+                            pointerEvents: 'none',
+                        }}
+                    />
+                )}
+                <Box
+                    ref={contentRef}
+                    role='dialog'
+                    aria-modal={open ? true : undefined}
+                    // Removido aria-hidden dinâmico: causava conflito com foco e gerava estado read-only.
+                    onTouchStart={e => {
+                        // Guard contra scroll elástico propagando para o body no iOS
+                        const el = e.currentTarget as HTMLElement;
+                        try {
+                            // Memoriza posição Y do toque para detectar direção no touchmove
+                            const t = (e.touches && e.touches[0]) || null;
+                            lastTouchYRef.current = t ? t.clientY : null;
+                            if (el.scrollHeight <= el.clientHeight + 1) return;
                             const atTop = el.scrollTop <= 0;
                             const atBottom =
                                 el.scrollTop + el.clientHeight >=
                                 el.scrollHeight - 1;
-                            const tryingPastTop = dy > 0 && atTop;
-                            const tryingPastBottom = dy < 0 && atBottom;
-                            if (
-                                !canScroll ||
-                                tryingPastTop ||
-                                tryingPastBottom
-                            ) {
-                                // Previne o rubber-band atingir o body/viewport
-                                e.preventDefault();
-                                return;
+                            if (atTop) {
+                                // Nudge para fora do topo para habilitar scroll interno
+                                el.scrollTop = 1;
+                            } else if (atBottom) {
+                                // Nudge para dentro do final
+                                el.scrollTop =
+                                    el.scrollHeight - el.clientHeight - 1;
                             }
+                        } catch {
+                            /* noop */
                         }
-                        // Atualiza última posição
-                        lastTouchYRef.current = currentY;
-                    } catch {
-                        /* noop */
-                    }
-                }}
-                sx={
-                    fullScreen
-                        ? {
-                              position: 'fixed',
-                              // Cobertura total da viewport (inclusive iOS com toolbars dinâmicas)
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              transform: 'none',
-                              bgcolor: 'var(--color-bg)',
-                              borderRadius: 0,
-                              boxShadow: 24,
-                              // Safe-area superior: pode ser desativado quando o conteúdo já trata disso
-                              pt: disableTopSafePadding
-                                  ? 0
-                                  : 'env(safe-area-inset-top, 0px)',
-                              pr: 2,
-                              pl: 2,
-                              // padding-bottom com safe-area inferior
-                              pb: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
-                              boxSizing: 'border-box',
-                              width: '100%',
-                              maxWidth: '100%',
-                              // Garante altura mínima para preencher a viewport dinâmica
-                              minHeight: 'calc(var(--appmodal-vh, 1vh) * 100)',
-                              overflowY: 'auto',
-                              overflowX: 'hidden',
-                              WebkitOverflowScrolling: 'touch',
-                              // Impede scroll chaining/scroll da página abaixo
-                              overscrollBehaviorY: 'contain',
-                              overscrollBehaviorX: 'none',
-                              pointerEvents: 'auto',
-                              // A small fixed bar to paint the OS safe-area with the app's header blue
-                              ...(showCloseButton
-                                  ? {
-                                        '&::before': {
-                                            content: '""',
-                                            position: 'fixed',
-                                            top: 0,
-                                            left: 0,
-                                            right: 0,
-                                            height: 'env(safe-area-inset-top, 0px)',
-                                            background: 'var(--color-primary)',
-                                            zIndex: 1,
-                                            pointerEvents: 'none',
-                                        },
-                                    }
-                                  : {}),
-                          }
-                        : {
-                              ...style,
-                              // Permite ajustar a altura máxima por modal
-                              maxHeight: `calc(var(--appmodal-vh, 1vh) * ${maxHeightVh})`,
-                              position: 'absolute' as const,
-                              WebkitOverflowScrolling: 'touch',
-                          }
-                }
-                tabIndex={-1}
-            >
-                {showCloseButton && (
-                    <ModalActionsBar
-                        onClose={onClose}
-                        showCloseButton={showCloseButton}
-                        style={actionsBarStyle}
-                    />
-                )}
-                {/* Reserve a right-side safe area so content never goes under the sticky close (X) */}
-                <div
-                    style={{
-                        // Reserve space for larger touch target (44px) + small gutter
-                        paddingRight: showCloseButton ? 48 : 0,
-                        pointerEvents: 'auto',
                     }}
+                    onTouchMove={e => {
+                        // Se o conteúdo não consegue rolar ou está numa borda e o gesto tenta exceder, previne a propagação (impede scroll da página)
+                        const el = e.currentTarget as HTMLElement;
+                        try {
+                            const t = (e.touches && e.touches[0]) || null;
+                            const currentY = t ? t.clientY : null;
+                            const lastY = lastTouchYRef.current;
+                            if (currentY != null && lastY != null) {
+                                const dy = currentY - lastY; // positivo: arrastando para baixo
+                                const canScroll =
+                                    el.scrollHeight > el.clientHeight + 1;
+                                const atTop = el.scrollTop <= 0;
+                                const atBottom =
+                                    el.scrollTop + el.clientHeight >=
+                                    el.scrollHeight - 1;
+                                const tryingPastTop = dy > 0 && atTop;
+                                const tryingPastBottom = dy < 0 && atBottom;
+                                if (
+                                    !canScroll ||
+                                    tryingPastTop ||
+                                    tryingPastBottom
+                                ) {
+                                    // Previne o rubber-band atingir o body/viewport
+                                    e.preventDefault();
+                                    return;
+                                }
+                            }
+                            // Atualiza última posição
+                            lastTouchYRef.current = currentY;
+                        } catch {
+                            /* noop */
+                        }
+                    }}
+                    sx={
+                        fullScreen
+                            ? {
+                                  position: 'fixed',
+                                  // Cobertura total da viewport (inclusive iOS com toolbars dinâmicas)
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  transform: 'none',
+                                  bgcolor: 'var(--color-bg)',
+                                  borderRadius: 0,
+                                  boxShadow: 24,
+                                  // Safe-area superior: pode ser desativado quando o conteúdo já trata disso
+                                  pt: disableTopSafePadding
+                                      ? 0
+                                      : 'env(safe-area-inset-top, 0px)',
+                                  pr: 2,
+                                  pl: 2,
+                                  // padding-bottom com safe-area inferior
+                                  pb: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+                                  boxSizing: 'border-box',
+                                  width: '100%',
+                                  maxWidth: '100%',
+                                  // Garante altura mínima para preencher a viewport dinâmica
+                                  // Combina unidade JS custom (para iOS antigo) com 100dvh (Safari moderno) para evitar "vazamento" de fundo na barra inferior.
+                                  minHeight:
+                                      'calc(var(--appmodal-vh, 1vh) * 100)',
+                                  height: '100dvh',
+                                  overflowY: 'auto',
+                                  overflowX: 'hidden',
+                                  WebkitOverflowScrolling: 'touch',
+                                  ...(disableOuterScroll
+                                      ? {
+                                            overflowY: 'visible',
+                                            // Para permitir que um filho flex ocupe todo espaço e seja scrollable
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                        }
+                                      : {}),
+                                  // Impede scroll chaining/scroll da página abaixo
+                                  overscrollBehaviorY: 'contain',
+                                  overscrollBehaviorX: 'none',
+                                  pointerEvents: 'auto',
+                                  // Garante que o conteúdo esteja acima do overlay e de backdrops residuais
+                                  zIndex: 1310,
+                                  // Overlays fixos para pintar áreas seguras (top já existe via ::before condicional; adicionamos ::after sempre para o bottom)
+                                  '&::after': {
+                                      content: '""',
+                                      position: 'fixed',
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 0,
+                                      // Soma safe-area e compensação dinâmica (se existente)
+                                      height: 'calc(env(safe-area-inset-bottom, 0px) + var(--appmodal-bottom-comp, 0px))',
+                                      background: 'var(--color-bg)',
+                                      zIndex: 1,
+                                      pointerEvents: 'none',
+                                  },
+                                  // A small fixed bar to paint the OS safe-area with the app's header blue
+                                  ...(showCloseButton
+                                      ? {
+                                            '&::before': {
+                                                content: '""',
+                                                position: 'fixed',
+                                                top: 0,
+                                                left: 0,
+                                                right: 0,
+                                                height: 'env(safe-area-inset-top, 0px)',
+                                                background:
+                                                    'var(--color-primary)',
+                                                zIndex: 1,
+                                                pointerEvents: 'none',
+                                            },
+                                        }
+                                      : {}),
+                              }
+                            : {
+                                  ...style,
+                                  // Permite ajustar a altura máxima por modal
+                                  maxHeight: `calc(var(--appmodal-vh, 1vh) * ${maxHeightVh})`,
+                                  position: 'absolute' as const,
+                                  WebkitOverflowScrolling: 'touch',
+                              }
+                    }
+                    tabIndex={-1}
+                    data-appmodal-fullscreen={fullScreen ? '1' : undefined}
+                    data-bottom-comp={bottomComp || undefined}
+                    style={
+                        fullScreen && bottomComp
+                            ? {
+                                  // Expor CSS var para pseudo-element
+                                  ['--appmodal-bottom-comp' as string]: `${bottomComp}px`,
+                              }
+                            : undefined
+                    }
                 >
-                    {children}
-                </div>
-            </Box>
+                    {showCloseButton && (
+                        <ModalActionsBar
+                            onClose={onClose}
+                            showCloseButton={showCloseButton}
+                            style={actionsBarStyle}
+                        />
+                    )}
+                    {/* Reserve a right-side safe area so content never goes under the sticky close (X) */}
+                    <div
+                        style={{
+                            // Reserve space for larger touch target (44px) + small gutter
+                            paddingRight: showCloseButton ? 48 : 0,
+                            pointerEvents: 'auto',
+                        }}
+                    >
+                        {children}
+                        {/* Internal bottom scroll buffer to prevent revealing underlying page on iOS rubber-band */}
+                        <div
+                            data-testid='appmodal-bottom-buffer'
+                            style={{
+                                height: 'calc(env(safe-area-inset-bottom, 0px) + var(--appmodal-bottom-comp, 0px) + 32px)',
+                                width: '100%',
+                                pointerEvents: 'none',
+                            }}
+                        />
+                    </div>
+                </Box>
+            </div>
         </Modal>
     );
 }

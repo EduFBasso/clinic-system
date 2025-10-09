@@ -184,8 +184,17 @@ export function useClientPendingState({
         let sISO = client.next_appointment_start_at || undefined;
         let eISO = client.next_appointment_end_at || undefined;
         let id = client.next_appointment_id ?? undefined;
-        // Se faltam dados locais, tenta uma busca server-side para recuperar o primeiro pendente
-        if (!sISO || !eISO || !id) {
+
+        // Caso estejamos em estado pendente mas o "next" local aponta para o futuro,
+        // precisamos buscar o compromisso passado (fim <= now) que realmente originou a pendência.
+        const nowMs = now.getTime();
+        const startMs = sISO ? new Date(sISO).getTime() : NaN;
+        const endMs = eISO ? new Date(eISO).getTime() : NaN;
+        const windowIsFuture =
+            (isFinite(startMs) && startMs > nowMs) ||
+            (isFinite(endMs) && endMs > nowMs);
+
+        if (effectivePending && (windowIsFuture || !sISO || !eISO || !id)) {
             const fetched = await findFirstPendingForClient(client.id, now);
             if (fetched) {
                 id = fetched.id;
@@ -193,6 +202,7 @@ export function useClientPendingState({
                 eISO = fetched.end_at;
             }
         }
+
         if (!sISO || !eISO || !id) {
             try {
                 window.dispatchEvent(
@@ -208,6 +218,7 @@ export function useClientPendingState({
             }
             return;
         }
+
         const appt: SharedAppointmentLike = {
             id,
             title: client.next_appointment_title ?? undefined,
@@ -225,7 +236,7 @@ export function useClientPendingState({
         } catch {
             /* noop */
         }
-    }, [client, now]);
+    }, [client, now, effectivePending]);
 
     const tryOpenPendingElseQuick = React.useCallback(
         async (onNoPending: () => void) => {

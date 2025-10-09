@@ -28,13 +28,15 @@ import { useClientPendingState } from '../hooks/useClientPendingState';
 import FinalizeButton from './clientCard/FinalizeButton';
 // SolveButton lives in clientCard folder along with FinalizeButton
 import SolveButton from './clientCard/SolveButton';
-import FutureAppointmentsList from './clientCard/FutureAppointmentsList';
+import {
+    FutureAppointmentsList,
+    useClientFutureAppointments,
+} from '../domain/futureAppointments';
 // (hysteresis & appointment state consolidated inside hooks)
 import { useFinalizeAppointment } from '../hooks/useFinalizeAppointment';
 // Replaced latch/snapshot/sweep logic by consolidated hook
 import { useClientOngoingState } from '../hooks/useClientOngoingState';
 import { formatTime } from '../utils/timeFormat';
-import { useClientFutureAppointments } from '../hooks/useClientFutureAppointments';
 import { openClientForm } from '../utils/openClientForm';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
@@ -167,6 +169,9 @@ export default function ClientCard({
     // Estado pendente isolado não exibe cabeçalho/tipo para manter UI minimalista.
     // Agenda line (tipo / horário) é suprimida se pendente para manter visual minimalista.
     // Porém queremos ainda exibir a linha 'Data:' com o botão Solucionar mesmo que haja um agendamento (scheduled+pending).
+    // Regra revisada:
+    //  - Quando pendente: não mostramos linha de agenda nem linha Data (substituímos por bloco compacto de pendência)
+    //  - Linha de agenda aparece apenas se há scheduled ativo, em andamento ou futuros E não está pendente
     const hasAgendaLine =
         !isPending &&
         (isScheduled || isOngoing || futureAppointments.length > 0);
@@ -365,7 +370,7 @@ export default function ClientCard({
                         {client.first_name} {client.last_name}
                     </span>
                 </div>
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div className={styles.nameActions}>
                     <button
                         className={styles.iconButton}
                         title='Editar cliente'
@@ -378,13 +383,6 @@ export default function ClientCard({
                             }
                             openClientForm({ id: client.id });
                         }}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 32,
-                            height: 32,
-                        }}
                     >
                         <FaEdit color={iconColor} />
                     </button>
@@ -395,34 +393,17 @@ export default function ClientCard({
                             e.stopPropagation();
                             onView(client);
                         }}
-                        style={{
-                            // Se houver foto, remove padding extra para encaixar círculo
-                            padding: client.photo ? 0 : undefined,
-                            borderRadius: client.photo ? '50%' : undefined,
-                            width: client.photo ? 40 : undefined,
-                            height: client.photo ? 40 : undefined,
-                            overflow: client.photo ? 'hidden' : undefined,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: client.photo
-                                ? 'var(--color-surface-strong)'
-                                : undefined,
-                            boxShadow: client.photo
-                                ? '0 0 0 1px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.12)'
-                                : undefined,
-                        }}
+                        style={
+                            client.photo
+                                ? { padding: 0, overflow: 'hidden' }
+                                : undefined
+                        }
                     >
                         {client.photo ? (
                             <img
                                 src={client.photo}
                                 alt={`Foto de ${client.first_name} ${client.last_name}`}
-                                style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover',
-                                    display: 'block',
-                                }}
+                                className={styles.clientThumb}
                                 loading='lazy'
                                 decoding='async'
                                 onError={ev => {
@@ -441,6 +422,7 @@ export default function ClientCard({
                     </button>
                 </div>
             </div>
+
             {ageYears !== null && (
                 <div className={styles.infoRow}>
                     <span
@@ -754,14 +736,8 @@ export default function ClientCard({
 
             {/* Fallback bloco removido: Data agora unificada acima usando displayStartISO/displayEndISO */}
 
-            {/* Bloco 'Sem agendamento' apenas quando não há agendamento, não está em andamento e NÃO está pendente (evita duplicação). */}
-            {/* A linha 'Data:' funciona como fallback geral quando NÃO mostramos a linha de agenda acima.
-                Mostramos também quando está pendente (mesmo se scheduled) para expor o botão Solucionar em posição consistente.
-                Regras:
-                  - Se há agenda line (hasAgendaLine) => já mostramos horário; evitamos duplicar exceto caso pendente.
-                  - Caso pendente e scheduled: hasAgendaLine é false (porque !isPending exigido), então esta linha aparece.
-            */}
-            {(!hasAgendaLine || isPending) && !isOngoing && (
+            {/* Linha Data fallback revisada: só aparece quando NÃO há agenda line, NÃO está pendente e NÃO está em andamento. */}
+            {!hasAgendaLine && !isPending && !isOngoing && (
                 <div className={styles.infoRow}>
                     <span
                         className={styles.label}
@@ -773,55 +749,67 @@ export default function ClientCard({
                         className={styles.value}
                         style={{ color: valueColor }}
                     >
-                        {isPending
-                            ? 'Compromisso pendente'
-                            : isScheduled
-                            ? 'Agendado'
-                            : 'Sem agendamento'}
+                        {isScheduled ? 'Agendado' : 'Sem agendamento'}
                     </span>
-                    {isPending ? (
-                        <SolveButton
-                            onSolve={async () => {
-                                try {
-                                    onSelect?.();
-                                } catch {
-                                    /* noop */
-                                }
-                                await tryOpenPendingElseQuick(() => {
-                                    /* noop fallback */
-                                });
-                            }}
-                        />
-                    ) : (
-                        <>
-                            <button
-                                className={styles.iconButton}
-                                title={createActionFallback.title}
-                                disabled={createActionFallback.disabled}
-                                style={
-                                    createActionFallback.disabled
-                                        ? {
-                                              opacity: 0.45,
-                                              cursor: 'not-allowed',
-                                          }
-                                        : undefined
-                                }
-                                onClick={createActionFallback.onClick}
-                            >
-                                <FaPlus color={iconColor} />
-                            </button>
-                            <button
-                                className={styles.iconButton}
-                                title='Agenda mensal'
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    setShowMonthly(true);
-                                }}
-                            >
-                                <FaCalendarAlt color={iconColor} />
-                            </button>
-                        </>
-                    )}
+                    <button
+                        className={styles.iconButton}
+                        title={createActionFallback.title}
+                        disabled={createActionFallback.disabled}
+                        style={
+                            createActionFallback.disabled
+                                ? { opacity: 0.45, cursor: 'not-allowed' }
+                                : undefined
+                        }
+                        onClick={createActionFallback.onClick}
+                    >
+                        <FaPlus color={iconColor} />
+                    </button>
+                    <button
+                        className={styles.iconButton}
+                        title='Agenda mensal'
+                        onClick={e => {
+                            e.stopPropagation();
+                            setShowMonthly(true);
+                        }}
+                    >
+                        <FaCalendarAlt color={iconColor} />
+                    </button>
+                </div>
+            )}
+
+            {/* Bloco compacto de pendência substitui linha Data e ícones quando pendente (independente de scheduled). */}
+            {isPending && !isOngoing && (
+                <div
+                    className={styles.infoRow}
+                    style={{ alignItems: 'center' }}
+                >
+                    <span
+                        className={styles.label}
+                        style={{ color: labelColor, fontWeight: 'bold' }}
+                    >
+                        Status:
+                    </span>
+                    <span
+                        className={styles.value}
+                        style={{
+                            color: 'var(--color-text-secondary, #6b7280)',
+                            fontStyle: 'italic',
+                        }}
+                    >
+                        Compromisso pendente
+                    </span>
+                    <SolveButton
+                        onSolve={async () => {
+                            try {
+                                onSelect?.();
+                            } catch {
+                                /* noop */
+                            }
+                            await tryOpenPendingElseQuick(() => {
+                                /* noop fallback */
+                            });
+                        }}
+                    />
                 </div>
             )}
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatTime } from '../../utils/timeFormat';
 import styles from '../../styles/components/ClientCard.module.css';
 import type { Appointment } from '../../hooks/useAppointments';
 import { API_BASE } from '../../config/api';
@@ -46,11 +47,7 @@ export default function FutureAppointmentsList({
                         .replace(/\b(\w)/, c => c.toUpperCase());
                     const dd = String(s.getDate()).padStart(2, '0');
                     const mm = String(s.getMonth() + 1).padStart(2, '0');
-                    const fmt = (d: Date) =>
-                        d.toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                        });
+                    const fmt = (d: Date) => formatTime(d, { mode: 'local' });
                     return (
                         <div
                             key={f.id}

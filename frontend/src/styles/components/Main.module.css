@@ -7,6 +7,7 @@
     ); /* altura da viewport - header/faixa/footer */
     padding: 1rem;
     background-color: var(--color-bg);
+    /* A área principal deve rolar sob header+faixa+navbar. Não aplicar overflow aqui para não quebrar sticky. */
 }
 
 .filterContainer {
@@ -15,10 +16,50 @@
     top: calc(
         var(--header-h) + var(--faixa-h) + var(--navbar-h)
     ); /* desktop: 80 + 8 + 56 = 144px */
-    z-index: 90; /* abaixo do header/faixa (100) */
+    z-index: 90; /* abaixo do header/faixa (100) para não sobrepor o header */
     background: var(--color-bg);
     padding-top: 0.5rem;
-    padding-bottom: 0.5rem; /* cria um buffer sob o filtro quando estiver grudado */
+    padding-bottom: 0.75rem; /* buffer levemente maior para mascarar bordas de cartões */
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    isolation: isolate; /* cria novo contexto de empilhamento para mascarar conteúdo abaixo */
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    /* Evita que a máscara lateral (::before) force rolagem horizontal */
+    overflow-x: clip;
+    overflow-y: visible;
+}
+
+/* Garanta que o conteúdo (rótulo e input) fique acima das máscaras (::before/::after) */
+.filterContainer > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Máscara lateral/ampliada: cobre além das bordas internas do main para impedir vazamento das bordas dos cards nas laterais */
+.filterContainer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100vw; /* estende muito à esquerda */
+    right: -100vw; /* estende muito à direita */
+    bottom: 0;
+    background: var(--color-bg);
+    z-index: 0; /* atrás do conteúdo do filtro */
+    pointer-events: none;
+}
+
+/* Faixa de máscara extra abaixo do filtro para esconder bordas selecionadas nas laterais quando os cartões encostam */
+.filterContainer::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -6px;
+    height: 12px; /* pequeno prolongamento sob o filtro */
+    background: var(--color-bg);
+    z-index: 0; /* atrás do conteúdo do filtro */
+    pointer-events: none;
 }
 
 .filterRow {
@@ -49,6 +90,8 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 20px;
+    position: relative;
+    z-index: 1; /* abaixo do filtro sticky (z=90) */
     /* Ao usar rolagem programática (ex: scrollIntoView), garanta offset do cabeçalho + filtro */
     scroll-padding-top: calc(
         var(--header-h) + var(--faixa-h) + var(--navbar-h) + 96px

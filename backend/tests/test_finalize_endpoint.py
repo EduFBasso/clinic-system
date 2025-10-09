@@ -42,6 +42,7 @@ def test_finalize_in_progress_shortens_end(client, django_user_model):
     assert r.status_code == 200
     appt.refresh_from_db()
     assert appt.status == Appointment.Status.DONE
+    assert appt.finalized_at is not None
     # Deve ter encurtado (end_at < orig_end)
     assert appt.end_at < orig_end
 
@@ -65,5 +66,6 @@ def test_finalize_after_past_keeps_end(client, django_user_model):
     assert r.status_code == 200
     appt.refresh_from_db()
     assert appt.status == Appointment.Status.DONE
+    assert appt.finalized_at is not None
     # Não deve encurtar (mantém fim planejado porque já passou)
     assert appt.end_at == orig_end

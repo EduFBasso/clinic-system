@@ -3,7 +3,7 @@ import FloatingDatePicker from '../components/FloatingDatePicker';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import ClientCardRow from '../components/shared/ClientCardRow';
 import QuickScheduleModal from '../components/QuickScheduleModal';
-import PendingActionsModal from '../components/PendingActionsModal';
+// PendingActionsModal agora é gerenciado globalmente em Home via evento 'pendingActions:open'
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
@@ -75,10 +75,7 @@ export default function DesktopAgendaPage() {
         startOfDay(new Date()),
     );
     const [reloadKey, setReloadKey] = React.useState(0);
-    const [pendingOpen, setPendingOpen] = React.useState(false);
-    const [pendingAppt, setPendingAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    // Removido: estado local de PendingActions; usar evento global
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
@@ -415,7 +412,6 @@ export default function DesktopAgendaPage() {
                 </select>
             </div>
 
-            {/* Lista do dia */}
             <div
                 style={{
                     overflow: 'auto',
@@ -441,7 +437,7 @@ export default function DesktopAgendaPage() {
                         return (
                             <div
                                 key={a.id}
-                                data-appt-id={a.id}
+                                data-appt-wrapper-id={a.id}
                                 style={{
                                     // Keep outer wrapper for spacing; grid managed by row/editor
                                     minWidth: 0,
@@ -501,10 +497,88 @@ export default function DesktopAgendaPage() {
                                                     : undefined
                                             }
                                             onResolvePending={appt => {
-                                                setPendingAppt(
-                                                    appt as Appointment,
-                                                );
-                                                setPendingOpen(true);
+                                                try {
+                                                    const a =
+                                                        appt as Appointment;
+                                                    const clientName = (():
+                                                        | string
+                                                        | undefined => {
+                                                        const anyAppt =
+                                                            a as unknown as Record<
+                                                                string,
+                                                                unknown
+                                                            >;
+                                                        if (
+                                                            typeof anyAppt.client_name ===
+                                                            'string'
+                                                        )
+                                                            return anyAppt.client_name as string;
+                                                        const c =
+                                                            anyAppt.client as unknown;
+                                                        if (
+                                                            c &&
+                                                            typeof c ===
+                                                                'object' &&
+                                                            'name' in
+                                                                (c as Record<
+                                                                    string,
+                                                                    unknown
+                                                                >)
+                                                        ) {
+                                                            const n = (
+                                                                c as {
+                                                                    name?: unknown;
+                                                                }
+                                                            ).name;
+                                                            if (
+                                                                typeof n ===
+                                                                'string'
+                                                            )
+                                                                return n;
+                                                        }
+                                                        return undefined;
+                                                    })();
+                                                    const clientField =
+                                                        ((): unknown => {
+                                                            const anyAppt =
+                                                                a as unknown as Record<
+                                                                    string,
+                                                                    unknown
+                                                                >;
+                                                            const c =
+                                                                anyAppt.client as unknown;
+                                                            if (
+                                                                typeof c ===
+                                                                    'number' ||
+                                                                typeof c ===
+                                                                    'object'
+                                                            )
+                                                                return c;
+                                                            return undefined;
+                                                        })();
+                                                    const payload = {
+                                                        id: a.id,
+                                                        start_at: a.start_at,
+                                                        end_at: a.end_at,
+                                                        status: a.status,
+                                                        notes: a.notes,
+                                                        client_name: clientName,
+                                                        client: clientField,
+                                                        title: a.title,
+                                                    } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
+                                                    window.dispatchEvent(
+                                                        new CustomEvent(
+                                                            'pendingActions:open',
+                                                            {
+                                                                detail: {
+                                                                    appt: payload,
+                                                                },
+                                                            },
+                                                        ),
+                                                    );
+                                                } catch {
+                                                    /* noop */
+                                                }
                                             }}
                                             onDetails={
                                                 a.status === 'done'
@@ -570,17 +644,7 @@ export default function DesktopAgendaPage() {
                     }}
                 />
             )}
-            {pendingOpen && pendingAppt && (
-                <PendingActionsModal
-                    open={pendingOpen}
-                    onClose={() => {
-                        setPendingOpen(false);
-                        setPendingAppt(null);
-                        setReloadKey(x => x + 1);
-                    }}
-                    appt={pendingAppt}
-                />
-            )}
+            {/* PendingActionsModal renderizado globalmente em Home */}
             {detailsOpen && detailsAppt && (
                 <AppointmentDetailsModal
                     open={detailsOpen}
