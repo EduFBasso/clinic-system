@@ -37,13 +37,18 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'register.Professional'
 
 MIDDLEWARE = [
+    # Security first
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    # Serve static files efficiently (must be right after SecurityMiddleware)
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    # Slow query logger (added after security/whitenoise for realistic timings)
+    # Custom instrumentation (kept early for realistic timings)
     'clinic_project.middleware.QueryTimingMiddleware',
     'clinic_project.middleware.VersionHeaderMiddleware',
+    # Sessions before CORS/Common to ensure session is available when needed
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # CORS should be as high as possible and before CommonMiddleware
+    'corsheaders.middleware.CorsMiddleware',
+    # Standard Django middlewares
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -106,7 +111,10 @@ WSGI_APPLICATION = 'clinic_project.wsgi.application'
 
 import os as _os
 _IN_CI = _os.environ.get('GITHUB_ACTIONS') == 'true'
-# Use SQLite em memória em CI ou quando explicitamente solicitado via TEST_USE_SQLITE
+# Test DB strategy:
+# - Default: use the configured Postgres to mirror production usage.
+# - To run tests sem Postgres (ex.: máquina nova/CI), defina TEST_USE_SQLITE=true
+#   para usar SQLite em memória de forma isolada e rápida.
 _USE_SQLITE_FOR_TESTS = config('TEST_USE_SQLITE', default=False, cast=bool) or _IN_CI
 if _USE_SQLITE_FOR_TESTS:
     DATABASES = {
