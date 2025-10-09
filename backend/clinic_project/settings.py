@@ -39,15 +39,15 @@ AUTH_USER_MODEL = 'register.Professional'
 MIDDLEWARE = [
     # Security first
     'django.middleware.security.SecurityMiddleware',
+    # CORS must be as high as possible to ensure headers on all responses (incl. preflight)
+    'corsheaders.middleware.CorsMiddleware',
     # Serve static files efficiently (must be right after SecurityMiddleware)
     'whitenoise.middleware.WhiteNoiseMiddleware',
     # Custom instrumentation (kept early for realistic timings)
     'clinic_project.middleware.QueryTimingMiddleware',
     'clinic_project.middleware.VersionHeaderMiddleware',
-    # Sessions before CORS/Common to ensure session is available when needed
+    # Sessions
     'django.contrib.sessions.middleware.SessionMiddleware',
-    # CORS should be as high as possible and before CommonMiddleware
-    'corsheaders.middleware.CorsMiddleware',
     # Standard Django middlewares
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -134,6 +134,14 @@ else:
             'PORT': config('DB_PORT', default='5432'),
         }
     }
+    # Keep DB connections open for a short period to reduce reconnect overhead in production.
+    # Helps avoid intermittent latency spikes and health-check timeouts on platforms like Render.
+    # Set via env DB_CONN_MAX_AGE (seconds). Reasonable values: 60-300.
+    try:
+        DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=60, cast=int)
+    except Exception:
+        # Fallback silently if environment parsing fails
+        DATABASES['default']['CONN_MAX_AGE'] = 60
 
 # Garante transações automáticas por requisição (evita estados parciais em exceptions)
 ATOMIC_REQUESTS = True

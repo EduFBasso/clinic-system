@@ -81,3 +81,5 @@ scripts/db/backups/**/*.json
 *.sw?
 
 .env
+backend/.env
+backend/.env.*
