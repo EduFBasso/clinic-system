@@ -1,41 +1,16 @@
 // frontend\src\hooks\useClients.ts
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
-
-export interface ClientBasic {
-    id: number;
-    first_name: string;
-    last_name: string;
-    phone: string;
-    email: string;
-    address?: string;
-    address_number?: string;
-    neighborhood?: string;
-    city?: string;
-    state?: string;
-    date_of_birth?: string | null;
-    next_appointment_start_at?: string | null; // Added for next appointment details
-    next_appointment_title?: string | null; // Added for next appointment details
-    next_appointment_visit_type?:
-        | 'avaliacao'
-        | 'retorno'
-        | 'procedimento'
-        | 'outro'
-        | 'consulta'
-        | null; // Added for next appointment details
-    next_appointment_notes?: string | null; // Added for next appointment notes
-    next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null; // Added for next appointment status
-    last_appointment_start_at?: string | null;
-    last_appointment_title?: string | null;
-    last_appointment_notes?: string | null;
-    last_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;
-}
+import type { ClientBasic } from '../types/ClientBasic';
 
 export function useClients() {
     const [clients, setClients] = useState<ClientBasic[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Keep a ref for current clients length to decide initial vs background loading
+    const clientsRef = useRef<ClientBasic[]>([]);
+    const debounceRef = useRef<number | null>(null);
 
     useEffect(() => {
         const fetchClients = () => {
@@ -49,7 +24,9 @@ export function useClients() {
                 setError(null);
                 return;
             }
-            setLoading(true);
+            // Only show the big loading state if we have no data yet (initial load)
+            const isInitial = (clientsRef.current?.length || 0) === 0;
+            if (isInitial) setLoading(true);
             const url = `${API_BASE}/register/clients-basic/`;
             console.debug('[useClients] API_BASE =', API_BASE, 'fetching', url);
             fetch(url, {
@@ -67,7 +44,8 @@ export function useClients() {
                 })
                 .then(data => {
                     setClients(data);
-                    setLoading(false);
+                    clientsRef.current = data;
+                    setLoading(false); // hide big loading (initial)
                 })
                 .catch(err => {
                     setError(err.message);
@@ -78,15 +56,29 @@ export function useClients() {
         // Handler para limpar clientes ao logout
         const handleClearClients = () => {
             setClients([]);
+            clientsRef.current = [];
         };
         // Handler para atualizar clientes após login
+        const scheduleFetch = () => {
+            // Debounce multiple update events close together
+            if (debounceRef.current) window.clearTimeout(debounceRef.current);
+            debounceRef.current = window.setTimeout(() => {
+                fetchClients();
+                debounceRef.current = null;
+            }, 160);
+        };
+        let lastLog = 0;
         const handleUpdateClients = () => {
-            console.log('Evento updateClients recebido!');
-            fetchClients();
+            const now = Date.now();
+            if (now - lastLog > 500) {
+                console.log('Evento updateClients recebido!');
+                lastLog = now;
+            }
+            scheduleFetch();
         };
         // Handler para atualizar clientes ao focar na janela
         const handleFocus = () => {
-            fetchClients();
+            scheduleFetch();
         };
         window.addEventListener('clearClients', handleClearClients);
         window.addEventListener('updateClients', handleUpdateClients);
@@ -101,6 +93,7 @@ export function useClients() {
                 handleUpdateClients,
             );
             window.removeEventListener('focus', handleFocus);
+            if (debounceRef.current) window.clearTimeout(debounceRef.current);
         };
     }, []);
 

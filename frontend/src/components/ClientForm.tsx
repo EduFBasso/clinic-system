@@ -3,10 +3,10 @@ import { API_BASE } from '../config/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { normalizeDOBForApi } from '../utils/dateOfBirth';
 import type { ClientData } from '../types/ClientData';
-import AppModal from './Modal';
 import ClientFormDesktop from './ClientFormDesktop';
 import ClientFormMobile from './ClientFormMobile';
-import useIsMobile from './useIsMobile';
+import useIsMobile from '../hooks/useIsMobile';
+import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
 import { useNavigate } from 'react-router-dom';
 
 export default function ClientForm({
@@ -14,6 +14,7 @@ export default function ClientForm({
 }: {
     cliente?: Partial<ClientData>;
 }) {
+    // Removido auto-timeout: fluxo agora depende de modal com botão OK
     // Marca erros já tratados para não sobrescrever mensagens específicas em catch
     type HandledError = Error & { handled?: boolean };
     function isHandledError(e: unknown): e is HandledError {
@@ -141,7 +142,7 @@ export default function ClientForm({
         other_procedures: cliente?.other_procedures ?? '',
     });
 
-    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    // Modal de sucesso local removido (uso do SystemMessageModal global)
     // "Salvar e novo" (entrada rápida): quando true, após criar não navega; reseta formulário e foca o primeiro campo
     const quickModeRef = useRef(false);
     const formRef = useRef<HTMLFormElement | null>(null);
@@ -157,8 +158,26 @@ export default function ClientForm({
                 takes_medication: cliente.takes_medication ?? 'Não',
                 had_surgery: cliente.had_surgery ?? 'Não',
             }));
+            // Após hidratar dados vindos do servidor, redefine baseline para evitar dirty falso
+            try {
+                const snapshot = {
+                    ...formData,
+                    ...cliente,
+                    takes_medication: cliente.takes_medication ?? 'Não',
+                    had_surgery: cliente.had_surgery ?? 'Não',
+                } as ClientData;
+                initialRef.current = JSON.stringify(snapshot);
+                setDirty(false);
+            } catch {
+                /* noop */
+            }
+        } else {
+            // Novo cadastro: baseline = formulário atual (limpo)
+            initialRef.current = JSON.stringify(formData);
+            setDirty(false);
         }
-    }, [cliente]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cliente?.id]);
 
     function handleChange(
         fieldOrEvent:
@@ -180,10 +199,50 @@ export default function ClientForm({
         }
     }
 
+    // Armazena somente mensagens de erro agora (sucesso usa modal OK)
     const [feedback, setFeedback] = useState<{
-        type: 'error' | 'success';
+        type: 'error';
         message: string;
     } | null>(null);
+    // Modal de sucesso local (OK fecha e executa closeSuccessAndExit)
+    const [successModalMessage, setSuccessModalMessage] = useState<
+        string | null
+    >(null);
+    // Photo file selected in the mobile form (kept out of typed ClientData)
+    const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(
+        null,
+    );
+    // Track dirty state: any change vs initial values
+    const initialRef = useRef(JSON.stringify(formData));
+    const [dirty, setDirty] = useState(false);
+    useEffect(() => {
+        setDirty(JSON.stringify(formData) !== initialRef.current);
+    }, [formData]);
+    // Enable guard only when there are unsaved changes
+    useUnsavedChangesGuard(dirty, 'Há alterações não salvas. Deseja sair?');
+    const uploadPhotoIfNeeded = async (clientId: number, token: string) => {
+        if (!selectedPhotoFile) return null;
+        const fd = new FormData();
+        fd.append('photo', selectedPhotoFile);
+        const res = await fetch(`${API_BASE}/register/clients/${clientId}/`, {
+            method: 'PATCH',
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            body: fd,
+        });
+        if (!res.ok) {
+            let errTxt = '';
+            try {
+                errTxt = await res.text();
+            } catch {
+                /* noop */
+            }
+            throw new Error(errTxt || 'Falha ao enviar foto');
+        }
+        return await res.json();
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const token = localStorage.getItem('accessToken');
@@ -262,10 +321,7 @@ export default function ClientForm({
                             payload: dataToSend,
                         });
                         const errorMsg = parseApiError(errorData, res.status);
-                        setFeedback({
-                            type: 'error',
-                            message: errorMsg,
-                        });
+                        setFeedback({ type: 'error', message: errorMsg });
                         if (isMobile) {
                             setTimeout(() => setFeedback(null), 3000);
                         }
@@ -277,11 +333,27 @@ export default function ClientForm({
                     }
                     return res.json();
                 })
-                .then(createdClient => {
-                    setFeedback({
-                        type: 'success',
-                        message: 'Cliente cadastrado com sucesso!',
+                .then(async createdClient => {
+                    setSuccessModalMessage('Cliente cadastrado com sucesso!');
+                    // If a photo was selected, upload it now via multipart PATCH
+                    try {
+                        if (createdClient?.id) {
+                            await uploadPhotoIfNeeded(createdClient.id, token);
+                        }
+                    } catch (err) {
+                        console.warn(
+                            'Falha ao enviar foto (não bloqueante):',
+                            err,
+                        );
+                    }
+                    // Reset dirty baseline after successful create
+                    initialRef.current = JSON.stringify({
+                        ...formData,
+                        id: createdClient?.id,
                     });
+                    setDirty(false);
+                    // Clear selected photo after successful create flow
+                    setSelectedPhotoFile(null);
                     // Salva o id do novo cliente para seleção automática
                     if (createdClient && createdClient.id) {
                         localStorage.setItem(
@@ -350,12 +422,45 @@ export default function ClientForm({
                                 /* noop */
                             }
                         }, 0);
+                        // Reset dirty baseline for the fresh form
+                        initialRef.current = JSON.stringify({
+                            first_name: '',
+                            last_name: '',
+                            email: '',
+                            phone: '',
+                            profession: '',
+                            address: '',
+                            neighborhood: '',
+                            city: 'Limeira',
+                            state: 'SP',
+                            postal_code: '',
+                            sport_activity: '',
+                            academic_activity: '',
+                            footwear_used: '',
+                            sock_used: '',
+                            takes_medication: 'Não',
+                            had_surgery: 'Não',
+                            is_pregnant: false,
+                            pain_sensitivity: '',
+                            clinical_history: '',
+                            plantar_view_left: '',
+                            plantar_view_right: '',
+                            dermatological_pathologies_left: '',
+                            dermatological_pathologies_right: '',
+                            nail_changes_left: '',
+                            nail_changes_right: '',
+                            deformities_left: '',
+                            deformities_right: '',
+                            sensitivity_test: '',
+                            other_procedures: '',
+                        });
+                        setDirty(false);
                         // Mantém na página, sem modal
                         return;
                     }
 
-                    // Fluxo normal: mostra modal de sucesso e depois sai
-                    setShowSuccessModal(true);
+                    // Fluxo normal: agora exibe modal de sucesso; fechamento só ao clicar OK
+                    setSuccessModalMessage('Cliente cadastrado com sucesso!');
                 })
                 .catch(async err => {
                     // Se já tratamos acima, não sobrescreve a mensagem específica
@@ -448,10 +553,7 @@ export default function ClientForm({
                         }
                     }
                     const errorMsg = parseApiError(errorData, res.status);
-                    setFeedback({
-                        type: 'error',
-                        message: errorMsg,
-                    });
+                    setFeedback({ type: 'error', message: errorMsg });
                     // No mobile, exibe erro por 3s
                     if (isMobile) {
                         setTimeout(() => setFeedback(null), 3000);
@@ -464,26 +566,26 @@ export default function ClientForm({
                 }
                 return res.json();
             })
-            .then(() => {
-                setFeedback({
-                    type: 'success',
-                    message: 'Cliente atualizado com sucesso!',
-                });
-                setTimeout(() => {
-                    if (window.opener) {
-                        window.opener.dispatchEvent(new Event('updateClients'));
-                        window.close();
-                    } else {
-                        window.dispatchEvent(new Event('updateClients'));
-                        // Não existe rota '/clients'; a home está em '/'
-                        navigate('/');
+            .then(async () => {
+                setSuccessModalMessage('Cliente atualizado com sucesso!');
+                // If a new photo was selected, upload it now
+                try {
+                    if (cliente?.id) {
+                        await uploadPhotoIfNeeded(cliente.id, token);
                     }
-                }, 1500);
+                } catch (err) {
+                    console.warn('Falha ao enviar foto (não bloqueante):', err);
+                }
+                // Reset baseline after successful update
+                initialRef.current = JSON.stringify(formData);
+                setDirty(false);
+                // Clear selected photo after successful update
+                setSelectedPhotoFile(null);
+                // Dispara mensagem padrão e também persiste para consumo na Home
+                // Aguarda interação do usuário no modal de sucesso
             })
             .catch(async err => {
-                if (isHandledError(err) && err.handled) {
-                    return;
-                }
+                if (isHandledError(err) && err.handled) return;
                 if (
                     typeof err === 'object' &&
                     err !== null &&
@@ -525,7 +627,6 @@ export default function ClientForm({
 
     // Fecha o modal de sucesso e retorna apropriado (fecha popup ou navega), notificando atualização
     const closeSuccessAndExit = () => {
-        setShowSuccessModal(false);
         try {
             if (window.opener) {
                 window.opener.dispatchEvent(new Event('updateClients'));
@@ -545,19 +646,38 @@ export default function ClientForm({
     };
 
     function handleCancel() {
-        // Se o formulário está em uma janela separada:
-        if (window.opener) {
-            window.close();
-            return;
+        // Se houver alterações, confirmar.
+        if (dirty) {
+            const confirmExit = window.confirm(
+                'É possível que existam alterações não salvas. Deseja sair mesmo assim?',
+            );
+            if (!confirmExit) return;
         }
-        // Em mobile (iPhone), garantir que saímos do modo edição limpando foco/locks
+        // Limpa qualquer guard de unload
+        try {
+            // Remove listener de beforeunload sem usar 'any'
+            (
+                window as Window & {
+                    onbeforeunload: typeof window.onbeforeunload;
+                }
+            ).onbeforeunload = null;
+        } catch {
+            /* noop */
+        }
+        if (window.opener) {
+            try {
+                window.close();
+                return;
+            } catch {
+                /* noop */
+            }
+        }
         try {
             (document.activeElement as HTMLElement | null)?.blur?.();
             document.body.classList.remove('keyboardOpen');
         } catch {
             /* noop */
         }
-        // Força navegação limpa para a Home e evita voltar ao formulário no histórico
         try {
             window.location.replace('/');
         } catch {
@@ -663,19 +783,72 @@ export default function ClientForm({
 
     const isMobile = useIsMobile();
 
+    // Render modal de sucesso (desktop & mobile) quando existir mensagem
+    const SuccessModal = successModalMessage ? (
+        <div
+            role='dialog'
+            aria-modal='true'
+            style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999,
+                padding: '1rem',
+            }}
+        >
+            <div
+                style={{
+                    background: '#fff',
+                    borderRadius: 8,
+                    padding: '1.25rem 1.5rem',
+                    maxWidth: 420,
+                    width: '100%',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                    fontSize: '1rem',
+                }}
+            >
+                <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.15rem' }}>
+                    Sucesso
+                </h2>
+                <p style={{ margin: '0 0 1.25rem', lineHeight: 1.4 }}>
+                    {successModalMessage}
+                </p>
+                <div style={{ textAlign: 'right' }}>
+                    <button
+                        type='button'
+                        onClick={() => {
+                            setSuccessModalMessage(null);
+                            closeSuccessAndExit();
+                        }}
+                        style={{
+                            background: '#2563eb',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '0.6rem 1.1rem',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                        }}
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    ) : null;
+
     if (isMobile) {
         return (
             <>
-                {feedback && (
+                {feedback?.type === 'error' && (
                     <div
                         style={{
-                            color: feedback.type === 'error' ? 'red' : 'green',
+                            color: 'red',
                             background: '#f8f8f8',
-                            border: `1px solid ${
-                                feedback.type === 'error'
-                                    ? '#d32f2f'
-                                    : '#388e3c'
-                            }`,
+                            border: '1px solid #d32f2f',
                             borderRadius: 6,
                             padding: '0.75rem',
                             marginBottom: '1rem',
@@ -693,45 +866,21 @@ export default function ClientForm({
                     handleCancel={handleCancel}
                     handleDelete={handleDelete}
                     isEdit={isEdit}
+                    onPhotoSelected={setSelectedPhotoFile}
+                    initialPhotoUrl={cliente?.photo || null}
                 />
-                {/* Modal de sucesso após cadastro */}
-                {showSuccessModal && (
-                    <AppModal open={true} onClose={closeSuccessAndExit}>
-                        <div style={{ textAlign: 'center', padding: '2rem' }}>
-                            <h2 style={{ color: '#388e3c' }}>
-                                Cliente cadastrado com sucesso!
-                            </h2>
-                            <button
-                                style={{
-                                    marginTop: '2rem',
-                                    padding: '0.7rem 2.5rem',
-                                    fontSize: '1.1rem',
-                                    background: '#388e3c',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                }}
-                                onClick={closeSuccessAndExit}
-                            >
-                                OK
-                            </button>
-                        </div>
-                    </AppModal>
-                )}
+                {SuccessModal}
             </>
         );
     }
     return (
         <>
-            {feedback && (
+            {feedback?.type === 'error' && (
                 <div
                     style={{
-                        color: feedback.type === 'error' ? 'red' : 'green',
+                        color: 'red',
                         background: '#f8f8f8',
-                        border: `1px solid ${
-                            feedback.type === 'error' ? '#d32f2f' : '#388e3c'
-                        }`,
+                        border: '1px solid #d32f2f',
                         borderRadius: 6,
                         padding: '0.75rem',
                         marginBottom: '1rem',
@@ -752,32 +901,10 @@ export default function ClientForm({
                 isEdit={isEdit}
                 onQuickSubmit={onQuickSubmit}
                 formRef={formRef}
+                initialPhotoUrl={cliente?.photo || null}
+                onPhotoSelected={setSelectedPhotoFile}
             />
-            {/* Modal de sucesso após cadastro */}
-            {showSuccessModal && (
-                <AppModal open={true} onClose={closeSuccessAndExit}>
-                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                        <h2 style={{ color: '#388e3c' }}>
-                            Cliente cadastrado com sucesso!
-                        </h2>
-                        <button
-                            style={{
-                                marginTop: '2rem',
-                                padding: '0.7rem 2.5rem',
-                                fontSize: '1.1rem',
-                                background: '#388e3c',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                            }}
-                            onClick={closeSuccessAndExit}
-                        >
-                            OK
-                        </button>
-                    </div>
-                </AppModal>
-            )}
+            {SuccessModal}
         </>
     );
 }

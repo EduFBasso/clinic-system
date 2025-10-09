@@ -11,6 +11,45 @@
     gap: 18px;
 }
 
+.headerRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 1px solid var(--color-border);
+    flex: 0 0 auto;
+}
+
+.avatarFallback {
+    width: 64px;
+    height: 64px;
+    border-radius: 999px;
+    background: var(--color-success-dark);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    letter-spacing: 1px;
+    border: 1px solid var(--color-border);
+    flex: 0 0 auto;
+}
+
+.clientName {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--color-heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .fieldRow {
     display: flex;
     flex-direction: row;
@@ -41,6 +80,11 @@
     .clientViewCard {
         padding: 16px 6px 16px 6px;
         margin: 18px 0;
+    }
+    .avatar,
+    .avatarFallback {
+        width: 56px;
+        height: 56px;
     }
     .fieldRow {
         flex-direction: column;

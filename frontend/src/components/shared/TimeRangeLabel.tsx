@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatTime } from '../../utils/timeFormat';
 
 interface TimeRangeLabelProps {
     start: Date | string;
@@ -6,15 +7,15 @@ interface TimeRangeLabelProps {
     format?: 'arrow' | 'dash';
     size?: 'sm' | 'md' | 'lg';
     boldEndArrow?: boolean;
+    // Controls which value is on the first line
+    order?: 'start-top' | 'end-top';
     className?: string;
     style?: React.CSSProperties;
 }
 
+// Centraliza formatação via formatTime (modo local por padrão)
 function fmt(d: Date) {
-    return d.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
+    return formatTime(d, { mode: 'local' });
 }
 
 export const TimeRangeLabel: React.FC<TimeRangeLabelProps> = ({
@@ -23,6 +24,7 @@ export const TimeRangeLabel: React.FC<TimeRangeLabelProps> = ({
     format = 'arrow',
     size = 'md',
     boldEndArrow = true,
+    order = 'start-top',
     className,
     style,
 }) => {
@@ -33,23 +35,39 @@ export const TimeRangeLabel: React.FC<TimeRangeLabelProps> = ({
         fontSize,
         lineHeight: 1.25,
         textAlign: 'right',
-        fontWeight: 600,
+        fontWeight: 'var(--card-time-weight)',
         ...style,
     };
     const sep =
         format === 'arrow' ? (
             boldEndArrow ? (
-                <span style={{ fontWeight: 700 }}>→</span>
+                <span style={{ fontWeight: 'var(--card-time-weight)' }}>→</span>
             ) : (
                 '→'
             )
         ) : (
             '–'
         );
+    const top =
+        order === 'end-top' ? (
+            <>
+                {sep} {fmt(e)}
+            </>
+        ) : (
+            <>{fmt(s)}</>
+        );
+    const bottom =
+        order === 'end-top' ? (
+            <>{fmt(s)}</>
+        ) : (
+            <>
+                {sep} {fmt(e)}
+            </>
+        );
     return (
         <div className={className} style={baseStyle}>
-            {fmt(s)}
-            <br /> {sep} {fmt(e)}
+            {top}
+            <br /> {bottom}
         </div>
     );
 };

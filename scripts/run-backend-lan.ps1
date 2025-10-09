@@ -27,11 +27,15 @@ function Get-LanIPv4s {
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $backendDir = Join-Path $repoRoot 'backend'
-$venvPython = Join-Path $repoRoot 'venv/Scripts/python.exe'
+# Resolve Python from .venv (preferred) or venv
+$venvPython = $null
+$venvPreferred = Join-Path $repoRoot '.venv/Scripts/python.exe'
+$venvAlt = Join-Path $repoRoot 'venv/Scripts/python.exe'
+if (Test-Path $venvPreferred) { $venvPython = $venvPreferred }
+elseif (Test-Path $venvAlt) { $venvPython = $venvAlt }
+else { $venvPython = $venvPreferred }
 
-if (-not (Test-Path $venvPython)) {
-    throw "Python venv not found at $venvPython. Activate venv or adjust the path."
-}
+if (-not (Test-Path $venvPython)) { throw "Python venv not found (tried 'venv' and '.venv'). Create/activate a venv (python -m venv .venv) or adjust the script." }
 
 $ips = Get-LanIPv4s
 if (-not $ips -or $ips.Count -eq 0) { throw 'No LAN IPv4 address found.' }

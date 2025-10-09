@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from decouple import config
+from corsheaders.defaults import default_headers  # for extending allowed CORS headers
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -36,13 +37,18 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'register.Professional'
 
 MIDDLEWARE = [
+    # Security first
     'django.middleware.security.SecurityMiddleware',
+    # Serve static files efficiently (must be right after SecurityMiddleware)
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    # Slow query logger (added after security/whitenoise for realistic timings)
+    # Custom instrumentation (kept early for realistic timings)
     'clinic_project.middleware.QueryTimingMiddleware',
     'clinic_project.middleware.VersionHeaderMiddleware',
+    # Sessions before CORS/Common to ensure session is available when needed
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # CORS should be as high as possible and before CommonMiddleware
     'corsheaders.middleware.CorsMiddleware',
+    # Standard Django middlewares
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -71,6 +77,19 @@ CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bo
 # Optional: allow credentials via env var if needed (useful when cookies are used).
 CORS_ALLOW_CREDENTIALS = config("CORS_ALLOW_CREDENTIALS", default=False, cast=bool)
 
+# Explicitly allow custom headers used by the frontend (device/session correlation, future versioning)
+# NOTE: keep header names in lowercase (browsers send them lowercased in preflight)
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-device-id',
+    'x-device-info',
+    'x-client-now',
+    # 'x-app-version',  # reserve for future use
+]
+
+# Cache preflight responses to reduce OPTIONS noise between Vite (5173) and Django (8000)
+# Browsers may reuse preflight results for requests with the same method and headers within this window.
+CORS_PREFLIGHT_MAX_AGE = config("CORS_PREFLIGHT_MAX_AGE", default=600, cast=int)
+
 ROOT_URLCONF = 'clinic_project.urls'
 
 TEMPLATES = [
@@ -90,23 +109,30 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'clinic_project.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': config("DB_ENGINE", default="django.db.backends.postgresql"),
-    'NAME': config("DB_NAME"),
-    'USER': config("DB_USER"),
-        'PASSWORD': config("DB_PASSWORD"),
-        'HOST': config("DB_HOST", default="localhost"),
-    'PORT': config("DB_PORT", default="5432"),
-    }
-}
-
-# Durante testes (pytest) podemos usar SQLite em memória para acelerar e isolar ambiente
 import os as _os
-if _os.environ.get('PYTEST_CURRENT_TEST') and config('TEST_USE_SQLITE', default=True, cast=bool):
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
+_IN_CI = _os.environ.get('GITHUB_ACTIONS') == 'true'
+# Test DB strategy:
+# - Default: use the configured Postgres to mirror production usage.
+# - To run tests sem Postgres (ex.: máquina nova/CI), defina TEST_USE_SQLITE=true
+#   para usar SQLite em memória de forma isolada e rápida.
+_USE_SQLITE_FOR_TESTS = config('TEST_USE_SQLITE', default=False, cast=bool) or _IN_CI
+if _USE_SQLITE_FOR_TESTS:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+            'NAME': config('DB_NAME', default='clinic'),
+            'USER': config('DB_USER', default='clinic'),
+            'PASSWORD': config('DB_PASSWORD', default='clinic'),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+        }
     }
 
 # Garante transações automáticas por requisição (evita estados parciais em exceptions)
@@ -167,9 +193,16 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Media (uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'apps.register.auth_device.JWTDeviceAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Enable session auth (useful for Django test client and local admin)
+        'rest_framework.authentication.SessionAuthentication',
     ),
     # Em produção removemos o BrowsableAPI para performance/segurança mínima
     'DEFAULT_RENDERER_CLASSES': [

@@ -2,6 +2,8 @@
 # backend\clinic_project\urls.py
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.db import connection
 from django.utils import timezone
@@ -9,6 +11,11 @@ from django.conf import settings
 from django.views.generic import RedirectView
 from apps.register.authentication import EmailTokenObtainPairView
 from rest_framework_simplejwt.views import TokenRefreshView
+from apps.register.views_sessions import (
+    sessions_summary,
+    sessions_active,
+    sessions_revoke,
+)
 
 def health_view(_request):
     return JsonResponse({'status': 'ok'})
@@ -37,7 +44,15 @@ urlpatterns = [
     path('register/', include('apps.register.urls')),  # 🧩 Rotas do app clínico
     path('agenda/', include('apps.agenda.urls')),
 
+    # 📱 Sessões de dispositivos (fase 1)
+    path('sessions/summary', sessions_summary),
+    path('sessions/active', sessions_active),
+    path('sessions/revoke', sessions_revoke),
+
     # 🔐 JWT endpoints
     path('token/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

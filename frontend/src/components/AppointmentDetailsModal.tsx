@@ -1,142 +1,238 @@
 import React from 'react';
 import AppModal from './Modal';
-import type { Appointment } from '../hooks/useAppointments';
+import type { SharedAppointmentLike } from './shared/AppointmentCard';
+import { formatTime } from '../utils/timeFormat';
+import StickyModalHeader from './shared/StickyModalHeader';
+import { API_BASE } from '../config/api';
 
-interface AppointmentDetailsModalProps {
+export interface AppointmentDetailsModalProps {
     open: boolean;
     onClose: () => void;
-    appointment: Appointment | null;
+    appt: SharedAppointmentLike | null;
 }
 
-function fmtDateTime(iso: string) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const date = d.toLocaleDateString('pt-BR', {
+function fmtDateTimeRange(startISO: string, endISO: string) {
+    const s = new Date(startISO);
+    const e = new Date(endISO);
+    const day = s.toLocaleDateString('pt-BR', {
         weekday: 'short',
+        year: 'numeric',
+        month: 'short',
         day: '2-digit',
-        month: '2-digit',
     });
-    const time = d.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-    return `${date} ${time}`;
+    const sh = formatTime(s, { mode: 'local' });
+    const eh = formatTime(e, { mode: 'local' });
+    return `${day}, ${sh} - ${eh}`;
 }
 
 export default function AppointmentDetailsModal({
     open,
     onClose,
-    appointment,
+    appt,
 }: AppointmentDetailsModalProps) {
-    if (!appointment) return null;
-    const {
-        id,
-        client_name,
-        professional_name,
-        title,
-        visit_type,
-        start_at,
-        end_at,
-        status,
-        notes,
-        location,
-    } = appointment;
+    const clientName = React.useMemo(() => {
+        if (!appt) return 'Cliente';
+        return (
+            appt.client_name ||
+            (typeof appt.client === 'object' &&
+            appt.client &&
+            'name' in appt.client
+                ? String((appt.client as { name?: string }).name || 'Cliente')
+                : 'Cliente')
+        );
+    }, [appt]);
 
-    const statusLabel: Record<string, string> = {
-        scheduled: 'Agendado',
-        done: 'Concluído',
-        canceled: 'Cancelado',
-    };
+    // Photo: prefer provided photo (client_photo) when available; else best-effort fetch by client id
+    const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
+    React.useEffect(() => {
+        // Prefer existing photo if present in payload
+        try {
+            if (
+                appt &&
+                typeof appt.client_photo === 'string' &&
+                appt.client_photo
+            ) {
+                setPhotoUrl(appt.client_photo);
+            } else {
+                setPhotoUrl(null);
+            }
+        } catch {
+            setPhotoUrl(null);
+        }
+        try {
+            if (!open || !appt) return;
+            if (appt && appt.client_photo) return; // already have photo
+            const clientId =
+                typeof appt.client === 'number'
+                    ? appt.client
+                    : typeof appt.client === 'object' && appt.client
+                    ? (appt.client as { id?: number }).id
+                    : undefined;
+            if (!clientId) return;
+            const token = localStorage.getItem('accessToken');
+            fetch(`${API_BASE}/register/clients/${clientId}/`, {
+                headers: {
+                    Authorization: token ? `Bearer ${token}` : '',
+                },
+                cache: 'no-store',
+            })
+                .then(r => (r.ok ? r.json() : null))
+                .then(data => {
+                    if (data && typeof data.photo === 'string') {
+                        setPhotoUrl(data.photo as string);
+                    }
+                })
+                .catch(() => {
+                    /* ignore */
+                });
+        } catch {
+            /* noop */
+        }
+    }, [open, appt]);
+
+    const initials = React.useMemo(() => {
+        const parts = String(clientName).trim().split(/\s+/).filter(Boolean);
+        const first = parts[0]?.[0] || '';
+        const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+        return (first + last).toUpperCase() || 'C';
+    }, [clientName]);
+
+    if (!appt) return null;
 
     return (
-        <AppModal open={open} onClose={onClose}>
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 16,
-                    minWidth: 300,
-                }}
-            >
-                <h3
-                    style={{
-                        margin: 0,
-                        fontSize: 22,
-                        fontWeight: 600,
-                        color: '#065f46',
-                    }}
-                >
-                    Detalhes do Compromisso
-                </h3>
+        <AppModal
+            open={open}
+            onClose={onClose}
+            closeOnEnter={false}
+            showCloseButton={false}
+            actionsBarStyle={{
+                background: 'transparent',
+                borderBottom: 'none',
+                boxShadow: 'none',
+            }}
+        >
+            <div style={{ display: 'grid', gap: 10, minWidth: 320 }}>
+                <StickyModalHeader
+                    title='Detalhes do atendimento'
+                    onClose={onClose}
+                />
+                {/* Client avatar + name summary */}
                 <div
                     style={{
-                        display: 'grid',
-                        gridTemplateColumns: '130px 1fr',
-                        rowGap: 10,
-                        columnGap: 14,
-                        fontSize: 15,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        padding: '2px 0 6px',
                     }}
                 >
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>ID:</span>
-                    <span>{id}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>
-                        Cliente:
-                    </span>
-                    <span>{client_name || '—'}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>
-                        Profissional:
-                    </span>
-                    <span>{professional_name || '—'}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>
-                        Título:
-                    </span>
-                    <span>{title || 'Consulta'}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>Tipo:</span>
-                    <span>{visit_type || '—'}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>
-                        Início:
-                    </span>
-                    <span>{fmtDateTime(start_at)}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>Fim:</span>
-                    <span>{fmtDateTime(end_at)}</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>
-                        Duração:
-                    </span>
-                    <span>
-                        {Math.round(
-                            (new Date(end_at).getTime() -
-                                new Date(start_at).getTime()) /
-                                60000,
-                        )}{' '}
-                        min
-                    </span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>
-                        Status:
-                    </span>
-                    <span>{statusLabel[status] || status}</span>
-                    {location && (
-                        <>
-                            <span style={{ fontWeight: 600, fontSize: 14 }}>
-                                Local:
-                            </span>
-                            <span>{location}</span>
-                        </>
+                    {photoUrl ? (
+                        <img
+                            src={photoUrl}
+                            alt={`Foto de ${clientName}`}
+                            style={{
+                                width: 56,
+                                height: 56,
+                                borderRadius: '999px',
+                                objectFit: 'cover',
+                                border: '1px solid var(--color-border)',
+                            }}
+                            loading='lazy'
+                            decoding='async'
+                            onError={ev => {
+                                try {
+                                    (
+                                        ev.currentTarget as HTMLImageElement
+                                    ).style.display = 'none';
+                                } catch {
+                                    /* noop */
+                                }
+                            }}
+                        />
+                    ) : (
+                        <div
+                            aria-hidden
+                            style={{
+                                width: 56,
+                                height: 56,
+                                borderRadius: '999px',
+                                background: 'var(--color-success-dark)',
+                                color: '#fff',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 900,
+                                letterSpacing: 1,
+                                userSelect: 'none',
+                                border: '1px solid var(--color-border)',
+                            }}
+                            title={clientName}
+                        >
+                            {initials}
+                        </div>
                     )}
-                    {notes && (
-                        <>
-                            <span
-                                style={{
-                                    fontWeight: 600,
-                                    alignSelf: 'start',
-                                    fontSize: 14,
-                                }}
-                            >
-                                Notas:
+                    <div style={{ minWidth: 0 }}>
+                        <div
+                            style={{
+                                fontWeight: 800,
+                                color: 'var(--color-heading)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {clientName}
+                        </div>
+                        <div style={{ color: '#6b7280', fontSize: 12 }}>
+                            {fmtDateTimeRange(appt.start_at, appt.end_at)}
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gap: 6 }}>
+                    <div>
+                        <span style={{ fontWeight: 700, color: '#374151' }}>
+                            Cliente:{' '}
+                        </span>
+                        <span style={{ color: '#111827' }}>{clientName}</span>
+                    </div>
+                    <div>
+                        <span style={{ fontWeight: 700, color: '#374151' }}>
+                            Tipo:{' '}
+                        </span>
+                        <span style={{ color: '#111827' }}>
+                            {appt.title || 'Atendimento'}
+                        </span>
+                    </div>
+                    <div>
+                        <span style={{ fontWeight: 700, color: '#374151' }}>
+                            Data e horário:{' '}
+                        </span>
+                        <span style={{ color: '#111827' }}>
+                            {fmtDateTimeRange(appt.start_at, appt.end_at)}
+                        </span>
+                    </div>
+                    <div>
+                        <span style={{ fontWeight: 700, color: '#374151' }}>
+                            Status:{' '}
+                        </span>
+                        <span
+                            style={{
+                                color: 'var(--color-done)',
+                                fontWeight: 700,
+                            }}
+                        >
+                            Concluído
+                        </span>
+                    </div>
+                    {appt.notes && (
+                        <div>
+                            <span style={{ fontWeight: 700, color: '#374151' }}>
+                                Observações:{' '}
                             </span>
-                            <span style={{ whiteSpace: 'pre-wrap' }}>
-                                {notes}
+                            <span style={{ color: '#111827' }}>
+                                {appt.notes}
                             </span>
-                        </>
+                        </div>
                     )}
                 </div>
                 <div
@@ -148,15 +244,7 @@ export default function AppointmentDetailsModal({
                 >
                     <button
                         onClick={onClose}
-                        style={{
-                            padding: '8px 18px',
-                            border: '1px solid #065f46',
-                            background: 'white',
-                            color: '#065f46',
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                            fontSize: 15,
-                        }}
+                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
                     >
                         Fechar
                     </button>

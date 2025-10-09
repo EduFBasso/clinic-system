@@ -1,8 +1,14 @@
 {
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/material": "^7.2.0",
-    "react-icons": "^5.5.0"
+  "name": "clinic-system-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run -w frontend build",
+    "test": "npm run -w frontend test",
+    "lint": "npm run -w frontend lint",
+    "dev:frontend": "npm run -w frontend dev",
+    "preview": "npm run -w frontend preview"
   }
 }

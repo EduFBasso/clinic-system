@@ -1,4 +1,19 @@
 {
+  // Terminal: PowerShell como padrão, mantendo perfil WSL disponível
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "source": "PowerShell",
+      "icon": "terminal-powershell",
+      "args": ["-NoLogo"]
+    },
+    "WSL": {
+      "path": "C:\\Windows\\System32\\wsl.exe"
+    }
+  },
+  "terminal.integrated.shellIntegration.enabled": true,
+
+  // UI e editor
   "window.zoomLevel": -0.3,
   "editor.fontSize": 15,
   "editor.fontFamily": "Consolas, 'Courier New', monospace",
@@ -8,6 +23,7 @@
   "editor.letterSpacing": -0.5,
   "editor.glyphMargin": false,
 
+  // Code Runner (se usado)
   "code-runner.clearPreviousOutput": true,
   "code-runner.runInTerminal": true,
   "code-runner.executorMap": {
@@ -19,6 +35,7 @@
     "cpp": "g++ $fileName -o $fileNameWithoutExt && ./$fileNameWithoutExt"
   },
 
+  // Preferências
   "editor.minimap.enabled": false,
   "editor.mouseWheelZoom": true,
   "editor.formatOnSave": true,
@@ -78,5 +95,7 @@
   // Monorepo: direcione o ESLint para a pasta do frontend
   "eslint.workingDirectories": [
     { "directory": "./frontend", "changeProcessCWD": true }
-  ]
+  ],
+  // Python interpreter (consolidated env at repo root)
+  "python.defaultInterpreterPath": ".venv/Scripts/python.exe"
 }

@@ -10,10 +10,12 @@
 
 .cardSelected {
     background-color: var(--color-selected-bg);
-    border: 2px solid var(--color-selected-border);
+    /* Uniformiza espessura com estado normal para evitar salto visual em ongoing */
+    border: 1px solid var(--color-selected-border);
+    /* Shadow mais sutil mantendo foco */
     box-shadow: 0 0 0 2px var(--color-selected-border),
-        0 4px 10px rgba(0, 0, 0, 0.18);
-    transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+        0 3px 8px rgba(0, 0, 0, 0.16);
+    transition: background 0.25s, box-shadow 0.25s, border-color 0.25s;
 }
 
 .flashBorder {
@@ -97,9 +99,29 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 30px; /* uniform size for leading action icons */
+    height: 30px;
     border-radius: 6px;
+}
+/* On touch/coarse pointers, increase tap target for better ergonomics */
+@media (pointer: coarse) {
+    .iconButton {
+        width: 44px;
+        height: 44px;
+    }
+}
+
+/* Reduce tap highlight on iOS/Safari for a cleaner feel */
+.iconButton {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    touch-action: manipulation;
+}
+
+/* Improve focus visibility for keyboard users without altering touch UX */
+.iconButton:focus-visible,
+.actionButton:focus-visible {
+    outline: 2px solid var(--color-selected-border);
+    outline-offset: 2px;
 }
 
 .editButton {
@@ -148,4 +170,103 @@
     display: flex;
     align-items: baseline;
     flex: 1;
+}
+
+/* Specific grouping for name-line action icons to ensure vertical alignment */
+.nameActions {
+    display: flex;
+    gap: 4px;
+    align-items: center; /* centers eye/edit on same vertical line */
+    margin-left: 4px;
+}
+
+/* Circular client thumbnail (small) */
+.clientThumb {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    background: var(--color-surface-strong);
+}
+
+/* Ações do card: botões de texto com sensação de pressionar */
+.actionButton {
+    -webkit-appearance: button;
+    appearance: button;
+    border: 1px solid #d1d5db; /* gray-300 */
+    background: #f9fafb; /* gray-50 */
+    color: #111827; /* gray-900 */
+    padding: 6px 10px;
+    font-size: 13px;
+    line-height: 1.2;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease,
+        box-shadow 0.12s ease, transform 0.05s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    touch-action: manipulation;
+}
+.actionButton:hover {
+    background: #f3f4f6; /* gray-100 */
+}
+.actionButton:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.08);
+}
+.actionButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.actionPrimary {
+    border-color: var(--color-ongoing);
+    background: var(--color-ongoing);
+    color: #ffffff;
+}
+.actionPrimary:hover {
+    /* Fallback: subtle white overlay to lighten without changing hue */
+    background-image: linear-gradient(
+        rgba(255, 255, 255, 0.03),
+        rgba(255, 255, 255, 0.03)
+    );
+    /* Preferred: precise lightening while preserving hue */
+    background-color: color-mix(in srgb, var(--color-ongoing) 97%, white 3%);
+}
+.actionPrimary:active {
+    /* Fallback: slightly stronger white overlay on press */
+    background-image: linear-gradient(
+        rgba(255, 255, 255, 0.06),
+        rgba(255, 255, 255, 0.06)
+    );
+    /* Preferred: keep hue, slightly lighter on press */
+    background-color: color-mix(in srgb, var(--color-ongoing) 94%, white 6%);
+    /* Avoid visual size shift on press for primary action */
+    transform: none !important;
+}
+
+/* Pending action variant (similar weight to primary but using pending color) */
+.actionPending {
+    border-color: var(--color-pending);
+    background: var(--color-pending);
+    color: #ffffff;
+}
+.actionPending:hover {
+    background-image: linear-gradient(
+        rgba(255, 255, 255, 0.04),
+        rgba(255, 255, 255, 0.04)
+    );
+    background-color: color-mix(in srgb, var(--color-pending) 97%, white 3%);
+}
+.actionPending:active {
+    background-image: linear-gradient(
+        rgba(255, 255, 255, 0.07),
+        rgba(255, 255, 255, 0.07)
+    );
+    background-color: color-mix(in srgb, var(--color-pending) 94%, white 6%);
+    transform: none !important;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import AppModal from './Modal';
-import styles from '../styles/components/NavBar.module.css';
+import modalStyles from '../styles/components/AgendaSettingsModal.module.css';
 
 interface AgendaSettingsModalProps {
     open: boolean;
@@ -15,7 +15,6 @@ const LS_KEYS = {
     slotInterval: 'agenda.slotInterval',
     defaultDuration: 'agenda.defaultDuration',
     defaultVisitType: 'defaultVisitType', // já usada anteriormente
-    autoSuggest: 'agenda.autoSuggestNext',
 };
 
 const intervalOptions = [5, 10, 15, 20, 30];
@@ -37,53 +36,91 @@ function clampHM(v: string, fallback: string) {
     ).padStart(2, '0')}`;
 }
 
+const DEFAULTS = {
+    workStart: '06:00',
+    workEnd: '21:00',
+    slotInterval: 10,
+    defaultDuration: 60,
+    defaultVisitType: 'consulta',
+};
+
 const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     open,
     onClose,
     onApply,
 }) => {
-    const [workStart, setWorkStart] = React.useState('06:00');
-    const [workEnd, setWorkEnd] = React.useState('21:00');
-    const [slotInterval, setSlotInterval] = React.useState(10);
-    const [defaultDuration, setDefaultDuration] = React.useState(60);
-    const [defaultVisitType, setDefaultVisitType] = React.useState('consulta');
-    const [autoSuggest, setAutoSuggest] = React.useState(true);
+    const [workStart, setWorkStart] = React.useState(DEFAULTS.workStart);
+    const [workEnd, setWorkEnd] = React.useState(DEFAULTS.workEnd);
+    const [slotInterval, setSlotInterval] = React.useState(
+        DEFAULTS.slotInterval,
+    );
+    const [defaultDuration, setDefaultDuration] = React.useState(
+        DEFAULTS.defaultDuration,
+    );
+    const [defaultVisitType, setDefaultVisitType] = React.useState(
+        DEFAULTS.defaultVisitType,
+    );
     const [savedMsg, setSavedMsg] = React.useState<string | null>(null);
+    const [msgType, setMsgType] = React.useState<'success' | 'error' | null>(
+        null,
+    );
+    const firstFieldRef = React.useRef<HTMLInputElement | null>(null);
+    const openRef = React.useRef(false);
 
     React.useEffect(() => {
         if (!open) return;
-        // Carrega valores atuais
         setSavedMsg(null);
+        setMsgType(null);
         setWorkStart(
             clampHM(
-                localStorage.getItem(LS_KEYS.workStart) || '06:00',
-                '06:00',
+                localStorage.getItem(LS_KEYS.workStart) || DEFAULTS.workStart,
+                DEFAULTS.workStart,
             ),
         );
         setWorkEnd(
-            clampHM(localStorage.getItem(LS_KEYS.workEnd) || '21:00', '21:00'),
+            clampHM(
+                localStorage.getItem(LS_KEYS.workEnd) || DEFAULTS.workEnd,
+                DEFAULTS.workEnd,
+            ),
         );
         const si = parseInt(
-            localStorage.getItem(LS_KEYS.slotInterval) || '10',
+            localStorage.getItem(LS_KEYS.slotInterval) ||
+                String(DEFAULTS.slotInterval),
             10,
         );
-        setSlotInterval(intervalOptions.includes(si) ? si : 10);
+        setSlotInterval(
+            intervalOptions.includes(si) ? si : DEFAULTS.slotInterval,
+        );
         const dd = parseInt(
-            localStorage.getItem(LS_KEYS.defaultDuration) || '60',
+            localStorage.getItem(LS_KEYS.defaultDuration) ||
+                String(DEFAULTS.defaultDuration),
             10,
         );
-        setDefaultDuration(durationOptions.includes(dd) ? dd : 60);
-        const vt = localStorage.getItem(LS_KEYS.defaultVisitType) || 'consulta';
-        setDefaultVisitType(
-            visitTypes.some(v => v.value === vt) ? vt : 'consulta',
+        setDefaultDuration(
+            durationOptions.includes(dd) ? dd : DEFAULTS.defaultDuration,
         );
-        setAutoSuggest(localStorage.getItem(LS_KEYS.autoSuggest) !== 'false');
+        const vt =
+            localStorage.getItem(LS_KEYS.defaultVisitType) ||
+            DEFAULTS.defaultVisitType;
+        setDefaultVisitType(
+            visitTypes.some(v => v.value === vt)
+                ? vt
+                : DEFAULTS.defaultVisitType,
+        );
+
+        // Manage initial focus only first time after open flag toggles true
+        requestAnimationFrame(() => {
+            if (firstFieldRef.current) {
+                firstFieldRef.current.focus();
+            }
+        });
+        openRef.current = true;
     }, [open]);
 
     function save() {
-        // valida ordem
         if (workEnd <= workStart) {
             setSavedMsg('Fim deve ser maior que início.');
+            setMsgType('error');
             return;
         }
         localStorage.setItem(LS_KEYS.workStart, workStart);
@@ -91,65 +128,120 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
         localStorage.setItem(LS_KEYS.slotInterval, String(slotInterval));
         localStorage.setItem(LS_KEYS.defaultDuration, String(defaultDuration));
         localStorage.setItem(LS_KEYS.defaultVisitType, defaultVisitType);
-        localStorage.setItem(
-            LS_KEYS.autoSuggest,
-            autoSuggest ? 'true' : 'false',
-        );
         setSavedMsg('Configurações salvas.');
+        setMsgType('success');
         if (onApply) onApply();
-        // Mantém aberto para permitir ajustes contínuos
+    }
+
+    function isAtDefaults() {
+        return (
+            workStart === DEFAULTS.workStart &&
+            workEnd === DEFAULTS.workEnd &&
+            slotInterval === DEFAULTS.slotInterval &&
+            defaultDuration === DEFAULTS.defaultDuration &&
+            defaultVisitType === DEFAULTS.defaultVisitType
+        );
+    }
+
+    function resetDefaults() {
+        setWorkStart(DEFAULTS.workStart);
+        setWorkEnd(DEFAULTS.workEnd);
+        setSlotInterval(DEFAULTS.slotInterval);
+        setDefaultDuration(DEFAULTS.defaultDuration);
+        setDefaultVisitType(DEFAULTS.defaultVisitType);
+        setSavedMsg('Padrões restaurados (não salvos ainda).');
+        setMsgType('success');
+    }
+
+    function handleKeyDown(e: React.KeyboardEvent) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            save();
+        }
     }
 
     return (
         <AppModal open={open} onClose={onClose} closeOnEnter={false}>
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 16,
-                    minWidth: 420,
+            <form
+                className={modalStyles.container}
+                onKeyDown={handleKeyDown}
+                onSubmit={e => {
+                    e.preventDefault();
+                    save();
                 }}
             >
-                <h2 style={{ margin: 0 }}>Configurações da Agenda</h2>
-                <div style={{ display: 'grid', gap: 12 }}>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                        <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
-                        >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                <h2 className={modalStyles.header}>Configurações da Agenda</h2>
+                <div className={modalStyles.formGrid}>
+                    <div className={modalStyles.timeRow}>
+                        <div className={modalStyles.fieldGroup}>
+                            <label
+                                htmlFor='agenda-workStart'
+                                className={modalStyles.label}
+                            >
                                 Início expediente
-                            </span>
-                            <input
-                                type='time'
-                                value={workStart}
-                                onChange={e =>
-                                    setWorkStart(
-                                        clampHM(e.target.value, '06:00'),
-                                    )
-                                }
-                            />
-                        </label>
-                        <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
-                        >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            </label>
+                            <div className={modalStyles.timeInputWrapper}>
+                                <input
+                                    id='agenda-workStart'
+                                    ref={firstFieldRef}
+                                    type='time'
+                                    className={modalStyles.input}
+                                    value={workStart}
+                                    onChange={e =>
+                                        setWorkStart(
+                                            clampHM(
+                                                e.target.value,
+                                                DEFAULTS.workStart,
+                                            ),
+                                        )
+                                    }
+                                />
+                                <span aria-hidden className={modalStyles.caret}>
+                                    ▾
+                                </span>
+                            </div>
+                        </div>
+                        <div aria-hidden className={modalStyles.divider} />
+                        <div className={modalStyles.fieldGroup}>
+                            <label
+                                htmlFor='agenda-workEnd'
+                                className={modalStyles.label}
+                            >
                                 Fim expediente
-                            </span>
-                            <input
-                                type='time'
-                                value={workEnd}
-                                onChange={e =>
-                                    setWorkEnd(clampHM(e.target.value, '21:00'))
-                                }
-                            />
-                        </label>
-                        <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
-                        >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            </label>
+                            <div className={modalStyles.timeInputWrapper}>
+                                <input
+                                    id='agenda-workEnd'
+                                    type='time'
+                                    className={modalStyles.input}
+                                    value={workEnd}
+                                    onChange={e =>
+                                        setWorkEnd(
+                                            clampHM(
+                                                e.target.value,
+                                                DEFAULTS.workEnd,
+                                            ),
+                                        )
+                                    }
+                                />
+                                <span aria-hidden className={modalStyles.caret}>
+                                    ▾
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={modalStyles.inlineRow}>
+                        <div className={modalStyles.fieldGroup}>
+                            <label
+                                htmlFor='agenda-slotInterval'
+                                className={modalStyles.label}
+                            >
                                 Intervalo (min)
-                            </span>
+                            </label>
                             <select
+                                id='agenda-slotInterval'
+                                className={modalStyles.select}
                                 value={slotInterval}
                                 onChange={e =>
                                     setSlotInterval(
@@ -163,14 +255,17 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                     </option>
                                 ))}
                             </select>
-                        </label>
-                        <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
-                        >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        </div>
+                        <div className={modalStyles.fieldGroup}>
+                            <label
+                                htmlFor='agenda-defaultDuration'
+                                className={modalStyles.label}
+                            >
                                 Duração padrão (min)
-                            </span>
+                            </label>
                             <select
+                                id='agenda-defaultDuration'
+                                className={modalStyles.select}
                                 value={defaultDuration}
                                 onChange={e =>
                                     setDefaultDuration(
@@ -184,71 +279,76 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                     </option>
                                 ))}
                             </select>
-                        </label>
+                        </div>
+                    </div>
+
+                    <div className={modalStyles.fullRow}>
                         <label
-                            style={{ display: 'flex', flexDirection: 'column' }}
+                            htmlFor='agenda-defaultVisitType'
+                            className={modalStyles.label}
                         >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
-                                Tipo padrão
-                            </span>
-                            <select
-                                value={defaultVisitType}
-                                onChange={e =>
-                                    setDefaultVisitType(e.target.value)
-                                }
-                            >
-                                {visitTypes.map(v => (
-                                    <option key={v.value} value={v.value}>
-                                        {v.label}
-                                    </option>
-                                ))}
-                            </select>
+                            Tipo padrão
                         </label>
+                        <select
+                            id='agenda-defaultVisitType'
+                            className={modalStyles.select}
+                            value={defaultVisitType}
+                            onChange={e => setDefaultVisitType(e.target.value)}
+                        >
+                            {visitTypes.map(v => (
+                                <option key={v.value} value={v.value}>
+                                    {v.label}
+                                </option>
+                            ))}
+                        </select>
                     </div>
-                    <label
-                        style={{
-                            display: 'flex',
-                            gap: 8,
-                            alignItems: 'center',
-                        }}
-                    >
-                        <input
-                            type='checkbox'
-                            checked={autoSuggest}
-                            onChange={e => setAutoSuggest(e.target.checked)}
-                        />
-                        <span style={{ fontSize: 13 }}>
-                            Sugerir próximo slot livre ao abrir agendamento
-                        </span>
-                    </label>
                 </div>
-                {savedMsg && (
-                    <div
-                        style={{
-                            fontSize: 13,
-                            color: savedMsg.startsWith('Configura')
-                                ? '#065f46'
-                                : '#991b1b',
-                        }}
-                    >
-                        {savedMsg}
-                    </div>
-                )}
+
                 <div
-                    style={{
-                        display: 'flex',
-                        gap: 8,
-                        justifyContent: 'flex-end',
-                    }}
+                    className={modalStyles.messageArea}
+                    role='status'
+                    aria-live='polite'
                 >
-                    <button className={styles.loginButton} onClick={save}>
+                    <div
+                        className={[
+                            modalStyles.statusMessage,
+                            savedMsg ? ' ' + modalStyles.visible : '',
+                            msgType === 'success'
+                                ? ' ' + modalStyles.statusSuccess
+                                : '',
+                            msgType === 'error'
+                                ? ' ' + modalStyles.statusError
+                                : '',
+                        ].join('')}
+                    >
+                        {savedMsg || ''}
+                    </div>
+                </div>
+
+                <div className={modalStyles.buttonBar}>
+                    <button
+                        type='button'
+                        className={`${modalStyles.buttonBase} ${modalStyles.secondary}`}
+                        onClick={resetDefaults}
+                        disabled={isAtDefaults()}
+                    >
+                        Restaurar padrões
+                    </button>
+                    <button
+                        type='submit'
+                        className={`${modalStyles.buttonBase} ${modalStyles.primary}`}
+                    >
                         Salvar
                     </button>
-                    <button className={styles.loginButton} onClick={onClose}>
+                    <button
+                        type='button'
+                        className={`${modalStyles.buttonBase} ${modalStyles.secondary}`}
+                        onClick={onClose}
+                    >
                         Fechar
                     </button>
                 </div>
-            </div>
+            </form>
         </AppModal>
     );
 };

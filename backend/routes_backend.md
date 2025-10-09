@@ -844,3 +844,35 @@ path('register/', include('apps.register.urls')), # 🧩 Rotas do app clínico
 ]
 
 arquivos asgi e wsgi.py não foram alterados desde a criação do projeo.
+
+---
+
+## Semântica de end_at vs finalized_at (Agenda)
+
+O modelo `Appointment` mantém dois marcadores relacionados ao término:
+
+| Campo        | Quando muda                                                                             | Propósito                                            |
+| ------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| end_at       | Ajustado para `now` se finalizar antes do fim planejado; caso contrário permanece igual | Representar a janela efetiva para cálculo de duração |
+| finalized_at | Definido somente na primeira finalização                                                | Auditoria do momento de registro da conclusão        |
+
+Casos típicos:
+
+- Finalização durante a sessão: `end_at ≈ finalized_at` (encurtado).
+- Finalização após o horário: `finalized_at > end_at` (mostra atraso em registrar).
+
+Uso recomendado:
+
+- Duração real: `end_at - start_at`.
+- Atraso em registrar: se `finalized_at > end_at`, considerar `(finalized_at - end_at)`.
+- Auditoria detalhada (drift cliente-servidor, motivo, device): somar consultas a `FinalizeAudit`.
+
+Motivação para manter ambos:
+
+- Preserva informação de atraso sem distorcer a duração exportada.
+- Facilita métricas futuras de comportamento operacional.
+
+Possíveis evoluções:
+
+- Badge no frontend para finalização tardia.
+- Métricas de atraso médio por profissional.

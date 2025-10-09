@@ -122,6 +122,12 @@
     align-items: center;
 }
 
+/* Profissional: linha do nome (desktop default) */
+/* Tornar negrito também no desktop. Mantemos regras detalhadas (clamp, alinhamento etc.) somente no bloco mobile abaixo */
+.nameLine {
+    font-weight: 600; /* destaque consistente em todas as larguras */
+}
+
 .loginInput {
     padding: 0.4rem 0.6rem;
     border: 1px solid #ccc;
@@ -153,9 +159,9 @@
 /* Desktop: nome e CRM/COP lado a lado com pequeno espaçamento */
 .proNameBlock {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--name-crm-gap, 0.5rem);
+    flex-direction: column; /* empilhar para manter hora sempre abaixo do nome no desktop também */
+    align-items: flex-start;
+    gap: 0.15rem; /* menor espaço entre nome e clock */
 }
 
 @media screen and (max-width: 600px) {
@@ -242,7 +248,7 @@
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: var(--name-crm-gap); /* espaço maior entre Nome e CRM/COP */
+        gap: 0.2rem;
         max-width: 100%;
     }
     .nameLine {
@@ -254,6 +260,7 @@
         white-space: normal;
         line-height: 1.15;
         text-align: right;
+        font-weight: 600; /* destaque para o nome do profissional */
     }
     .idLine {
         max-width: 100%;

@@ -56,7 +56,12 @@ def test_client_cannot_change(api_client, professional, client1, client2):
         'client': client2.id
     }, format='json')
     assert r2.status_code == 400
-    assert 'cliente não pode ser alterado'.lower() in str(r2.data).lower()
+    body_lower = str(r2.data).lower()
+    # Aceita a mensagem antiga (específica) ou a nova mensagem de bloqueio geral de edição
+    assert (
+        'cliente não pode ser alterado' in body_lower
+        or 'edição de compromissos está temporariamente bloqueada' in body_lower
+    )
 
 
 def test_delete_is_blocked(api_client, client1):

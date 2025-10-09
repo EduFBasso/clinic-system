@@ -3,9 +3,10 @@
 // - Pauses when the tab is hidden (Page Visibility API) to be battery-friendly.
 // - Returns a Date instance that updates on each tick.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getNow } from '../utils/now';
 
 export function useNow(intervalMs = 30000) {
-    const [now, setNow] = useState<Date>(new Date());
+    const [now, setNow] = useState<Date>(getNow());
     const timerRef = useRef<number | null>(null);
 
     const clear = useCallback(() => {
@@ -18,7 +19,7 @@ export function useNow(intervalMs = 30000) {
     const start = useCallback(() => {
         clear();
         timerRef.current = window.setInterval(
-            () => setNow(new Date()),
+            () => setNow(getNow()),
             intervalMs,
         );
     }, [clear, intervalMs]);
@@ -28,7 +29,7 @@ export function useNow(intervalMs = 30000) {
             if (document.hidden) {
                 clear();
             } else {
-                setNow(new Date());
+                setNow(getNow());
                 start();
             }
         };

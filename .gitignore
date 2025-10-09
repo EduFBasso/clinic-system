@@ -26,12 +26,19 @@ info/*
 
 # Python virtual environments
 venv/
+.venv/
+/.venv-wsl/
 backend/venv*/
+backend/.venv*/
+backend/.venv-wsl/
 frontend/venv*/
+frontend/.venv*/
 
 # Collected static files and python cache
 backend/staticfiles/
 **/__pycache__/
+**/.pytest_cache/
+.pytest_cache/
 
 # Logs
 logs

@@ -1,6 +1,6 @@
 // frontend/src/components/ClientCard.tsx
 import React from 'react';
-import { useNow } from '../hooks/useNow';
+import { focusClientCard } from '../utils/focusClientCard';
 import styles from '../styles/components/ClientCard.module.css';
 import {
     FaEye,
@@ -9,6 +9,7 @@ import {
     FaCalendarAlt,
     FaPlus,
 } from 'react-icons/fa';
+import { useClientCreateAction } from '../hooks/useClientCreateAction';
 import { getMaxScheduledPerClient } from '../config/limits';
 import { API_BASE } from '../config/api';
 import type { Appointment } from '../hooks/useAppointments';
@@ -19,7 +20,24 @@ import { FaEdit } from 'react-icons/fa';
 import '../styles/palette.css';
 import { parseDOB, calcAge } from '../utils/dateOfBirth';
 import MonthlyAgendaModal from './MonthlyAgendaModal';
-import WeeklyPreviewModal from './WeeklyPreviewModal';
+import WeeklyAgendaModal from './WeeklyAgendaModal';
+import { useClientCardStyle } from './clientCard/useClientCardStyle';
+// PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
+import { useClientPendingState } from '../hooks/useClientPendingState';
+// import type { SharedAppointmentLike } from './shared/AppointmentCard'; // no longer needed after pending hook extraction
+import FinalizeButton from './clientCard/FinalizeButton';
+// SolveButton lives in clientCard folder along with FinalizeButton
+import SolveButton from './clientCard/SolveButton';
+import {
+    FutureAppointmentsList,
+    useClientFutureAppointments,
+} from '../domain/futureAppointments';
+// (hysteresis & appointment state consolidated inside hooks)
+import { useFinalizeAppointment } from '../hooks/useFinalizeAppointment';
+// Replaced latch/snapshot/sweep logic by consolidated hook
+import { useClientOngoingState } from '../hooks/useClientOngoingState';
+import { formatTime } from '../utils/timeFormat';
+import { openClientForm } from '../utils/openClientForm';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
 
@@ -36,36 +54,56 @@ export default function ClientCard({
     selected,
     onSelect,
 }: ClientCardProps) {
+    // Feature flag: disable per-client ongoing probe unless explicitly enabled (reduces debug traffic)
+    const ENABLE_ONGOING_PROBE =
+        (import.meta as ImportMeta).env.VITE_ENABLE_ONGOING_PROBE === 'true';
     const [showMonthly, setShowMonthly] = React.useState(false);
     const [showWeekly, setShowWeekly] = React.useState(false);
     const [showQuick, setShowQuick] = React.useState(false);
+    // Removido: PendingActions local — usar evento global
     const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
         null,
     );
-    // Próximos compromissos além do próximo principal
-    const [futureAppointments, setFutureAppointments] = React.useState<
-        Appointment[]
-    >([]);
-    const [loadingFuture, setLoadingFuture] = React.useState(false);
+    const isScheduled = client.next_appointment_status === 'scheduled';
+    // Futuros agora gerenciados por hook dedicado
+    const { futureAppointments, loadingFuture, dynLimit } =
+        useClientFutureAppointments({ client, isScheduled });
     const [pressed, setPressed] = React.useState(false);
-    // Refresh time-based UI every 30s while visible (lightweight)
-    {
-        /** Botão responsivo: alterna entre 'Editar' e 'Sair' conforme estado inlineEdit */
+    const { finishing, finalize } = useFinalizeAppointment(client.id);
+    // Suprimir visual de "em andamento" por alguns segundos após finalizar/cancelar
+    // suppressOngoingUntil removido (gestão dentro do hook de ongoing)
+    // Simplificado: usar hora local, mas com tick para refletir mudanças de estado (scheduled→ongoing) sem interação do usuário
+    function useNowTick(intervalMs: number) {
+        const [now, setNow] = React.useState<Date>(() => new Date());
+        React.useEffect(() => {
+            // Alinha o primeiro tick ao próximo múltiplo do intervalo para suavizar transições
+            const firstDelay = (() => {
+                const d = new Date();
+                const ms = d.getMilliseconds() + d.getSeconds() * 1000;
+                const rem = intervalMs - (ms % intervalMs);
+                return Math.max(250, Math.min(rem, intervalMs));
+            })();
+            let t1: number | null = null;
+            let t2: number | null = null;
+            t1 = window.setTimeout(() => {
+                setNow(new Date());
+                t2 = window.setInterval(
+                    () => setNow(new Date()),
+                    intervalMs,
+                ) as unknown as number;
+            }, firstDelay) as unknown as number;
+            return () => {
+                if (t1 != null) window.clearTimeout(t1 as unknown as number);
+                if (t2 != null) window.clearInterval(t2 as unknown as number);
+            };
+        }, [intervalMs]);
+        return now;
     }
-    const now = useNow(30000);
-    const start = React.useMemo(
-        () =>
-            client.next_appointment_start_at
-                ? new Date(client.next_appointment_start_at)
-                : null,
-        [client.next_appointment_start_at],
-    );
-    const end = React.useMemo(() => {
-        if (client.next_appointment_end_at)
-            return new Date(client.next_appointment_end_at);
-        if (start) return new Date(start.getTime() + 60 * 60 * 1000);
-        return null;
-    }, [client.next_appointment_end_at, start]);
+    const now = useNowTick(5000);
+    // Removed resumeGrace (was used for previous ongoing suppression logic)
+    // const resumeGrace = useVisibilityResumeGrace(30000);
+    // start derivado como Date não é necessário; mantemos ISO para o snapshot
+    // end derivado não é necessário para estilização; snapshot usa ISO strings
     // Idade calculada uma vez (se data válida) para exibir em linha própria
     const ageYears = React.useMemo(() => {
         if (!client.date_of_birth) return null;
@@ -75,35 +113,137 @@ export default function ClientCard({
             ? parsed.age
             : calcAge(parsed.year, parsed.month, parsed.day);
     }, [client.date_of_birth]);
-    const isScheduled = client.next_appointment_status === 'scheduled';
-    const isOngoing =
-        isScheduled &&
-        !!start &&
-        !!end &&
-        start.getTime() <= now.getTime() &&
-        now.getTime() < end.getTime();
-    const amber = '#b45309';
-    const amberBg = '#fffbeb';
-    const labelColor = 'var(--color-primary)';
-    const iconColor = 'var(--color-primary)';
+    // isScheduled já definido acima (reordenado para hook de futuros)
+    // Base: informações vindas do servidor (se disponíveis)
+    // startISO / endISO no longer directly used after ongoing refactor
+    // const startISO = client.next_appointment_start_at ?? null;
+    // const endISO = client.next_appointment_end_at ?? null;
+    const {
+        isOngoing,
+        // isOngoingRaw (raw signal) not needed in card after refactor
+        displayStartISO,
+        displayEndISO,
+        effectiveApptId,
+        afterFinalizeSuccess,
+    } = useClientOngoingState({
+        client,
+        now,
+        enableProbe: ENABLE_ONGOING_PROBE,
+        debug: false,
+    });
+
+    // Quando tivermos uma janela confiável e status scheduled, usamos o hook compartilhado
+    // legacy variables now derived via hook (kept for potential future use) startISO/endISO still used for future fetch logic
+
+    // Preferir dados confiáveis do servidor OU da varredura global quando houver janela atual
+    // Se houver um agendamento em andamento detectado pela varredura (windowFromOverride),
+    // usamos esse horário/ID em prioridade para refletir corretamente o estado "Em andamento".
+    // removed: local derivations now handled by useClientOngoingState
+
+    // Auto-clear latch some time after the end to avoid sticky ongoing if finalize didn't fire
+    // removed auto-clear effect (handled inside hook)
+
+    // Novo: limpar latch imediatamente se detectarmos que o appointment latched foi finalizado/cancelado, expirado ou janela deixou de ser confiável
+    // removed immediate-clear effect (handled in hook)
+
+    // On resume (visibility/pageshow), refresh local latched state from storage in case iOS flushed memory
+    // removed visibility storage refresh (handled in hook)
+
+    // Aplicar histerese visual: aguarda 250ms para entrar em ongoing; saída é imediata
+    // hysteresis now inside hook (isOngoing already stabilized)
+
+    // Instrumentação de diagnóstico opcional: loga decisão de ongoing/latch
+    // removed debug effect (handled via hook's debug option)
+
+    // Telemetry: entering ongoing window
+    // removed telemetry enter effect (done inside hook)
+
+    // Hook centralizado de pendência
+    const {
+        effectivePending: isPending,
+        openPendingActions,
+        tryOpenPendingElseQuick,
+    } = useClientPendingState({ client, now });
+
+    // Mostrar seção de agenda somente se há algo concreto (agendamento atual ou em andamento) ou futuros carregados.
+    // Estado pendente isolado não exibe cabeçalho/tipo para manter UI minimalista.
+    // Agenda line (tipo / horário) é suprimida se pendente para manter visual minimalista.
+    // Porém queremos ainda exibir a linha 'Data:' com o botão Solucionar mesmo que haja um agendamento (scheduled+pending).
+    // Regra revisada:
+    //  - Quando pendente: não mostramos linha de agenda nem linha Data (substituímos por bloco compacto de pendência)
+    //  - Linha de agenda aparece apenas se há scheduled ativo, em andamento ou futuros E não está pendente
+    const hasAgendaLine =
+        !isPending &&
+        (isScheduled || isOngoing || futureAppointments.length > 0);
+
+    // Ações unificadas (+) para agenda e fallback
+    const createActionAgenda = useClientCreateAction({
+        isOngoing,
+        isPending,
+        futureAppointmentsCount: futureAppointments.length,
+        isScheduled,
+        dynLimit,
+        openPendingActions,
+        tryOpenPendingElseQuick,
+        setEditing: setEditingAppt,
+        openQuick: () => setShowQuick(true),
+        baseTitle: 'Novo agendamento',
+    });
+    const createActionFallback = useClientCreateAction({
+        isOngoing,
+        isPending,
+        futureAppointmentsCount: futureAppointments.length,
+        isScheduled,
+        dynLimit,
+        openPendingActions,
+        tryOpenPendingElseQuick,
+        setEditing: setEditingAppt,
+        openQuick: () => setShowQuick(true),
+        baseTitle: 'Agendar',
+    });
+    // Estilos centralizados via hook: mantém regra de cartão branco durante atendimento
+    const {
+        containerStyle,
+        labelColor,
+        iconColor,
+        valueColor,
+        separatorColor,
+        separatorOpacity,
+    } = useClientCardStyle({
+        isOngoing,
+        selected,
+        pressed,
+        isScheduled,
+        isPending,
+    });
     const cardRef = React.useRef<HTMLDivElement | null>(null);
+
+    // Align with global forceClose: ensure any ClientCard modal closes too
+    // PendingActions global — sem necessidade de listener local
+
+    // Finalização com encapsulamento via hook
+    const finalizeEarlyAware = React.useCallback(async () => {
+        const apptId = effectiveApptId;
+        if (!apptId) return;
+        const ok = await finalize(apptId, {
+            preferEarly: isOngoing,
+            openPendingAfter: async () => {
+                await tryOpenPendingElseQuick(() => {});
+            },
+        });
+        if (ok) afterFinalizeSuccess();
+    }, [
+        effectiveApptId,
+        isOngoing,
+        finalize,
+        tryOpenPendingElseQuick,
+        afterFinalizeSuccess,
+    ]);
     // Fechar modo edição ao clicar fora do card
     // Efeito de clique fora removido enquanto editor inline está desativado
-    // Thicken border when ongoing and either pressed or selected
-    const borderWidth = isOngoing && (pressed || selected) ? 2 : 1;
-    const cardBorder = isOngoing
-        ? `${borderWidth}px solid ${amber}`
-        : selected
-        ? '2px solid var(--color-selected-border)'
-        : '1px solid var(--color-border)';
-    const cardBg = isOngoing
-        ? amberBg
-        : selected
-        ? 'var(--color-selected-bg)'
-        : 'var(--card-bg)';
-    const leftStripeColor = isOngoing ? amber : 'transparent';
+    // Borda e fundo já definidos no hook (containerStyle)
     // title display moved into the agenda section below when scheduled
-    const [flash, setFlash] = React.useState(false);
+    // Flash visual ao focar/entrar em andamento removido — mantemos apenas seleção + scroll
     React.useEffect(() => {
         let cancelled = false;
         const cleanupTimers: number[] = [];
@@ -126,20 +266,20 @@ export default function ClientCard({
                 Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
             );
             const ratio = overlapTop / rect.height;
-            // Se menos de 70% visível ou topo muito acima (< -32) ou bottom cortado > 32px, ajusta
             const needsScroll =
                 ratio < 0.7 || rect.top < 8 || rect.bottom > vh - 8;
             if (needsScroll) {
                 try {
                     // Calcula scroll target centralizado mas com leve offset para deixar título visível
                     const currentY = window.scrollY || window.pageYOffset;
-                    const targetTop = rect.top + currentY - 60; // 60px de margem superior
+                    const offset = 110; // maior offset para manter cabeçalho/label totalmente visível
+                    const targetTop = Math.max(0, rect.top + currentY - offset);
                     window.scrollTo({ top: targetTop, behavior: 'smooth' });
                 } catch {
                     try {
                         el.scrollIntoView({
                             behavior: 'smooth',
-                            block: 'center',
+                            block: 'start',
                         });
                     } catch {
                         /* noop */
@@ -165,9 +305,6 @@ export default function ClientCard({
                 } catch {
                     /* noop */
                 }
-                setFlash(true);
-                const t = setTimeout(() => setFlash(false), 2600);
-                cleanupTimers.push(t as unknown as number);
                 // agenda verificação assíncrona depois do repaint para pegar altura final inicial
                 requestAnimationFrame(() => ensureVisible(0));
             }
@@ -184,74 +321,20 @@ export default function ClientCard({
             window.removeEventListener('touchstart', cancelByUser);
             window.removeEventListener('wheel', cancelByUser);
         };
-    }, [client.id, onSelect]);
-
-    React.useEffect(() => {
-        if (!isScheduled) {
-            setFutureAppointments([]);
-            return;
-        }
-        function fetchFuture() {
-            const token = localStorage.getItem('accessToken');
-            if (!token) return;
-            const startRef = client.next_appointment_start_at;
-            if (!startRef) return;
-            setLoadingFuture(true);
-            const dynLimit = getMaxScheduledPerClient();
-            const overfetchLimit = dynLimit + 5;
-            const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
-                startRef,
-            )}&limit=${overfetchLimit}&ordering=start_at&client=${client.id}`;
-            fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-                .then(r => (r.ok ? r.json() : []))
-                .then((data: Appointment[]) => {
-                    const list = (Array.isArray(data) ? data : [])
-                        .filter(a => a.status === 'scheduled')
-                        .filter(a => a.id !== client.next_appointment_id);
-                    const total = (isScheduled ? 1 : 0) + list.length;
-                    if (total > dynLimit) {
-                        try {
-                            window.dispatchEvent(
-                                new CustomEvent('systemMessage', {
-                                    detail: {
-                                        text: `Excedido limite de ${dynLimit} compromissos (total atual: ${total}). Ajuste/cancelamento necessário.`,
-                                        type: 'warning',
-                                    },
-                                }),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                    }
-                    setFutureAppointments(list);
-                })
-                .catch(() => setFutureAppointments([]))
-                .finally(() => setLoadingFuture(false));
-        }
-        fetchFuture();
-        const listener = () => fetchFuture();
-        window.addEventListener(
-            'appointments:changed',
-            listener as EventListener,
-        );
-        return () => {
-            window.removeEventListener(
-                'appointments:changed',
-                listener as EventListener,
-            );
-        };
     }, [
         client.id,
+        onSelect,
+        futureAppointments.length,
+        isOngoing,
         isScheduled,
-        client.next_appointment_start_at,
-        client.next_appointment_id,
     ]);
 
-    const cardClassNames = [
-        styles.card,
-        selected ? styles.cardSelected : '',
-        flash ? styles.flashBorder : '',
-    ]
+    // Inline effect de futuros removido (substituído pelo hook)
+
+    // Clear ongoing visual immediately when a targeted event is dispatched (same-tab UX)
+    // Clear ongoing event handling moved to hook; listener removed
+
+    const cardClassNames = [styles.card, selected ? styles.cardSelected : '']
         .filter(Boolean)
         .join(' ');
 
@@ -259,16 +342,7 @@ export default function ClientCard({
         <div
             ref={cardRef}
             className={cardClassNames}
-            style={{
-                position: 'relative',
-                cursor: 'pointer',
-                userSelect: 'none',
-                background: cardBg,
-                border: cardBorder,
-                transform: pressed ? 'scale(0.995)' : 'scale(1)',
-                transition:
-                    'background 0.3s, border 0.25s, box-shadow 0.4s, transform 0.07s',
-            }}
+            style={containerStyle}
             onClick={() => onSelect?.()}
             onMouseDown={() => setPressed(true)}
             onMouseUp={() => setPressed(false)}
@@ -276,21 +350,7 @@ export default function ClientCard({
             onTouchStart={() => setPressed(true)}
             onTouchEnd={() => setPressed(false)}
         >
-            {isOngoing && (
-                <div
-                    aria-hidden
-                    style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 4,
-                        background: leftStripeColor,
-                        borderTopLeftRadius: 12,
-                        borderBottomLeftRadius: 12,
-                    }}
-                />
-            )}
+            {/* Removida barra lateral colorida: foco no esquema de dois tons (borda + fundo) */}
             <div className={styles.infoRow}>
                 <div className={styles.rowBaseline}>
                     <span
@@ -305,26 +365,64 @@ export default function ClientCard({
                     </span>
                     <span
                         className={styles.value}
-                        style={{
-                            color: isOngoing ? amber : 'var(--color-text)',
-                            lineHeight: 1.3,
-                            fontWeight: isOngoing ? 600 : undefined,
-                        }}
+                        style={{ color: valueColor, lineHeight: 1.3 }}
                     >
                         {client.first_name} {client.last_name}
                     </span>
                 </div>
-                <button
-                    className={styles.iconButton}
-                    title='Visualizar detalhes'
-                    onClick={e => {
-                        e.stopPropagation();
-                        onView(client);
-                    }}
-                >
-                    <FaEye color={iconColor} />
-                </button>
+                <div className={styles.nameActions}>
+                    <button
+                        className={styles.iconButton}
+                        title='Editar cliente'
+                        onClick={e => {
+                            e.stopPropagation();
+                            const token = localStorage.getItem('accessToken');
+                            if (!token) {
+                                onView(client);
+                                return;
+                            }
+                            openClientForm({ id: client.id });
+                        }}
+                    >
+                        <FaEdit color={iconColor} />
+                    </button>
+                    <button
+                        className={styles.iconButton}
+                        title='Visualizar detalhes'
+                        onClick={e => {
+                            e.stopPropagation();
+                            onView(client);
+                        }}
+                        style={
+                            client.photo
+                                ? { padding: 0, overflow: 'hidden' }
+                                : undefined
+                        }
+                    >
+                        {client.photo ? (
+                            <img
+                                src={client.photo}
+                                alt={`Foto de ${client.first_name} ${client.last_name}`}
+                                className={styles.clientThumb}
+                                loading='lazy'
+                                decoding='async'
+                                onError={ev => {
+                                    try {
+                                        (
+                                            ev.currentTarget as HTMLImageElement
+                                        ).style.display = 'none';
+                                    } catch {
+                                        /* noop */
+                                    }
+                                }}
+                            />
+                        ) : (
+                            <FaEye color={iconColor} />
+                        )}
+                    </button>
+                </div>
             </div>
+
             {ageYears !== null && (
                 <div className={styles.infoRow}>
                     <span
@@ -335,7 +433,7 @@ export default function ClientCard({
                     </span>
                     <span
                         className={styles.value}
-                        style={{ color: 'var(--color-text)' }}
+                        style={{ color: valueColor }}
                     >
                         {ageYears} anos
                     </span>
@@ -349,13 +447,7 @@ export default function ClientCard({
                 >
                     Tel:
                 </span>
-                <span
-                    className={styles.value}
-                    style={{
-                        color: isOngoing ? amber : 'var(--color-text)',
-                        fontWeight: isOngoing ? 600 : undefined,
-                    }}
-                >
+                <span className={styles.value} style={{ color: valueColor }}>
                     {formatPhone(client.phone)}
                 </span>
                 <a
@@ -382,7 +474,7 @@ export default function ClientCard({
                     </span>
                     <span
                         className={styles.value}
-                        style={{ color: 'var(--color-text)', lineHeight: 1.3 }}
+                        style={{ color: valueColor, lineHeight: 1.3 }}
                     >
                         {client.address}
                         {client.address_number && (
@@ -406,10 +498,7 @@ export default function ClientCard({
                     </span>
                     <span
                         className={styles.value}
-                        style={{
-                            color: isOngoing ? amber : 'var(--color-text)',
-                            fontWeight: isOngoing ? 600 : undefined,
-                        }}
+                        style={{ color: valueColor }}
                     >
                         {client.email}
                     </span>
@@ -427,160 +516,134 @@ export default function ClientCard({
             )}
 
             {/* Separator between personal data and agenda info (increased spacing) */}
-            {isScheduled && (
+            {hasAgendaLine && (
                 <div
                     aria-hidden
                     style={{
                         height: 1,
-                        background: labelColor,
-                        opacity: 0.5,
+                        background: separatorColor,
+                        opacity: separatorOpacity,
                         margin: '12px 0 12px',
                         borderRadius: 1,
                     }}
                 />
             )}
 
-            {/* Agenda section below E-mail, visible only when there is an active appointment */}
-            {isScheduled && (
+            {/* Agenda section below E-mail. Exibe durante agendamento OU enquanto em andamento (hasAgendaLine). */}
+            {hasAgendaLine && (
                 <>
+                    {(isScheduled ||
+                        isOngoing ||
+                        futureAppointments.length > 0) && (
+                        <div className={styles.infoRow}>
+                            <span
+                                className={styles.label}
+                                style={{
+                                    color: labelColor,
+                                    fontWeight: 'bold',
+                                }}
+                            >
+                                Agenda (tipo):
+                            </span>
+                            <span
+                                className={styles.value}
+                                style={{ color: valueColor }}
+                            >
+                                {client.next_appointment_title || 'Consulta'}
+                            </span>
+                            {isPending ? (
+                                <SolveButton
+                                    onSolve={async () => {
+                                        try {
+                                            onSelect?.();
+                                        } catch {
+                                            /* noop */
+                                        }
+                                        // Usa mesma lógica do minicard daily: tenta abrir pendente ou fallback rápido
+                                        await tryOpenPendingElseQuick(() => {
+                                            // Se não houver nada pendente inesperadamente, apenas não faz nada (ou poderíamos abrir criação)
+                                        });
+                                    }}
+                                />
+                            ) : (
+                                <>
+                                    <button
+                                        className={styles.iconButton}
+                                        title={createActionAgenda.title}
+                                        disabled={createActionAgenda.disabled}
+                                        style={
+                                            createActionAgenda.disabled
+                                                ? {
+                                                      opacity: 0.45,
+                                                      cursor: 'not-allowed',
+                                                  }
+                                                : undefined
+                                        }
+                                        onClick={createActionAgenda.onClick}
+                                    >
+                                        <FaPlus color={iconColor} />
+                                    </button>
+                                    <button
+                                        className={styles.iconButton}
+                                        title='Agenda mensal'
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            setShowMonthly(true);
+                                        }}
+                                    >
+                                        <FaCalendarAlt color={iconColor} />
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
                     <div className={styles.infoRow}>
                         <span
                             className={styles.label}
                             style={{ color: labelColor, fontWeight: 'bold' }}
                         >
-                            Agenda (tipo):
-                        </span>
-                        <span
-                            className={styles.value}
-                            style={{
-                                color: isOngoing ? amber : 'var(--color-text)',
-                                fontWeight: isOngoing ? 600 : undefined,
-                            }}
-                        >
-                            {client.next_appointment_title || 'Consulta'}
-                        </span>
-                        {(() => {
-                            const dynLimit = getMaxScheduledPerClient();
-                            const totalScheduled =
-                                (isScheduled ? 1 : 0) +
-                                futureAppointments.length;
-                            const limitReached = totalScheduled >= dynLimit;
-                            const title = limitReached
-                                ? `Limite de ${dynLimit} compromissos (atual: ${totalScheduled})`
-                                : 'Novo agendamento';
-                            return (
-                                <button
-                                    className={styles.iconButton}
-                                    title={title}
-                                    disabled={limitReached}
-                                    style={
-                                        limitReached
-                                            ? {
-                                                  opacity: 0.45,
-                                                  cursor: 'not-allowed',
-                                              }
-                                            : undefined
-                                    }
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        if (limitReached) {
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'systemMessage',
-                                                        {
-                                                            detail: {
-                                                                text: `Limite de ${dynLimit} compromissos atingido (total: ${totalScheduled})`,
-                                                                type: 'warning',
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
-                                            return;
-                                        }
-                                        setEditingAppt(null);
-                                        setShowQuick(true);
-                                    }}
-                                >
-                                    <FaPlus color={iconColor} />
-                                </button>
-                            );
-                        })()}
-                        <button
-                            className={styles.iconButton}
-                            title='Agenda mensal'
-                            onClick={e => {
-                                e.stopPropagation();
-                                setShowMonthly(true);
-                            }}
-                        >
-                            <FaCalendarAlt color={iconColor} />
-                        </button>
-                    </div>
-                    <div className={styles.infoRow}>
-                        <span
-                            className={styles.label}
-                            style={{
-                                color: labelColor,
-                                fontWeight: 'bold',
-                            }}
-                        >
                             Data:
                         </span>
                         <span
                             className={styles.value}
-                            style={{
-                                color: isOngoing ? amber : 'var(--color-text)',
-                                fontWeight: isOngoing ? 600 : undefined,
-                            }}
+                            style={{ color: labelColor, fontWeight: 'bold' }}
                         >
                             {(() => {
-                                const s = client.next_appointment_start_at
-                                    ? new Date(client.next_appointment_start_at)
-                                    : null;
-                                const e = client.next_appointment_end_at
-                                    ? new Date(client.next_appointment_end_at)
-                                    : s
-                                    ? new Date(s.getTime() + 60 * 60 * 1000)
-                                    : null;
+                                const sIso =
+                                    displayStartISO ||
+                                    client.next_appointment_start_at ||
+                                    null;
+                                const eIso =
+                                    displayEndISO ||
+                                    client.next_appointment_end_at ||
+                                    null;
+                                if (!sIso || !eIso) return '—';
+                                const s = new Date(sIso);
+                                const e = new Date(eIso);
+                                if (isNaN(s.getTime()) || isNaN(e.getTime()))
+                                    return '—';
                                 const wd = s
-                                    ? s
-                                          .toLocaleDateString('pt-BR', {
-                                              weekday: 'short',
-                                          })
-                                          .replace('.', '')
-                                          .replace(/\b(\w)/, c =>
-                                              c.toUpperCase(),
-                                          )
-                                    : '--';
-                                const dd = s
-                                    ? String(s.getDate()).padStart(2, '0')
-                                    : '--';
-                                const mm = s
-                                    ? String(s.getMonth() + 1).padStart(2, '0')
-                                    : '--';
-                                const fmt = (d: Date | null) =>
-                                    d
-                                        ? d.toLocaleTimeString('pt-BR', {
-                                              hour: '2-digit',
-                                              minute: '2-digit',
-                                          })
-                                        : '--:--';
-                                return `${wd} ${dd}/${mm}, ${fmt(s)} - ${fmt(
-                                    e,
-                                )}`;
+                                    .toLocaleDateString('pt-BR', {
+                                        weekday: 'short',
+                                    })
+                                    .replace('.', '')
+                                    .replace(/\b(\w)/, c => c.toUpperCase());
+                                const dd = String(s.getDate()).padStart(2, '0');
+                                const mm = String(s.getMonth() + 1).padStart(
+                                    2,
+                                    '0',
+                                );
+                                const fs = formatTime(sIso);
+                                const fe = formatTime(eIso);
+                                return `${wd} ${dd}/${mm}, ${fs} - ${fe}`;
                             })()}
                         </span>
-                        <button
-                            className={styles.iconButton}
-                            title='Editar agendamento'
-                            onClick={e => {
-                                e.stopPropagation();
-                                if (client.next_appointment_id) {
-                                    // Fetch the appointment detail before opening modal
+                        {client.next_appointment_id && !isOngoing && (
+                            <button
+                                className={styles.iconButton}
+                                title='Editar agendamento'
+                                onClick={e => {
+                                    e.stopPropagation();
                                     const token =
                                         localStorage.getItem('accessToken');
                                     fetch(
@@ -602,59 +665,79 @@ export default function ClientCard({
                                             setEditingAppt(null);
                                             setShowQuick(true);
                                         });
-                                } else {
-                                    setEditingAppt(null);
-                                    setShowQuick(true);
-                                }
-                            }}
-                        >
-                            <FaEdit color={iconColor} />
-                        </button>
+                                }}
+                            >
+                                <FaEdit color={iconColor} />
+                            </button>
+                        )}
                     </div>
-                    <div
-                        className={styles.infoRow}
-                        style={{ cursor: 'default' }}
-                    >
-                        <div
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                flex: 1,
-                            }}
-                        >
-                            <span
-                                className={styles.label}
-                                style={{
-                                    color: labelColor,
-                                    fontWeight: 'bold',
-                                    marginBottom: 4,
-                                }}
+                    {(isScheduled || isOngoing) &&
+                        client.next_appointment_notes?.trim() && (
+                            <div
+                                className={styles.infoRow}
+                                style={{ paddingTop: 2 }}
                             >
-                                Observações:
-                            </span>
-                            <span
-                                className={styles.value}
-                                style={{
-                                    color: isOngoing
-                                        ? amber
-                                        : 'var(--color-text)',
-                                    fontWeight: isOngoing ? 600 : undefined,
-                                }}
-                            >
-                                {client.next_appointment_notes?.trim() ? (
+                                <span
+                                    className={styles.value}
+                                    style={{
+                                        color: valueColor,
+                                        fontSize: 13,
+                                        lineHeight: 1.35,
+                                        whiteSpace: 'pre-wrap',
+                                        overflowWrap: 'anywhere',
+                                    }}
+                                >
                                     <span className={styles.notesText}>
                                         {client.next_appointment_notes.trim()}
                                     </span>
-                                ) : (
-                                    '—'
-                                )}
-                            </span>
+                                </span>
+                            </div>
+                        )}
+                    {isOngoing && (
+                        <div
+                            className={styles.infoRow}
+                            style={{ paddingTop: 2 }}
+                        >
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    gap: 12,
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        background: 'var(--color-ongoing)',
+                                        color: '#fff',
+                                        borderRadius: 6,
+                                        padding: '2px 8px',
+                                        fontWeight: 700,
+                                        fontSize: 12,
+                                        lineHeight: 1.2,
+                                    }}
+                                >
+                                    Em andamento
+                                </span>
+                                <FinalizeButton
+                                    finishing={finishing}
+                                    disabled={!effectiveApptId}
+                                    isEarly={isOngoing}
+                                    clientId={client.id}
+                                    appointmentId={effectiveApptId}
+                                    onFinalize={finalizeEarlyAware}
+                                />
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </>
             )}
 
-            {!isScheduled && (
+            {/* Fallback bloco removido: Data agora unificada acima usando displayStartISO/displayEndISO */}
+
+            {/* Linha Data fallback revisada: só aparece quando NÃO há agenda line, NÃO está pendente e NÃO está em andamento. */}
+            {!hasAgendaLine && !isPending && !isOngoing && (
                 <div className={styles.infoRow}>
                     <span
                         className={styles.label}
@@ -664,59 +747,69 @@ export default function ClientCard({
                     </span>
                     <span
                         className={styles.value}
-                        style={{ color: 'var(--color-text)' }}
+                        style={{ color: valueColor }}
                     >
-                        Sem agendamento
+                        {isScheduled ? 'Agendado' : 'Sem agendamento'}
                     </span>
-                    {(() => {
-                        const dynLimit = getMaxScheduledPerClient();
-                        const totalScheduled =
-                            (isScheduled ? 1 : 0) + futureAppointments.length;
-                        const limitReached = totalScheduled >= dynLimit;
-                        const title = limitReached
-                            ? `Limite de ${dynLimit} compromissos (atual: ${totalScheduled})`
-                            : 'Agendar';
-                        return (
-                            <button
-                                className={styles.iconButton}
-                                title={title}
-                                disabled={limitReached}
-                                style={
-                                    limitReached
-                                        ? {
-                                              opacity: 0.45,
-                                              cursor: 'not-allowed',
-                                          }
-                                        : undefined
-                                }
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    if (limitReached) {
-                                        try {
-                                            window.dispatchEvent(
-                                                new CustomEvent(
-                                                    'systemMessage',
-                                                    {
-                                                        detail: {
-                                                            text: `Limite de ${dynLimit} compromissos atingido (total: ${totalScheduled})`,
-                                                            type: 'warning',
-                                                        },
-                                                    },
-                                                ),
-                                            );
-                                        } catch {
-                                            /* noop */
-                                        }
-                                        return;
-                                    }
-                                    setEditingAppt(null);
-                                    setShowQuick(true);
-                                }}
-                            >
-                                <FaPlus color={iconColor} />
-                            </button>
-                        );
-                    })()}
+                    <button
+                        className={styles.iconButton}
+                        title={createActionFallback.title}
+                        disabled={createActionFallback.disabled}
+                        style={
+                            createActionFallback.disabled
+                                ? { opacity: 0.45, cursor: 'not-allowed' }
+                                : undefined
+                        }
+                        onClick={createActionFallback.onClick}
+                    >
+                        <FaPlus color={iconColor} />
+                    </button>
+                    <button
+                        className={styles.iconButton}
+                        title='Agenda mensal'
+                        onClick={e => {
+                            e.stopPropagation();
+                            setShowMonthly(true);
+                        }}
+                    >
+                        <FaCalendarAlt color={iconColor} />
+                    </button>
+                </div>
+            )}
+
+            {/* Bloco compacto de pendência substitui linha Data e ícones quando pendente (independente de scheduled). */}
+            {isPending && !isOngoing && (
+                <div
+                    className={styles.infoRow}
+                    style={{ alignItems: 'center' }}
+                >
+                    <span
+                        className={styles.label}
+                        style={{ color: labelColor, fontWeight: 'bold' }}
+                    >
+                        Status:
+                    </span>
+                    <span
+                        className={styles.value}
+                        style={{
+                            color: 'var(--color-text-secondary, #6b7280)',
+                            fontStyle: 'italic',
+                        }}
+                    >
+                        Compromisso pendente
+                    </span>
+                    <SolveButton
+                        onSolve={async () => {
+                            try {
+                                onSelect?.();
+                            } catch {
+                                /* noop */
+                            }
+                            await tryOpenPendingElseQuick(() => {
+                                /* noop fallback */
+                            });
+                        }}
+                    />
                 </div>
             )}
 
@@ -727,12 +820,37 @@ export default function ClientCard({
             {showMonthly && (
                 <MonthlyAgendaModal
                     open={showMonthly}
-                    onClose={() => setShowMonthly(false)}
+                    onClose={() => {
+                        setShowMonthly(false);
+                        try {
+                            document.body.dataset.keepScroll = '1';
+                            setTimeout(() => {
+                                try {
+                                    delete document.body.dataset.keepScroll;
+                                } catch {
+                                    /* noop */
+                                }
+                            }, 800);
+                        } catch {
+                            /* noop */
+                        }
+                        try {
+                            window.dispatchEvent(
+                                new Event('ensureScrollUnlocked'),
+                            );
+                        } catch {
+                            /* noop */
+                        }
+                        // Reancora a lista no cartão do cliente, reutilizando o mesmo mecanismo do filtro dinâmico
+                        // e do latch de "em andamento". Fazemos após o ciclo de fechamento para garantir layout estável.
+                        // Pequeno atraso para deixar o MUI desmontar e a lista assentar
+                        setTimeout(() => focusClientCard(client.id), 60);
+                    }}
                     client={client}
                 />
             )}
             {showWeekly && (
-                <WeeklyPreviewModal
+                <WeeklyAgendaModal
                     open={showWeekly}
                     onClose={() => setShowWeekly(false)}
                 />
@@ -740,7 +858,28 @@ export default function ClientCard({
             {showQuick && (
                 <QuickScheduleModal
                     open={showQuick}
-                    onClose={() => setShowQuick(false)}
+                    onClose={() => {
+                        setShowQuick(false);
+                        try {
+                            document.body.dataset.keepScroll = '1';
+                            setTimeout(() => {
+                                try {
+                                    delete document.body.dataset.keepScroll;
+                                } catch {
+                                    /* noop */
+                                }
+                            }, 800);
+                        } catch {
+                            /* noop */
+                        }
+                        try {
+                            window.dispatchEvent(
+                                new Event('ensureScrollUnlocked'),
+                            );
+                        } catch {
+                            /* noop */
+                        }
+                    }}
                     client={client}
                     editAppointment={editingAppt}
                     futureAppointments={futureAppointments}
@@ -751,26 +890,29 @@ export default function ClientCard({
                         // Agora FECHA também em edição conforme solicitado (uniformizar experiência)
                         setShowQuick(false);
                         try {
+                            document.body.dataset.keepScroll = '1';
+                            setTimeout(() => {
+                                try {
+                                    delete document.body.dataset.keepScroll;
+                                } catch {
+                                    /* noop */
+                                }
+                            }, 800);
+                        } catch {
+                            /* noop */
+                        }
+                        try {
                             window.dispatchEvent(
                                 new Event('ensureScrollUnlocked'),
                             );
                         } catch {
                             /* noop */
                         }
-                        setTimeout(() => {
-                            try {
-                                window.dispatchEvent(
-                                    new CustomEvent('scrollToClientCard', {
-                                        detail: { clientId: client.id },
-                                    }),
-                                );
-                            } catch {
-                                /* noop */
-                            }
-                        }, 50);
                     }}
                 />
             )}
+            {/* PendingActionsModal é global (Home) */}
+            {/* QuickScheduleModal é agora o único fluxo de agendamento (ScheduleModal legacy removido) */}
             {futureAppointments.length > 0 && (
                 <div
                     style={{
@@ -780,12 +922,6 @@ export default function ClientCard({
                         marginTop: 4,
                     }}
                 >
-                    <span
-                        className={styles.label}
-                        style={{ color: labelColor, fontWeight: 'bold' }}
-                    >
-                        Próximos compromissos:
-                    </span>
                     <div
                         style={{
                             display: 'flex',
@@ -793,185 +929,17 @@ export default function ClientCard({
                             gap: 4,
                         }}
                     >
-                        {futureAppointments.slice(0, 7).map(f => {
-                            const s = new Date(f.start_at);
-                            const e = new Date(f.end_at);
-                            const wd = s
-                                .toLocaleDateString('pt-BR', {
-                                    weekday: 'short',
-                                })
-                                .replace('.', '')
-                                .replace(/\b(\w)/, c => c.toUpperCase());
-                            const dd = String(s.getDate()).padStart(2, '0');
-                            const mm = String(s.getMonth() + 1).padStart(
-                                2,
-                                '0',
-                            );
-                            const fmt = (d: Date) =>
-                                d.toLocaleTimeString('pt-BR', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                });
-                            const rowSelected = false; // placeholder if futuramente marcar seleção
-                            // Sem exibir título aqui — foco em data/horário compactos
-                            return (
-                                <div
-                                    key={f.id}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: 8,
-                                        padding: '6px 8px',
-                                        background: rowSelected
-                                            ? 'var(--color-selected-bg)'
-                                            : 'var(--card-bg)',
-                                        border: rowSelected
-                                            ? '1px solid var(--color-selected-border)'
-                                            : '1px solid var(--color-border)',
-                                        borderRadius: 6,
-                                        // fontSize alinhado ao restante do cartão (removido valor fixo anterior)
-                                        lineHeight: 1.25,
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            flex: 1,
-                                            minWidth: 0,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 6,
-                                            overflow: 'hidden',
-                                        }}
-                                    >
-                                        <span
-                                            style={{
-                                                fontWeight: 600,
-                                                color: '#065f46',
-                                                whiteSpace: 'nowrap',
-                                            }}
-                                        >
-                                            {wd} {dd}/{mm}
-                                        </span>
-                                        <span
-                                            style={{
-                                                color: 'var(--color-text)',
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                            }}
-                                        >
-                                            {fmt(s)} - {fmt(e)}
-                                        </span>
-                                    </div>
-                                    <button
-                                        className={styles.iconButton}
-                                        title='Ver detalhes do compromisso'
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            fetch(
-                                                `${API_BASE}/agenda/appointments/${f.id}/`,
-                                                {
-                                                    headers: {
-                                                        Authorization: token
-                                                            ? `Bearer ${token}`
-                                                            : '',
-                                                    },
-                                                },
-                                            )
-                                                .then(r =>
-                                                    r.ok ? r.json() : null,
-                                                )
-                                                .then(data => {
-                                                    const appt = data || f;
-                                                    try {
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'openAppointmentDetails',
-                                                                {
-                                                                    detail: {
-                                                                        appointment:
-                                                                            appt,
-                                                                    },
-                                                                },
-                                                            ),
-                                                        );
-                                                    } catch {
-                                                        /* noop */
-                                                    }
-                                                })
-                                                .catch(() => {
-                                                    window.dispatchEvent(
-                                                        new CustomEvent(
-                                                            'openAppointmentDetails',
-                                                            {
-                                                                detail: {
-                                                                    appointment:
-                                                                        f,
-                                                                },
-                                                            },
-                                                        ),
-                                                    );
-                                                });
-                                        }}
-                                    >
-                                        <FaEye color={iconColor} />
-                                    </button>
-                                    <button
-                                        className={styles.iconButton}
-                                        title='Editar este compromisso'
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            fetch(
-                                                `${API_BASE}/agenda/appointments/${f.id}/`,
-                                                {
-                                                    headers: {
-                                                        Authorization: token
-                                                            ? `Bearer ${token}`
-                                                            : '',
-                                                    },
-                                                },
-                                            )
-                                                .then(r =>
-                                                    r.ok ? r.json() : null,
-                                                )
-                                                .then(data => {
-                                                    setEditingAppt(data);
-                                                    setShowQuick(true);
-                                                })
-                                                .catch(() => {
-                                                    setEditingAppt({
-                                                        ...f,
-                                                    } as Appointment);
-                                                    setShowQuick(true);
-                                                });
-                                        }}
-                                    >
-                                        <FaEdit color={iconColor} />
-                                    </button>
-                                </div>
-                            );
-                        })}
-                        {futureAppointments.length > 7 && (
-                            <div
-                                style={{
-                                    fontSize: 11,
-                                    color: '#6b7280',
-                                    padding: '2px 4px',
-                                }}
-                            >
-                                + {futureAppointments.length - 7} outros
-                                agendados
-                            </div>
-                        )}
+                        <FutureAppointmentsList
+                            items={futureAppointments}
+                            valueColor={valueColor}
+                            iconColor={iconColor}
+                            labelColor={labelColor}
+                            clientId={client.id}
+                            onEdit={(appt: Appointment) => {
+                                setEditingAppt(appt);
+                                setShowQuick(true);
+                            }}
+                        />
                         {loadingFuture && (
                             <div style={{ fontSize: 11, color: '#6b7280' }}>
                                 Carregando…
