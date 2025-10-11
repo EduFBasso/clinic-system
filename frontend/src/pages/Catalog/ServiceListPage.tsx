@@ -52,7 +52,7 @@ export default function ServiceListPage() {
         <FormPage title='Procedimentos' onSubmit={e => e.preventDefault()}>
             <FormSection
                 title='Lista'
-                onClose={() => navigate(-1)}
+                onClose={() => navigate('/')}
                 closeTitle='Fechar'
             >
                 <div
