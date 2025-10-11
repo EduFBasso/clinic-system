@@ -377,19 +377,24 @@ export default function BudgetModal({
                     linha ao orçamento.
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                    {/* Procedimentos (Serviços) — sem R$ ao lado */}
+                    {/* Procedimentos (Serviços) — limitar dropdown para não empurrar o botão + */}
                     <div
                         style={{
                             display: 'grid',
                             gap: 6,
-                            gridTemplateColumns: '1fr 52px',
+                            gridTemplateColumns: 'minmax(0, 1fr) 52px',
                             alignItems: 'center',
                         }}
                     >
                         <select
                             value={selServiceId}
                             onChange={e => setSelServiceId(e.target.value)}
-                            style={{ padding: 6, width: '100%' }}
+                            style={{
+                                padding: 6,
+                                width: '100%',
+                                maxWidth: '70vw',
+                                minWidth: 0,
+                            }}
                         >
                             <option value=''>Procedimento</option>
                             {services.map(s => (
@@ -442,19 +447,24 @@ export default function BudgetModal({
                         </button>
                     </div>
 
-                    {/* Produtos (Medicamentos) — sem R$ ao lado e sem quantidade */}
+                    {/* Produtos (Medicamentos) — limitar dropdown para não empurrar o botão + */}
                     <div
                         style={{
                             display: 'grid',
                             gap: 6,
-                            gridTemplateColumns: '1fr 52px',
+                            gridTemplateColumns: 'minmax(0, 1fr) 52px',
                             alignItems: 'center',
                         }}
                     >
                         <select
                             value={selProductId}
                             onChange={e => setSelProductId(e.target.value)}
-                            style={{ padding: 6, width: '100%' }}
+                            style={{
+                                padding: 6,
+                                width: '100%',
+                                maxWidth: '70vw',
+                                minWidth: 0,
+                            }}
                         >
                             <option value=''>Medicamento</option>
                             {products.map(p => (
