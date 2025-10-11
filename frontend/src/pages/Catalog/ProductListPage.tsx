@@ -56,7 +56,11 @@ export default function ProductListPage() {
 
     return (
         <FormPage title='Produtos' onSubmit={e => e.preventDefault()}>
-            <FormSection title='Lista'>
+            <FormSection
+                title='Lista'
+                onClose={() => navigate('/')}
+                closeTitle='Fechar'
+            >
                 <div
                     style={{
                         display: 'flex',
