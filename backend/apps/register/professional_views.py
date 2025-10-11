@@ -49,6 +49,26 @@ class ProfessionalViewSet(ModelViewSet):
             return Response(serializer.data)
         return Response(ProfessionalSettingsSerializer(obj).data)
 
+    @action(detail=False, methods=["get", "patch"], url_path="me")
+    def me(self, request):
+        """Permite ao profissional autenticado visualizar/atualizar seu próprio perfil.
+        GET: retorna first_name, last_name, register_number, id, email
+        PATCH: atualiza campos permitidos (first_name, last_name, register_number)
+        """
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"detail": "Authentication required."}, status=401)
+        if request.method.lower() == "get":
+            return Response(ProfessionalBasicSerializer(user).data)
+        allowed_fields = {"first_name", "last_name", "register_number"}
+        payload = {k: v for k, v in request.data.items() if k in allowed_fields}
+        if not payload:
+            return Response({"detail": "No allowed fields to update."}, status=400)
+        for k, v in payload.items():
+            setattr(user, k, v)
+        user.save(update_fields=list(payload.keys()))
+        return Response(ProfessionalBasicSerializer(user).data)
+
 
 class ProfessionalBasicViewSet(ModelViewSet):
     serializer_class = ProfessionalBasicSerializer

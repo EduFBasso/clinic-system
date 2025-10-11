@@ -31,6 +31,7 @@ import AgendaSettingsModal from './AgendaSettingsModal';
 import AppModal from './Modal';
 import '../styles/modal-message.css';
 import { isTokenExpired } from '../utils/jwt';
+import { emit } from '../events/bus';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
@@ -220,70 +221,41 @@ const NavBar: React.FC<NavBarProps> = ({
                                             padding: '0 6px',
                                             fontSize: 11,
                                             lineHeight: '16px',
-                                            display: 'inline-block',
                                         }}
-                                        title={`Sessões ativas: ${summary.count}`}
+                                        title='Outras sessões ativas'
                                     >
-                                        {summary.count}
+                                        !
                                     </span>
                                 )}
                             </button>
+                            {/* Opções adicionais removidas para simplificar o menu de Clientes */}
                         </div>
                     )}
                 </div>
+                {/* Agenda dropdown reintroduzido */}
                 <div className={styles.dropdownWrapper} ref={agendaDropdownRef}>
                     <button
                         className={styles.menuButton}
-                        onClick={() => {
-                            const token = localStorage.getItem('accessToken');
-                            if (!token) {
-                                setSessionExpiredOpen(true);
-                                return;
-                            }
-                            setAgendaDropdownOpen(open => !open);
-                        }}
+                        onClick={() => setAgendaDropdownOpen(open => !open)}
                         aria-haspopup='true'
                         aria-expanded={agendaDropdownOpen}
                     >
-                        📅 Agenda <span className={styles.caret}>▼</span>
+                        📆 Agenda <span className={styles.caret}>▼</span>
                     </button>
                     {agendaDropdownOpen && (
                         <div className={styles.dropdownMenu}>
-                            {/** Menu Agenda simplificado: Configurações, Agenda Diária, Semanal e Mensal (>10"). */}
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setAgendaDropdownOpen(false);
-                                    setAgendaSettingsOpen(true);
-                                }}
-                            >
-                                Configurações
-                            </button>
-                            <div
-                                style={{
-                                    height: 1,
-                                    background: 'var(--border-subtle)',
-                                    margin: '6px 0',
-                                }}
-                                aria-hidden
-                            />
-
-                            <button
-                                className={styles.dropdownItem}
-                                onClick={() => {
-                                    setAgendaDropdownOpen(false);
-                                    try {
-                                        const today = new Date();
-                                        window.dispatchEvent(
-                                            new CustomEvent('openDailyAgenda', {
-                                                detail: {
-                                                    date: today.toISOString(),
-                                                },
-                                            }),
-                                        );
-                                    } catch {
-                                        /* noop */
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
                                     }
+                                    // Abrir agenda diária via evento (usar {} para evitar access de propriedades em undefined no handler)
+                                    emit('openDailyAgenda', {});
                                 }}
                             >
                                 Agenda Diária
@@ -318,7 +290,6 @@ const NavBar: React.FC<NavBarProps> = ({
                             >
                                 Agenda Semanal
                             </button>
-                            {/** Mostrar Agenda Mensal apenas para telas estritamente > 10" */}
                             {(() => {
                                 function canShowMonthly() {
                                     try {
@@ -329,9 +300,8 @@ const NavBar: React.FC<NavBarProps> = ({
                                         const diagonalInches =
                                             Math.sqrt(pxW ** 2 + pxH ** 2) /
                                             (dpr * 96);
-                                        // Fallback: considera tela realmente larga como proxy >10" se cálculo falhar ou densidade distorce
                                         const fallbackLarge =
-                                            window.innerWidth >= 1440; // mais conservador
+                                            window.innerWidth >= 1440;
                                         return (
                                             diagonalInches > 10 || fallbackLarge
                                         );
@@ -358,7 +328,6 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 agendaOpeners &&
                                                 !isMobileDevice()
                                             ) {
-                                                // Requer um cliente selecionado para abrir a agenda mensal
                                                 if (!selectedClientId) {
                                                     try {
                                                         window.dispatchEvent(
@@ -390,7 +359,6 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 const d = String(
                                                     now.getDate(),
                                                 ).padStart(2, '0');
-                                                // Em dispositivos móveis, navegar com client=id para abrir o modal com o cliente correto
                                                 const url = selectedClientId
                                                     ? `/agenda?client=${selectedClientId}&date=${y}-${m}-${d}&mode=month`
                                                     : `/agenda?date=${y}-${m}-${d}&mode=month`;
@@ -411,8 +379,6 @@ const NavBar: React.FC<NavBarProps> = ({
                                                     } catch {
                                                         /* noop */
                                                     }
-                                                    // Mesmo sem cliente, ainda permite navegar para visão mensal geral (sem cliente) se desejado
-                                                    // Aqui mantemos o comportamento anterior: segue para a URL sem client
                                                 }
                                                 if (isMobileDevice())
                                                     window.location.href = url;
@@ -424,7 +390,15 @@ const NavBar: React.FC<NavBarProps> = ({
                                     </button>
                                 );
                             })()}
-                            {/* Opções 'Novo' e 'Editar' removidas para simplificar e evitar redundâncias */}
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setAgendaDropdownOpen(false);
+                                    setAgendaSettingsOpen(true);
+                                }}
+                            >
+                                Configurações
+                            </button>
                         </div>
                     )}
                 </div>
@@ -435,11 +409,7 @@ const NavBar: React.FC<NavBarProps> = ({
                     <button
                         className={styles.menuButton}
                         onClick={() => {
-                            const token = localStorage.getItem('accessToken');
-                            if (!token) {
-                                setSessionExpiredOpen(true);
-                                return;
-                            }
+                            // Permite abrir o menu mesmo sem token para visualizar as opções.
                             setConsultaDropdownOpen(open => !open);
                         }}
                         aria-haspopup='true'
@@ -453,21 +423,33 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setConsultaDropdownOpen(false);
-                                    window.location.href =
-                                        '/catalog/services/new';
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
+                                    }
+                                    window.location.href = '/catalog/services';
                                 }}
+                                title='Procedimentos'
                             >
-                                + Procedimento
+                                📋 Procedimentos
                             </button>
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setConsultaDropdownOpen(false);
-                                    window.location.href =
-                                        '/catalog/products/new';
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
+                                    }
+                                    window.location.href = '/catalog/products';
                                 }}
+                                title='Produtos'
                             >
-                                + Produto
+                                📦 Produtos
                             </button>
                         </div>
                     )}

@@ -61,6 +61,7 @@ section {
     padding: 1.5rem 1.2rem 1.2rem 1.2rem;
     margin-bottom: 0.5rem;
     border: 1px solid var(--color-border);
+    overflow: hidden; /* evita que conteúdo interno exceda visualmente o cartão em iOS */
 }
 
 /* Garante que sections dentro de colPair ocupem toda a largura da coluna no desktop */

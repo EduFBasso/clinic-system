@@ -18,6 +18,8 @@ import { useEffect } from 'react';
 import ensureDeviceSession from './services/sessions';
 import ProductFormPage from './pages/Catalog/ProductFormPage';
 import ServiceFormPage from './pages/Catalog/ServiceFormPage';
+import ProductListPage from './pages/Catalog/ProductListPage';
+import ServiceListPage from './pages/Catalog/ServiceListPage';
 
 function App() {
     useEffect(() => {
@@ -37,8 +39,20 @@ function App() {
                 <Route path='/clients/edit/:id' element={<ClientFormPage />} />
                 {/* AgendaPage removida: consolidamos em modais no Home */}
                 <Route path='/agenda' element={<Home />} />
-                <Route path='/catalog/products/new' element={<ProductFormPage />} />
-                <Route path='/catalog/services/new' element={<ServiceFormPage />} />
+                <Route
+                    path='/catalog/products/new'
+                    element={<ProductFormPage />}
+                />
+                <Route
+                    path='/catalog/services/new'
+                    element={<ServiceFormPage />}
+                />
+                <Route
+                    path='/catalog/services/:id'
+                    element={<ServiceFormPage />}
+                />
+                <Route path='/catalog/products' element={<ProductListPage />} />
+                <Route path='/catalog/services' element={<ServiceListPage />} />
                 {/* Full-page scheduler for mobile */}
                 {/** Rota /schedule removida para unificar experiência via modais */}
                 {/* Rota /agenda/settings removida */}

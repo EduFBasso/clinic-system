@@ -45,6 +45,8 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    max-height: 60vh; /* evita estourar a tela em dispositivos pequenos */
+    overflow-y: auto; /* permite rolar para ver todas as opções */
 }
 
 .dropdownItem {
