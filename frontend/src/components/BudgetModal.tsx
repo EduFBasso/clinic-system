@@ -15,17 +15,31 @@ function normalizeDigits(s?: string | null): string | null {
     const digits = String(s).replace(/\D+/g, '');
     return digits || null;
 }
-function toE164BR(digits: string | null): string | undefined {
-    if (!digits) return undefined;
-    const d = digits.startsWith('55') ? digits : `55${digits}`;
-    return d;
+
+function toE164BR(digits: string | null): string | null {
+    if (!digits) return null;
+    // Accept 10-11 digits; prepend +55 (Brazil). If already starts with 55, keep once.
+    const clean = digits.replace(/^55/, '');
+    return `+55${clean}`;
 }
 
-export interface BudgetModalProps {
+type Service = {
+    id: string | number;
+    name: string;
+    base_price?: number | string | null;
+};
+
+type Product = {
+    id: string | number;
+    name: string;
+    price?: number | string | null;
+};
+
+interface BudgetModalProps {
     open: boolean;
     onClose: () => void;
     clientName?: string;
-    clientPhone?: string | null;
+    clientPhone?: string;
     professionalName?: string;
     professionalTitle?: string;
 }
@@ -39,6 +53,7 @@ export default function BudgetModal({
     professionalTitle,
 }: BudgetModalProps) {
     const [items, setItems] = React.useState<ChargeItem[]>([]);
+    const [priceDrafts, setPriceDrafts] = React.useState<string[]>([]);
     const [notes, setNotes] = React.useState('');
     const [busy, setBusy] = React.useState(false);
     const [sendPix, setSendPix] = React.useState(false);
@@ -46,21 +61,17 @@ export default function BudgetModal({
     const [pixKeyValue, setPixKeyValue] = React.useState<string>('');
     const [profFirstName, setProfFirstName] = React.useState<string>('');
     const [profLastName, setProfLastName] = React.useState<string>('');
-    // Local drafts for price inputs to display BR format (e.g., 10,00)
-    const [priceDrafts, setPriceDrafts] = React.useState<string[]>([]);
-
-    // Catalog data
-    type Service = { id: number; name: string; base_price?: number };
-    type Product = { id: number; name: string; price?: number };
     const [services, setServices] = React.useState<Service[]>([]);
     const [products, setProducts] = React.useState<Product[]>([]);
     const [selServiceId, setSelServiceId] = React.useState<string>('');
     const [selProductId, setSelProductId] = React.useState<string>('');
 
+    // Load on open: reset, fetch services/products, load professional + PIX settings
     React.useEffect(() => {
         if (!open) return;
         setBusy(false);
         setItems([]);
+        setPriceDrafts([]);
         setNotes('');
         setServices([]);
         setProducts([]);
@@ -68,7 +79,6 @@ export default function BudgetModal({
         setSelProductId('');
         setSendPix(false);
 
-        // Load services and products for the logged professional
         (async () => {
             try {
                 const [svcs, prods] = await Promise.all([
@@ -93,7 +103,7 @@ export default function BudgetModal({
                 }
             }
         })();
-        // Read logged professional from localStorage and fetch PIX settings
+
         try {
             const stored = localStorage.getItem('loggedProfessional');
             if (stored) {
@@ -107,6 +117,7 @@ export default function BudgetModal({
         } catch {
             /* noop */
         }
+
         (async () => {
             try {
                 const token = localStorage.getItem('accessToken');
@@ -115,9 +126,7 @@ export default function BudgetModal({
                     `${API_BASE}/register/professionals/settings/`,
                     {
                         method: 'GET',
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
+                        headers: { Authorization: `Bearer ${token}` },
                     },
                 );
                 if (!res.ok) return; // silencioso se indisponível
@@ -279,7 +288,10 @@ export default function BudgetModal({
                 items,
                 notes,
             });
-            const result = await shareText({ text, phoneE164 });
+            const result = await shareText({
+                text,
+                phoneE164: phoneE164 || undefined,
+            });
             try {
                 window.dispatchEvent(
                     new CustomEvent('systemMessage', {
@@ -377,19 +389,14 @@ export default function BudgetModal({
                         style={{
                             display: 'grid',
                             gap: 6,
-                            gridTemplateColumns: selServiceId
-                                ? '1fr 52px'
-                                : '1fr',
+                            gridTemplateColumns: '1fr 52px',
                             alignItems: 'center',
                         }}
                     >
                         <select
                             value={selServiceId}
                             onChange={e => setSelServiceId(e.target.value)}
-                            style={{
-                                padding: 6,
-                                maxWidth: selServiceId ? '90%' : '100%',
-                            }}
+                            style={{ padding: 6, width: '100%' }}
                         >
                             <option value=''>Procedimento</option>
                             {services.map(s => (
@@ -399,36 +406,47 @@ export default function BudgetModal({
                                 </option>
                             ))}
                         </select>
-                        {selServiceId && (
-                            <button
-                                title='Adicionar linha'
-                                aria-label='Adicionar linha'
-                                onClick={() => {
-                                    const s = services.find(
-                                        x => String(x.id) === selServiceId,
-                                    );
-                                    if (!s) return;
-                                    addItemTemplate(
-                                        s.name,
-                                        Number(s.base_price || 0),
-                                    );
-                                    setSelServiceId('');
-                                }}
-                                style={{
-                                    padding: '10px 14px',
-                                    fontWeight: 800,
-                                    fontSize: 28,
-                                    background: 'transparent',
-                                    color: 'var(--color-success-dark)',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    lineHeight: 1,
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                +
-                            </button>
-                        )}
+                        <button
+                            title={
+                                selServiceId
+                                    ? 'Adicionar linha'
+                                    : 'Selecione um procedimento'
+                            }
+                            aria-label='Adicionar linha'
+                            disabled={!selServiceId}
+                            onClick={() => {
+                                const s = services.find(
+                                    x => String(x.id) === selServiceId,
+                                );
+                                if (!s) return;
+                                addItemTemplate(
+                                    s.name,
+                                    Number(s.base_price || 0),
+                                );
+                                setSelServiceId('');
+                            }}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 44,
+                                height: 36,
+                                padding: 0,
+                                fontWeight: 800,
+                                fontSize: 28,
+                                background: 'var(--color-success-dark)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: 6,
+                                lineHeight: 1,
+                                cursor: selServiceId
+                                    ? 'pointer'
+                                    : 'not-allowed',
+                                opacity: selServiceId ? 1 : 0.5,
+                            }}
+                        >
+                            +
+                        </button>
                     </div>
 
                     {/* Produtos (Medicamentos) — sem R$ ao lado e sem quantidade */}
@@ -436,19 +454,14 @@ export default function BudgetModal({
                         style={{
                             display: 'grid',
                             gap: 6,
-                            gridTemplateColumns: selProductId
-                                ? '1fr 52px'
-                                : '1fr',
+                            gridTemplateColumns: '1fr 52px',
                             alignItems: 'center',
                         }}
                     >
                         <select
                             value={selProductId}
                             onChange={e => setSelProductId(e.target.value)}
-                            style={{
-                                padding: 6,
-                                maxWidth: selProductId ? '90%' : '100%',
-                            }}
+                            style={{ padding: 6, width: '100%' }}
                         >
                             <option value=''>Medicamento</option>
                             {products.map(p => (
@@ -457,40 +470,51 @@ export default function BudgetModal({
                                 </option>
                             ))}
                         </select>
-                        {selProductId && (
-                            <button
-                                title='Adicionar linha'
-                                aria-label='Adicionar linha'
-                                onClick={() => {
-                                    const p = products.find(
-                                        x => String(x.id) === selProductId,
-                                    );
-                                    if (!p) return;
-                                    setItems(prev => [
-                                        ...prev,
-                                        {
-                                            label: p.name,
-                                            price: Number(p.price || 0),
-                                            qty: 1,
-                                        },
-                                    ]);
-                                    setSelProductId('');
-                                }}
-                                style={{
-                                    padding: '10px 14px',
-                                    fontWeight: 800,
-                                    fontSize: 28,
-                                    background: 'transparent',
-                                    color: 'var(--color-success-dark)',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    lineHeight: 1,
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                +
-                            </button>
-                        )}
+                        <button
+                            title={
+                                selProductId
+                                    ? 'Adicionar linha'
+                                    : 'Selecione um medicamento'
+                            }
+                            aria-label='Adicionar linha'
+                            disabled={!selProductId}
+                            onClick={() => {
+                                const p = products.find(
+                                    x => String(x.id) === selProductId,
+                                );
+                                if (!p) return;
+                                setItems(prev => [
+                                    ...prev,
+                                    {
+                                        label: p.name,
+                                        price: Number(p.price || 0),
+                                        qty: 1,
+                                    },
+                                ]);
+                                setSelProductId('');
+                            }}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 44,
+                                height: 36,
+                                padding: 0,
+                                fontWeight: 800,
+                                fontSize: 28,
+                                background: 'var(--color-success-dark)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: 6,
+                                lineHeight: 1,
+                                cursor: selProductId
+                                    ? 'pointer'
+                                    : 'not-allowed',
+                                opacity: selProductId ? 1 : 0.5,
+                            }}
+                        >
+                            +
+                        </button>
                     </div>
                     {/* Espaço após os dropdowns */}
                     <div style={{ height: 8 }} />
