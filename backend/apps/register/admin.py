@@ -1,6 +1,6 @@
 # backend\apps\register\admin.py
 from django.contrib import admin
-from .models import Professional, Client, DeviceSession
+from .models import Professional, Client, DeviceSession, ProfessionalSettings
 
 
 @admin.register(Professional)
@@ -64,6 +64,39 @@ class DeviceSessionAdmin(admin.ModelAdmin):
     list_filter = ("is_active", "professional")
     search_fields = ("professional__email", "device_id")
     readonly_fields = ("created_at", "last_seen_at", "terminated_at")
+
+
+
+@admin.register(ProfessionalSettings)
+class ProfessionalSettingsAdmin(admin.ModelAdmin):
+    list_display = (
+        "professional",
+        "pix_key_type",
+        "pix_key_value",
+        "work_start_hour",
+        "work_end_hour",
+        "slot_minutes",
+        "updated_at",
+    )
+    search_fields = ("professional__email", "pix_key_value")
+    list_filter = ("pix_key_type",)
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        ("Profissional", {"fields": ("professional",)}),
+        (
+            "Agenda padrão",
+            {"fields": ("work_start_hour", "work_end_hour", "slot_minutes")},
+        ),
+        (
+            "Mensageria",
+            {"fields": ("confirm_message_enabled", "confirm_message_template")},
+        ),
+        (
+            "PIX",
+            {"fields": ("pix_key_type", "pix_key_value")},
+        ),
+        ("Datas", {"fields": ("created_at", "updated_at")}),
+    )
 
 
 

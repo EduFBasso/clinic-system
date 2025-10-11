@@ -2,13 +2,7 @@
 import React from 'react';
 import { focusClientCard } from '../utils/focusClientCard';
 import styles from '../styles/components/ClientCard.module.css';
-import {
-    FaEye,
-    FaWhatsapp,
-    FaEnvelope,
-    FaCalendarAlt,
-    FaPlus,
-} from 'react-icons/fa';
+import { FaEye, FaWhatsapp, FaCalendarAlt, FaPlus } from 'react-icons/fa';
 import { useClientCreateAction } from '../hooks/useClientCreateAction';
 import { getMaxScheduledPerClient } from '../config/limits';
 import { API_BASE } from '../config/api';
@@ -38,6 +32,7 @@ import { useFinalizeAppointment } from '../hooks/useFinalizeAppointment';
 import { useClientOngoingState } from '../hooks/useClientOngoingState';
 import { formatTime } from '../utils/timeFormat';
 import { openClientForm } from '../utils/openClientForm';
+import BudgetModal from './BudgetModal';
 // Inline editor desativado temporariamente para isolar atraso no botão
 // import InlineAppointmentEditor from './InlineAppointmentEditor';
 
@@ -217,6 +212,7 @@ export default function ClientCard({
         isPending,
     });
     const cardRef = React.useRef<HTMLDivElement | null>(null);
+    const [budgetOpen, setBudgetOpen] = React.useState(false);
 
     // Align with global forceClose: ensure any ClientCard modal closes too
     // PendingActions global — sem necessidade de listener local
@@ -450,6 +446,26 @@ export default function ClientCard({
                 <span className={styles.value} style={{ color: valueColor }}>
                     {formatPhone(client.phone)}
                 </span>
+                <button
+                    className={styles.iconButton}
+                    title='Orçamento via WhatsApp'
+                    onClick={e => {
+                        e.stopPropagation();
+                        setBudgetOpen(true);
+                    }}
+                >
+                    <span
+                        style={{
+                            fontWeight: 900,
+                            color: iconColor,
+                            fontFamily:
+                                'system-ui, Segoe UI, Roboto, sans-serif',
+                        }}
+                        aria-hidden
+                    >
+                        🧾
+                    </span>
+                </button>
                 <a
                     className={styles.iconButton}
                     title='WhatsApp'
@@ -502,16 +518,7 @@ export default function ClientCard({
                     >
                         {client.email}
                     </span>
-                    <a
-                        className={styles.iconButton}
-                        title='E-mail'
-                        href={`mailto:${client.email}`}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <FaEnvelope color={iconColor} />
-                    </a>
+                    {/* Email sending removed intentionally */}
                 </div>
             )}
 
@@ -947,6 +954,16 @@ export default function ClientCard({
                         )}
                     </div>
                 </div>
+            )}
+            {/* Modal de Cobrança independente da agenda */}
+            {/* charge modal removed */}
+            {budgetOpen && (
+                <BudgetModal
+                    open={budgetOpen}
+                    onClose={() => setBudgetOpen(false)}
+                    clientName={`${client.first_name} ${client.last_name}`}
+                    clientPhone={client.phone}
+                />
             )}
         </div>
     );

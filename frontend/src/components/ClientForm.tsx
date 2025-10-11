@@ -204,10 +204,11 @@ export default function ClientForm({
         type: 'error';
         message: string;
     } | null>(null);
-    // Modal de sucesso local (OK fecha e executa closeSuccessAndExit)
-    const [successModalMessage, setSuccessModalMessage] = useState<
-        string | null
-    >(null);
+    // Modal informativo (OK fecha e executa closeSuccessAndExit). Usado para sucesso e alguns erros (ex.: telefone duplicado)
+    const [infoModal, setInfoModal] = useState<{
+        title: string;
+        message: string;
+    } | null>(null);
     // Photo file selected in the mobile form (kept out of typed ClientData)
     const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(
         null,
@@ -321,6 +322,22 @@ export default function ClientForm({
                             payload: dataToSend,
                         });
                         const errorMsg = parseApiError(errorData, res.status);
+                        // Se for telefone duplicado, exibe modal que fecha a página
+                        if (
+                            /telefone|phone/i.test(errorMsg) &&
+                            /cadastr|existe|duplicad/i.test(errorMsg)
+                        ) {
+                            setInfoModal({
+                                title: 'Atenção',
+                                message: errorMsg,
+                            });
+                            const err: HandledError = new Error(
+                                errorMsg,
+                            ) as HandledError;
+                            err.handled = true;
+                            throw err;
+                        }
+                        // Demais erros: banner
                         setFeedback({ type: 'error', message: errorMsg });
                         if (isMobile) {
                             setTimeout(() => setFeedback(null), 3000);
@@ -334,7 +351,10 @@ export default function ClientForm({
                     return res.json();
                 })
                 .then(async createdClient => {
-                    setSuccessModalMessage('Cliente cadastrado com sucesso!');
+                    setInfoModal({
+                        title: 'Sucesso',
+                        message: 'Cliente cadastrado com sucesso!',
+                    });
                     // If a photo was selected, upload it now via multipart PATCH
                     try {
                         if (createdClient?.id) {
@@ -460,7 +480,10 @@ export default function ClientForm({
                     }
 
                     // Fluxo normal: agora exibe modal de sucesso; fechamento só ao clicar OK
-                    setSuccessModalMessage('Cliente cadastrado com sucesso!');
+                    setInfoModal({
+                        title: 'Sucesso',
+                        message: 'Cliente cadastrado com sucesso!',
+                    });
                 })
                 .catch(async err => {
                     // Se já tratamos acima, não sobrescreve a mensagem específica
@@ -553,8 +576,20 @@ export default function ClientForm({
                         }
                     }
                     const errorMsg = parseApiError(errorData, res.status);
+                    // Se for telefone duplicado, exibe modal que fecha a página
+                    if (
+                        /telefone|phone/i.test(errorMsg) &&
+                        /cadastr|existe|duplicad/i.test(errorMsg)
+                    ) {
+                        setInfoModal({ title: 'Atenção', message: errorMsg });
+                        const err: HandledError = new Error(
+                            errorMsg,
+                        ) as HandledError;
+                        err.handled = true;
+                        throw err;
+                    }
+                    // Demais erros: banner
                     setFeedback({ type: 'error', message: errorMsg });
-                    // No mobile, exibe erro por 3s
                     if (isMobile) {
                         setTimeout(() => setFeedback(null), 3000);
                     }
@@ -567,7 +602,10 @@ export default function ClientForm({
                 return res.json();
             })
             .then(async () => {
-                setSuccessModalMessage('Cliente atualizado com sucesso!');
+                setInfoModal({
+                    title: 'Sucesso',
+                    message: 'Cliente atualizado com sucesso!',
+                });
                 // If a new photo was selected, upload it now
                 try {
                     if (cliente?.id) {
@@ -784,7 +822,7 @@ export default function ClientForm({
     const isMobile = useIsMobile();
 
     // Render modal de sucesso (desktop & mobile) quando existir mensagem
-    const SuccessModal = successModalMessage ? (
+    const SuccessModal = infoModal ? (
         <div
             role='dialog'
             aria-modal='true'
@@ -811,16 +849,16 @@ export default function ClientForm({
                 }}
             >
                 <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.15rem' }}>
-                    Sucesso
+                    {infoModal.title}
                 </h2>
                 <p style={{ margin: '0 0 1.25rem', lineHeight: 1.4 }}>
-                    {successModalMessage}
+                    {infoModal.message}
                 </p>
                 <div style={{ textAlign: 'right' }}>
                     <button
                         type='button'
                         onClick={() => {
-                            setSuccessModalMessage(null);
+                            setInfoModal(null);
                             closeSuccessAndExit();
                         }}
                         style={{

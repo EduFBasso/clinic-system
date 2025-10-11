@@ -47,4 +47,6 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
             "slot_minutes",
             "confirm_message_enabled",
             "confirm_message_template",
+            "pix_key_type",
+            "pix_key_value",
         ]

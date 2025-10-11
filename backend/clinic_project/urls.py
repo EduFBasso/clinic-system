@@ -43,6 +43,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('register/', include('apps.register.urls')),  # 🧩 Rotas do app clínico
     path('agenda/', include('apps.agenda.urls')),
+    path('inventory/', include('apps.inventory.urls')),
 
     # 📱 Sessões de dispositivos (fase 1)
     path('sessions/summary', sessions_summary),

@@ -227,6 +227,18 @@ class ProfessionalSettings(models.Model):
     confirm_message_enabled = models.BooleanField(default=False)
     confirm_message_template = models.TextField(blank=True)
 
+    # PIX defaults (for quick budget payments)
+    PIX_KEY_TYPES = (
+        ("telefone", "Telefone"),
+        ("cpf", "CPF"),
+        ("email", "E-mail"),
+        ("aleatoria", "Aleatória"),
+    )
+    pix_key_type = models.CharField(
+        max_length=16, choices=PIX_KEY_TYPES, blank=True, default=""
+    )
+    pix_key_value = models.CharField(max_length=128, blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

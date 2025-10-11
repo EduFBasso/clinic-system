@@ -158,7 +158,12 @@ export default function ClientFormMobile({
         <form
             onSubmit={handleSubmit}
             className={styles.clientForm}
-            style={{ background: 'var(--color-bg)', minHeight: '100%' }}
+            style={{
+                background: 'var(--color-bg)',
+                minHeight: '100vh',
+                display: 'flex',
+                flexDirection: 'column',
+            }}
         >
             <h2 className={styles.formTitle}>Cadastro de Cliente</h2>
             <section>
@@ -766,17 +771,18 @@ export default function ClientFormMobile({
             <div
                 className='formActions'
                 style={{
-                    position: 'fixed',
-                    left: 0,
+                    marginTop: 'auto',
+                    position: 'sticky',
                     bottom: 0,
-                    width: '100%',
+                    left: 0,
+                    right: 0,
                     background: 'rgba(255,255,255,0.98)',
                     boxShadow: '0 -2px 12px rgba(0,0,0,0.10)',
-                    zIndex: 9999,
                     display: 'flex',
                     justifyContent: 'center',
                     gap: '1rem',
                     padding: '1rem 0.5rem',
+                    backdropFilter: 'saturate(120%) blur(4px)',
                 }}
             >
                 <button

@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'apps.agenda',
     'apps.register',
+    'apps.inventory',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

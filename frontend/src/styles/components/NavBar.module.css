@@ -116,6 +116,29 @@
     color: var(--color-primary);
 }
 
+/* Desktop: alinhar carets (▼) dos menus à esquerda na mesma coluna */
+@media screen and (min-width: 601px) {
+    /* Tornar botões iguais em largura e alinhar caret à direita do botão */
+    .menuContainer .menuButton {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: var(--menu-btn-w, 9.5rem); /* ajuste fino conforme desejar */
+        text-align: left;
+        box-sizing: border-box; /* inclui padding dentro da largura fixa */
+        padding: 0.25rem 0.6rem; /* dá respiro para os ícones e rótulos */
+    }
+}
+
+/* Shared caret for dropdown buttons to keep consistent size and spacing */
+.caret {
+    margin-left: 4px;
+    font-size: 14px;
+    line-height: 1;
+    display: inline-block;
+    vertical-align: middle;
+}
+
 .loginContainer {
     display: flex;
     gap: 0.5rem;
@@ -215,6 +238,14 @@
         gap: 0.4rem;
         white-space: nowrap; /* mantém em uma linha */
     }
+
+    /* Em mobile, os botões do menu à esquerda podem ocupar apenas o conteúdo,
+       mantendo bom alvo de toque via padding, e deixando o caret próximo ao rótulo */
+    .menuContainer .menuButton {
+        width: auto;
+    }
+
+    /* Carets próximos aos rótulos no mobile (removido empurrar para direita) */
 
     .loginContainer {
         display: flex;

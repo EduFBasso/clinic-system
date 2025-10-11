@@ -71,6 +71,9 @@ const NavBar: React.FC<NavBarProps> = ({
     // Agenda dropdown state
     const [agendaDropdownOpen, setAgendaDropdownOpen] = useState(false);
     const agendaDropdownRef = useRef<HTMLDivElement>(null);
+    // Consulta dropdown state
+    const [consultaDropdownOpen, setConsultaDropdownOpen] = useState(false);
+    const consultaDropdownRef = useRef<HTMLDivElement>(null);
 
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
@@ -101,6 +104,12 @@ const NavBar: React.FC<NavBarProps> = ({
                 !agendaDropdownRef.current.contains(target)
             ) {
                 setAgendaDropdownOpen(false);
+            }
+            if (
+                consultaDropdownRef.current &&
+                !consultaDropdownRef.current.contains(target)
+            ) {
+                setConsultaDropdownOpen(false);
             }
         }
         document.addEventListener('mousedown', handleClickOutside);
@@ -177,7 +186,7 @@ const NavBar: React.FC<NavBarProps> = ({
                         aria-expanded={dropdownOpen}
                     >
                         👤 Clientes
-                        <span style={{ marginLeft: 6, fontSize: 14 }}>▼</span>
+                        <span className={styles.caret}>▼</span>
                     </button>
                     {dropdownOpen && (
                         <div className={styles.dropdownMenu}>
@@ -236,8 +245,7 @@ const NavBar: React.FC<NavBarProps> = ({
                         aria-haspopup='true'
                         aria-expanded={agendaDropdownOpen}
                     >
-                        📅 Agenda{' '}
-                        <span style={{ marginLeft: 6, fontSize: 14 }}>▼</span>
+                        📅 Agenda <span className={styles.caret}>▼</span>
                     </button>
                     {agendaDropdownOpen && (
                         <div className={styles.dropdownMenu}>
@@ -251,6 +259,15 @@ const NavBar: React.FC<NavBarProps> = ({
                             >
                                 Configurações
                             </button>
+                            <div
+                                style={{
+                                    height: 1,
+                                    background: 'var(--border-subtle)',
+                                    margin: '6px 0',
+                                }}
+                                aria-hidden
+                            />
+
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
@@ -411,20 +428,50 @@ const NavBar: React.FC<NavBarProps> = ({
                         </div>
                     )}
                 </div>
-                <button
-                    className={styles.menuButton}
-                    onClick={() => {
-                        const token = localStorage.getItem('accessToken');
-                        if (!token) {
-                            setSessionExpiredOpen(true);
-                            return;
-                        }
-                        setModalMessage('Consulta: Falta implementar o Código');
-                        setModalOpen(true);
-                    }}
+                <div
+                    className={styles.dropdownWrapper}
+                    ref={consultaDropdownRef}
                 >
-                    🩺 Consulta
-                </button>
+                    <button
+                        className={styles.menuButton}
+                        onClick={() => {
+                            const token = localStorage.getItem('accessToken');
+                            if (!token) {
+                                setSessionExpiredOpen(true);
+                                return;
+                            }
+                            setConsultaDropdownOpen(open => !open);
+                        }}
+                        aria-haspopup='true'
+                        aria-expanded={consultaDropdownOpen}
+                    >
+                        🩺 Consulta <span className={styles.caret}>▼</span>
+                    </button>
+                    {consultaDropdownOpen && (
+                        <div className={styles.dropdownMenu}>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setConsultaDropdownOpen(false);
+                                    window.location.href =
+                                        '/catalog/services/new';
+                                }}
+                            >
+                                + Procedimento
+                            </button>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setConsultaDropdownOpen(false);
+                                    window.location.href =
+                                        '/catalog/products/new';
+                                }}
+                            >
+                                + Produto
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Modal de decisão removido */}
@@ -514,7 +561,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                           )?.last_name
                                         : 'Profissionais'}
                                 </span>
-                                <span style={{ fontSize: 14 }}>▼</span>
+                                <span className={styles.caret}>▼</span>
                             </button>
                             {professionalDropdownOpen && (
                                 <div className={styles.dropdownMenu}>

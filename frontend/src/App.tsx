@@ -16,6 +16,8 @@ const LazyDesktopAgenda: React.ComponentType = React.lazy(async () => {
 import ClientFormPage from './pages/Clients/ClientFormPage';
 import { useEffect } from 'react';
 import ensureDeviceSession from './services/sessions';
+import ProductFormPage from './pages/Catalog/ProductFormPage';
+import ServiceFormPage from './pages/Catalog/ServiceFormPage';
 
 function App() {
     useEffect(() => {
@@ -35,6 +37,8 @@ function App() {
                 <Route path='/clients/edit/:id' element={<ClientFormPage />} />
                 {/* AgendaPage removida: consolidamos em modais no Home */}
                 <Route path='/agenda' element={<Home />} />
+                <Route path='/catalog/products/new' element={<ProductFormPage />} />
+                <Route path='/catalog/services/new' element={<ServiceFormPage />} />
                 {/* Full-page scheduler for mobile */}
                 {/** Rota /schedule removida para unificar experiência via modais */}
                 {/* Rota /agenda/settings removida */}
