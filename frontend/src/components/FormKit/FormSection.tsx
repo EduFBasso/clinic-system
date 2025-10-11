@@ -29,11 +29,16 @@ export default function FormSection({
                         position: 'absolute',
                         top: 10,
                         right: 12,
-                        background: 'transparent',
-                        border: 'none',
+                        background: 'rgba(255,255,255,0.95)',
+                        border: '1px solid var(--color-border)',
                         cursor: 'pointer',
                         fontSize: 18,
                         color: 'var(--color-text)',
+                        borderRadius: 8,
+                        padding: '6px 10px',
+                        lineHeight: 1,
+                        zIndex: 5,
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
                     }}
                 >
                     ✖
