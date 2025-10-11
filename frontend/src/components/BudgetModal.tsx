@@ -377,7 +377,7 @@ export default function BudgetModal({
                     linha ao orçamento.
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                    {/* Procedimentos (Serviços) — limitar dropdown para não empurrar o botão + */}
+                    {/* Procedimentos (Serviços) — limitar dropdown (50vw) para não empurrar o botão + */}
                     <div
                         style={{
                             display: 'grid',
@@ -392,7 +392,7 @@ export default function BudgetModal({
                             style={{
                                 padding: 6,
                                 width: '100%',
-                                maxWidth: '70vw',
+                                maxWidth: '50vw',
                                 minWidth: 0,
                             }}
                         >
@@ -447,7 +447,7 @@ export default function BudgetModal({
                         </button>
                     </div>
 
-                    {/* Produtos (Medicamentos) — limitar dropdown para não empurrar o botão + */}
+                    {/* Produtos (Medicamentos) — limitar dropdown (50vw) para não empurrar o botão + */}
                     <div
                         style={{
                             display: 'grid',
@@ -462,7 +462,7 @@ export default function BudgetModal({
                             style={{
                                 padding: 6,
                                 width: '100%',
-                                maxWidth: '70vw',
+                                maxWidth: '50vw',
                                 minWidth: 0,
                             }}
                         >

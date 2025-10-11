@@ -1,14 +1,25 @@
 export interface ShareOptions {
     text: string;
-    phoneE164?: string; // e.g., 55DDNNNNNNNNN (digits only)
+    phoneE164?: string; // digits only, with country code (e.g. 55XXXXXXXXXXX)
+}
+
+function normalizePhoneDigits(phone?: string): string | undefined {
+    if (!phone) return undefined;
+    const digits = String(phone).replace(/\D+/g, '');
+    if (!digits) return undefined;
+    // Accept 10-15 digits
+    if (digits.length < 10 || digits.length > 15) return undefined;
+    return digits;
 }
 
 function toWaLink(text: string, phoneE164?: string): string {
     const encoded = encodeURIComponent(text);
-    if (phoneE164 && /^[0-9]{10,15}$/.test(phoneE164)) {
-        return `https://wa.me/${phoneE164}?text=${encoded}`;
+    const digits = normalizePhoneDigits(phoneE164);
+    // Prefer api.whatsapp.com which tends to work better on mobile and desktop
+    if (digits) {
+        return `https://api.whatsapp.com/send?phone=${digits}&text=${encoded}`;
     }
-    return `https://wa.me/?text=${encoded}`;
+    return `https://api.whatsapp.com/send?text=${encoded}`;
 }
 
 export async function shareText(
