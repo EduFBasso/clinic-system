@@ -10,18 +10,7 @@ import { apiFetch, ApiError } from '../utils/apiFetch';
 import { API_BASE } from '../config/api';
 import { buildPixCopiaCola } from '../utils/pix';
 
-function normalizeDigits(s?: string | null): string | null {
-    if (!s) return null;
-    const digits = String(s).replace(/\D+/g, '');
-    return digits || null;
-}
-
-function toE164BR(digits: string | null): string | null {
-    if (!digits) return null;
-    // Accept 10-11 digits; prepend +55 (Brazil). If already starts with 55, keep once.
-    const clean = digits.replace(/^55/, '');
-    return `+55${clean}`;
-}
+// no extra phone helpers here; we'll normalize inline when sending
 
 type Service = {
     id: string | number;
@@ -211,8 +200,8 @@ export default function BudgetModal({
 
     if (!open) return null;
 
-    const phoneDigits = normalizeDigits(clientPhone || null);
-    const phoneE164 = toE164BR(phoneDigits);
+    // Budget (🧾) deve abrir WhatsApp com a mensagem preenchida, sem amarrar em um número.
+    // O ícone do WhatsApp no ClientCard continua abrindo direto no número do cliente.
 
     const total = items.reduce(
         (acc, it) => acc + (it.price || 0) * (it.qty || 1),
@@ -288,10 +277,14 @@ export default function BudgetModal({
                 items,
                 notes,
             });
-            const result = await shareText({
-                text,
-                phoneE164: phoneE164 || undefined,
-            });
+            // Normaliza telefone do clientecard e abre WhatsApp diretamente nesse contato
+            const digits = (clientPhone || '').replace(/\D+/g, '');
+            const phoneE164 = digits
+                ? digits.startsWith('55')
+                    ? digits
+                    : `55${digits}`
+                : undefined;
+            const result = await shareText({ text, phoneE164 });
             try {
                 window.dispatchEvent(
                     new CustomEvent('systemMessage', {
