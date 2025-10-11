@@ -24,6 +24,7 @@ export default function ServiceListPage() {
     const [items, setItems] = useState<Service[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -48,6 +49,27 @@ export default function ServiceListPage() {
         };
     }, []);
 
+    // Exibe imediatamente a mensagem de sucesso ao retornar do formulário
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('pendingSystemMessage');
+            if (raw) {
+                const obj = JSON.parse(raw);
+                if (obj && obj.text) {
+                    setSuccessMsg(String(obj.text));
+                    const ms =
+                        typeof obj.autoCloseMs === 'number'
+                            ? obj.autoCloseMs
+                            : 6000;
+                    setTimeout(() => setSuccessMsg(null), ms);
+                }
+                localStorage.removeItem('pendingSystemMessage');
+            }
+        } catch {
+            /* noop */
+        }
+    }, []);
+
     return (
         <FormPage title='Procedimentos' onSubmit={e => e.preventDefault()}>
             <FormSection
@@ -55,6 +77,21 @@ export default function ServiceListPage() {
                 onClose={() => navigate('/')}
                 closeTitle='Fechar'
             >
+                {successMsg && (
+                    <div
+                        style={{
+                            marginBottom: 8,
+                            padding: '10px 12px',
+                            background: 'var(--color-success-bg)',
+                            border: '1px solid var(--color-success-dark)',
+                            borderRadius: 8,
+                            color: 'var(--color-success-dark)',
+                            fontWeight: 600,
+                        }}
+                    >
+                        {successMsg}
+                    </div>
+                )}
                 <div
                     style={{
                         display: 'flex',
