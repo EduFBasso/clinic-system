@@ -58,3 +58,5 @@ Monitoramento
 - Render Events: erros/latências
 - Console do browser: 4xx/5xx
 - Feedback de usuários: fotos em modais, fluxo de agenda/finalização
+
+Nova branch feature/alerts-semi-automatico-local
