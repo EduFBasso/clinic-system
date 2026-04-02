@@ -1,67 +1,184 @@
 <!-- backend\README.md -->
 
-# Clinic System Backend
+# Backend (Django 5.2.4)
 
-Este diretório contém o backend do sistema de gerenciamento de clínica de podologia.
+API REST para gerenciamento de clínica multi-especialidade: agenda, clientes, inventário e autenticação por OTP.
 
-## Estrutura
+## Arquitetura Rápida
 
-- `apps/register/`: App principal com modelos, views, serializers, serviços e testes.
-- `clinic_system/`: Configurações globais do projeto Django.
-- `manage.py`: Script para comandos administrativos Django.
+**Stack**: Django 5.2.4 + PostgreSQL + Django REST Framework + simplejwt
+**Auth**: OTP para email + JWT com device sessions (máx 2 concorrentes)
+**Multi-tenancy**: Hard-scoped por `Professional` (AUTH_USER_MODEL)
 
-## Como rodar localmente
+## Estrutura de Apps
 
-1. Instale as dependências:
+| App         | Modelos                                                               | Responsabilidade                        |
+| ----------- | --------------------------------------------------------------------- | --------------------------------------- |
+| `register`  | Professional, Client, AccessCode, DeviceSession, ProfessionalSettings | Auth, clients, device management        |
+| `agenda`    | Appointment, FinalizeAudit                                            | Scheduling, finalization, audit trails  |
+| `inventory` | Product, Supplier, StockMove, Service, ServiceMaterial                | Products, services, BOM, stock tracking |
 
-   ```
-   pip install -r requirements.txt
-   ```
+## Setup Local
 
-2. Configure o ambiente:
+### 1) Criar ambiente virtual
 
-   - Copie `backend/.env.example` para `backend/.env` e ajuste as variáveis.
-   - (Opcional) Suba um Postgres local: `docker compose -f docker-compose.local.yml up -d`
-     - Windows: se tiver o serviço PostgreSQL do Windows ativo (porta 5432), o container usa a porta 55432 no host.
-       Garanta que no `backend/.env` esteja `DB_HOST=127.0.0.1` e `DB_PORT=55432`.
-       Se preferir 5432, pare o serviço do Windows primeiro.
-
-3. Execute as migrações:
-
-   ```
-   python manage.py migrate
-   ```
-
-4. Inicie o servidor:
-   ```
-   python manage.py runserver
-   ```
-
-## Rodando os testes
-
-```
-python manage.py test
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-## Observações
+### 2) Instalar dependências
 
-- O login é feito via código OTP enviado por e-mail.
-- Cada profissional só visualiza seus próprios clientes.
-- Para produção, configure variáveis de ambiente para dados
-
-## Deploy (Render + Vercel)
-
-Na Render (backend), defina as seguintes variáveis de ambiente para permitir o frontend hospedado na Vercel:
-
-- `DJANGO_ALLOWED_HOSTS`: inclua o host do serviço da Render e outros necessários, separados por vírgula. Ex: `clinic-system-swzd.onrender.com,localhost,127.0.0.1`
-- `CORS_ALLOWED_ORIGINS`: origens explícitas (se conhecer a URL do projeto na Vercel). Ex: `https://seuapp.vercel.app`
-- `CORS_ALLOWED_ORIGIN_REGEXES`: para prévias do Vercel, use regex. Ex: `^https://.*\.vercel\.app$`
-- `CSRF_TRUSTED_ORIGINS`: se for usar cookies/admin a partir do frontend. Ex: `https://seuapp.vercel.app,https://*.vercel.app`
-
-No Vercel (frontend), defina `VITE_API_BASE` para apontar para a URL pública do backend na Render, por exemplo:
-
-```
-VITE_API_BASE=https://clinic-system-swzd.onrender.com
+```bash
+pip install -r requirements.txt
 ```
 
-O frontend também possui um fallback em runtime para usar o domínio da Render quando detecta `*.vercel.app`, mas é recomendável setar `VITE_API_BASE` no build.
+### 3) Subir banco PostgreSQL (Docker)
+
+```bash
+docker-compose -f docker-compose.local.yml up -d db
+```
+
+### 4) Migrações
+
+```bash
+cd backend
+python manage.py migrate
+```
+
+### 5) Rodar servidor
+
+**Localhost (dev rápido)**
+
+```bash
+python manage.py runserver
+```
+
+**LAN (testar em dispositivos na mesma rede)**
+
+```bash
+scripts/run-backend-lan.sh
+```
+
+Detecta IPs privados automaticamente, configura DJANGO_ALLOWED_HOSTS e CORS.
+
+## Endpoints Principais
+
+**Health**
+
+- `GET /health` — liveness
+- `GET /health/full` — readiness + versão + DB status
+
+**Auth**
+
+- `POST /register/auth/request-code/` — enviar OTP via email
+- `POST /register/auth/verify-code/` — verificar código → JWT
+- `POST /register/auth/logout-device/` — logout + terminar sessão
+
+**Clientes**
+
+- `GET /register/clients/` — listar
+- `POST /register/clients/` — criar
+- `GET /register/clients/{id}/` — detalhe (incluindo anamnese completa)
+- `PATCH /register/clients/{id}/` — atualizar
+
+**Agenda**
+
+- `GET /agenda/appointments/?start=&end=&status=` — filtrado por range
+- `POST /agenda/appointments/` — criar
+- `POST /agenda/appointments/{id}/finalize/` — finalizar + audit
+- `POST /agenda/appointments/{id}/cancel/` — cancelar
+
+Veja [routes_backend.md](routes_backend.md) para referência completa.
+
+## Configuração
+
+### Arquivo `.env` (obrigatório localmente)
+
+```bash
+DEBUG=True
+DJANGO_SECRET_KEY=dev-only-key
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+DB_ENGINE=django.db.backends.postgresql
+DB_HOST=127.0.0.1
+DB_PORT=55432
+DB_NAME=clinic_local
+DB_USER=clinic
+DB_PASSWORD=clinicpass
+```
+
+Para detalhes e opções avançadas, veja [.env](.env).
+
+## Testes
+
+```bash
+# Todos
+cd backend && python -m pytest -q
+
+# Teste específico
+python -m pytest tests/test_health_endpoints.py -v
+
+# Com cobertura
+python -m pytest --cov=apps -q
+```
+
+Configuração: [pytest.ini](pytest.ini)
+
+## Migrações
+
+Ao alterar modelos, gerar migração:
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
+
+Histórico em: `apps/*/migrations/`
+
+## Dependências
+
+Arquivo: [requirements.txt](requirements.txt)
+
+**Atualizado (Sprint 0 - limpeza)**
+
+- setuptools pinned em 80.0.0 (evita warning de simplejwt com pkg_resources)
+- Removidos: axios, bcrypt, lxml, colorama, mysqlclient (histórico Windows/testes)
+- Mantidos: Django, DRF, JWT, PostgreSQL, Pillow, pytest
+
+## Problemas Comuns
+
+| Erro                             | Solução                                                                |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| `connection refused` porta 55432 | Banco não subiu: `docker-compose -f docker-compose.local.yml up -d db` |
+| Migrações fail                   | Garantir banco ativo + `python manage.py migrate`                      |
+| Imports fail                     | Ativar venv: `source .venv/bin/activate`                               |
+
+## Deploy (Render)
+
+Estável em produção. Start command:
+
+```bash
+gunicorn clinic_project.wsgi --chdir backend --bind 0.0.0.0:10000 --workers 2
+```
+
+Variáveis obrigatórias em produção:
+
+- `DJANGO_SECRET_KEY` (gerar com `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`)
+- `DEBUG=False`
+- `DJANGO_ALLOWED_HOSTS=seu-backend.onrender.com,...`
+- `CORS_ALLOWED_ORIGINS=https://seu-frontend.vercel.app,...`
+- `DB_*` (Postgres gerenciado)
+
+Veja [../../DEPLOY_CHECKLIST.md](../../DEPLOY_CHECKLIST.md) para checklist pré-deploy.
+
+## Próximas Etapas (Roadmap Sprint 1+)
+
+- [ ] Novos modelos: `Encounter`, `ClinicalRecord`, `Charge`
+- [ ] Máquina de estados robusta para `Appointment`
+- [ ] Formulários dinâmicos por especialidade
+- [ ] RBAC (role-based access control)
+- [ ] Mensageria semi-automática com log
+
+**Setup local vs produção**: veja [../../info/local-vs-online-workflow.md](../../info/local-vs-online-workflow.md)

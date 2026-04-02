@@ -1,5 +1,3 @@
-# urls do projeto
-# backend\clinic_project\urls.py
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -34,9 +32,7 @@ def full_health_view(_request):
     })
 
 urlpatterns = [
-    # Redirect root to the admin UI to make the admin entry point easy to find
     path('', RedirectView.as_view(url='/admin/', permanent=False)),
-    # Health check endpoint (public) for uptime monitors and warm-up
     path('health/', health_view),  # liveness
     path('health', health_view),   # liveness (no slash)
     path('health/full', full_health_view),  # readiness + metadata
