@@ -1,0 +1,85 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+info/*
+
+# Python virtual environments
+venv/
+.venv/
+/.venv-wsl/
+backend/venv*/
+backend/.venv*/
+backend/.venv-wsl/
+frontend/venv*/
+frontend/.venv*/
+
+# Collected static files and python cache
+backend/staticfiles/
+**/__pycache__/
+**/.pytest_cache/
+.pytest_cache/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Vercel local project files
+.vercel
+frontend/.vercel
+
+# Local databases and dumps
+*.sqlite3
+db.sqlite3
+backend/db.sqlite3
+
+# Local backup artifacts
+scripts/db/backups/
+scripts/db/backups/**/*.csv
+scripts/db/backups/**/*.sql
+scripts/db/backups/**/*.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.env
+backend/.env
+backend/.env.*

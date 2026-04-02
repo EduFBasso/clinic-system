@@ -1,0 +1,1167 @@
+import React from 'react';
+import { dispatchers } from '../events/dispatchers';
+import AppModal from './Modal';
+import TimePicker10 from './TimePicker10';
+import FloatingDatePicker from './FloatingDatePicker';
+import QuickScheduleHeader from './quickschedule/QuickScheduleHeader';
+import DateControlsHeader from './shared/DateControlsHeader';
+import QuickScheduleDayList, {
+    type DayFilter,
+} from './quickschedule/QuickScheduleDayList';
+// PendingActionsModal é global (Home)
+import AppointmentDetailsModal from './AppointmentDetailsModal';
+import ensureDeviceSession from '../services/sessions';
+import type { ClientBasic } from '../types/ClientBasic';
+import type { Appointment } from '../hooks/useAppointments';
+import { useAppointmentsRange } from '../hooks/useAppointments';
+import { getNow } from '../utils/now';
+import {
+    getSlotInterval,
+    getWorkTimes,
+    getDefaultDuration,
+} from '../utils/agendaSettings';
+import { AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE } from '../config/limits';
+import { API_BASE } from '../config/api';
+import { track } from '../utils/telemetry';
+import { buildDeviceHeaders } from '../services/device';
+import { usePendingGuard } from '../hooks/usePendingGuard';
+import { focusClientCard } from '../utils/focusClientCard';
+
+type VisitType = Appointment['visit_type'];
+type ClientMaybeNext = ClientBasic & { next_appointment_id?: number };
+
+interface QuickScheduleModalProps {
+    open: boolean;
+    onClose: () => void;
+    client: ClientBasic;
+    editAppointment?: Appointment | null;
+    afterPersist?: (id?: number, action?: 'created' | 'updated') => void;
+    futureAppointments?: Array<unknown>;
+    maxFutureAppointments?: number;
+}
+
+function pad2(n: number) {
+    return String(n).padStart(2, '0');
+}
+function toMinutes(hm: string): number {
+    const [h, m] = hm.split(':').map(s => parseInt(s || '0', 10));
+    return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+function fromMinutes(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${pad2(h)}:${pad2(m)}`;
+}
+function weekdayLabel(d: Date) {
+    const s = d
+        .toLocaleDateString('pt-BR', { weekday: 'short' })
+        .replace('.', '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export default function QuickScheduleModal({
+    open,
+    onClose,
+    client,
+    editAppointment,
+    afterPersist,
+}: QuickScheduleModalProps) {
+    const isEdit = !!editAppointment;
+    const [selectedDate, setSelectedDate] = React.useState<Date>(() => {
+        if (isEdit && editAppointment)
+            return new Date(editAppointment.start_at);
+        const base = getNow();
+        base.setMinutes(base.getMinutes() + 60);
+        return base;
+    });
+    const [startHM, setStartHM] = React.useState<string>(() => {
+        if (isEdit && editAppointment) {
+            const d = new Date(editAppointment.start_at);
+            return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+        }
+        const d = new Date(selectedDate);
+        return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    });
+    const [endHM, setEndHM] = React.useState<string>(() => {
+        if (isEdit && editAppointment) {
+            const d = new Date(editAppointment.end_at);
+            return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+        }
+        const mins = toMinutes(startHM) + getDefaultDuration();
+        return fromMinutes(mins);
+    });
+    const [visitType, setVisitType] = React.useState<VisitType>(
+        (isEdit && editAppointment
+            ? editAppointment.visit_type
+            : 'consulta') as VisitType,
+    );
+    // removed: 'definir como padrão' toggle; managed in Agenda settings
+    const [notes, setNotes] = React.useState<string>(
+        (isEdit && editAppointment && editAppointment.notes) || '',
+    );
+    const [saving, setSaving] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+    const [reloadKey, setReloadKey] = React.useState(0);
+    const [currentEdit, setCurrentEdit] = React.useState<Appointment | null>(
+        editAppointment || null,
+    );
+    const [lastEditedId, setLastEditedId] = React.useState<number | null>(null);
+    const [highlightId, setHighlightId] = React.useState<number | null>(null);
+    const [editingHighlightId, setEditingHighlightId] = React.useState<
+        number | null
+    >(currentEdit?.id ?? null);
+    const [showPicker, setShowPicker] = React.useState(false);
+    const listRef = React.useRef<HTMLDivElement | null>(null);
+    const workTimes = getWorkTimes();
+    // Removed: flexible minute mode (minuto livre) — simplificação: sempre respeita intervalo configurado
+
+    // Day range for list
+    const dayStart = React.useMemo(() => {
+        const d = new Date(selectedDate);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }, [selectedDate]);
+    const dayEnd = React.useMemo(() => {
+        const d = new Date(dayStart);
+        d.setDate(d.getDate() + 1);
+        return d;
+    }, [dayStart]);
+
+    // Important: QuickSchedule shows the day grid like Daily/Weekly, irrespective of client.
+    // Do NOT filter by client here; the day list must show all appointments to avoid double-booking.
+    const { items: dayAppointments, loading: dayLoading } =
+        useAppointmentsRange(dayStart, dayEnd, undefined, reloadKey);
+
+    const [dayFilter, setDayFilter] = React.useState<DayFilter>('todos');
+
+    // Details modal for viewing completed (done) appointments
+    const [detailsOpen, setDetailsOpen] = React.useState(false);
+    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
+        null,
+    );
+
+    // Title helpers
+    // removed: separate subtitle; DateControlsHeader label covers the date context
+    const sectionDateTitle = React.useMemo(() => {
+        const d = selectedDate;
+        const dd = `${pad2(d.getDate())}/${pad2(
+            d.getMonth() + 1,
+        )}/${d.getFullYear()}`;
+        return `${weekdayLabel(d)} — ${dd}`;
+    }, [selectedDate]);
+
+    // Pending guard (block create when client has pending)
+    const { found: pendingFound, refresh: refreshPendingGuard } =
+        usePendingGuard({
+            open,
+            isEdit,
+            clientId: client.id,
+        });
+    const isPending = !!pendingFound;
+    // PendingActions é global — sem estado local
+
+    // Removido alinhamento local — Home coordena
+    React.useEffect(() => {
+        if (!dayLoading && lastEditedId) {
+            const exists = dayAppointments.some(a => a.id === lastEditedId);
+            if (exists) {
+                setHighlightId(lastEditedId);
+                requestAnimationFrame(() => {
+                    try {
+                        const el = document.getElementById(
+                            `appt-card-${lastEditedId}`,
+                        );
+                        if (el && el.scrollIntoView)
+                            el.scrollIntoView({ block: 'center' });
+                    } catch {
+                        /* noop */
+                    }
+                });
+                const t = window.setTimeout(() => setHighlightId(null), 2500);
+                return () => window.clearTimeout(t);
+            }
+        }
+        return;
+    }, [dayLoading, lastEditedId, dayAppointments]);
+
+    // Recarrega a lista do dia quando houver mudanças externas de compromissos
+    React.useEffect(() => {
+        if (!open) return;
+        const onChanged = () => setReloadKey(k => k + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, [open]);
+
+    // buildDateStr no longer needed; we construct dates via Date API
+
+    const handleImmediateClose = React.useCallback(() => {
+        try {
+            window.dispatchEvent(new Event('ensureScrollUnlocked'));
+        } catch {
+            /* noop */
+        }
+        try {
+            refreshPendingGuard();
+        } catch {
+            /* noop */
+        }
+        onClose();
+    }, [onClose, refreshPendingGuard]);
+
+    const handleSave = React.useCallback(async () => {
+        setError(null);
+        setSaving(true);
+        const t0 = performance.now();
+        // Normalize minutes if flex mode is off to respect slot interval
+        const slot = getSlotInterval();
+        function snapIfNeeded(hm: string): string {
+            const [h, m] = hm.split(':').map(n => parseInt(n, 10));
+            if (isNaN(h) || isNaN(m)) return hm;
+            const snapped = Math.round(m / slot) * slot;
+            const finalM = Math.min(59, Math.max(0, snapped));
+            return `${pad2(h)}:${pad2(finalM)}`;
+        }
+        const normalizedStartHM = snapIfNeeded(startHM);
+        let normalizedEndHM = snapIfNeeded(endHM);
+        // Ensure end >= start
+        if (toMinutes(normalizedEndHM) <= toMinutes(normalizedStartHM)) {
+            const mins = toMinutes(normalizedStartHM) + getDefaultDuration();
+            normalizedEndHM = fromMinutes(mins);
+        }
+        // Build start/end using Date API to avoid invalid strings like "24:00"
+        // and clamp to the same-day window [00:00, 23:59]. Ensure end > start.
+        const MAX_MINUTE = 23 * 60 + 59;
+        const startMin0 = toMinutes(normalizedStartHM);
+        const endMin0 = toMinutes(normalizedEndHM);
+        const startMin = Math.max(0, Math.min(MAX_MINUTE, startMin0));
+        let endMin = Math.max(0, Math.min(MAX_MINUTE, endMin0));
+        if (endMin <= startMin) {
+            // Guarantee at least 1 minute duration if clamping caused equality
+            endMin = Math.min(MAX_MINUTE, startMin + 1);
+        }
+        const baseDate = new Date(selectedDate);
+        const startDate = new Date(baseDate);
+        startDate.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+        const endDate = new Date(baseDate);
+        endDate.setHours(Math.floor(endMin / 60), endMin % 60, 0, 0);
+        const startISO = startDate.toISOString();
+        const endISO = endDate.toISOString();
+        const visitTitles: Record<string, string> = {
+            consulta: 'Consulta',
+            avaliacao: 'Avaliação',
+            retorno: 'Retorno',
+            procedimento: 'Procedimento',
+            outro: 'Outro',
+        };
+        const title = visitTitles[String(visitType)] || 'Consulta';
+        const token = localStorage.getItem('accessToken') || '';
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        try {
+            let updatedId: number | undefined;
+            const wasEdit = !!currentEdit;
+            if (currentEdit) {
+                const resp = await fetch(
+                    `${API_BASE}/agenda/appointments/${currentEdit.id}/`,
+                    {
+                        method: 'PATCH',
+                        headers,
+                        body: JSON.stringify({
+                            title,
+                            start_at: startISO,
+                            end_at: endISO,
+                            visit_type: visitType,
+                            notes,
+                        }),
+                    },
+                );
+                if (!resp.ok) throw new Error('Erro ao atualizar');
+                updatedId = currentEdit.id;
+            } else {
+                // Ensure device session exists before POST create
+                try {
+                    await ensureDeviceSession();
+                } catch {
+                    /* noop */
+                }
+                let resp = await fetch(`${API_BASE}/agenda/appointments/`, {
+                    method: 'POST',
+                    headers: { ...headers, ...buildDeviceHeaders() },
+                    body: JSON.stringify({
+                        client: client.id,
+                        title,
+                        start_at: startISO,
+                        end_at: endISO,
+                        visit_type: visitType,
+                        status: 'scheduled',
+                        notes,
+                    }),
+                });
+                if (resp.status === 401 || resp.status === 403) {
+                    try {
+                        await ensureDeviceSession(true);
+                    } catch {
+                        /* noop */
+                    }
+                    resp = await fetch(`${API_BASE}/agenda/appointments/`, {
+                        method: 'POST',
+                        headers: { ...headers, ...buildDeviceHeaders() },
+                        body: JSON.stringify({
+                            client: client.id,
+                            title,
+                            start_at: startISO,
+                            end_at: endISO,
+                            visit_type: visitType,
+                            status: 'scheduled',
+                            notes,
+                        }),
+                    });
+                }
+                if (!resp.ok) {
+                    let text = '';
+                    try {
+                        const ct = resp.headers.get('Content-Type') || '';
+                        if (ct.includes('application/json')) {
+                            const j = await resp.json();
+                            text =
+                                typeof j === 'string' ? j : JSON.stringify(j);
+                        } else {
+                            text = await resp.text();
+                        }
+                    } catch {
+                        /* ignore */
+                    }
+                    // If backend indicates pending, open resolver
+                    if (/pendente/i.test(text)) {
+                        try {
+                            const token2 =
+                                localStorage.getItem('accessToken') || '';
+                            const headers2: Record<string, string> = {};
+                            if (token2)
+                                headers2['Authorization'] = `Bearer ${token2}`;
+                            const url = `${API_BASE}/agenda/appointments/?client=${
+                                client.id
+                            }&status=scheduled&ordering=-end_at&limit=50&ts=${Date.now()}`;
+                            const r = await fetch(url, {
+                                headers: headers2,
+                                cache: 'no-store',
+                            });
+                            if (r.ok) {
+                                const data = (await r.json()) as Appointment[];
+                                const nowMs = Date.now();
+                                const pending = Array.isArray(data)
+                                    ? data.find(ap => {
+                                          const endMs = new Date(
+                                              ap.end_at,
+                                          ).getTime();
+                                          return (
+                                              ap.status === 'scheduled' &&
+                                              isFinite(endMs) &&
+                                              endMs <= nowMs
+                                          );
+                                      })
+                                    : null;
+                                if (pending) {
+                                    try {
+                                        const a = pending as Appointment;
+                                        const anyAppt = a as unknown as Record<
+                                            string,
+                                            unknown
+                                        >;
+                                        const clientName = (():
+                                            | string
+                                            | undefined => {
+                                            if (
+                                                typeof anyAppt.client_name ===
+                                                'string'
+                                            )
+                                                return anyAppt.client_name as string;
+                                            const c = anyAppt.client as unknown;
+                                            if (
+                                                c &&
+                                                typeof c === 'object' &&
+                                                'name' in
+                                                    (c as Record<
+                                                        string,
+                                                        unknown
+                                                    >)
+                                            ) {
+                                                const n = (
+                                                    c as { name?: unknown }
+                                                ).name;
+                                                if (typeof n === 'string')
+                                                    return n;
+                                            }
+                                            return undefined;
+                                        })();
+                                        const clientField = ((): unknown => {
+                                            const c = anyAppt.client as unknown;
+                                            if (
+                                                typeof c === 'number' ||
+                                                typeof c === 'object'
+                                            )
+                                                return c;
+                                            return undefined;
+                                        })();
+                                        const payload = {
+                                            id: a.id,
+                                            start_at: a.start_at,
+                                            end_at: a.end_at,
+                                            status: a.status,
+                                            notes: a.notes,
+                                            client_name: clientName,
+                                            client: clientField,
+                                            title: a.title,
+                                        } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
+                                        window.dispatchEvent(
+                                            new CustomEvent(
+                                                'pendingActions:open',
+                                                { detail: { appt: payload } },
+                                            ),
+                                        );
+                                    } catch {
+                                        /* noop */
+                                    }
+                                    try {
+                                        window.dispatchEvent(
+                                            new CustomEvent('systemMessage', {
+                                                detail: {
+                                                    text: 'Há uma pendência anterior. Resolva-a antes de criar um novo compromisso.',
+                                                    type: 'warning',
+                                                },
+                                            }),
+                                        );
+                                    } catch {
+                                        /* noop */
+                                    }
+                                }
+                            }
+                        } catch {
+                            /* ignore */
+                        }
+                    }
+                    const friendly =
+                        text && text.length < 400 ? text : 'Erro ao criar';
+                    throw new Error(friendly);
+                }
+                const data = (await resp.json()) as { id?: number };
+                updatedId = data?.id;
+            }
+
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: {
+                            text: wasEdit
+                                ? 'Compromisso atualizado'
+                                : 'Compromisso criado',
+                            type: 'success',
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+
+            try {
+                // Dispara imediatamente e também agenda via dispatcher para coalescer com outros eventos próximos
+                dispatchers.updateClients();
+                dispatchers.appointmentsChanged();
+                // Sinal adicional opcional: nudge 'appointments:maybeRefresh' para hooks que escutam pings leves
+                try {
+                    window.dispatchEvent(
+                        new Event('appointments:maybeRefresh'),
+                    );
+                } catch {
+                    /* noop */
+                }
+            } catch {
+                /* noop */
+            }
+
+            setReloadKey(k => k + 1);
+            if (updatedId) setLastEditedId(updatedId);
+            if (afterPersist)
+                afterPersist(updatedId, wasEdit ? 'updated' : 'created');
+
+            try {
+                if (!wasEdit && updatedId) {
+                    track({
+                        type: 'appointment_created',
+                        payload: {
+                            id: updatedId,
+                            client_id: client.id,
+                            start_at: startISO,
+                        },
+                    });
+                } else if (wasEdit && updatedId) {
+                    track({
+                        type: 'appointment_updated',
+                        payload: { id: updatedId, start_at: startISO },
+                    });
+                }
+            } catch {
+                /* noop */
+            }
+
+            if (!wasEdit && AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE) {
+                try {
+                    window.dispatchEvent(new Event('ensureScrollUnlocked'));
+                } catch {
+                    /* noop */
+                }
+                setTimeout(() => {
+                    try {
+                        // Mantemos forceRefresh direto (uso específico), mas coalescemos eventos globais
+                        window.dispatchEvent(new Event('clients:forceRefresh'));
+                    } catch {
+                        /* noop */
+                    }
+                    handleImmediateClose();
+                }, 160);
+            }
+        } catch (e) {
+            const msg =
+                e && typeof e === 'object' && 'message' in e
+                    ? String((e as Error).message)
+                    : 'Erro ao salvar';
+            setError(msg);
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'error' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        } finally {
+            setSaving(false);
+            const t1 = performance.now();
+            console.debug(
+                '[QuickSchedule] handleSave latency ms',
+                (t1 - t0).toFixed(1),
+            );
+            try {
+                window.dispatchEvent(new Event('ensureScrollUnlocked'));
+            } catch {
+                /* noop */
+            }
+        }
+    }, [
+        selectedDate,
+        startHM,
+        endHM,
+        visitType,
+        notes,
+        currentEdit,
+        client.id,
+        afterPersist,
+        handleImmediateClose,
+    ]);
+
+    React.useEffect(() => {
+        if (!saving) return;
+        const id = window.setTimeout(() => {
+            setSaving(false);
+            setError(
+                prev =>
+                    prev ||
+                    'Operação demorou demais. Verifique conexão e tente novamente.',
+            );
+            try {
+                window.dispatchEvent(new Event('ensureScrollUnlocked'));
+            } catch {
+                /* noop */
+            }
+        }, 20000);
+        return () => window.clearTimeout(id);
+    }, [saving]);
+
+    return (
+        <>
+            <AppModal
+                open={open}
+                onClose={handleImmediateClose}
+                closeOnEnter={false}
+                showCloseButton={false}
+                fullScreen
+                disableTopSafePadding={true}
+                maxHeightVh={96}
+                actionsBarStyle={{
+                    background: 'transparent',
+                    borderBottom: 'none',
+                }}
+            >
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 16,
+                        position: 'relative',
+                        width: '100%',
+                    }}
+                >
+                    {/* Title + client info remain; date controls standardized below */}
+                    <QuickScheduleHeader
+                        clientFullName={`${client.first_name} ${client.last_name}`}
+                        onClose={handleImmediateClose}
+                    />
+
+                    <DateControlsHeader
+                        currentDate={selectedDate}
+                        label={sectionDateTitle}
+                        onPrev={() =>
+                            setSelectedDate(
+                                d =>
+                                    new Date(
+                                        d.getFullYear(),
+                                        d.getMonth(),
+                                        d.getDate() - 1,
+                                    ),
+                            )
+                        }
+                        onNext={() =>
+                            setSelectedDate(
+                                d =>
+                                    new Date(
+                                        d.getFullYear(),
+                                        d.getMonth(),
+                                        d.getDate() + 1,
+                                    ),
+                            )
+                        }
+                        onToday={() => setSelectedDate(new Date())}
+                        onOpenPicker={() => setShowPicker(true)}
+                    />
+
+                    {/** Compact status switch moved next to the minicards (inside QuickScheduleDayList). Removed big toggle here to save space. **/}
+
+                    {!isEdit && isPending && (
+                        <div
+                            style={{
+                                background: '#f3f4f6',
+                                border: '1px solid #d1d5db',
+                                color: '#374151',
+                                padding: '8px 10px',
+                                borderRadius: 8,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                            }}
+                        >
+                            <div>
+                                <strong>Atenção:</strong> há um compromisso
+                                pendente para este cliente. Finalize-o antes de
+                                criar um novo.
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const id = (pendingFound?.id ||
+                                                (client as ClientMaybeNext)
+                                                    .next_appointment_id) as
+                                                | number
+                                                | undefined;
+                                            if (!id) {
+                                                focusClientCard(client.id);
+                                                return;
+                                            }
+                                            const token =
+                                                localStorage.getItem(
+                                                    'accessToken',
+                                                );
+                                            const headers: Record<
+                                                string,
+                                                string
+                                            > = {
+                                                'Content-Type':
+                                                    'application/json',
+                                            };
+                                            if (token)
+                                                headers[
+                                                    'Authorization'
+                                                ] = `Bearer ${token}`;
+                                            const resp = await fetch(
+                                                `${API_BASE}/agenda/appointments/${id}/`,
+                                                { headers },
+                                            );
+                                            if (!resp.ok)
+                                                throw new Error(
+                                                    'Falha ao carregar compromisso pendente',
+                                                );
+                                            const appt =
+                                                (await resp.json()) as Appointment;
+                                            try {
+                                                const a = appt as Appointment;
+                                                const anyAppt =
+                                                    a as unknown as Record<
+                                                        string,
+                                                        unknown
+                                                    >;
+                                                const clientName = (():
+                                                    | string
+                                                    | undefined => {
+                                                    if (
+                                                        typeof anyAppt.client_name ===
+                                                        'string'
+                                                    )
+                                                        return anyAppt.client_name as string;
+                                                    const c =
+                                                        anyAppt.client as unknown;
+                                                    if (
+                                                        c &&
+                                                        typeof c === 'object' &&
+                                                        'name' in
+                                                            (c as Record<
+                                                                string,
+                                                                unknown
+                                                            >)
+                                                    ) {
+                                                        const n = (
+                                                            c as {
+                                                                name?: unknown;
+                                                            }
+                                                        ).name;
+                                                        if (
+                                                            typeof n ===
+                                                            'string'
+                                                        )
+                                                            return n;
+                                                    }
+                                                    return undefined;
+                                                })();
+                                                const clientField =
+                                                    ((): unknown => {
+                                                        const c =
+                                                            anyAppt.client as unknown;
+                                                        if (
+                                                            typeof c ===
+                                                                'number' ||
+                                                            typeof c ===
+                                                                'object'
+                                                        )
+                                                            return c;
+                                                        return undefined;
+                                                    })();
+                                                const payload = {
+                                                    id: a.id,
+                                                    start_at: a.start_at,
+                                                    end_at: a.end_at,
+                                                    status: a.status,
+                                                    notes: a.notes,
+                                                    client_name: clientName,
+                                                    client: clientField,
+                                                    title: a.title,
+                                                } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
+                                                window.dispatchEvent(
+                                                    new CustomEvent(
+                                                        'pendingActions:open',
+                                                        {
+                                                            detail: {
+                                                                appt: payload,
+                                                            },
+                                                        },
+                                                    ),
+                                                );
+                                            } catch {
+                                                /* noop */
+                                            }
+                                        } catch (e) {
+                                            const msg =
+                                                e &&
+                                                typeof e === 'object' &&
+                                                'message' in e
+                                                    ? String(
+                                                          (e as Error).message,
+                                                      )
+                                                    : 'Erro ao abrir pendência';
+                                            try {
+                                                window.dispatchEvent(
+                                                    new CustomEvent(
+                                                        'systemMessage',
+                                                        {
+                                                            detail: {
+                                                                text: msg,
+                                                                type: 'warning',
+                                                            },
+                                                        },
+                                                    ),
+                                                );
+                                            } catch {
+                                                /* noop */
+                                            }
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '6px 10px',
+                                        background: '#e5e7eb',
+                                    }}
+                                >
+                                    Resolver agora
+                                </button>
+                                <button
+                                    onClick={handleImmediateClose}
+                                    style={{
+                                        padding: '6px 10px',
+                                        background: '#e5e7eb',
+                                    }}
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* PendingActionsModal é global (Home) */}
+
+                    <div
+                        style={{
+                            display: 'flex',
+                            gap: 12,
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            marginTop: 8,
+                        }}
+                    >
+                        <TimePicker10
+                            label='Início'
+                            value={startHM}
+                            onChange={val => {
+                                setStartHM(val);
+                                const sMin = toMinutes(val);
+                                let newEnd = sMin + getDefaultDuration();
+                                const max =
+                                    workTimes.endHour * 60 + workTimes.endMin;
+                                if (newEnd > max) newEnd = max;
+                                setEndHM(fromMinutes(newEnd));
+                            }}
+                            minHour={workTimes.startHour}
+                            maxHour={workTimes.endHour}
+                            minHM={`${pad2(workTimes.startHour)}:${pad2(
+                                workTimes.startMin,
+                            )}`}
+                            maxHM={`${pad2(workTimes.endHour)}:${pad2(
+                                workTimes.endMin,
+                            )}`}
+                            stepMinutes={
+                                getSlotInterval() as 1 | 5 | 10 | 15 | 20 | 30
+                            }
+                        />
+                        <TimePicker10
+                            label='Fim'
+                            value={endHM}
+                            onChange={val => setEndHM(val)}
+                            minHour={workTimes.startHour}
+                            maxHour={workTimes.endHour}
+                            minHM={`${pad2(workTimes.startHour)}:${pad2(
+                                workTimes.startMin,
+                            )}`}
+                            maxHM={`${pad2(workTimes.endHour)}:${pad2(
+                                workTimes.endMin,
+                            )}`}
+                            stepMinutes={
+                                getSlotInterval() as 1 | 5 | 10 | 15 | 20 | 30
+                            }
+                        />
+                        {/* Removed: "Minuto livre" checkbox (flexible minute mode) */}
+                        <label
+                            style={{ display: 'flex', flexDirection: 'column' }}
+                        >
+                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                Tipo
+                            </span>
+                            <select
+                                value={visitType}
+                                onChange={e =>
+                                    setVisitType(e.target.value as VisitType)
+                                }
+                                style={{ padding: '6px 8px' }}
+                            >
+                                <option value='consulta'>Consulta</option>
+                                <option value='avaliacao'>Avaliação</option>
+                                <option value='retorno'>Retorno</option>
+                                <option value='procedimento'>
+                                    Procedimento
+                                </option>
+                                <option value='outro'>Outro</option>
+                            </select>
+                        </label>
+                        {/** Removed 'Definir como padrão' toggle (managed in settings) **/}
+                    </div>
+
+                    <textarea
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        rows={3}
+                        style={{
+                            padding: '8px',
+                            resize: 'vertical',
+                            background: '#f8fafc',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 8,
+                        }}
+                        placeholder='Anotações rápidas...'
+                    />
+
+                    <div
+                        style={{
+                            display: 'flex',
+                            gap: 8,
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 5,
+                            paddingTop: 6,
+                            paddingBottom: 6,
+                            background: 'var(--color-bg)',
+                        }}
+                    >
+                        {/* Mini toggle "Todos" alinhado à esquerda, pequeno para não competir com os botões */}
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                            }}
+                        >
+                            <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                Todos
+                            </span>
+                            <button
+                                type='button'
+                                role='switch'
+                                aria-checked={dayFilter !== 'ativos'}
+                                onClick={() =>
+                                    setDayFilter(
+                                        dayFilter === 'ativos'
+                                            ? 'todos'
+                                            : 'ativos',
+                                    )
+                                }
+                                aria-label='Alternar entre todos os status e apenas ativos'
+                                title='Alternar entre todos os status e apenas ativos'
+                                style={{
+                                    position: 'relative',
+                                    width: 40,
+                                    height: 24,
+                                    borderRadius: 999,
+                                    border: '1px solid var(--color-border)',
+                                    background:
+                                        dayFilter === 'ativos'
+                                            ? '#e5e7eb'
+                                            : '#059669',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    outline: 'none',
+                                }}
+                            >
+                                <span
+                                    aria-hidden
+                                    style={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: dayFilter === 'ativos' ? 2 : 20,
+                                        transform: 'translateY(-50%)',
+                                        width: 18,
+                                        height: 18,
+                                        borderRadius: '50%',
+                                        background: '#fff',
+                                        boxShadow:
+                                            '0 1px 2px rgba(0,0,0,0.1), 0 1px 1px rgba(0,0,0,0.06)',
+                                        transition:
+                                            'left 150ms ease, transform 150ms ease',
+                                    }}
+                                />
+                            </button>
+                        </div>
+                        {/* Right actions: Cancel + Create/Save grouped together */}
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                            }}
+                        >
+                            <button
+                                onClick={handleImmediateClose}
+                                style={{
+                                    padding: '8px 12px',
+                                    background: '#e5e7eb',
+                                }}
+                                disabled={saving}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                style={{
+                                    padding: '8px 12px',
+                                    background: '#059669',
+                                    color: '#fff',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                }}
+                                disabled={saving}
+                            >
+                                {saving && (
+                                    <span
+                                        style={{
+                                            width: 14,
+                                            height: 14,
+                                            borderRadius: '50%',
+                                            border: '2px solid rgba(255,255,255,0.6)',
+                                            borderTopColor:
+                                                'rgba(255,255,255,1)',
+                                            animation:
+                                                'qsSpin 0.8s linear infinite',
+                                        }}
+                                    />
+                                )}
+                                {saving
+                                    ? 'Salvando...'
+                                    : isEdit
+                                    ? 'Salvar'
+                                    : 'Criar'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <QuickScheduleDayList
+                        appointments={dayAppointments}
+                        loading={dayLoading}
+                        dayFilter={dayFilter}
+                        onChangeFilter={setDayFilter}
+                        sectionDateTitle={sectionDateTitle}
+                        highlightId={highlightId}
+                        editingHighlightId={editingHighlightId}
+                        currentEditId={currentEdit?.id ?? null}
+                        listRef={listRef}
+                        minimal={true}
+                        renderMinimalToggle={false}
+                        onUseTime={a => {
+                            const sd = new Date(a.start_at);
+                            const ed = new Date(a.end_at);
+                            setSelectedDate(sd);
+                            setStartHM(
+                                `${pad2(sd.getHours())}:${pad2(
+                                    sd.getMinutes(),
+                                )}`,
+                            );
+                            setEndHM(
+                                `${pad2(ed.getHours())}:${pad2(
+                                    ed.getMinutes(),
+                                )}`,
+                            );
+                            setCurrentEdit(null);
+                        }}
+                        onEdit={a => {
+                            setCurrentEdit(a);
+                            setEditingHighlightId(a.id);
+                        }}
+                        onCancel={async a => {
+                            try {
+                                const { cancelAppointment } = await import(
+                                    '../services/appointments'
+                                );
+                                const res = await cancelAppointment(a.id);
+                                if (!res.ok) {
+                                    throw new Error(
+                                        res.text || 'Erro ao cancelar',
+                                    );
+                                }
+                                setReloadKey(k => k + 1);
+                                try {
+                                    track({
+                                        type: 'appointment_cancel_succeeded',
+                                        payload: { id: a.id },
+                                    });
+                                } catch {
+                                    /* noop */
+                                }
+                                try {
+                                    dispatchers.updateClients();
+                                    dispatchers.appointmentsChanged();
+                                } catch {
+                                    /* noop */
+                                }
+                                setTimeout(
+                                    () => focusClientCard(client.id),
+                                    120,
+                                );
+                                if (currentEdit?.id === a.id)
+                                    setCurrentEdit(null);
+                                if (lastEditedId === a.id) {
+                                    setLastEditedId(null);
+                                    setHighlightId(null);
+                                }
+                                try {
+                                    handleImmediateClose();
+                                } catch {
+                                    /* noop */
+                                }
+                            } catch (err) {
+                                const msg =
+                                    err &&
+                                    typeof err === 'object' &&
+                                    'message' in err
+                                        ? String((err as Error).message)
+                                        : 'Erro ao cancelar';
+                                try {
+                                    console.warn(
+                                        '[QuickSchedule] cancel failed',
+                                        { id: a.id, msg },
+                                    );
+                                } catch {
+                                    /* noop */
+                                }
+                                setError(msg);
+                                try {
+                                    track({
+                                        type: 'appointment_cancel_failed',
+                                        payload: { id: a.id, error: msg },
+                                    });
+                                } catch {
+                                    /* noop */
+                                }
+                            }
+                        }}
+                    />
+
+                    {error && (
+                        <div style={{ color: '#b91c1c', fontSize: 14 }}>
+                            {error}
+                        </div>
+                    )}
+                    <style>{`@keyframes qsSpin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
+                    <FloatingDatePicker
+                        open={showPicker}
+                        onClose={() => setShowPicker(false)}
+                        selectedDate={selectedDate}
+                        onChange={d => {
+                            setSelectedDate(d);
+                            setShowPicker(false);
+                        }}
+                    />
+                </div>
+            </AppModal>
+            {detailsOpen && detailsAppt && (
+                <AppointmentDetailsModal
+                    open={detailsOpen}
+                    onClose={() => {
+                        setDetailsOpen(false);
+                        setDetailsAppt(null);
+                    }}
+                    appt={detailsAppt}
+                />
+            )}
+        </>
+    );
+}

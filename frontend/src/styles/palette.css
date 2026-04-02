@@ -1,0 +1,125 @@
+/* frontend\src\styles\palette.css */
+
+/* Paleta azul */
+:root {
+    --color-primary: #004aad;
+    --color-primary-light: #e6f0fa;
+    --color-secondary: #007bff;
+    --color-accent: #ffb300;
+    --color-bg: #f7f7f7; /* opaco; ajuste aqui a cor escura desejada para o main */
+    --color-screenoff: #252424;
+    --color-bg-section: #ffffff; /* opaco para contraste dos cartões */
+    /* Card background (padrão segue a seção) */
+    --card-bg: var(--color-bg-section);
+    --color-border: #e0e0e0;
+    --color-border-focus: #007bff;
+    --color-shadow: rgba(0, 0, 0, 0.06);
+    --color-text: #222;
+    --color-text-light: #333;
+    --color-text-muted: #6b7280; /* cinza 600-700 */
+    --color-heading: #111827; /* quase preto para títulos */
+    --color-disabled: #9ca3af; /* cinza para ícones/controles desabilitados */
+    /* Legacy error tokens (mantidos para compatibilidade) */
+    --color-error: #d32f2f;
+    --color-error-light: #ffeaea;
+    --color-error-dark: #a31515;
+    --color-error-border: #a31515;
+
+    /* Semantic tokens - use estes em componentes */
+    /* Success (verdes) - azul/verde escuro para alto contraste + fundo claro */
+    --color-success: #065f46; /* mais escuro (antes: #059669) */
+    --color-success-dark: #064e3b;
+    --color-success-darker: #052e22; /* hover mais escuro */
+    --color-success-deep: #03261a; /* active/pressed */
+    --color-success-bg: #ecfdf5; /* mantém fundo claro */
+
+    /* Danger (vermelhos) */
+    --color-danger: #b91c1c; /* principal - botões/ênfase (genérico) */
+    --color-danger-dark: #991b1b; /* bordas/textos */
+    --color-danger-bg: #fef2f2; /* plano de fundo de alerta */
+    /* Canceled (derivado do danger) — vermelho vivo e alto contraste */
+    --color-canceled: #b91c1c; /* vermelho forte para textos/faixa de cancelado */
+    --color-canceled-bg: #fdf1f1; /* mais claro para facilitar leitura com mais textos vermelhos */
+
+    /* Warning (ambar) */
+    --color-warning: #f59e0b;
+    --color-warning-bg: #fef3c7;
+
+    /* Ongoing (atendimento em curso) - tons laranja escuro/marrom + bege claro */
+    --color-ongoing: #7c2d12; /* laranja escuro puxando para marrom */
+    --color-ongoing-bg: #fff7ed; /* bege/laranja bem claro (alto contraste) */
+
+    /* Done (atendimento finalizado) - azul escuro (alto contraste) + fundo claro */
+    --color-done: #1e3a8a; /* azul bem escuro (antes: #2563eb) */
+    --color-done-bg: #eff6ff; /* mantém azul clarinho no fundo para conforto visual */
+
+    /* Pending (vencido/aguardando ação) - cinza mais escuro para contraste + fundo claro */
+    --color-pending: #374151; /* mais escuro (antes: #6b7280) */
+    --color-pending-bg: #f3f4f6; /* mantém fundo claro */
+
+    /* Ícones e bordas (linkar a tokens existentes) */
+    --color-icon-default: var(--color-primary);
+    --color-card-border: var(--color-border);
+
+    --color-selected-bg: #e0f7fa; /* exemplo: azul claro */
+    --color-selected-border: #00838f; /* exemplo: azul escuro */
+
+    /* Font sizes (tokens de tipografia) */
+    --font-title-lg: 22px; /* títulos de modais principais */
+    --font-title-md: 18px; /* subtítulos, seções */
+    --font-body: 14px; /* texto padrão */
+    --font-small: 12px; /* rótulos pequenos */
+    --icon-size-md: 18px; /* ícones padrão */
+    --icon-size-lg: 20px; /* ícones de cabeçalho */
+
+    /* Heading weights (padronizar títulos entre telas) */
+    --heading-weight-lg: 700; /* título principal (evita bold excessivo) */
+    --heading-weight-md: 600; /* rótulos/headers médios */
+
+    /* Typography/layout tokens for minicards (AppointmentCard) */
+    --card-font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+        Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+    --card-name-size: 15px; /* tamanho do nome do cliente */
+    --card-type-size: 12px; /* tamanho do tipo de visita */
+    --card-text-size: 12px; /* tamanho do corpo/notas */
+    /* new: weight tokens to tune boldness across platforms */
+    --card-name-weight: 700; /* was 800 */
+    --card-type-weight: 600; /* label/type */
+    --card-time-weight: 600; /* time labels (left and inline) */
+    --card-radius: 8px; /* raio da borda do cartão */
+    --card-padding-md: 8px 10px; /* padding padrão */
+    --card-padding-compact: 6px 8px; /* padding compacto */
+}
+
+/* Removido override mobile para manter contraste entre cartões e fundo do main */
+
+/* // Paleta verde */
+/* :root {
+    --color-primary: #218838;
+    --color-primary-light: #e6f9ea;
+    --color-secondary: #28a745;
+    --color-accent: #b2dfdb;
+    --color-bg: #f6fff8;
+    --color-bg-section: #fff;
+    --color-border: #b7e4c7;
+    --color-border-focus: #28a745;
+    --color-text: #1b3a2b;
+    --color-text-light: #3a5a40;
+    --color-error: #d32f2f;
+} */
+
+/* // Paleta escura */
+
+/* :root {
+    --color-primary: #313131;
+    --color-primary-light: #cdcdcd;
+    --color-secondary: #222;
+    --color-accent: #888;
+    --color-bg: #dddddd;
+    --color-bg-section: #f2f2f2;
+    --color-border: #333;
+    --color-border-focus: #555;
+    --color-text: #222;
+    --color-text-light: #4d4d4d;
+    --color-error: #d32f2f;
+} */
