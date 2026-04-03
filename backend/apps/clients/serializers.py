@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import timezone as dt_timezone
-from .models import Client
+from apps.clients.models import Client
 import unicodedata, re
 
 # Helpers de normalização (UF/CEP)

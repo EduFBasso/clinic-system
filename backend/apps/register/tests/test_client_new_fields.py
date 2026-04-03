@@ -1,7 +1,8 @@
 import pytest
 from datetime import date
-from apps.register.models import Professional, Client
-from apps.register.serializers_clients import ClientSerializer
+from apps.clients.models import Client
+from apps.clients.serializers import ClientSerializer
+from apps.register.models import Professional
 
 pytestmark = pytest.mark.django_db
 

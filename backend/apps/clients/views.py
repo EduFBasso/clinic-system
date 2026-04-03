@@ -1,11 +1,10 @@
-# backend\apps\register\client_views.py
 from rest_framework import filters
 from rest_framework.exceptions import ValidationError
 from django.db import IntegrityError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
-from .models import Client
-from .serializers import ClientSerializer, ClientBasicSerializer
+from apps.clients.models import Client
+from apps.clients.serializers import ClientSerializer, ClientBasicSerializer
 
 
 class ClientViewSet(ModelViewSet):

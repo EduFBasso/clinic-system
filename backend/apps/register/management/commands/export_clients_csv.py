@@ -5,7 +5,8 @@ from typing import Optional
 from django.core.management.base import BaseCommand, CommandParser
 from django.utils import timezone
 
-from apps.register.models import Client, Professional
+from apps.clients.models import Client
+from apps.register.models import Professional
 
 
 class Command(BaseCommand):

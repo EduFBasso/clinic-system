@@ -1,6 +1,7 @@
 import pytest
-from apps.register.serializers_clients import ClientSerializer
-from apps.register.models import Professional, Client
+from apps.clients.serializers import ClientSerializer
+from apps.clients.models import Client
+from apps.register.models import Professional
 
 
 @pytest.fixture

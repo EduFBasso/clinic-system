@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Professional, Client, DeviceSession, ProfessionalSettings
+from .models import Professional, DeviceSession, ProfessionalSettings
 
 
 @admin.register(Professional)
@@ -48,13 +48,6 @@ class ProfessionalAdmin(admin.ModelAdmin):
         if not change and not obj.password:
             obj.set_unusable_password()
         super().save_model(request, obj, form, change)
-
-
-@admin.register(Client)
-class ClientAdmin(admin.ModelAdmin):
-    list_display = ("first_name", "last_name", "email", "city", "state", "professional")
-    search_fields = ("first_name", "last_name", "email")
-    list_filter = ("professional", "city", "state")
 
 
 @admin.register(DeviceSession)

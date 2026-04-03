@@ -2,7 +2,8 @@ import pytest
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from apps.agenda.models import Appointment
-from apps.register.models import Professional, Client
+from apps.clients.models import Client
+from apps.register.models import Professional
 
 
 @pytest.fixture

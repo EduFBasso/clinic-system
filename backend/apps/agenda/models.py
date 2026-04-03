@@ -37,7 +37,7 @@ class Appointment(models.Model):
         verbose_name="Profissional",
     )
     client = models.ForeignKey(
-        "register.Client",
+        "clients.Client",
         on_delete=models.CASCADE,
         related_name="appointments",
         verbose_name="Cliente",
@@ -132,7 +132,7 @@ class FinalizeAudit(models.Model):
         "register.Professional", on_delete=models.CASCADE, related_name="finalize_audits"
     )
     client = models.ForeignKey(
-        "register.Client", on_delete=models.CASCADE, related_name="finalize_audits"
+        "clients.Client", on_delete=models.CASCADE, related_name="finalize_audits"
     )
 
     device_id = models.CharField(max_length=64, blank=True, null=True)

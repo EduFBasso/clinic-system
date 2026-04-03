@@ -1,7 +1,8 @@
 import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
-from apps.register.models import Professional, Client
+from apps.clients.models import Client
+from apps.register.models import Professional
 
 
 @pytest.fixture

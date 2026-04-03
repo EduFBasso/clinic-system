@@ -8,7 +8,7 @@ from .views_webauthn import (
     webauthn_login_begin,
     webauthn_login_complete,
 )
-from .client_views import ClientViewSet, ClientBasicViewSet
+from apps.clients.views import ClientViewSet, ClientBasicViewSet
 from .professional_views import ProfessionalViewSet, ProfessionalBasicViewSet
 
 router = DefaultRouter()

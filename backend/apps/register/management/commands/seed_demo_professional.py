@@ -6,7 +6,8 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.db import transaction
 
-from apps.register.models import Professional, Client
+from apps.clients.models import Client
+from apps.register.models import Professional
 from apps.agenda.models import Appointment
 
 

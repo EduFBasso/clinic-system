@@ -4,7 +4,8 @@ from typing import Optional, Dict, Any, List
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.register.models import Client, Professional
+from apps.clients.models import Client
+from apps.register.models import Professional
 
 
 def normalize_phone_digits(phone: Optional[str]) -> Optional[str]:

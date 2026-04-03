@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from apps.register.models import Professional, Client
+from apps.clients.models import Client
+from apps.register.models import Professional
 
 
 class Command(BaseCommand):

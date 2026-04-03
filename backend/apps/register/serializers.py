@@ -1,4 +1,4 @@
-from .serializers_clients import ClientSerializer, ClientBasicSerializer
+from apps.clients.serializers import ClientSerializer, ClientBasicSerializer
 from .serializers_professionals import (
     ProfessionalSerializer,
     ProfessionalBasicSerializer

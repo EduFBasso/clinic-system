@@ -22,6 +22,7 @@ ALLOWED_HOSTS = config(
 INSTALLED_APPS = [
     'rest_framework',
     'apps.agenda',
+    'apps.clients',
     'apps.register',
     'apps.inventory',
     'django.contrib.admin',
