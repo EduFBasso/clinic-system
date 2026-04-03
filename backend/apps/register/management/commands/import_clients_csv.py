@@ -47,7 +47,7 @@ class Command(BaseCommand):
             if not local_prof:
                 raise CommandError('Nenhum Professional ativo encontrado para associar clientes.')
 
-        self.stdout.write(self.style.NOTICE(f'Importando para o Professional local: {local_prof.email} (id={local_prof.id})'))
+        self.stdout.write(self.style.NOTICE(f'Importando para o Professional local: {local_prof.email} (id={local_prof.id})')) # type: ignore
 
         # Lê CSV
         rows: List[Dict[str, Any]] = []
@@ -138,7 +138,7 @@ class Command(BaseCommand):
                 if existing:
                     changed = False
                     updates = {
-                        'professional': local_prof if existing.professional_id != local_prof.id else existing.professional,
+                        'professional': local_prof if existing.professional_id != local_prof.id else existing.professional, # type: ignore
                         'first_name': first_name or existing.first_name,
                         'last_name': last_name or existing.last_name,
                         'email': email_remote or existing.email,

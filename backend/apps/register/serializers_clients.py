@@ -1,4 +1,3 @@
-# backend\apps\register\serializers_clients.py
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import timezone as dt_timezone
@@ -149,6 +148,7 @@ class ClientBasicSerializer(serializers.ModelSerializer):
     last_appointment_title = serializers.CharField(read_only=True)
     last_appointment_status = serializers.CharField(read_only=True)
     last_appointment_notes = serializers.CharField(read_only=True)
+
     class Meta:
         model = Client
         fields = [

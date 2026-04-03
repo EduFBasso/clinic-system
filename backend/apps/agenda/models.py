@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -43,7 +44,6 @@ class Appointment(models.Model):
     )
 
     title = models.CharField("Título", max_length=80)
-    # NOTE: default alterado para CONSULTA (antes AVALIACAO). Gerar migração correspondente.
     visit_type = models.CharField(
         "Tipo de consulta",
         max_length=20,
@@ -102,8 +102,6 @@ class Appointment(models.Model):
     def clean(self):
         # validações simples
         if self.end_at <= self.start_at:
-            from django.core.exceptions import ValidationError
-
             raise ValidationError({"end_at": "Fim deve ser após o início."})
         # status cancelado não tem regra extra aqui; lógica adicional pode ir no viewset
 

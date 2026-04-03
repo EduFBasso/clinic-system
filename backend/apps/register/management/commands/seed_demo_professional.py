@@ -38,7 +38,7 @@ class Command(BaseCommand):
         prof = Professional.objects.filter(email=email).first()
         created_prof = False
         if not prof:
-            prof = Professional.objects.create_user(
+            prof = Professional.objects.create_user( # type: ignore
                 email=email,
                 password=password,
                 first_name=options['first_name'],
@@ -47,11 +47,11 @@ class Command(BaseCommand):
             created_prof = True
 
         self.stdout.write(self.style.SUCCESS(
-            f"Profissional: {prof.email} (id={prof.id}) {'[CRIADO]' if created_prof else '[EXISTENTE]'}"
+            f"Profissional: {prof.email} (id={prof.id}) {'[CRIADO]' if created_prof else '[EXISTENTE]'}" # type: ignore
         ))
 
         # 2) Clientes sintéticos (não recria se já existem suficientes)
-        existing_clients = prof.clients.count()
+        existing_clients = prof.clients.count() # type: ignore
         to_create = max(0, clients_qtd - existing_clients)
         created_clients = []
         base_phone_prefix = '1198888'
@@ -89,7 +89,7 @@ class Command(BaseCommand):
         appts_existing = Appointment.objects.filter(professional=prof).count()
         appts_to_create = max(0, appt_qtd - appts_existing)
         created_appts = []
-        clients_cycle = list(prof.clients.order_by('id')[:max(1, clients_qtd)])
+        clients_cycle = list(prof.clients.order_by('id')[:max(1, clients_qtd)]) # type: ignore
         if not clients_cycle:
             self.stdout.write(self.style.WARNING('Nenhum cliente disponível para criar agendamentos.'))
         else:

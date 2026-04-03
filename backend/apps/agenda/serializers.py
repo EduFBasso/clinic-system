@@ -34,17 +34,17 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-    read_only_fields = [
-        "created_at",
-        "updated_at",
-        "professional",
-        "created_device_id",
-        "created_device_info",
-        "ended_device_id",
-        "ended_device_info",
-        "finalized_at",
-        "canceled_at",
-    ]
+        read_only_fields = [
+            "created_at",
+            "updated_at",
+            "professional",
+            "created_device_id",
+            "created_device_info",
+            "ended_device_id",
+            "ended_device_info",
+            "finalized_at",
+            "canceled_at",
+        ]
 
     # Semântica de tempos:
     # - end_at: término planejado OU real (se finalize antecipado encurta end_at = now).
@@ -263,7 +263,7 @@ class IntegrationConsultationSerializer(serializers.Serializer):
 
     def _price_for(self, obj: Appointment):
         try:
-            return self._PRICE_TABLE.get(obj.visit_type, None)
+            return self._PRICE_TABLE.get(obj.visit_type, None) # type: ignore
         except Exception:
             return None
 

@@ -1,7 +1,6 @@
 from rest_framework import viewsets, permissions, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.conf import settings
 from django.utils import timezone
 
 from .models import Appointment, FinalizeAudit
@@ -108,34 +107,6 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             update_fields = ["status", "updated_at"]
         obj.save(update_fields=update_fields)
         return Response(self.get_serializer(obj).data, status=200)
-
-    @action(detail=False, methods=["post"], url_path="purge")
-    def purge(self, request):
-        """Apaga compromissos do profissional autenticado (DEV-only).
-
-        Aceita JSON opcional {start: ISO, end: ISO} para limitar por intervalo.
-        Somente disponível com settings.DEBUG=True para evitar uso em produção.
-        """
-        if not settings.DEBUG:
-            return Response({"detail": "forbidden"}, status=403)
-        user = getattr(request, "user", None)
-        if not (user and getattr(user, "id", None)):
-            return Response({"detail": "unauthorized"}, status=401)
-
-        qs = Appointment.objects.filter(professional_id=user.id)
-        start = request.data.get("start")
-        end = request.data.get("end")
-        try:
-            if start:
-                qs = qs.filter(start_at__gte=start)
-            if end:
-                qs = qs.filter(end_at__lte=end)
-        except Exception:
-            # Se datas inválidas forem passadas, ignore filtros e apague tudo do profissional
-            pass
-
-        deleted, _ = qs.delete()
-        return Response({"deleted": deleted})
 
     @action(detail=False, methods=["get"], url_path="next")
     def next_for_client(self, request):

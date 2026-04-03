@@ -25,7 +25,7 @@ class Command(BaseCommand):
             help="E-mail do profissional para filtrar (opcional)",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args, **options): # type: ignore
         out: str = options["out"]
         prof_email: Optional[str] = options.get("professional")
 
@@ -58,7 +58,7 @@ class Command(BaseCommand):
         rows = []
         for c in qs.order_by("first_name", "last_name"):
             rows.append([
-                c.id,
+                c.id, # type: ignore
                 c.first_name or "",
                 c.last_name or "",
                 c.phone or "",

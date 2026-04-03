@@ -5,7 +5,6 @@ from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.db import connection
 from django.utils import timezone
-from django.conf import settings
 from django.views.generic import RedirectView
 from apps.register.authentication import EmailTokenObtainPairView
 from rest_framework_simplejwt.views import TokenRefreshView

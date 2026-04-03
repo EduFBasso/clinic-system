@@ -1,4 +1,3 @@
-# backend.apps.register.views_auth.py
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
@@ -14,11 +13,11 @@ def login_professional(request):
 
     if user:
         return Response({
-            'id': user.id,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'register_number': user.register_number,
-            'specialty': user.specialty
+            'id': user.id,  # type: ignore[union-attr]
+            'first_name': user.first_name,  # type: ignore[union-attr]
+            'last_name': user.last_name,  # type: ignore[union-attr]
+            'register_number': user.register_number,  # type: ignore[union-attr]
+            'specialty': user.specialty  # type: ignore[union-attr]
         })
 
     return Response({'error': 'Credenciais inválidas'}, status=401)

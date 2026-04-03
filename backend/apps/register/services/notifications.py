@@ -1,5 +1,6 @@
 # backend\apps\register\services\notifications.py
 import logging
+import re
 from django.core.mail import send_mail
 from django.conf import settings
 from apps.register.models import Professional
@@ -44,10 +45,15 @@ Equipe Clínica
         return False
 
 
+def format_whatsapp_number(raw_number: str) -> str:
+    """Formata o número bruto para padrão internacional (+55...)."""
+    digits = re.sub(r'\D', '', raw_number)
+    if digits.startswith("55"):
+        return f"+{digits}"
+    return f"+55{digits}"
+
 
 #  Integração com WhatsApp (simulação)
-logger = logging.getLogger(__name__)
-
 def send_code_whatsapp(phone_number: str, code: str) -> None:
     """
     Simula o envio de código OTP via WhatsApp para o número especificado.
@@ -65,23 +71,12 @@ def send_code_whatsapp(phone_number: str, code: str) -> None:
     # Simulação no terminal
     logger.info(f"[Simulação WhatsApp] Enviando para {formatted}: {message}")
 
-        # Integração futura (exemplo com API fictícia):
-        # import requests
-        # response = requests.post("https://api.whatsapp-gateway.com/send", json={
-        #     "to": formatted,
-        #     "message": message,
-        #     "auth": {"api_key": "SUA_CHAVE_AQUI"}
-        # })
-        # if response.status_code != 200:
-        #     logger.error(f"Erro ao enviar WhatsApp: {response.text}")
-    
-    def format_whatsapp_number(raw_number: str) -> str:
-        """
-        Formata o número bruto para padrão internacional (+55...).
-        Aceita números com DDD e remove caracteres extras.
-        """
-        import re
-        digits = re.sub(r'\D', '', raw_number)  # Remove tudo que não for número
-        if digits.startswith("55"):
-            return f"+{digits}"
-        return f"+55{digits}"
+    # Integração futura (exemplo com API fictícia):
+    # import requests
+    # response = requests.post("https://api.whatsapp-gateway.com/send", json={
+    #     "to": formatted,
+    #     "message": message,
+    #     "auth": {"api_key": "SUA_CHAVE_AQUI"}
+    # })
+    # if response.status_code != 200:
+    #     logger.error(f"Erro ao enviar WhatsApp: {response.text}")

@@ -1,4 +1,3 @@
-# backend\apps\register\views_auth_code.py
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -45,8 +44,6 @@ def verify_code(request):
     code_digits = re.sub(r"\D", "", raw_code)
     code = code_digits[:4] if code_digits else ""
     device_id = (request.data.get("device_id") or "").strip()[:64]
-    fallback_pass = "0000" # Senha alternativa para testes
-
     # Redact sensitive data in logs
     red_email = (email or "").split("@")[0] + "@***"
     red_code = "****" if code else None
@@ -119,7 +116,7 @@ def verify_code(request):
     # Sessões de dispositivo: criar/reativar sessão e impor limite
     max_sessions = getattr(settings, "MAX_ACTIVE_DEVICE_SESSIONS", 2)
     if not device_id:
-        device_id = f"otp-{access_code.id}"
+        device_id = f"otp-{access_code.id}" # type: ignore
     ua = (request.META.get("HTTP_USER_AGENT", "") or "")[:255]
     ip = request.META.get("REMOTE_ADDR")
 

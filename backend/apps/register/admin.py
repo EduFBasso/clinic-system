@@ -1,4 +1,3 @@
-# backend\apps\register\admin.py
 from django.contrib import admin
 from .models import Professional, Client, DeviceSession, ProfessionalSettings
 
