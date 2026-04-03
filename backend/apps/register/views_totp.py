@@ -177,7 +177,7 @@ def professional_create(request):
         )
 
     secret = pyotp.random_base32()
-    professional = Professional.objects.create_user(
+    professional = Professional.objects.create_user( # type: ignore
         email=email,
         password=password,
         first_name=first_name,

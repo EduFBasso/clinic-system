@@ -160,18 +160,7 @@ class Client(models.Model):
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
     
-    
-# apps.register.models.py
-class AccessCode(models.Model):
-    professional = models.ForeignKey(Professional, on_delete=models.CASCADE)
-    code = models.CharField(max_length=4)
-    expires_at = models.DateTimeField()
-    is_used = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.professional.email} — Código {self.code}"
- 
 
 class DeviceSession(models.Model):
     """Sessão de dispositivo por profissional para auditoria e controle de limite.
@@ -253,4 +242,35 @@ class ProfessionalSettings(models.Model):
 
     def __str__(self):
         return f"Config {self.professional.email} ({self.work_start_hour}-{self.work_end_hour}/{self.slot_minutes}m)"
+
+
+class WebAuthnCredential(models.Model):
+    """Credencial WebAuthn (passkey / biometria) de um profissional.
+
+    Armazena o resultado de um registro bem-sucedido feito via
+    navigator.credentials.create() no frontend.  Cada profissional pode ter
+    múltiplas credenciais (iPhone, iPad, etc.).
+    """
+
+    professional = models.ForeignKey(
+        Professional,
+        on_delete=models.CASCADE,
+        related_name="webauthn_credentials",
+    )
+    # id base64url retornado pelo @simplewebauthn/browser
+    credential_id = models.TextField(unique=True)
+    # Chave pública COSE codificada em base64 (bytes brutos do py_webauthn)
+    public_key = models.TextField()
+    sign_count = models.PositiveIntegerField(default=0)
+    # Nome amigável (user-agent resumido, e.g. "iPhone de Eduardo")
+    device_name = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Credencial WebAuthn"
+        verbose_name_plural = "Credenciais WebAuthn"
+
+    def __str__(self):
+        return f"{self.professional.email} — {self.device_name or self.credential_id[:12]}"
 

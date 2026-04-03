@@ -238,3 +238,17 @@ LOGGING = {
         }
     }
 }
+
+# === TOTP ===
+TOTP_ISSUER = config("TOTP_ISSUER", default="ClinicSystem")
+
+# === WebAuthn / Passkeys ===
+# rpId: domain sem esquema/porta. localhost para dev; domínio real em produção.
+WEBAUTHN_RP_ID = config("WEBAUTHN_RP_ID", default="localhost")
+WEBAUTHN_RP_NAME = config("WEBAUTHN_RP_NAME", default="ClinicSystem")
+# Origens aceitas separadas por vírgula (incluir http em dev, https em produção)
+WEBAUTHN_ORIGINS = config(
+    "WEBAUTHN_ORIGINS",
+    default="http://localhost:5173",
+    cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
+)

@@ -33,6 +33,10 @@ import { isTokenExpired } from '../utils/jwt';
 import { emit } from '../events/bus';
 import ProfessionalCreateModal from './ProfessionalCreateModal';
 import TotpAdminResetModal from './TotpAdminResetModal';
+import {
+    startRegistration,
+    startAuthentication,
+} from '@simplewebauthn/browser';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
@@ -49,7 +53,9 @@ const NavBar: React.FC<NavBarProps> = ({
     agendaOpeners,
 }) => {
     // Viewport listener removido (usado apenas pelo relógio)
-    const [loginEmail, setLoginEmail] = useState<string>('');
+    const [loginEmail, setLoginEmail] = useState<string>(
+        () => localStorage.getItem('lastLoginEmail') ?? '',
+    );
     const [totpCode, setTotpCode] = useState('');
     const [loadingOtp, setLoadingOtp] = useState(false);
     const [loggedProfessional, setLoggedProfessional] =
@@ -81,6 +87,13 @@ const NavBar: React.FC<NavBarProps> = ({
     // Admin modals (superuser only)
     const [createProfOpen, setCreateProfOpen] = useState(false);
     const [totpResetOpen, setTotpResetOpen] = useState(false);
+    // Biometric / WebAuthn
+    const [offerBiometricOpen, setOfferBiometricOpen] = useState(false);
+    const [biometricLoading, setBiometricLoading] = useState(false);
+    // true when a passkey has been registered for the current email on this device
+    const hasWebAuthn =
+        !!loginEmail &&
+        !!localStorage.getItem(`hasWebAuthn_${loginEmail.toLowerCase()}`);
     // Trigger summary fetch when dropdown toggles open
     const { summary } = useSessionsSummary(dropdownOpen);
 
@@ -162,6 +175,148 @@ const NavBar: React.FC<NavBarProps> = ({
     // Edição via menu Agenda removida (opção Editar retirada)
 
     // handleAgendaNew removido (menu Novo Compromisso retirado)
+
+    // --- WebAuthn: register biometric after TOTP login ---
+    const handleRegisterBiometric = async () => {
+        setBiometricLoading(true);
+        try {
+            const token = localStorage.getItem('accessToken');
+            const beginRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/register-begin/`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({}),
+                },
+            );
+            if (!beginRes.ok) throw new Error('Erro ao iniciar registro.');
+            const options = await beginRes.json();
+            const credential = await startRegistration({
+                optionsJSON: options,
+            });
+            const ua = navigator.userAgent;
+            const deviceName = /iPhone/.test(ua)
+                ? 'iPhone'
+                : /iPad/.test(ua)
+                  ? 'iPad'
+                  : /Mac/.test(ua)
+                    ? 'Mac'
+                    : 'Dispositivo';
+            const completeRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/register-complete/`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        credential,
+                        device_name: deviceName,
+                    }),
+                },
+            );
+            if (!completeRes.ok) throw new Error('Erro ao concluir registro.');
+            localStorage.setItem(
+                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                '1',
+            );
+            setOfferBiometricOpen(false);
+            setModalMessage('Face ID ativado para futuros logins!');
+            setModalOpen(true);
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error
+                    ? err.message
+                    : 'Erro ao registrar biometria.';
+            setModalMessage(msg);
+            setModalOpen(true);
+        } finally {
+            setBiometricLoading(false);
+        }
+    };
+
+    // --- WebAuthn: login with biometric ---
+    const handleWebAuthnLogin = async () => {
+        setBiometricLoading(true);
+        try {
+            const beginRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/login-begin/`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: loginEmail }),
+                },
+            );
+            if (!beginRes.ok) throw new Error('Erro ao iniciar autenticação.');
+            const options = await beginRes.json();
+            const assertion = await startAuthentication({
+                optionsJSON: options,
+            });
+            const deviceIdKey = 'device_id';
+            const deviceId = getOrCreateDeviceId(deviceIdKey);
+            const completeRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/login-complete/`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: loginEmail,
+                        assertion,
+                        device_id: deviceId,
+                    }),
+                },
+            );
+            let data: VerifyResponse = {};
+            try {
+                data = await completeRes.json();
+            } catch {
+                data = { message: 'Falha ao interpretar resposta do servidor' };
+            }
+            if (completeRes.ok && data.access) {
+                let successMsg = 'Login realizado!';
+                if (typeof data.active_sessions_count === 'number') {
+                    successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
+                }
+                setModalMessage(successMsg);
+                setModalOpen(true);
+                localStorage.setItem('accessToken', data.access);
+                localStorage.setItem(
+                    'loggedProfessional',
+                    JSON.stringify(data.professional),
+                );
+                if (data.device_id) {
+                    localStorage.setItem(deviceIdKey, String(data.device_id));
+                }
+                setLoggedProfessional(data.professional || null);
+                window.dispatchEvent(new Event('updateClients'));
+                window.dispatchEvent(new Event('clearClients'));
+            } else {
+                setModalMessage(
+                    String(data.message || 'Autenticação biométrica falhou.'),
+                );
+                setModalOpen(true);
+            }
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error
+                    ? err.message
+                    : 'Erro na autenticação biométrica.';
+            // User cancelled the prompt → just ignore, no error modal
+            if (
+                !msg.toLowerCase().includes('cancel') &&
+                !msg.toLowerCase().includes('not allowed')
+            ) {
+                setModalMessage(msg);
+                setModalOpen(true);
+            }
+        } finally {
+            setBiometricLoading(false);
+        }
+    };
 
     return (
         <div className={styles.navBar}>
@@ -554,6 +709,17 @@ const NavBar: React.FC<NavBarProps> = ({
                                         ?.requestSubmit();
                             }}
                         />
+                        {hasWebAuthn && (
+                            <button
+                                className={styles.loginButton}
+                                disabled={biometricLoading || !loginEmail}
+                                onClick={handleWebAuthnLogin}
+                                title='Entrar com biometria'
+                                style={{ marginRight: 6 }}
+                            >
+                                {biometricLoading ? '...' : '🔒 Face ID'}
+                            </button>
+                        )}
                         <button
                             className={styles.loginButton}
                             disabled={
@@ -626,6 +792,37 @@ const NavBar: React.FC<NavBarProps> = ({
                                         window.dispatchEvent(
                                             new Event('clearClients'),
                                         );
+                                        localStorage.setItem(
+                                            'lastLoginEmail',
+                                            loginEmail,
+                                        );
+                                        // Offer biometric registration if not already set
+                                        if (
+                                            !localStorage.getItem(
+                                                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                                            ) &&
+                                            typeof PublicKeyCredential !==
+                                                'undefined' &&
+                                            typeof (
+                                                PublicKeyCredential as {
+                                                    isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
+                                                }
+                                            )
+                                                .isUserVerifyingPlatformAuthenticatorAvailable ===
+                                                'function'
+                                        ) {
+                                            try {
+                                                const ok = await (
+                                                    PublicKeyCredential as {
+                                                        isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean>;
+                                                    }
+                                                ).isUserVerifyingPlatformAuthenticatorAvailable();
+                                                if (ok)
+                                                    setOfferBiometricOpen(true);
+                                            } catch {
+                                                /* ignore */
+                                            }
+                                        }
                                     } else {
                                         setModalMessage(
                                             String(
@@ -689,6 +886,37 @@ const NavBar: React.FC<NavBarProps> = ({
                 open={totpResetOpen}
                 onClose={() => setTotpResetOpen(false)}
             />
+            {/* Modal: oferecer registro de biometria após login TOTP */}
+            <AppModal
+                open={offerBiometricOpen}
+                onClose={() => setOfferBiometricOpen(false)}
+                unmountOnClose
+            >
+                <div className='modal-message'>
+                    <h3>Ativar Face ID / Touch ID?</h3>
+                    <p style={{ fontSize: 14, marginBottom: 16 }}>
+                        Use a biometria do dispositivo para entrar sem digitar o
+                        código nas próximas vezes.
+                    </p>
+                    <div
+                        style={{
+                            display: 'flex',
+                            gap: 8,
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <button
+                            onClick={handleRegisterBiometric}
+                            disabled={biometricLoading}
+                        >
+                            {biometricLoading ? 'Aguarde...' : 'Sim, ativar'}
+                        </button>
+                        <button onClick={() => setOfferBiometricOpen(false)}>
+                            Agora não
+                        </button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 };

@@ -8,7 +8,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'email', 'first_name', 'last_name', 'register_number',
             'specialty', 'phone', 'city', 'state',
-            'can_manage_professionals', 'is_active', 'is_staff',
+            'can_manage_professionals', 'is_active', 'is_staff', 'is_superuser',
             'created_at', 'deactivated_at', 'deactivation_reason',
         ]
         extra_kwargs = {
