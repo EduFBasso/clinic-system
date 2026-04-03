@@ -49,9 +49,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Legacy scripts (historical, no longer in active use)
-scripts-legacy/
-
 # User-uploaded media files (never commit photos/files to the repository)
 backend/media/
 
