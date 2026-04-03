@@ -23,7 +23,6 @@ type VerifyResponse = {
     device_id?: string;
     message?: string;
 };
-import { useProfessionals } from '../hooks/useProfessionals';
 import type { ProfessionalBasic } from '../hooks/useProfessionals';
 import styles from '../styles/components/NavBar.module.css';
 import AgendaSettingsModal from './AgendaSettingsModal';
@@ -48,23 +47,14 @@ const NavBar: React.FC<NavBarProps> = ({
     agendaOpeners,
 }) => {
     // Viewport listener removido (usado apenas pelo relógio)
-    const [selectedProfessional, setSelectedProfessional] =
-        useState<string>('');
-    const [codeSent, setCodeSent] = useState(false);
-    const [otp, setOtp] = useState('');
+    const [loginEmail, setLoginEmail] = useState<string>('');
+    const [totpCode, setTotpCode] = useState('');
     const [loadingOtp, setLoadingOtp] = useState(false);
     const [loggedProfessional, setLoggedProfessional] =
         useState<ProfessionalBasic | null>(() => {
             const stored = localStorage.getItem('loggedProfessional');
             return stored ? JSON.parse(stored) : null;
         });
-
-    const [professionalDropdownOpen, setProfessionalDropdownOpen] =
-        useState(false);
-
-    const professionalDropdownRef = useRef<HTMLDivElement>(null);
-
-    const { professionals, loading, error } = useProfessionals();
 
     // Dropdown state
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -83,8 +73,7 @@ const NavBar: React.FC<NavBarProps> = ({
     // Estados de decisão de novo compromisso removidos após simplificação do menu
     // Modal configurações agenda
     const [agendaSettingsOpen, setAgendaSettingsOpen] = useState(false);
-    // Quando true após solicitar OTP com sucesso, só revela o campo após clicar em OK no modal
-    const [otpSentConfirmPending, setOtpSentConfirmPending] = useState(false);
+
     // About modal state
     const [aboutOpen, setAboutOpen] = useState(false);
     // Trigger summary fetch when dropdown toggles open
@@ -498,9 +487,8 @@ const NavBar: React.FC<NavBarProps> = ({
                                 localStorage.removeItem('loggedProfessional');
                                 localStorage.removeItem('newClientId');
                                 setLoggedProfessional(null);
-                                setSelectedProfessional('');
-                                setCodeSent(false);
-                                setOtp('');
+                                setLoginEmail('');
+                                setTotpCode('');
                                 window.dispatchEvent(new Event('clearClients'));
                             }}
                         >
@@ -509,255 +497,128 @@ const NavBar: React.FC<NavBarProps> = ({
                     </div>
                 ) : (
                     <>
-                        <div
-                            className={styles.dropdownWrapper}
-                            style={{ marginRight: 12 }}
-                            ref={professionalDropdownRef}
-                        >
-                            <button
-                                className={styles.menuButton}
-                                onClick={() =>
-                                    setProfessionalDropdownOpen(open => !open)
-                                }
-                                aria-haspopup='true'
-                                aria-expanded={professionalDropdownOpen}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                }}
-                            >
-                                <span style={{ fontSize: 18 }}>👨‍⚕️</span>
-                                <span>
-                                    {selectedProfessional
-                                        ? professionals.find(
-                                              p =>
-                                                  p.email ===
-                                                  selectedProfessional,
-                                          )?.first_name +
-                                          ' ' +
-                                          professionals.find(
-                                              p =>
-                                                  p.email ===
-                                                  selectedProfessional,
-                                          )?.last_name
-                                        : 'Profissionais'}
-                                </span>
-                                <span className={styles.caret}>▼</span>
-                            </button>
-                            {professionalDropdownOpen && (
-                                <div className={styles.dropdownMenu}>
-                                    <div
-                                        className={styles.dropdownItem}
-                                        style={{
-                                            fontWeight: 'bold',
-                                            cursor: 'default',
-                                        }}
-                                    >
-                                        Profissionais
-                                    </div>
-                                    {loading && (
-                                        <div className={styles.dropdownItem}>
-                                            Carregando...
-                                        </div>
-                                    )}
-                                    {error && (
-                                        <div className={styles.dropdownItem}>
-                                            Erro ao carregar
-                                        </div>
-                                    )}
-                                    {professionals.map(prof => (
-                                        <button
-                                            key={prof.id}
-                                            className={styles.dropdownItem}
-                                            onClick={() => {
-                                                setSelectedProfessional(
-                                                    prof.email,
-                                                );
-                                                setProfessionalDropdownOpen(
-                                                    false,
-                                                );
-                                                setCodeSent(false);
-                                                setOtp('');
-                                            }}
-                                        >
-                                            {prof.first_name} {prof.last_name}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        {/* Botão para enviar código aparece após seleção do profissional, antes do envio */}
-                        {selectedProfessional && !codeSent && (
-                            <button
-                                className={styles.loginButton}
-                                style={{ marginRight: 8 }}
-                                disabled={loadingOtp}
-                                onClick={async () => {
-                                    setLoadingOtp(true);
-                                    try {
-                                        console.debug(
-                                            '[NavBar] API_BASE =',
-                                            API_BASE,
-                                            'fetch ->',
-                                            `${API_BASE}/register/auth/request-code/`,
-                                        );
-                                        const res = await fetch(
-                                            `${API_BASE}/register/auth/request-code/`,
-                                            {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type':
-                                                        'application/json',
-                                                },
-                                                body: JSON.stringify({
-                                                    email: selectedProfessional,
-                                                }),
+                        {/* TOTP login: email + código do Google Authenticator */}
+                        <input
+                            type='email'
+                            placeholder='E-mail'
+                            className={styles.loginInput}
+                            value={loginEmail}
+                            onChange={e => setLoginEmail(e.target.value)}
+                            style={{ marginRight: 6 }}
+                            autoComplete='username'
+                        />
+                        <input
+                            type='text'
+                            inputMode='numeric'
+                            placeholder='Código (6 dígitos)'
+                            className={styles.loginInput}
+                            value={totpCode}
+                            onChange={e =>
+                                setTotpCode(
+                                    e.target.value
+                                        .replace(/\D/g, '')
+                                        .slice(0, 6),
+                                )
+                            }
+                            style={{ marginRight: 6, width: 120 }}
+                            autoComplete='one-time-code'
+                            onKeyDown={e => {
+                                if (e.key === 'Enter')
+                                    e.currentTarget
+                                        .closest('form')
+                                        ?.requestSubmit();
+                            }}
+                        />
+                        <button
+                            className={styles.loginButton}
+                            disabled={
+                                loadingOtp ||
+                                !loginEmail ||
+                                totpCode.length !== 6
+                            }
+                            onClick={async () => {
+                                setLoadingOtp(true);
+                                try {
+                                    const deviceIdKey = 'device_id';
+                                    const deviceId =
+                                        getOrCreateDeviceId(deviceIdKey);
+                                    const res = await fetch(
+                                        `${API_BASE}/register/auth/totp/verify/`,
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type':
+                                                    'application/json',
                                             },
-                                        );
-                                        const data = await res.json();
-                                        // Se vier message e status 200, considera sucesso
-                                        if (data.message && res.ok) {
-                                            setModalMessage(data.message);
-                                            setModalOpen(true);
-                                            // Aguarda confirmação do usuário para revelar o campo de OTP
-                                            setOtpSentConfirmPending(true);
-                                        } else {
-                                            setModalMessage(
-                                                data.message ||
-                                                    'Erro ao enviar código',
-                                            );
-                                            setModalOpen(true);
-                                            setOtpSentConfirmPending(false);
-                                        }
+                                            body: JSON.stringify({
+                                                email: loginEmail,
+                                                code: totpCode,
+                                                device_id: deviceId,
+                                            }),
+                                        },
+                                    );
+                                    let data: VerifyResponse = {};
+                                    try {
+                                        data = await res.json();
                                     } catch {
+                                        data = {
+                                            message:
+                                                'Falha ao interpretar resposta do servidor',
+                                        };
+                                    }
+                                    if (res.ok && data.access) {
+                                        let successMsg =
+                                            'Login realizado! Dados dos clientes liberados.';
+                                        if (
+                                            typeof data.active_sessions_count ===
+                                            'number'
+                                        ) {
+                                            successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
+                                        }
+                                        setModalMessage(successMsg);
+                                        setModalOpen(true);
+                                        localStorage.setItem(
+                                            'accessToken',
+                                            data.access,
+                                        );
+                                        setTotpCode('');
+                                        setLoggedProfessional(
+                                            data.professional || null,
+                                        );
+                                        localStorage.setItem(
+                                            'loggedProfessional',
+                                            JSON.stringify(data.professional),
+                                        );
+                                        if (data.device_id) {
+                                            localStorage.setItem(
+                                                deviceIdKey,
+                                                String(data.device_id),
+                                            );
+                                        }
+                                        window.dispatchEvent(
+                                            new Event('updateClients'),
+                                        );
+                                        window.dispatchEvent(
+                                            new Event('clearClients'),
+                                        );
+                                    } else {
                                         setModalMessage(
-                                            'Erro ao enviar código',
+                                            String(
+                                                data.message ||
+                                                    'Código inválido',
+                                            ),
                                         );
                                         setModalOpen(true);
-                                        setOtpSentConfirmPending(false);
                                     }
-                                    setLoadingOtp(false);
-                                }}
-                            >
-                                Enviar código
-                            </button>
-                        )}
-
-                        {/* Input e botão Entrar só aparecem após envio do código */}
-                        {selectedProfessional && codeSent && (
-                            <>
-                                <input
-                                    type='password'
-                                    placeholder='Senha'
-                                    className={styles.loginInput}
-                                    value={otp}
-                                    onChange={e => setOtp(e.target.value)}
-                                    style={{ marginRight: 8 }}
-                                />
-                                <button
-                                    className={styles.loginButton}
-                                    onClick={async () => {
-                                        setLoadingOtp(true);
-                                        try {
-                                            console.debug(
-                                                '[NavBar] API_BASE =',
-                                                API_BASE,
-                                                'fetch ->',
-                                                `${API_BASE}/register/auth/verify-code/`,
-                                            );
-                                            // Ensure device_id exists and send it for device session tracking
-                                            const deviceIdKey = 'device_id';
-                                            const deviceId =
-                                                getOrCreateDeviceId(
-                                                    deviceIdKey,
-                                                );
-                                            const res = await fetch(
-                                                `${API_BASE}/register/auth/verify-code/`,
-                                                {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type':
-                                                            'application/json',
-                                                    },
-                                                    body: JSON.stringify({
-                                                        email: selectedProfessional,
-                                                        code: otp,
-                                                        device_id: deviceId,
-                                                    }),
-                                                },
-                                            );
-                                            let data: VerifyResponse = {};
-                                            try {
-                                                data = await res.json();
-                                            } catch {
-                                                data = {
-                                                    message:
-                                                        'Falha ao interpretar resposta do servidor',
-                                                };
-                                            }
-                                            // Substitui alert por modal para validação do código
-                                            if (res.ok && data.access) {
-                                                let successMsg =
-                                                    'Login realizado! Dados dos clientes liberados.';
-                                                if (
-                                                    typeof data.active_sessions_count ===
-                                                    'number'
-                                                ) {
-                                                    successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
-                                                }
-                                                setModalMessage(successMsg);
-                                                setModalOpen(true);
-                                                localStorage.setItem(
-                                                    'accessToken',
-                                                    data.access,
-                                                );
-                                                setOtp('');
-                                                setLoggedProfessional(
-                                                    data.professional || null,
-                                                );
-                                                localStorage.setItem(
-                                                    'loggedProfessional',
-                                                    JSON.stringify(
-                                                        data.professional,
-                                                    ),
-                                                );
-                                                if (data.device_id) {
-                                                    localStorage.setItem(
-                                                        deviceIdKey,
-                                                        String(data.device_id),
-                                                    );
-                                                }
-                                                window.dispatchEvent(
-                                                    new Event('updateClients'),
-                                                );
-                                                // Limpa erro de sessão expirada imediatamente
-                                                window.dispatchEvent(
-                                                    new Event('clearClients'),
-                                                );
-                                            } else {
-                                                setModalMessage(
-                                                    String(
-                                                        data.message ||
-                                                            'Código inválido',
-                                                    ),
-                                                );
-                                                setModalOpen(true);
-                                            }
-                                        } catch {
-                                            setModalMessage(
-                                                'Erro ao validar código',
-                                            );
-                                            setModalOpen(true);
-                                        }
-                                        setLoadingOtp(false);
-                                    }}
-                                    disabled={loadingOtp || !otp}
-                                >
-                                    Entrar
-                                </button>
-                            </>
-                        )}
+                                } catch {
+                                    setModalMessage('Erro ao validar código');
+                                    setModalOpen(true);
+                                }
+                                setLoadingOtp(false);
+                            }}
+                        >
+                            Entrar
+                        </button>
                     </>
                 )}
             </div>
@@ -765,28 +626,12 @@ const NavBar: React.FC<NavBarProps> = ({
             {/* Modal padrão para mensagens */}
             <AppModal
                 open={modalOpen}
-                onClose={() => {
-                    if (otpSentConfirmPending) {
-                        setCodeSent(true);
-                        setOtpSentConfirmPending(false);
-                    }
-                    setModalOpen(false);
-                }}
+                onClose={() => setModalOpen(false)}
                 unmountOnClose
             >
                 <div className='modal-message'>
                     <h3>{modalMessage}</h3>
-                    <button
-                        onClick={() => {
-                            if (otpSentConfirmPending) {
-                                setCodeSent(true);
-                                setOtpSentConfirmPending(false);
-                            }
-                            setModalOpen(false);
-                        }}
-                    >
-                        Ok
-                    </button>
+                    <button onClick={() => setModalOpen(false)}>Ok</button>
                 </div>
             </AppModal>
 
