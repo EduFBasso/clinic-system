@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views_auth import login_professional
 from .views_auth_code import request_otp_view, verify_code, logout_device
-from .views_totp import totp_setup, totp_verify
+from .views_totp import totp_setup, totp_verify, professional_create, totp_admin_reset
 from .client_views import ClientViewSet, ClientBasicViewSet
 from .professional_views import ProfessionalViewSet, ProfessionalBasicViewSet
 
@@ -20,5 +20,7 @@ urlpatterns = [
     path('auth/logout-device/', logout_device),
     path('auth/totp/setup/', totp_setup),
     path('auth/totp/verify/', totp_verify),
+    path('auth/totp/admin-reset/', totp_admin_reset),
+    path('auth/professional-create/', professional_create),
     path('', include(router.urls)),
 ]

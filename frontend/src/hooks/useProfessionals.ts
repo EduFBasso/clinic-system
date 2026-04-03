@@ -9,6 +9,8 @@ export interface ProfessionalBasic {
     last_name: string;
     register_number: string;
     email: string;
+    is_superuser?: boolean;
+    is_staff?: boolean;
 }
 
 // Hook customizado para buscar profissionais do backend

@@ -31,6 +31,8 @@ import AppModal from './Modal';
 import '../styles/modal-message.css';
 import { isTokenExpired } from '../utils/jwt';
 import { emit } from '../events/bus';
+import ProfessionalCreateModal from './ProfessionalCreateModal';
+import TotpAdminResetModal from './TotpAdminResetModal';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
@@ -76,6 +78,9 @@ const NavBar: React.FC<NavBarProps> = ({
 
     // About modal state
     const [aboutOpen, setAboutOpen] = useState(false);
+    // Admin modals (superuser only)
+    const [createProfOpen, setCreateProfOpen] = useState(false);
+    const [totpResetOpen, setTotpResetOpen] = useState(false);
     // Trigger summary fetch when dropdown toggles open
     const { summary } = useSessionsSummary(dropdownOpen);
 
@@ -494,6 +499,26 @@ const NavBar: React.FC<NavBarProps> = ({
                         >
                             Sair
                         </button>
+                        {loggedProfessional.is_superuser && (
+                            <>
+                                <button
+                                    className={styles.loginButton}
+                                    style={{ marginLeft: 6 }}
+                                    onClick={() => setCreateProfOpen(true)}
+                                    title='Criar novo profissional'
+                                >
+                                    + Profissional
+                                </button>
+                                <button
+                                    className={styles.loginButton}
+                                    style={{ marginLeft: 4 }}
+                                    onClick={() => setTotpResetOpen(true)}
+                                    title='Resetar autenticador de profissional'
+                                >
+                                    🔑 Reset
+                                </button>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -655,6 +680,14 @@ const NavBar: React.FC<NavBarProps> = ({
                 buildTime={
                     import.meta.env?.VITE_BUILD_TIME as string | undefined
                 }
+            />
+            <ProfessionalCreateModal
+                open={createProfOpen}
+                onClose={() => setCreateProfOpen(false)}
+            />
+            <TotpAdminResetModal
+                open={totpResetOpen}
+                onClose={() => setTotpResetOpen(false)}
             />
         </div>
     );

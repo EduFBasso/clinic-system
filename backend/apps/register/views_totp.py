@@ -2,7 +2,7 @@ import re
 import pyotp
 import logging
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -140,3 +140,110 @@ def totp_verify(request):
         "active_sessions_count": active_count,
         "device_id": device_id,
     }, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def professional_create(request):
+    """Create a new Professional and immediately generate a TOTP secret.
+
+    Requires superuser JWT. Returns the professional data plus the otpauth_uri
+    so the frontend can show a QR code for the new user to scan right away.
+
+    POST /register/auth/professional-create/
+    Body: { email, first_name, last_name, password, specialty?, register_number?, phone?, city?, state? }
+    Response: { professional, secret, otpauth_uri, issuer }
+    """
+    email = (request.data.get("email") or "").strip().lower()
+    first_name = (request.data.get("first_name") or "").strip()
+    last_name = (request.data.get("last_name") or "").strip()
+    password = request.data.get("password") or ""
+    specialty = (request.data.get("specialty") or "").strip()
+    register_number = (request.data.get("register_number") or "").strip() or None
+    phone = (request.data.get("phone") or "").strip() or ""
+    city = (request.data.get("city") or "").strip()
+    state = (request.data.get("state") or "").strip()[:2].upper()
+
+    if not email or not first_name or not last_name or not password:
+        return Response(
+            {"message": "email, first_name, last_name e password são obrigatórios."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if Professional.objects.filter(email__iexact=email).exists():
+        return Response(
+            {"message": "Já existe um profissional com este e-mail."},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    secret = pyotp.random_base32()
+    professional = Professional.objects.create_user(
+        email=email,
+        password=password,
+        first_name=first_name,
+        last_name=last_name,
+        specialty=specialty,
+        register_number=register_number,
+        phone=phone,
+        city=city,
+        state=state,
+        totp_secret=secret,
+    )
+
+    issuer = getattr(settings, "TOTP_ISSUER", "ClinicSystem")
+    uri = pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=issuer)
+
+    logger.info("[Professional Create] Created user=%s by superuser=%s", email, request.user.email)  # type: ignore[union-attr]
+    return Response({
+        "professional": ProfessionalSerializer(professional).data,
+        "secret": secret,
+        "otpauth_uri": uri,
+        "issuer": issuer,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def totp_admin_reset(request):
+    """Reset the TOTP secret of any professional (e.g. lost phone).
+
+    Requires superuser JWT. Generates a new secret and returns the otpauth_uri
+    so the admin can show the QR code to the professional.
+
+    POST /register/auth/totp/admin-reset/
+    Body: { user_id }
+    Response: { secret, otpauth_uri, issuer, professional }
+    """
+    user_id = request.data.get("user_id")
+    if not user_id:
+        return Response(
+            {"message": "user_id é obrigatório."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        professional = Professional.objects.get(pk=user_id)
+    except Professional.DoesNotExist:
+        return Response(
+            {"message": "Profissional não encontrado."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    secret = pyotp.random_base32()
+    professional.totp_secret = secret
+    professional.save(update_fields=["totp_secret"])
+
+    issuer = getattr(settings, "TOTP_ISSUER", "ClinicSystem")
+    uri = pyotp.TOTP(secret).provisioning_uri(name=professional.email, issuer_name=issuer)
+
+    logger.info(
+        "[TOTP Admin Reset] secret reset for user=%s by superuser=%s",
+        professional.email,
+        request.user.email,  # type: ignore[union-attr]
+    )
+    return Response({
+        "secret": secret,
+        "otpauth_uri": uri,
+        "issuer": issuer,
+        "professional": ProfessionalSerializer(professional).data,
+    })
