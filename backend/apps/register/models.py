@@ -33,7 +33,7 @@ class ProfessionalManager(BaseUserManager):
 class Professional(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField("Nome", max_length=50)
     last_name = models.CharField("Sobrenome", max_length=70)
-    phone = PhoneNumberField("Telefone", region="BR", blank=True)
+    phone = PhoneNumberField("Telefone", region="BR", blank=True) # type: ignore
     email = models.EmailField("E-mail", unique=True)
 
     register_number = models.CharField(
@@ -47,7 +47,13 @@ class Professional(AbstractBaseUser, PermissionsMixin):
     can_manage_professionals = models.BooleanField(
     default=False,
     verbose_name="Pode gerenciar profissionais"
-)      
+)
+    totp_secret = models.CharField(
+        "TOTP Secret",
+        max_length=64,
+        blank=True,
+        help_text="Base32 secret for TOTP (Google Authenticator). Empty = TOTP not configured.",
+    )
 
     # Endereço
     city = models.CharField("Cidade", max_length=50, blank=True)
@@ -71,7 +77,6 @@ class Professional(AbstractBaseUser, PermissionsMixin):
 
     # Soft delete helper
     def deactivate(self, reason: str = ""):
-        from django.utils import timezone
         if not self.deactivated_at:
             self.deactivated_at = timezone.now()
         if reason:
