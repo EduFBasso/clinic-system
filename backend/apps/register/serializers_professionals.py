@@ -5,10 +5,14 @@ from rest_framework.permissions import BasePermission
 class ProfessionalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Professional
-        fields = '__all__'
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'register_number',
+            'specialty', 'phone', 'city', 'state',
+            'can_manage_professionals', 'is_active', 'is_staff',
+            'created_at', 'deactivated_at', 'deactivation_reason',
+        ]
         extra_kwargs = {
-            'password': {'required': False, 'write_only': True},
-            'can_manage_professionals': {'required': False}
+            'can_manage_professionals': {'required': False},
         }
 
 
