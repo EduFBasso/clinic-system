@@ -140,16 +140,6 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                 <span className={styles.fieldValue}>{client.id}</span>
             </div>
 
-            <div className={styles.printActions} data-print-hide>
-                <button
-                    type='button'
-                    className={styles.printBtn}
-                    onClick={() => window.print()}
-                >
-                    🖨 Imprimir / Salvar PDF
-                </button>
-            </div>
-
             {fieldOrder.map(k => {
                 const label = fieldLabels[k];
                 if (!label) return null;

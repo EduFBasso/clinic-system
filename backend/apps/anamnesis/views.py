@@ -1,6 +1,12 @@
+from __future__ import annotations
+
+from typing import cast
+
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
+from rest_framework.request import Request as DRFRequest
 from rest_framework.response import Response
+from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 
 from apps.clients.models import Client
@@ -22,7 +28,7 @@ class AnamnesisFieldViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AnamnesisFieldSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[AnamnesisField]:  # type: ignore[override]
         return AnamnesisField.objects.filter(
             professional=self.request.user,
             is_active=True,
@@ -38,12 +44,13 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
     serializer_class = AnamnesisResponseSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[AnamnesisResponse]:  # type: ignore[override]
+        req = cast(DRFRequest, self.request)
         qs = AnamnesisResponse.objects.filter(
-            field__professional=self.request.user,
+            field__professional=req.user,
         ).select_related('field').prefetch_related('photos')
 
-        client_id = self.request.query_params.get('client')
+        client_id = req.query_params.get('client')
         if client_id:
             qs = qs.filter(client_id=client_id)
 
@@ -57,8 +64,9 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
         """
         serializer = AnamnesisResponseBulkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data: dict = serializer.validated_data  # type: ignore[assignment]
 
-        client_id = serializer.validated_data['client']
+        client_id = data['client']
         client = get_object_or_404(
             Client,
             pk=client_id,
@@ -66,7 +74,7 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
         )
 
         saved = []
-        for item in serializer.validated_data['responses']:
+        for item in data['responses']:
             field: AnamnesisField = item['field']
             value: str = item['value']
 
@@ -94,7 +102,7 @@ class AnamnesisPhotoViewSet(viewsets.ModelViewSet):
     serializer_class = AnamnesisPhotoSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[AnamnesisPhoto]:  # type: ignore[override]
         return AnamnesisPhoto.objects.filter(
             response__field__professional=self.request.user,
         ).select_related('response')
