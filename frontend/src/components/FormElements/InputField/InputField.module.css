@@ -23,6 +23,7 @@
     background: var(--color-input);
     color: var(--color-text-main);
     font: inherit;
+    line-height: 1.5; /* garante altura consistente em input[type=date] vazio no iOS */
     -webkit-appearance: none; /* remove estilo nativo iOS/Safari (ex: input[type=date]) */
     appearance: none;
     transition:
