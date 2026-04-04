@@ -1,4 +1,3 @@
-import type { FormEvent } from 'react';
 import type { ClientData } from '../../types/ClientData';
 import InputField from '../FormElements/InputField/InputField';
 import SelectField from '../FormElements/SelectField/SelectField';
@@ -18,13 +17,7 @@ type ChangeHandler = (
 interface Props {
     formData: ClientData;
     handleChange: ChangeHandler;
-    handleSubmit: (e: FormEvent) => void;
-    handleCancel: () => void;
-    handleDelete: () => void;
-    isEdit?: boolean;
     feedback?: { type: 'error'; message: string } | null;
-    onQuickSubmit?: () => void;
-    formRef?: React.Ref<HTMLFormElement>;
 }
 
 /** Convert dd/mm/YYYY or YYYY-MM-DD to YYYY-MM-DD for <input type="date"> */
@@ -39,22 +32,11 @@ function toInputDate(dob: string | undefined): string {
 export default function ClientPersonalDataForm({
     formData,
     handleChange,
-    handleSubmit,
-    handleCancel,
-    handleDelete,
-    isEdit,
     feedback,
-    onQuickSubmit,
-    formRef,
 }: Props) {
     return (
         <div data-theme='blue' className={styles.wrapper}>
-            <form
-                ref={formRef}
-                onSubmit={handleSubmit}
-                noValidate
-                className={styles.form}
-            >
+            <div className={styles.form}>
                 <header className={styles.header}>
                     <span className={styles.eyebrow}>Cadastro</span>
                     <h2 className={styles.title}>Dados Pessoais</h2>
@@ -204,38 +186,7 @@ export default function ClientPersonalDataForm({
                         autoComplete='country-name'
                     />
                 </div>
-
-                <footer className={styles.actions}>
-                    {!isEdit && (
-                        <button
-                            type='submit'
-                            className={styles.btnSecondary}
-                            onClick={() => onQuickSubmit?.()}
-                        >
-                            Salvar e novo
-                        </button>
-                    )}
-                    <button type='submit' className={styles.btnPrimary}>
-                        Salvar
-                    </button>
-                    <button
-                        type='button'
-                        className={styles.btnSecondary}
-                        onClick={handleCancel}
-                    >
-                        Cancelar
-                    </button>
-                    {isEdit && (
-                        <button
-                            type='button'
-                            className={styles.btnDanger}
-                            onClick={handleDelete}
-                        >
-                            Apagar
-                        </button>
-                    )}
-                </footer>
-            </form>
+            </div>
         </div>
     );
 }

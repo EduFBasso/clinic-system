@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { normalizeDOBForApi } from '../utils/dateOfBirth';
 import type { ClientData } from '../types/ClientData';
 import ClientPersonalDataForm from './ClientPersonalDataForm/ClientPersonalDataForm';
+import ClientAddressForm from './ClientAddressForm/ClientAddressForm';
+import styles from './ClientForm.module.css';
 import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
 import { useNavigate } from 'react-router-dom';
 
@@ -883,17 +885,52 @@ export default function ClientForm({
 
     return (
         <>
-            <ClientPersonalDataForm
-                formData={formData}
-                handleChange={handleChange}
-                handleSubmit={handleSubmit}
-                handleCancel={handleCancel}
-                handleDelete={handleDelete}
-                isEdit={isEdit}
-                feedback={feedback}
-                onQuickSubmit={onQuickSubmit}
-                formRef={formRef}
-            />
+            <form
+                ref={formRef}
+                onSubmit={handleSubmit}
+                noValidate
+                data-theme='blue'
+            >
+                <ClientPersonalDataForm
+                    formData={formData}
+                    handleChange={handleChange}
+                    feedback={feedback}
+                />
+                <ClientAddressForm
+                    formData={formData}
+                    handleChange={handleChange}
+                />
+                <div className={styles.footer}>
+                    {!isEdit && (
+                        <button
+                            type='submit'
+                            className={styles.btnSecondary}
+                            onClick={() => onQuickSubmit()}
+                        >
+                            Salvar e novo
+                        </button>
+                    )}
+                    <button type='submit' className={styles.btnPrimary}>
+                        Salvar
+                    </button>
+                    <button
+                        type='button'
+                        className={styles.btnSecondary}
+                        onClick={handleCancel}
+                    >
+                        Cancelar
+                    </button>
+                    {isEdit && (
+                        <button
+                            type='button'
+                            className={styles.btnDanger}
+                            onClick={handleDelete}
+                        >
+                            Apagar
+                        </button>
+                    )}
+                </div>
+            </form>
             {SuccessModal}
         </>
     );

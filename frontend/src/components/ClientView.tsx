@@ -3,7 +3,7 @@ import type { ClientData } from '../types/ClientData';
 import styles from '../styles/components/ClientView.module.css';
 import { formatPhone } from '../utils/formatPhone';
 import { formatDOBWithAge } from '../utils/dateOfBirth';
-import { formatCpf, formatCnpj, formatRg } from '../utils/formatCpf';
+import { formatCpf, formatCnpj, formatRg, formatCep } from '../utils/formatCpf';
 
 interface ClientViewProps {
     client: ClientData & {
@@ -25,6 +25,12 @@ const fieldOrder: Array<keyof ClientData> = [
     'document_number',
     'marital_status',
     'nationality',
+    'postal_code',
+    'address',
+    'address_number',
+    'neighborhood',
+    'city',
+    'state',
 ];
 
 const fieldLabels: Partial<Record<keyof ClientData, string>> = {
@@ -40,6 +46,12 @@ const fieldLabels: Partial<Record<keyof ClientData, string>> = {
     document_number: 'Número do documento',
     marital_status: 'Estado civil',
     nationality: 'Nacionalidade',
+    postal_code: 'CEP',
+    address: 'Rua',
+    address_number: 'Número',
+    neighborhood: 'Bairro',
+    city: 'Cidade',
+    state: 'Estado',
 };
 
 const SEX_LABELS: Record<string, string> = {
@@ -153,6 +165,8 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                             : formatCpf(String(raw));
                 } else if (k === 'rg') {
                     value = formatRg(String(raw));
+                } else if (k === 'postal_code') {
+                    value = formatCep(String(raw));
                 } else {
                     value = String(raw);
                 }
