@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -153,3 +155,411 @@ class FinalizeAudit(models.Model):
             models.Index(fields=["device_id"]),
         ]
         ordering = ["-created_at"]
+
+
+class Encounter(models.Model):
+    class Status(models.TextChoices):
+        OPEN = "open", "Em andamento"
+        CLOSED = "closed", "Encerrado"
+        CANCELED = "canceled", "Cancelado"
+
+    professional = models.ForeignKey(
+        "register.Professional",
+        on_delete=models.CASCADE,
+        related_name="encounters",
+        verbose_name="Profissional",
+    )
+    client = models.ForeignKey(
+        "clients.Client",
+        on_delete=models.CASCADE,
+        related_name="encounters",
+        verbose_name="Cliente",
+    )
+    appointment = models.OneToOneField(
+        Appointment,
+        on_delete=models.SET_NULL,
+        related_name="clinical_encounter",
+        null=True,
+        blank=True,
+        verbose_name="Agendamento",
+    )
+    started_at = models.DateTimeField("Início do atendimento", default=timezone.now)
+    ended_at = models.DateTimeField("Fim do atendimento", null=True, blank=True)
+    chief_complaint = models.CharField("Queixa principal", max_length=255, blank=True)
+    assessment = models.TextField("Avaliação", blank=True)
+    plan = models.TextField("Plano", blank=True)
+    notes = models.TextField("Notas", blank=True)
+    status = models.CharField(
+        "Status",
+        max_length=12,
+        choices=Status.choices,
+        default=Status.OPEN,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["professional", "client", "status"]),
+            models.Index(fields=["professional", "started_at"]),
+            models.Index(fields=["client", "started_at"]),
+        ]
+        ordering = ["-started_at", "-id"]
+
+    def clean(self):
+        errors = {}
+
+        if self.ended_at and self.started_at and self.ended_at < self.started_at:
+            errors["ended_at"] = "Fim do atendimento deve ser após o início."
+
+        if self.status == self.Status.OPEN and self.ended_at is not None:
+            errors["ended_at"] = "Atendimentos abertos não podem ter horário de fim."
+
+        if self.status in {self.Status.CLOSED, self.Status.CANCELED} and self.ended_at is None:
+            errors["ended_at"] = "Informe o fim do atendimento ao encerrar ou cancelar."
+
+        appointment = getattr(self, "appointment", None)
+        professional_id = getattr(self, "professional_id", None)
+        client_id = getattr(self, "client_id", None)
+
+        if appointment is not None:
+            if getattr(appointment, "professional_id", None) != professional_id:
+                errors["appointment"] = "O agendamento precisa pertencer ao mesmo profissional."
+            if getattr(appointment, "client_id", None) != client_id:
+                errors["appointment"] = "O agendamento precisa pertencer ao mesmo cliente."
+
+        open_qs = Encounter.objects.filter(
+            professional_id=professional_id,
+            client_id=client_id,
+            status=self.Status.OPEN,
+        )
+        if self.pk:
+            open_qs = open_qs.exclude(pk=self.pk)
+        if self.status == self.Status.OPEN and open_qs.exists():
+            errors["status"] = "Já existe um atendimento em andamento para este cliente."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Atendimento {self.client} — {self.status}"
+
+
+class ClinicalRecord(models.Model):
+    class RecordType(models.TextChoices):
+        EVOLUTION = "evolution", "Evolução"
+        ASSESSMENT = "assessment", "Avaliação"
+        PLAN = "plan", "Plano"
+        PRESCRIPTION = "prescription", "Prescrição"
+        NOTE = "note", "Nota"
+
+    professional = models.ForeignKey(
+        "register.Professional",
+        on_delete=models.CASCADE,
+        related_name="clinical_records",
+        verbose_name="Profissional",
+    )
+    client = models.ForeignKey(
+        "clients.Client",
+        on_delete=models.CASCADE,
+        related_name="clinical_records",
+        verbose_name="Cliente",
+    )
+    encounter = models.ForeignKey(
+        Encounter,
+        on_delete=models.SET_NULL,
+        related_name="records",
+        null=True,
+        blank=True,
+        verbose_name="Atendimento",
+    )
+    record_type = models.CharField(
+        "Tipo de registro",
+        max_length=24,
+        choices=RecordType.choices,
+        default=RecordType.EVOLUTION,
+    )
+    title = models.CharField("Título", max_length=120, blank=True)
+    content = models.TextField("Conteúdo")
+    recorded_at = models.DateTimeField("Registrado em", default=timezone.now)
+    is_confidential = models.BooleanField("Confidencial", default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["professional", "client", "recorded_at"]),
+            models.Index(fields=["client", "record_type", "recorded_at"]),
+            models.Index(fields=["encounter", "recorded_at"]),
+        ]
+        ordering = ["-recorded_at", "-id"]
+
+    def clean(self):
+        errors = {}
+
+        if not (self.content or "").strip():
+            errors["content"] = "O registro clínico não pode ficar vazio."
+
+        encounter = getattr(self, "encounter", None)
+        professional_id = getattr(self, "professional_id", None)
+        client_id = getattr(self, "client_id", None)
+
+        if encounter is not None:
+            if getattr(encounter, "professional_id", None) != professional_id:
+                errors["encounter"] = "O atendimento precisa pertencer ao mesmo profissional."
+            if getattr(encounter, "client_id", None) != client_id:
+                errors["encounter"] = "O atendimento precisa pertencer ao mesmo cliente."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.title or f"Prontuário {self.client} — {self.record_type}"
+
+
+class Charge(models.Model):
+    class ChargeType(models.TextChoices):
+        QUOTE = "quote", "Orçamento"
+        CHARGE = "charge", "Cobrança"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Rascunho"
+        SENT = "sent", "Enviado"
+        PAID = "paid", "Pago"
+        CANCELED = "canceled", "Cancelado"
+
+    professional = models.ForeignKey(
+        "register.Professional",
+        on_delete=models.CASCADE,
+        related_name="charges",
+        verbose_name="Profissional",
+    )
+    client = models.ForeignKey(
+        "clients.Client",
+        on_delete=models.CASCADE,
+        related_name="charges",
+        verbose_name="Cliente",
+    )
+    encounter = models.ForeignKey(
+        Encounter,
+        on_delete=models.SET_NULL,
+        related_name="charges",
+        null=True,
+        blank=True,
+        verbose_name="Atendimento",
+    )
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.SET_NULL,
+        related_name="charges",
+        null=True,
+        blank=True,
+        verbose_name="Agendamento",
+    )
+    charge_type = models.CharField(
+        "Tipo",
+        max_length=12,
+        choices=ChargeType.choices,
+        default=ChargeType.CHARGE,
+    )
+    status = models.CharField(
+        "Status",
+        max_length=12,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+    title = models.CharField("Título", max_length=120, blank=True)
+    notes = models.TextField("Notas", blank=True)
+    recipient_name = models.CharField("Nome do destinatário", max_length=160, blank=True)
+    recipient_phone = models.CharField("Telefone do destinatário", max_length=32, blank=True)
+    currency = models.CharField("Moeda", max_length=8, default="BRL")
+    total_amount = models.DecimalField("Total", max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    shared_at = models.DateTimeField("Compartilhado em", null=True, blank=True)
+    paid_at = models.DateTimeField("Pago em", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["professional", "client", "status"]),
+            models.Index(fields=["appointment", "status"]),
+            models.Index(fields=["encounter", "status"]),
+            models.Index(fields=["created_at"]),
+        ]
+        ordering = ["-created_at", "-id"]
+
+    def clean(self):
+        errors = {}
+
+        encounter = getattr(self, "encounter", None)
+        appointment = getattr(self, "appointment", None)
+        professional_id = getattr(self, "professional_id", None)
+        client_id = getattr(self, "client_id", None)
+
+        if encounter is not None:
+            if getattr(encounter, "professional_id", None) != professional_id:
+                errors["encounter"] = "O atendimento precisa pertencer ao mesmo profissional."
+            if getattr(encounter, "client_id", None) != client_id:
+                errors["encounter"] = "O atendimento precisa pertencer ao mesmo cliente."
+
+        if appointment is not None:
+            if getattr(appointment, "professional_id", None) != professional_id:
+                errors["appointment"] = "O agendamento precisa pertencer ao mesmo profissional."
+            if getattr(appointment, "client_id", None) != client_id:
+                errors["appointment"] = "O agendamento precisa pertencer ao mesmo cliente."
+
+        encounter_appointment_id = getattr(encounter, "appointment_id", None)
+        appointment_id = getattr(self, "appointment_id", None)
+        if encounter is not None and appointment is not None and encounter_appointment_id:
+            if encounter_appointment_id != appointment_id:
+                errors["appointment"] = "Agendamento e atendimento precisam estar alinhados."
+
+        if self.status == self.Status.PAID and self.paid_at is None:
+            errors["paid_at"] = "Informe quando a cobrança foi paga."
+
+        if self.status == self.Status.CANCELED and self.paid_at is not None:
+            errors["status"] = "Cobrança cancelada não pode ficar como paga."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def recalculate_total(self, save=True):
+        total = Decimal("0.00")
+        if self.pk:
+            for item in ChargeItem.objects.filter(charge=self):
+                total += item.line_total
+        self.total_amount = total
+        if save and self.pk:
+            type(self).objects.filter(pk=self.pk).update(
+                total_amount=total,
+                updated_at=timezone.now(),
+            )
+        return total
+
+    def __str__(self):
+        return self.title or f"{self.charge_type} — {self.client}"
+
+
+class ChargeItem(models.Model):
+    class ItemType(models.TextChoices):
+        SERVICE = "service", "Serviço"
+        PRODUCT = "product", "Produto"
+        CUSTOM = "custom", "Personalizado"
+
+    charge = models.ForeignKey(
+        Charge,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Cobrança",
+    )
+    item_type = models.CharField(
+        "Tipo de item",
+        max_length=12,
+        choices=ItemType.choices,
+        default=ItemType.CUSTOM,
+    )
+    service = models.ForeignKey(
+        "inventory.Service",
+        on_delete=models.SET_NULL,
+        related_name="charge_items",
+        null=True,
+        blank=True,
+        verbose_name="Serviço",
+    )
+    product = models.ForeignKey(
+        "inventory.Product",
+        on_delete=models.SET_NULL,
+        related_name="charge_items",
+        null=True,
+        blank=True,
+        verbose_name="Produto",
+    )
+    description = models.CharField("Descrição", max_length=255, blank=True)
+    quantity = models.DecimalField("Quantidade", max_digits=10, decimal_places=2, default=Decimal("1.00"))
+    unit_price = models.DecimalField("Preço unitário", max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    sort_order = models.PositiveIntegerField("Ordem", default=0)
+    notes = models.CharField("Notas", max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["charge", "sort_order"]),
+            models.Index(fields=["item_type"]),
+        ]
+        ordering = ["sort_order", "id"]
+
+    @property
+    def line_total(self):
+        return (self.quantity or Decimal("0")) * (self.unit_price or Decimal("0"))
+
+    def clean(self):
+        errors = {}
+
+        if self.quantity <= 0:
+            errors["quantity"] = "A quantidade deve ser maior que zero."
+
+        if self.unit_price < 0:
+            errors["unit_price"] = "O preço unitário não pode ser negativo."
+
+        service = getattr(self, "service", None)
+        product = getattr(self, "product", None)
+
+        if self.item_type == self.ItemType.SERVICE:
+            if service is None:
+                errors["service"] = "Selecione um serviço para itens do tipo serviço."
+            if product is not None:
+                errors["product"] = "Itens de serviço não podem apontar para produto."
+        elif self.item_type == self.ItemType.PRODUCT:
+            if product is None:
+                errors["product"] = "Selecione um produto para itens do tipo produto."
+            if service is not None:
+                errors["service"] = "Itens de produto não podem apontar para serviço."
+        else:
+            if service is not None or product is not None:
+                errors["item_type"] = "Itens personalizados não podem referenciar serviço ou produto."
+            if not (self.description or "").strip():
+                errors["description"] = "Informe uma descrição para o item personalizado."
+
+        if service is not None and getattr(service, "professional_id", None) != getattr(self.charge, "professional_id", None):
+            errors["service"] = "O serviço precisa pertencer ao mesmo profissional da cobrança."
+
+        if product is not None and getattr(product, "professional_id", None) != getattr(self.charge, "professional_id", None):
+            errors["product"] = "O produto precisa pertencer ao mesmo profissional da cobrança."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        service = getattr(self, "service", None)
+        product = getattr(self, "product", None)
+        if not self.description:
+            if service is not None:
+                self.description = self.service.name
+            elif product is not None:
+                self.description = self.product.name
+        self.full_clean()
+        result = super().save(*args, **kwargs)
+        self.charge.recalculate_total(save=True)
+        return result
+
+    def delete(self, *args, **kwargs):
+        charge = self.charge
+        result = super().delete(*args, **kwargs)
+        charge.recalculate_total(save=True)
+        return result
+
+    def __str__(self):
+        return self.description or f"Item {self.pk}"

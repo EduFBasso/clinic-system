@@ -2,21 +2,22 @@
 
 # Backend (Django 5.2.4)
 
-API REST para gerenciamento de clínica multi-especialidade: agenda, clientes, inventário e autenticação por OTP.
+API REST para gerenciamento de clínica multi-especialidade: agenda, clientes, inventário e autenticação profissional.
 
 ## Arquitetura Rápida
 
 **Stack**: Django 5.2.4 + PostgreSQL + Django REST Framework + simplejwt
-**Auth**: OTP para email + JWT com device sessions (máx 2 concorrentes)
+**Auth**: JWT + device sessions + WebAuthn/passkeys
 **Multi-tenancy**: Hard-scoped por `Professional` (AUTH_USER_MODEL)
 
 ## Estrutura de Apps
 
-| App         | Modelos                                                               | Responsabilidade                        |
-| ----------- | --------------------------------------------------------------------- | --------------------------------------- |
-| `register`  | Professional, Client, AccessCode, DeviceSession, ProfessionalSettings | Auth, clients, device management        |
-| `agenda`    | Appointment, FinalizeAudit                                            | Scheduling, finalization, audit trails  |
-| `inventory` | Product, Supplier, StockMove, Service, ServiceMaterial                | Products, services, BOM, stock tracking |
+| App         | Modelos                                                                   | Responsabilidade                                    |
+| ----------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| `register`  | Professional, DeviceSession, ProfessionalSettings, WebAuthnCredential     | Auth, sessões, identidade profissional              |
+| `clients`   | Client                                                                    | Cadastro e anamnese base do cliente                 |
+| `agenda`    | Appointment, FinalizeAudit, Encounter, ClinicalRecord, Charge, ChargeItem | Agenda, atendimento, prontuário evolutivo, cobrança |
+| `inventory` | Product, Supplier, StockMove, Service, ServiceMaterial                    | Produtos, serviços, BOM, estoque                    |
 
 ## Setup Local
 
@@ -175,7 +176,9 @@ Veja [../../DEPLOY_CHECKLIST.md](../../DEPLOY_CHECKLIST.md) para checklist pré-
 
 ## Próximas Etapas (Roadmap Sprint 1+)
 
-- [ ] Novos modelos: `Encounter`, `ClinicalRecord`, `Charge`
+- [x] Novos modelos: `Encounter`, `ClinicalRecord`, `Charge`
+- [ ] Integrar `Charge`/`ChargeItem` aos modais de orçamento e cobrança do frontend
+- [ ] Integrar `Encounter` ao fluxo de finalização e atendimento em andamento
 - [ ] Máquina de estados robusta para `Appointment`
 - [ ] Formulários dinâmicos por especialidade
 - [ ] RBAC (role-based access control)
