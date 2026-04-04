@@ -966,7 +966,6 @@ export default function ClientForm({
                 onSubmit={handleSubmit}
                 noValidate
                 data-theme='blue'
-                data-print-form
             >
                 <ClientPersonalDataForm
                     formData={formData}
@@ -987,14 +986,7 @@ export default function ClientForm({
                         }))
                     }
                 />
-                <div className={styles.footer} data-print-hide>
-                    <button
-                        type='button'
-                        className={styles.btnSecondary}
-                        onClick={() => window.print()}
-                    >
-                        🖨 Imprimir
-                    </button>
+                <div className={styles.footer}>
                     {!isEdit && (
                         <button
                             type='submit'

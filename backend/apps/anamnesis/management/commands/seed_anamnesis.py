@@ -101,8 +101,23 @@ class Command(BaseCommand):
                     created_count += 1
                     self.stdout.write(f'  + [{sector}] {obj.label}')
                 else:
+                    # Atualiza options e order se houve mudança no seed
+                    updated_fields = []
+                    if obj.options != field_def.get('options'):
+                        obj.options = field_def.get('options')
+                        updated_fields.append('options')
+                    if obj.order != field_def['order']:
+                        obj.order = field_def['order']
+                        updated_fields.append('order')
+                    if obj.sector_order != sector_order:
+                        obj.sector_order = sector_order
+                        updated_fields.append('sector_order')
+                    if updated_fields:
+                        obj.save(update_fields=updated_fields)
+                        self.stdout.write(f'  ↻ [{sector}] {obj.label} (atualizado: {", ".join(updated_fields)})')
+                    else:
+                        self.stdout.write(f'  ~ [{sector}] {obj.label} (já existia)')
                     existing_count += 1
-                    self.stdout.write(f'  ~ [{sector}] {obj.label} (já existia)')
 
         if dry_run:
             self.stdout.write(

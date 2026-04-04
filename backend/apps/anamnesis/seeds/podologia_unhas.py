@@ -76,7 +76,7 @@ SECTORS = [
             {
                 'label': 'Vista plantar direita',
                 'field_type': 'radio',
-                'options': ['Normal', 'Plano', 'Cavo', 'Valgo', 'Varo'],
+                'options': ['Normal', 'Plano', 'Cavo'],
                 'order': 0,
             },
             {
@@ -112,7 +112,7 @@ SECTORS = [
             {
                 'label': 'Vista plantar esquerda',
                 'field_type': 'radio',
-                'options': ['Normal', 'Plano', 'Cavo', 'Valgo', 'Varo'],
+                'options': ['Normal', 'Plano', 'Cavo'],
                 'order': 0,
             },
             {
