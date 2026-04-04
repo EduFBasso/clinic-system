@@ -36,6 +36,9 @@ class Client(models.Model):
     phone = models.CharField(
         "Telefone", max_length=20, unique=True, null=True, blank=False
     )
+    rg = models.CharField(
+        "RG", max_length=20, null=True, blank=True
+    )
     document_type = models.CharField(
         "Tipo de documento", max_length=4,
         choices=DOCUMENT_TYPE_CHOICES, null=True, blank=True

@@ -75,6 +75,7 @@ class ClientSerializer(serializers.ModelSerializer):
             "address_number": {"required": False, "allow_null": True, "allow_blank": True},
             "photo": {"required": False, "allow_null": True},
             # Campos pessoais adicionais
+            "rg": {"required": False, "allow_null": True, "allow_blank": True},
             "document_type": {"required": False, "allow_null": True, "allow_blank": True},
             "document_number": {"required": False, "allow_null": True, "allow_blank": True},
             "sex": {"required": False, "allow_null": True, "allow_blank": True},

@@ -84,6 +84,22 @@ export default function ClientPersonalDataForm({
                         placeholder='Sobrenome'
                         autoComplete='family-name'
                     />
+                    <SelectField
+                        label='Sexo'
+                        name='sex'
+                        value={formData.sex ?? ''}
+                        onChange={e => handleChange(e)}
+                        options={[
+                            { value: 'masculino', label: 'Masculino' },
+                            { value: 'feminino', label: 'Feminino' },
+                            { value: 'outro', label: 'Outro' },
+                            {
+                                value: 'nao_informado',
+                                label: 'Prefiro não informar',
+                            },
+                        ]}
+                        placeholder='Selecione…'
+                    />
                     <InputField
                         label='Telefone'
                         name='phone'
@@ -124,6 +140,13 @@ export default function ClientPersonalDataForm({
                         onChange={e => handleChange(e)}
                         placeholder='Ex: Professora, Maratonista'
                     />
+                    <InputField
+                        label='RG'
+                        name='rg'
+                        value={formData.rg ?? ''}
+                        onChange={e => handleChange(e)}
+                        placeholder='00.000.000-0'
+                    />
                     <SelectField
                         label='Tipo de documento'
                         name='document_type'
@@ -145,22 +168,6 @@ export default function ClientPersonalDataForm({
                                 ? '00.000.000/0000-00'
                                 : '000.000.000-00'
                         }
-                    />
-                    <SelectField
-                        label='Sexo'
-                        name='sex'
-                        value={formData.sex ?? ''}
-                        onChange={e => handleChange(e)}
-                        options={[
-                            { value: 'masculino', label: 'Masculino' },
-                            { value: 'feminino', label: 'Feminino' },
-                            { value: 'outro', label: 'Outro' },
-                            {
-                                value: 'nao_informado',
-                                label: 'Prefiro não informar',
-                            },
-                        ]}
-                        placeholder='Selecione…'
                     />
                     <SelectField
                         label='Estado civil'

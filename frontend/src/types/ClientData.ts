@@ -35,6 +35,7 @@ export interface ClientData {
     photo?: string | null; // URL da foto existente (somente leitura na edição)
     document_type?: 'cpf' | 'cnpj' | '';
     document_number?: string;
+    rg?: string;
     sex?: string;
     marital_status?: string;
     nationality?: string;
