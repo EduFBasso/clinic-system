@@ -27,12 +27,14 @@ export default function ModalActionsBar({
                 zIndex: 1000,
                 display: 'flex',
                 justifyContent: 'flex-end',
-                gap: 0,
+                alignItems: 'center',
+                // Thin strip — just tall enough for the touch target
+                minHeight: 44,
                 padding: 0,
-                // Transparente para não encobrir conteúdo ao rolar
-                background: 'transparent',
+                // Subtle gradient so the X stays readable when content scrolls underneath
+                background:
+                    'linear-gradient(to bottom, var(--color-bg, #fff) 60%, transparent)',
                 borderBottom: 'none',
-                // Não bloquear interações/rolagem do conteúdo por baixo
                 pointerEvents: 'none',
                 ...style,
             }}
