@@ -5,8 +5,11 @@ import { normalizeDOBForApi } from '../utils/dateOfBirth';
 import type { ClientData } from '../types/ClientData';
 import ClientPersonalDataForm from './ClientPersonalDataForm/ClientPersonalDataForm';
 import ClientAddressForm from './ClientAddressForm/ClientAddressForm';
+import ClientAnamnesisForm from './ClientAnamnesisForm/ClientAnamnesisForm';
 import styles from './ClientForm.module.css';
 import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
+import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
+import type { AnamnesisResponse } from '../types/AnamnesisTypes';
 import { useNavigate } from 'react-router-dom';
 
 export default function ClientForm({
@@ -229,6 +232,35 @@ export default function ClientForm({
     }, [formData]);
     // Enable guard only when there are unsaved changes
     useUnsavedChangesGuard(dirty, 'Há alterações não salvas. Deseja sair?');
+
+    // Anamnesis fields (loaded once for the authenticated professional)
+    const { fields: anamnesisFields } = useAnamnesisFields();
+    // fieldId → selected value
+    const [anamnesisValues, setAnamnesisValues] = useState<
+        Record<number, string>
+    >({});
+
+    // Load existing responses when editing a client
+    useEffect(() => {
+        if (!cliente?.id) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        fetch(`${API_BASE}/anamnesis/responses/?client=${cliente.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => (r.ok ? r.json() : Promise.resolve([])))
+            .then((data: AnamnesisResponse[]) => {
+                const map: Record<number, string> = {};
+                data.forEach(r => {
+                    if (r.field !== null) map[r.field] = r.value;
+                });
+                setAnamnesisValues(map);
+            })
+            .catch(() => {
+                /* silent */
+            });
+    }, [cliente?.id]);
+
     const uploadPhotoIfNeeded = async (clientId: number, token: string) => {
         if (!selectedPhotoFile) return null;
         const fd = new FormData();
@@ -250,6 +282,27 @@ export default function ClientForm({
             throw new Error(errTxt || 'Falha ao enviar foto');
         }
         return await res.json();
+    };
+
+    const saveAnamnesis = async (
+        clientId: number,
+        token: string,
+    ): Promise<void> => {
+        const entries = Object.entries(anamnesisValues).map(
+            ([fieldId, value]) => ({
+                field: Number(fieldId),
+                value,
+            }),
+        );
+        if (entries.length === 0) return;
+        await fetch(`${API_BASE}/anamnesis/responses/bulk_save/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ client: clientId, responses: entries }),
+        });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -368,6 +421,17 @@ export default function ClientForm({
                     } catch (err) {
                         console.warn(
                             'Falha ao enviar foto (não bloqueante):',
+                            err,
+                        );
+                    }
+                    // Save anamnesis responses (non-blocking)
+                    try {
+                        if (createdClient?.id) {
+                            await saveAnamnesis(createdClient.id, token);
+                        }
+                    } catch (err) {
+                        console.warn(
+                            'Falha ao salvar anamnese (não bloqueante):',
                             err,
                         );
                     }
@@ -492,6 +556,7 @@ export default function ClientForm({
                             other_procedures: '',
                         });
                         setDirty(false);
+                        setAnamnesisValues({});
                         // Mantém na página, sem modal
                         return;
                     }
@@ -624,6 +689,17 @@ export default function ClientForm({
                     }
                 } catch (err) {
                     console.warn('Falha ao enviar foto (não bloqueante):', err);
+                }
+                // Save anamnesis responses (non-blocking)
+                try {
+                    if (cliente?.id) {
+                        await saveAnamnesis(cliente.id, token);
+                    }
+                } catch (err) {
+                    console.warn(
+                        'Falha ao salvar anamnese (não bloqueante):',
+                        err,
+                    );
                 }
                 // Reset baseline after successful update
                 initialRef.current = JSON.stringify(formData);
@@ -899,6 +975,16 @@ export default function ClientForm({
                 <ClientAddressForm
                     formData={formData}
                     handleChange={handleChange}
+                />
+                <ClientAnamnesisForm
+                    fields={anamnesisFields}
+                    values={anamnesisValues}
+                    onChange={(fieldId, value) =>
+                        setAnamnesisValues(prev => ({
+                            ...prev,
+                            [fieldId]: value,
+                        }))
+                    }
                 />
                 <div className={styles.footer}>
                     {!isEdit && (
