@@ -76,6 +76,79 @@
     word-break: break-word;
 }
 
+.printActions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.printBtn {
+    border: 1.5px solid var(--color-border-strong, #c7d4e0);
+    border-radius: 999px;
+    padding: 0.5rem 1.1rem;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--color-surface, #fff);
+    color: var(--color-text-main, #0a2540);
+    transition:
+        background 120ms,
+        border-color 120ms;
+}
+
+.printBtn:hover {
+    border-color: var(--color-accent, #2563eb);
+    background: var(--color-accent-soft, #eff6ff);
+}
+
+/* ── Print / Save as PDF ──────────────────────────────── */
+@media print {
+    /* Hide everything on the page except the client card */
+    body > * {
+        display: none !important;
+    }
+
+    /* Re-show the card by reaching it through the DOM */
+    .clientViewCard {
+        display: flex !important;
+        position: fixed !important;
+        inset: 0 !important;
+        margin: 0 !important;
+        max-width: 100% !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 24px !important;
+        background: #fff !important;
+        color: #000 !important;
+        font-size: 12pt !important;
+        overflow: visible !important;
+    }
+
+    /* Hide the print button itself when printing */
+    .printActions {
+        display: none !important;
+    }
+
+    .fieldValue {
+        background: transparent !important;
+        box-shadow: none !important;
+        color: #000 !important;
+        padding: 0 4px !important;
+    }
+
+    .fieldLabel {
+        color: #000 !important;
+    }
+
+    .avatarFallback {
+        background: #e0e7ef !important;
+        color: #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
 @media (max-width: 768px) {
     .clientViewCard {
         padding: 16px 6px 16px 6px;

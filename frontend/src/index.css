@@ -8,6 +8,52 @@
     --navbar-h-mobile: 138px; /* ajuste para mobile (soma resulta em ~196px) */
 }
 
+/* ── Print / Salvar como PDF ─────────────────────────────── */
+@media print {
+    /* Visibility hack: oculta tudo, mostra só o card */
+    body * {
+        visibility: hidden !important;
+    }
+    [data-print-card],
+    [data-print-card] * {
+        visibility: visible !important;
+    }
+    [data-print-card] {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        margin: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 24px 28px !important;
+        background: #fff !important;
+        color: #000 !important;
+        font-size: 11pt !important;
+        overflow: visible !important;
+        gap: 10px !important;
+    }
+    /* Oculta o botão de imprimir na impressão */
+    [data-print-hide] {
+        display: none !important;
+    }
+    /* Campos sem background colorido */
+    [data-print-card] span {
+        background: transparent !important;
+        box-shadow: none !important;
+        color: #000 !important;
+    }
+    /* Avatar fallback */
+    [data-print-card] [data-avatar-fallback] {
+        background: #e0e0e0 !important;
+        color: #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

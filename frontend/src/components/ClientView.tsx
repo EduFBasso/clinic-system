@@ -86,6 +86,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
 
     return (
         <div
+            data-print-card
             className={styles.clientViewCard}
             style={{
                 background: 'var(--color-selected-bg)',
@@ -117,6 +118,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                 ) : (
                     <div
                         className={styles.avatarFallback}
+                        data-avatar-fallback
                         aria-hidden
                         title={`${client.first_name} ${client.last_name}`}
                     >
@@ -136,6 +138,16 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
             <div className={styles.fieldRow}>
                 <span className={styles.fieldLabel}>Código:</span>
                 <span className={styles.fieldValue}>{client.id}</span>
+            </div>
+
+            <div className={styles.printActions} data-print-hide>
+                <button
+                    type='button'
+                    className={styles.printBtn}
+                    onClick={() => window.print()}
+                >
+                    🖨 Imprimir / Salvar PDF
+                </button>
             </div>
 
             {fieldOrder.map(k => {
