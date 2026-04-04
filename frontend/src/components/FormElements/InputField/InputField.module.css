@@ -23,6 +23,8 @@
     background: var(--color-input);
     color: var(--color-text-main);
     font: inherit;
+    -webkit-appearance: none; /* remove estilo nativo iOS/Safari (ex: input[type=date]) */
+    appearance: none;
     transition:
         border-color 160ms ease,
         box-shadow 160ms ease;

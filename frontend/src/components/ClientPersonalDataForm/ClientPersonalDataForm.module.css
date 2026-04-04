@@ -47,6 +47,8 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
+    overflow: hidden; /* clipa input[type=date] iOS no limite do grid, mantendo o padding do form visível */
+    padding-right: 2px; /* garante que a borda direita do input não seja clipada */
 }
 
 .grid > * {
