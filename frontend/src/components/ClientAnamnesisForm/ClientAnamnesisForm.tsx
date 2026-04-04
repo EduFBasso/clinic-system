@@ -59,6 +59,12 @@ export default function ClientAnamnesisForm({
                                                         <button
                                                             key={opt}
                                                             type='button'
+                                                            data-anamnesis-pill=''
+                                                            data-selected={
+                                                                selected
+                                                                    ? ''
+                                                                    : undefined
+                                                            }
                                                             className={
                                                                 selected
                                                                     ? `${styles.radioBtn} ${styles.radioBtnSelected}`

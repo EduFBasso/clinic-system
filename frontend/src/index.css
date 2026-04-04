@@ -15,7 +15,9 @@
         visibility: hidden !important;
     }
     [data-print-card],
-    [data-print-card] * {
+    [data-print-card] *,
+    [data-print-form],
+    [data-print-form] * {
         visibility: visible !important;
     }
     [data-print-card] {
@@ -34,6 +36,65 @@
         font-size: 11pt !important;
         overflow: visible !important;
         gap: 10px !important;
+    }
+    /* ── Formulário de cadastro (modo edição) ── */
+    [data-print-form] {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        background: #fff !important;
+        color: #000 !important;
+        font-size: 10pt !important;
+    }
+    /* Painéis de seção: remove background/border/shadow */
+    [data-print-form] [data-theme='blue'] {
+        padding: 0 !important;
+        max-width: 100% !important;
+    }
+    [data-print-form] [data-theme='blue'] > div {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 10px 0 !important;
+        max-width: 100% !important;
+        border-bottom: 1px solid #e0e0e0 !important;
+    }
+    /* Campos nativos: aparecem como texto sublinhado */
+    [data-print-form] input,
+    [data-print-form] select,
+    [data-print-form] textarea {
+        border: none !important;
+        border-bottom: 1px solid #bbb !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: #000 !important;
+        padding: 1px 2px !important;
+        box-shadow: none !important;
+        min-height: auto !important;
+        resize: none !important;
+    }
+    /* Pills de anamnese: não selecionados ficam apagados */
+    [data-print-form] [data-anamnesis-pill] {
+        background: transparent !important;
+        border: 1px solid #ccc !important;
+        color: #aaa !important;
+        font-weight: 400 !important;
+        padding: 1px 6px !important;
+        border-radius: 3px !important;
+        font-size: 9pt !important;
+        box-shadow: none !important;
+    }
+    /* Pill selecionado: destaque em negrito */
+    [data-print-form] [data-anamnesis-pill][data-selected] {
+        border-color: #222 !important;
+        color: #000 !important;
+        font-weight: 700 !important;
+        background: #f0f0f0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
     /* Oculta o botão de imprimir na impressão */
     [data-print-hide] {
