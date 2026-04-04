@@ -10,7 +10,6 @@ from .serializers import (
     ClinicalRecordSerializer,
     EncounterSerializer,
     FinalizeAuditSerializer,
-    IntegrationConsultationSerializer,
 )
 
 
@@ -281,62 +280,6 @@ class FinalizeAuditListView(generics.ListAPIView):
             except Exception:
                 pass
         return qs.order_by("-created_at")
-
-
-class IntegrationConsultationsListView(generics.ListAPIView):
-    """Endpoint de leitura para integrações externas (ex.: Odoo).
-
-    Retorna compromissos finalizados (status=done) no formato de "consultations".
-    Requer autenticação padrão do sistema (JWT/Session). No futuro, podemos adicionar
-    um token específico de integração.
-
-    Filtros suportados:
-    - start: ISO datetime (start_at >=)
-    - end: ISO datetime (end_at <=)
-    - updated_since: ISO datetime (updated_at >=) para pulls incrementais
-    - client: id
-    - professional: id (admin/staff pode ver outros; profissional comum vê apenas os seus)
-    """
-
-    serializer_class = IntegrationConsultationSerializer
-    permission_classes = [IsProfessionalOrReadOnly]
-
-    def get_queryset(self):
-        qs = Appointment.objects.select_related("professional", "client").filter(status=Appointment.Status.DONE)
-        user = getattr(self.request, "user", None)
-
-        # Profissional comum: restringe aos seus próprios compromissos
-        if user and getattr(user, "id", None) and not getattr(user, "is_staff", False):
-            qs = qs.filter(professional_id=user.id)
-
-        start = self.request.query_params.get("start")
-        end = self.request.query_params.get("end")
-        updated_since = self.request.query_params.get("updated_since")
-        client_id = self.request.query_params.get("client")
-        professional_id = self.request.query_params.get("professional")
-
-        if start:
-            try:
-                qs = qs.filter(start_at__gte=start)
-            except Exception:
-                pass
-        if end:
-            try:
-                qs = qs.filter(end_at__lte=end)
-            except Exception:
-                pass
-        if updated_since:
-            try:
-                qs = qs.filter(updated_at__gte=updated_since)
-            except Exception:
-                pass
-        if client_id:
-            qs = qs.filter(client_id=client_id)
-        if professional_id:
-            qs = qs.filter(professional_id=professional_id)
-
-        # Ordenação padrão: updated_at crescente para facilitar pulls incrementais determinísticos
-        return qs.order_by("updated_at", "id")
 
 
 class EncounterViewSet(ProfessionalOwnedViewSet):

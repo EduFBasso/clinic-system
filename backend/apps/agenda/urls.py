@@ -7,7 +7,6 @@ from .views import (
     ClinicalRecordViewSet,
     EncounterViewSet,
     FinalizeAuditListView,
-    IntegrationConsultationsListView,
 )
 
 router = DefaultRouter()
@@ -19,6 +18,4 @@ router.register(r'charges', ChargeViewSet, basename='charge')
 urlpatterns = [
     path('', include(router.urls)),
     path('finalize-audits/', FinalizeAuditListView.as_view(), name='finalize-audits-list'),
-    # Integração: consultas (somente leitura)
-    path('integration/consultations/', IntegrationConsultationsListView.as_view(), name='integration-consultations-list'),
 ]
