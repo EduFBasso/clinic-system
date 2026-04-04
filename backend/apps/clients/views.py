@@ -14,10 +14,10 @@ class ClientViewSet(ModelViewSet):
     ordering_fields = ['first_name', 'last_name', 'city', 'state']
     ordering = ['first_name']
 
-    def get_queryset(self):
+    def get_queryset(self): # type: ignore
         user = self.request.user
         queryset = Client.objects.filter(professional=user)
-        nome = self.request.query_params.get('nome')
+        nome = self.request.query_params.get('nome') # type: ignore
         if nome:
             queryset = queryset.filter(first_name__icontains=nome)
         return queryset
@@ -49,8 +49,8 @@ class ClientBasicViewSet(ModelViewSet):
     serializer_class = ClientBasicSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        nome = self.request.query_params.get('nome', '').strip()
+    def get_queryset(self): # type: ignore
+        nome = self.request.query_params.get('nome', '').strip() # type: ignore
         base_qs = Client.objects.filter(professional=self.request.user)
 
         # Enriquecimento: próximo compromisso futuro (não inclui passado nem em andamento), exclui cancelados.
