@@ -3,9 +3,7 @@ import { API_BASE } from '../config/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { normalizeDOBForApi } from '../utils/dateOfBirth';
 import type { ClientData } from '../types/ClientData';
-import ClientFormDesktop from './ClientFormDesktop';
-import ClientFormMobile from './ClientFormMobile';
-import useIsMobile from '../hooks/useIsMobile';
+import ClientPersonalDataForm from './ClientPersonalDataForm/ClientPersonalDataForm';
 import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
 import { useNavigate } from 'react-router-dom';
 
@@ -74,16 +72,16 @@ export default function ClientForm({
                     field === 'email'
                         ? 'E-mail'
                         : field === 'phone'
-                        ? 'Telefone'
-                        : field === 'state'
-                        ? 'Estado'
-                        : field === 'city'
-                        ? 'Cidade'
-                        : field === 'postal_code'
-                        ? 'CEP'
-                        : field === 'profession'
-                        ? 'Profissão'
-                        : field.replace(/_/g, ' ');
+                          ? 'Telefone'
+                          : field === 'state'
+                            ? 'Estado'
+                            : field === 'city'
+                              ? 'Cidade'
+                              : field === 'postal_code'
+                                ? 'CEP'
+                                : field === 'profession'
+                                  ? 'Profissão'
+                                  : field.replace(/_/g, ' ');
                 const toText = (v: unknown) =>
                     Array.isArray(v)
                         ? v.map(x => String(x)).join(', ')
@@ -339,9 +337,6 @@ export default function ClientForm({
                         }
                         // Demais erros: banner
                         setFeedback({ type: 'error', message: errorMsg });
-                        if (isMobile) {
-                            setTimeout(() => setFeedback(null), 3000);
-                        }
                         const err: HandledError = new Error(
                             errorMsg,
                         ) as HandledError;
@@ -492,9 +487,6 @@ export default function ClientForm({
                         type: 'error',
                         message: 'Erro ao cadastrar: ' + (err?.message || ''),
                     });
-                    if (isMobile) {
-                        setTimeout(() => setFeedback(null), 3000);
-                    }
                 });
             return;
         }
@@ -590,9 +582,6 @@ export default function ClientForm({
                     }
                     // Demais erros: banner
                     setFeedback({ type: 'error', message: errorMsg });
-                    if (isMobile) {
-                        setTimeout(() => setFeedback(null), 3000);
-                    }
                     const err: HandledError = new Error(
                         errorMsg,
                     ) as HandledError;
@@ -754,10 +743,6 @@ export default function ClientForm({
                             type: 'error',
                             message: 'Erro ao excluir cliente',
                         });
-                        // No mobile, exibe erro por 3s
-                        if (isMobile) {
-                            setTimeout(() => setFeedback(null), 3000);
-                        }
                         throw new Error('Erro ao excluir cliente');
                     }
                     // Sucesso: sai imediatamente da tela de edição e atualiza a lista
@@ -819,9 +804,7 @@ export default function ClientForm({
 
     const isEdit = !!cliente?.id;
 
-    const isMobile = useIsMobile();
-
-    // Render modal de sucesso (desktop & mobile) quando existir mensagem
+    // Render modal de sucesso quando existir mensagem
     const SuccessModal = infoModal ? (
         <div
             role='dialog'
@@ -878,69 +861,18 @@ export default function ClientForm({
         </div>
     ) : null;
 
-    if (isMobile) {
-        return (
-            <>
-                {feedback?.type === 'error' && (
-                    <div
-                        style={{
-                            color: 'red',
-                            background: '#f8f8f8',
-                            border: '1px solid #d32f2f',
-                            borderRadius: 6,
-                            padding: '0.75rem',
-                            marginBottom: '1rem',
-                            textAlign: 'center',
-                            fontWeight: 'bold',
-                        }}
-                    >
-                        {feedback.message}
-                    </div>
-                )}
-                <ClientFormMobile
-                    formData={formData}
-                    handleChange={handleChange}
-                    handleSubmit={handleSubmit}
-                    handleCancel={handleCancel}
-                    handleDelete={handleDelete}
-                    isEdit={isEdit}
-                    onPhotoSelected={setSelectedPhotoFile}
-                    initialPhotoUrl={cliente?.photo || null}
-                />
-                {SuccessModal}
-            </>
-        );
-    }
     return (
         <>
-            {feedback?.type === 'error' && (
-                <div
-                    style={{
-                        color: 'red',
-                        background: '#f8f8f8',
-                        border: '1px solid #d32f2f',
-                        borderRadius: 6,
-                        padding: '0.75rem',
-                        marginBottom: '1rem',
-                        textAlign: 'center',
-                        fontWeight: 'bold',
-                    }}
-                >
-                    {feedback.message}
-                </div>
-            )}
-            <ClientFormDesktop
+            <ClientPersonalDataForm
                 formData={formData}
-                setFormData={setFormData}
                 handleChange={handleChange}
                 handleSubmit={handleSubmit}
                 handleCancel={handleCancel}
                 handleDelete={handleDelete}
                 isEdit={isEdit}
+                feedback={feedback}
                 onQuickSubmit={onQuickSubmit}
                 formRef={formRef}
-                initialPhotoUrl={cliente?.photo || null}
-                onPhotoSelected={setSelectedPhotoFile}
             />
             {SuccessModal}
         </>

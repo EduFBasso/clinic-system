@@ -1,0 +1,119 @@
+.wrapper {
+    /* Theme scope — lab design tokens active inside */
+}
+
+.form {
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    padding: 28px;
+    box-shadow: var(--shadow-panel);
+    display: grid;
+    gap: 24px;
+    max-width: 680px;
+    margin: 0 auto;
+}
+
+.header {
+    display: grid;
+    gap: 4px;
+}
+
+.eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.72rem;
+    color: var(--color-accent-strong);
+}
+
+.title {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--color-text-main);
+}
+
+.errorBanner {
+    background: var(--color-danger-soft);
+    color: var(--color-danger-ink);
+    border: 1px solid var(--color-danger);
+    border-radius: var(--radius-lg);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+@media (max-width: 520px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .form {
+        padding: 20px 16px;
+    }
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.btnPrimary,
+.btnSecondary,
+.btnDanger {
+    border: 0;
+    border-radius: var(--radius-pill);
+    padding: 0.75rem 1.25rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        transform 150ms ease,
+        opacity 150ms ease;
+}
+
+.btnPrimary:hover,
+.btnSecondary:hover,
+.btnDanger:hover {
+    transform: translateY(-1px);
+}
+
+.btnPrimary:disabled,
+.btnSecondary:disabled,
+.btnDanger:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
+.btnPrimary {
+    background: linear-gradient(
+        135deg,
+        var(--color-accent-strong),
+        var(--color-accent)
+    );
+    color: var(--color-on-accent);
+}
+
+.btnSecondary {
+    background: var(--color-surface);
+    color: var(--color-text-main);
+    border: 1px solid var(--color-border-strong);
+}
+
+.btnDanger {
+    background: linear-gradient(
+        135deg,
+        var(--color-danger-strong),
+        var(--color-danger)
+    );
+    color: #fff7f7;
+}
