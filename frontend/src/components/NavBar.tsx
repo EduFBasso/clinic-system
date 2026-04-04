@@ -23,7 +23,7 @@ type VerifyResponse = {
     device_id?: string;
     message?: string;
 };
-import type { ProfessionalBasic } from '../hooks/useProfessionals';
+import type { Professional as ProfessionalBasic } from '../types/models';
 import styles from '../styles/components/NavBar.module.css';
 import AgendaSettingsModal from './AgendaSettingsModal';
 // formatTime removido: não exibimos mais relógio no header

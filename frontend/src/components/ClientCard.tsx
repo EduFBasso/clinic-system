@@ -18,7 +18,6 @@ import WeeklyAgendaModal from './WeeklyAgendaModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
 // PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
 import { useClientPendingState } from '../hooks/useClientPendingState';
-// import type { SharedAppointmentLike } from './shared/AppointmentCard'; // no longer needed after pending hook extraction
 import FinalizeButton from './clientCard/FinalizeButton';
 // SolveButton lives in clientCard folder along with FinalizeButton
 import SolveButton from './clientCard/SolveButton';
@@ -33,8 +32,6 @@ import { useClientOngoingState } from '../hooks/useClientOngoingState';
 import { formatTime } from '../utils/timeFormat';
 import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
-// Inline editor desativado temporariamente para isolar atraso no botão
-// import InlineAppointmentEditor from './InlineAppointmentEditor';
 
 interface ClientCardProps {
     client: ClientBasic;
