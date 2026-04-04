@@ -3,6 +3,7 @@ import type { ClientData } from '../types/ClientData';
 import styles from '../styles/components/ClientView.module.css';
 import { formatPhone } from '../utils/formatPhone';
 import { formatDOBWithAge } from '../utils/dateOfBirth';
+import { formatCpf, formatCnpj, formatRg } from '../utils/formatCpf';
 
 interface ClientViewProps {
     client: ClientData & {
@@ -93,8 +94,12 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                         decoding='async'
                         onError={ev => {
                             try {
-                                (ev.currentTarget as HTMLImageElement).style.display = 'none';
-                            } catch { /* noop */ }
+                                (
+                                    ev.currentTarget as HTMLImageElement
+                                ).style.display = 'none';
+                            } catch {
+                                /* noop */
+                            }
                         }}
                     />
                 ) : (
@@ -140,6 +145,14 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                     value = MARITAL_LABELS[raw as string] ?? String(raw);
                 } else if (k === 'document_type') {
                     value = DOC_TYPE_LABELS[raw as string] ?? String(raw);
+                } else if (k === 'document_number') {
+                    const docType = client.document_type ?? '';
+                    value =
+                        docType === 'cnpj'
+                            ? formatCnpj(String(raw))
+                            : formatCpf(String(raw));
+                } else if (k === 'rg') {
+                    value = formatRg(String(raw));
                 } else {
                     value = String(raw);
                 }

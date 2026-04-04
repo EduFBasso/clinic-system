@@ -3,6 +3,7 @@ import type { ClientData } from '../../types/ClientData';
 import InputField from '../FormElements/InputField/InputField';
 import SelectField from '../FormElements/SelectField/SelectField';
 import { formatPhone } from '../../utils/formatPhone';
+import { formatCpf, formatCnpj, formatRg } from '../../utils/formatCpf';
 import styles from './ClientPersonalDataForm.module.css';
 
 type ChangeHandler = (
@@ -144,7 +145,9 @@ export default function ClientPersonalDataForm({
                         label='RG'
                         name='rg'
                         value={formData.rg ?? ''}
-                        onChange={e => handleChange(e)}
+                        onChange={e =>
+                            handleChange('rg', formatRg(e.target.value))
+                        }
                         placeholder='00.000.000-0'
                     />
                     <SelectField
@@ -162,7 +165,16 @@ export default function ClientPersonalDataForm({
                         label='Número do documento'
                         name='document_number'
                         value={formData.document_number ?? ''}
-                        onChange={e => handleChange(e)}
+                        onChange={e => {
+                            const fmt =
+                                formData.document_type === 'cnpj'
+                                    ? formatCnpj
+                                    : formatCpf;
+                            handleChange(
+                                'document_number',
+                                fmt(e.target.value),
+                            );
+                        }}
                         placeholder={
                             formData.document_type === 'cnpj'
                                 ? '00.000.000/0000-00'
