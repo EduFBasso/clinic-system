@@ -9,12 +9,48 @@ class Client(models.Model):
         verbose_name="Profissional",
     )
 
+    DOCUMENT_TYPE_CHOICES = [
+        ("cpf", "CPF"),
+        ("cnpj", "CNPJ"),
+    ]
+
+    SEX_CHOICES = [
+        ("masculino", "Masculino"),
+        ("feminino", "Feminino"),
+        ("outro", "Outro"),
+        ("nao_informado", "Prefiro não informar"),
+    ]
+
+    MARITAL_STATUS_CHOICES = [
+        ("solteiro", "Solteiro(a)"),
+        ("casado", "Casado(a)"),
+        ("divorciado", "Divorciado(a)"),
+        ("viuvo", "Viúvo(a)"),
+        ("uniao_estavel", "União estável"),
+    ]
+
     # Pessoais
     first_name = models.CharField("Primeiro nome", max_length=255)
     last_name = models.CharField("Sobrenome", max_length=255)
     email = models.EmailField("E-mail", unique=True, null=True, blank=True)
     phone = models.CharField(
         "Telefone", max_length=20, unique=True, null=True, blank=False
+    )
+    document_type = models.CharField(
+        "Tipo de documento", max_length=4,
+        choices=DOCUMENT_TYPE_CHOICES, null=True, blank=True
+    )
+    document_number = models.CharField(
+        "Número do documento", max_length=20, null=True, blank=True
+    )
+    sex = models.CharField(
+        "Sexo", max_length=20, choices=SEX_CHOICES, null=True, blank=True
+    )
+    marital_status = models.CharField(
+        "Estado civil", max_length=20, choices=MARITAL_STATUS_CHOICES, null=True, blank=True
+    )
+    nationality = models.CharField(
+        "Nacionalidade", max_length=60, null=True, blank=True
     )
     profession = models.CharField("Profissão", max_length=100, null=True, blank=True)
 

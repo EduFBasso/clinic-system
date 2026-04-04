@@ -74,6 +74,12 @@ class ClientSerializer(serializers.ModelSerializer):
             "date_of_birth": {"required": False, "allow_null": True},
             "address_number": {"required": False, "allow_null": True, "allow_blank": True},
             "photo": {"required": False, "allow_null": True},
+            # Campos pessoais adicionais
+            "document_type": {"required": False, "allow_null": True, "allow_blank": True},
+            "document_number": {"required": False, "allow_null": True, "allow_blank": True},
+            "sex": {"required": False, "allow_null": True, "allow_blank": True},
+            "marital_status": {"required": False, "allow_null": True, "allow_blank": True},
+            "nationality": {"required": False, "allow_null": True, "allow_blank": True},
         }
 
     # Normalizações e validações leves

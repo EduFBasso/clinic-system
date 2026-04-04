@@ -112,6 +112,11 @@ export default function ClientForm({
         email: cliente?.email ?? '',
         phone: cliente?.phone ?? '',
         profession: cliente?.profession ?? '',
+        document_type: cliente?.document_type ?? '',
+        document_number: cliente?.document_number ?? '',
+        sex: cliente?.sex ?? '',
+        marital_status: cliente?.marital_status ?? '',
+        nationality: cliente?.nationality ?? '',
         address: cliente?.address ?? '',
         neighborhood: cliente?.neighborhood ?? '',
         city: cliente?.city ?? 'Limeira',
@@ -180,7 +185,9 @@ export default function ClientForm({
     function handleChange(
         fieldOrEvent:
             | keyof ClientData
-            | React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+            | React.ChangeEvent<
+                  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+              >,
         value?: ClientData[keyof ClientData],
     ) {
         if (typeof fieldOrEvent === 'string') {
@@ -400,6 +407,11 @@ export default function ClientForm({
                             email: '',
                             phone: '',
                             profession: '',
+                            document_type: '',
+                            document_number: '',
+                            sex: '',
+                            marital_status: '',
+                            nationality: '',
                             address: '',
                             neighborhood: '',
                             city: 'Limeira',
@@ -444,6 +456,11 @@ export default function ClientForm({
                             email: '',
                             phone: '',
                             profession: '',
+                            document_type: '',
+                            document_number: '',
+                            sex: '',
+                            marital_status: '',
+                            nationality: '',
                             address: '',
                             neighborhood: '',
                             city: 'Limeira',

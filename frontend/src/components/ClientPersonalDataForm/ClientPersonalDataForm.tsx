@@ -1,13 +1,16 @@
 import type { FormEvent } from 'react';
 import type { ClientData } from '../../types/ClientData';
 import InputField from '../FormElements/InputField/InputField';
+import SelectField from '../FormElements/SelectField/SelectField';
 import { formatPhone } from '../../utils/formatPhone';
 import styles from './ClientPersonalDataForm.module.css';
 
 type ChangeHandler = (
     fieldOrEvent:
         | keyof ClientData
-        | React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+        | React.ChangeEvent<
+              HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+          >,
     value?: ClientData[keyof ClientData],
 ) => void;
 
@@ -120,6 +123,66 @@ export default function ClientPersonalDataForm({
                         value={formData.profession}
                         onChange={e => handleChange(e)}
                         placeholder='Ex: Professora, Maratonista'
+                    />
+                    <SelectField
+                        label='Tipo de documento'
+                        name='document_type'
+                        value={formData.document_type ?? ''}
+                        onChange={e => handleChange(e)}
+                        options={[
+                            { value: 'cpf', label: 'CPF' },
+                            { value: 'cnpj', label: 'CNPJ' },
+                        ]}
+                        placeholder='Selecione…'
+                    />
+                    <InputField
+                        label='Número do documento'
+                        name='document_number'
+                        value={formData.document_number ?? ''}
+                        onChange={e => handleChange(e)}
+                        placeholder={
+                            formData.document_type === 'cnpj'
+                                ? '00.000.000/0000-00'
+                                : '000.000.000-00'
+                        }
+                    />
+                    <SelectField
+                        label='Sexo'
+                        name='sex'
+                        value={formData.sex ?? ''}
+                        onChange={e => handleChange(e)}
+                        options={[
+                            { value: 'masculino', label: 'Masculino' },
+                            { value: 'feminino', label: 'Feminino' },
+                            { value: 'outro', label: 'Outro' },
+                            {
+                                value: 'nao_informado',
+                                label: 'Prefiro não informar',
+                            },
+                        ]}
+                        placeholder='Selecione…'
+                    />
+                    <SelectField
+                        label='Estado civil'
+                        name='marital_status'
+                        value={formData.marital_status ?? ''}
+                        onChange={e => handleChange(e)}
+                        options={[
+                            { value: 'solteiro', label: 'Solteiro(a)' },
+                            { value: 'casado', label: 'Casado(a)' },
+                            { value: 'divorciado', label: 'Divorciado(a)' },
+                            { value: 'viuvo', label: 'Viúvo(a)' },
+                            { value: 'uniao_estavel', label: 'União estável' },
+                        ]}
+                        placeholder='Selecione…'
+                    />
+                    <InputField
+                        label='Nacionalidade'
+                        name='nationality'
+                        value={formData.nationality ?? ''}
+                        onChange={e => handleChange(e)}
+                        placeholder='Ex: Brasileira'
+                        autoComplete='country-name'
                     />
                 </div>
 

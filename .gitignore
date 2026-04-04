@@ -86,3 +86,5 @@ scripts/db/backups/**/*.json
 .env
 backend/.env
 backend/.env.*
+
+frontend-lab/

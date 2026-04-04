@@ -23,13 +23,11 @@
     background: var(--color-input);
     color: var(--color-text-main);
     font: inherit;
+    appearance: auto;
+    cursor: pointer;
     transition:
         border-color 160ms ease,
         box-shadow 160ms ease;
-}
-
-.input::placeholder {
-    color: var(--color-text-muted);
 }
 
 .input:hover,
