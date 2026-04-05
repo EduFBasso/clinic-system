@@ -3,13 +3,19 @@ import { FaTimes } from 'react-icons/fa';
 
 export interface QuickScheduleHeaderProps {
     clientFullName: string;
+    isEditing?: boolean;
     onClose?: () => void;
 }
 
 export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
     clientFullName,
+    isEditing = false,
     onClose,
 }) => {
+    const parts = clientFullName.trim().split(' ');
+    const firstName = parts[0] ?? clientFullName;
+    const lastName = parts.slice(1).join(' ');
+
     return (
         <div
             style={{
@@ -26,40 +32,49 @@ export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '8px 0',
-                    gap: 12,
-                    flexWrap: 'wrap',
+                    padding: '10px 0',
+                    gap: 8,
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                        minWidth: 0,
+                    }}
+                >
                     <h2
                         style={{
                             margin: 0,
-                            fontSize: 22,
+                            fontSize: 19,
                             fontWeight: 800,
                             color: '#111827',
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                         }}
                         title={clientFullName}
                     >
-                        {clientFullName}
+                        {firstName}
+                        {lastName && (
+                            <span className='monthly-title-lastname'>
+                                {' '}
+                                {lastName}
+                            </span>
+                        )}
                     </h2>
                     <span
-                        aria-hidden
-                        title='Novo agendamento'
                         style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 22,
-                            height: 22,
-                            borderRadius: 999,
-                            background: '#059669',
-                            color: '#fff',
-                            fontWeight: 900,
-                            lineHeight: 1,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            letterSpacing: 0.4,
+                            textTransform: 'uppercase',
+                            color: isEditing ? '#2563eb' : '#059669',
                         }}
                     >
-                        +
+                        {isEditing ? 'Editar compromisso' : 'Novo compromisso'}
                     </span>
                 </div>
                 <button
@@ -67,6 +82,7 @@ export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
                     aria-label='Fechar'
                     onClick={onClose}
                     style={{
+                        flexShrink: 0,
                         width: 36,
                         height: 36,
                         display: 'inline-flex',

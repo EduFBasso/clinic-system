@@ -971,14 +971,17 @@ export default function ClientForm({
                     formData={formData}
                     handleChange={handleChange}
                     feedback={feedback}
+                    isEdit={isEdit}
                 />
                 <ClientAddressForm
                     formData={formData}
                     handleChange={handleChange}
+                    isEdit={isEdit}
                 />
                 <ClientAnamnesisForm
                     fields={anamnesisFields}
                     values={anamnesisValues}
+                    isEdit={isEdit}
                     onChange={(fieldId, value) =>
                         setAnamnesisValues(prev => ({
                             ...prev,

@@ -60,14 +60,10 @@ export default function FloatingDatePicker({
     const [viewMonth, setViewMonth] = React.useState(() =>
         startOfMonth(selectedDate),
     );
-    // Pending selection: user can click a day and confirm with OK
-    const [pendingDate, setPendingDate] = React.useState<Date>(selectedDate);
 
     React.useEffect(() => {
         if (open) {
             setViewMonth(startOfMonth(selectedDate));
-            // Reset pending selection when opened or selected changes from parent
-            setPendingDate(selectedDate);
         }
     }, [open, selectedDate]);
 
@@ -253,7 +249,7 @@ export default function FloatingDatePicker({
                 }}
             >
                 {days.map(({ date, inMonth }) => {
-                    const selected = isSameDay(date, pendingDate);
+                    const selected = isSameDay(date, selectedDate);
                     const disabled = !!minDay && date < minDay;
                     const isToday = (() => {
                         const now = new Date();
@@ -268,13 +264,12 @@ export default function FloatingDatePicker({
                             type='button'
                             onClick={() => {
                                 if (disabled) return;
-                                // Preserve time from current pending selection (or prop selected if unchanged)
-                                const base = pendingDate || selectedDate;
+                                const base = selectedDate;
                                 const next = new Date(base);
                                 next.setFullYear(date.getFullYear());
                                 next.setMonth(date.getMonth());
                                 next.setDate(date.getDate());
-                                setPendingDate(next);
+                                onChange(next);
                             }}
                             style={{
                                 aspectRatio: '1 / 1',
@@ -283,24 +278,24 @@ export default function FloatingDatePicker({
                                     selected && isToday
                                         ? 'var(--color-success)'
                                         : selected
-                                        ? '#2563eb'
-                                        : '#e5e7eb'
+                                          ? '#2563eb'
+                                          : '#e5e7eb'
                                 }`,
                                 background: '#fff',
                                 color: disabled
                                     ? '#d1d5db'
                                     : selected
-                                    ? '#2563eb'
-                                    : isToday
-                                    ? 'var(--color-success)'
-                                    : inMonth
-                                    ? '#111827'
-                                    : '#9ca3af',
+                                      ? '#2563eb'
+                                      : isToday
+                                        ? 'var(--color-success)'
+                                        : inMonth
+                                          ? '#111827'
+                                          : '#9ca3af',
                                 fontWeight: selected
                                     ? 700
                                     : isToday
-                                    ? 700
-                                    : 500,
+                                      ? 700
+                                      : 500,
                                 cursor: disabled ? 'not-allowed' : 'pointer',
                                 opacity: disabled ? 0.6 : 1,
                             }}
@@ -311,34 +306,6 @@ export default function FloatingDatePicker({
                         </button>
                     );
                 })}
-            </div>
-            <div
-                style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    gap: 8,
-                    padding: '8px 12px 12px',
-                }}
-            >
-                <button
-                    type='button'
-                    onClick={() => {
-                        onChange(pendingDate);
-                        onClose();
-                    }}
-                    style={{
-                        background: '#2563eb',
-                        color: '#fff',
-                        border: '1px solid #2563eb',
-                        borderRadius: 6,
-                        padding: '6px 12px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                    }}
-                    title='Confirmar data'
-                >
-                    OK
-                </button>
             </div>
         </div>
     );

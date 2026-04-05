@@ -18,6 +18,7 @@ interface Props {
     formData: ClientData;
     handleChange: ChangeHandler;
     feedback?: { type: 'error'; message: string } | null;
+    isEdit?: boolean;
 }
 
 /** Convert dd/mm/YYYY or YYYY-MM-DD to YYYY-MM-DD for <input type="date"> */
@@ -33,12 +34,15 @@ export default function ClientPersonalDataForm({
     formData,
     handleChange,
     feedback,
+    isEdit = false,
 }: Props) {
     return (
         <div data-theme='blue' className={styles.wrapper}>
             <div className={styles.form}>
                 <header className={styles.header}>
-                    <span className={styles.eyebrow}>Cadastro</span>
+                    <span className={styles.eyebrow}>
+                        {isEdit ? 'Editar / Apagar' : 'Cadastro'}
+                    </span>
                     <h2 className={styles.title}>Dados Pessoais</h2>
                 </header>
 

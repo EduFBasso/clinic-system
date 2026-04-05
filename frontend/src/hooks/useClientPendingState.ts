@@ -27,6 +27,11 @@ export function useClientPendingState({
 }: UseClientPendingParams): UseClientPendingResult {
     const isScheduled = client.next_appointment_status === 'scheduled';
 
+    // Ref keeps the current `now` accessible inside effects without adding it to dep arrays
+    // (avoids re-running network effects every 5 s on each clock tick)
+    const nowRef = React.useRef(now);
+    nowRef.current = now;
+
     const isPendingHeuristic = React.useMemo(() => {
         // Future fields probing guarded by 'in'; no TS expectation directives.
         const anyClient = client as unknown as Record<string, unknown>;
@@ -61,20 +66,25 @@ export function useClientPendingState({
     React.useEffect(() => {
         let cancelled = false;
         if (isPendingHeuristic) {
-            if (pendingOverride) setPendingOverride(false);
+            // Heurística já confirma pendência: limpa override para evitar estado duplo
+            setPendingOverride(false);
             return () => {
                 cancelled = true;
             };
         }
-        // Only probe if not heuristic pending
+        // Só consulta o servidor quando a heurística não detectou — usa nowRef para não
+        // reexecutar a cada tick de relógio (a cada 5 s), apenas em mudanças reais de estado.
         (async () => {
-            const appt = await findFirstPendingForClient(client.id, now);
+            const appt = await findFirstPendingForClient(
+                client.id,
+                nowRef.current,
+            );
             if (!cancelled && appt) setPendingOverride(true);
         })();
         return () => {
             cancelled = true;
         };
-    }, [isPendingHeuristic, client.id, now, pendingOverride]);
+    }, [isPendingHeuristic, client.id]); // removido: now, pendingOverride (causavam 12×/min por cartão)
 
     // Observa override para o next_appointment_id (se existir)
     const overrideStatus = React.useMemo(() => {
@@ -93,6 +103,7 @@ export function useClientPendingState({
                 | undefined;
             if (!detail || typeof detail.clientId !== 'number') return;
             if (detail.clientId === client.id) {
+                setPendingOverride(false); // limpa override para rawPending = false imediatamente
                 setPendingResolvedLocal(true);
                 setPendingBlockUntil(Date.now() + 4000); // 4s de blindagem contra volta brusca
             }
@@ -115,6 +126,7 @@ export function useClientPendingState({
             if (ids && !ids.includes(client.next_appointment_id!)) return;
             const ov = getAppointmentOverride(client.next_appointment_id!);
             if (ov && (ov.status === 'done' || ov.status === 'canceled')) {
+                setPendingOverride(false); // limpa override: rawPending fica false direto
                 setPendingResolvedLocal(true);
                 setPendingBlockUntil(Date.now() + 4000);
             }
@@ -134,8 +146,12 @@ export function useClientPendingState({
         // Se status não é mais scheduled ou end_at passa a ser > now (nova janela futura) limpamos flag
         const endISO = client.next_appointment_end_at;
         const endMs = endISO ? new Date(endISO).getTime() : NaN;
+        // Limpa apenas quando servidor confirma status terminal (done/canceled)
+        // ou quando chega novo agendamento futuro (end_at > now).
+        // null = servidor não retorna agendamentos passados — não indica resolução.
         const shouldClear =
-            client.next_appointment_status !== 'scheduled' ||
+            client.next_appointment_status === 'done' ||
+            client.next_appointment_status === 'canceled' ||
             (isFinite(endMs) && endMs > now.getTime());
         if (shouldClear) {
             setPendingResolvedLocal(false);

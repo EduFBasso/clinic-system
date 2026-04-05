@@ -10,7 +10,8 @@ import { getAppointmentOverride } from '../utils/appointments/overrides';
 import ClientCardRow from './shared/ClientCardRow';
 // PendingActionsModal é global (Home)
 import StickyModalHeader from './shared/StickyModalHeader';
-import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
+import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
+import FloatingDatePicker from './FloatingDatePicker';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -59,12 +60,40 @@ export default function MonthlyAgendaModal({
     initialMonth?: Date;
 }) {
     const effectiveNowRef = React.useMemo(() => new Date(), []);
+    // Floating date picker state — consistent with DailyAgendaModal / WeeklyAgendaModal
+    const [showPicker, setShowPicker] = React.useState(false);
+    const [pickerPos, setPickerPos] = React.useState<
+        { x: number; y: number } | undefined
+    >(undefined);
+    const openDatePicker = React.useCallback(
+        (ev?: React.MouseEvent | React.PointerEvent | React.TouchEvent) => {
+            let px = 24;
+            let py = 120;
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const native = (ev as any)?.nativeEvent ?? ev;
+                if (native) {
+                    if (typeof native.clientX === 'number') {
+                        px = native.clientX;
+                        py = native.clientY;
+                    } else if (native.touches && native.touches[0]) {
+                        px = native.touches[0].clientX;
+                        py = native.touches[0].clientY;
+                    }
+                }
+            } catch {
+                /* noop */
+            }
+            setPickerPos({ x: px, y: py });
+            setShowPicker(true);
+        },
+        [],
+    );
+
     const [month, setMonth] = React.useState<Date>(() =>
         startOfMonth(initialMonth ? new Date(initialMonth) : new Date()),
     );
     const [statusFilter] = React.useState<StatusFilter>('all');
-    // dayFilter agora é interno (UI removida). Mantemos para possível scroll focado.
-    const [dayFilter, setDayFilter] = React.useState<'all' | string>('all');
     const [reloadKey, setReloadKey] = React.useState(0);
     const [visibleDaysCount, setVisibleDaysCount] = React.useState<number>(14);
 
@@ -117,28 +146,6 @@ export default function MonthlyAgendaModal({
         [filteredItems],
     );
 
-    const allMonthDays = React.useMemo(() => {
-        const days: string[] = [];
-        const d = new Date(monthStart);
-        while (d < monthEnd) {
-            days.push(toISODate(d));
-            d.setDate(d.getDate() + 1);
-        }
-        return days;
-    }, [monthStart, monthEnd]);
-
-    React.useEffect(() => {
-        if (!open) return;
-        setDayFilter('all');
-    }, [open]);
-
-    React.useEffect(() => {
-        if (!open) return;
-        if (dayFilter !== 'all' && !allMonthDays.includes(dayFilter)) {
-            setDayFilter('all');
-        }
-    }, [month, allMonthDays, open, dayFilter]);
-
     React.useEffect(() => {
         let t: number | undefined;
         const onChanged = () => {
@@ -152,12 +159,22 @@ export default function MonthlyAgendaModal({
         };
     }, []);
 
-    const mName = React.useMemo(
-        () => month.toLocaleString('pt-BR', { month: 'long' }),
-        [month],
-    );
     const y = month.getFullYear();
-    const monthValue = `${y}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+
+    const MONTH_ABBR = [
+        'Jan',
+        'Fev',
+        'Mar',
+        'Abr',
+        'Mai',
+        'Jun',
+        'Jul',
+        'Ago',
+        'Set',
+        'Out',
+        'Nov',
+        'Dez',
+    ];
 
     const sortedDays = React.useMemo(
         () => Object.keys(groupedFiltered).sort(),
@@ -186,23 +203,24 @@ export default function MonthlyAgendaModal({
             disableTopSafePadding
         >
             <StickyModalHeader
-                title={`Agenda mensal — ${client.first_name} ${client.last_name}`}
+                title={
+                    <>
+                        {'Compromissos: '}
+                        {client.first_name}
+                        <span className='monthly-title-lastname'>
+                            {' '}
+                            {client.last_name}
+                        </span>
+                    </>
+                }
                 onClose={onClose}
             >
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 16,
-                        flexWrap: 'wrap',
-                    }}
-                >
+                {/* Linha 1: Hoje + ano com setas */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <button
                         onClick={() => {
                             const now = new Date();
                             setMonth(startOfMonth(now));
-                            setDayFilter(toISODate(now));
-                            // Scroll até o dia de hoje se listado (após frame)
                             requestAnimationFrame(() => {
                                 const id = toISODate(now);
                                 const el = document.querySelector(
@@ -221,141 +239,121 @@ export default function MonthlyAgendaModal({
                             cursor: 'pointer',
                             color: 'white',
                         }}
-                        aria-label='Ir para hoje'
+                        aria-label='Ir para o mês atual'
                     >
-                        Hoje
+                        Mês Atual
                     </button>
                     <button
-                        type='button'
                         onClick={() =>
-                            document
-                                .getElementById('hiddenMonthPicker')
-                                ?.click()
+                            setMonth(d => {
+                                const x = new Date(d);
+                                x.setFullYear(x.getFullYear() - 1);
+                                return startOfMonth(x);
+                            })
                         }
-                        title='Abrir calendário'
-                        aria-label='Abrir calendário'
+                        title='Ano anterior'
+                        aria-label='Ano anterior'
                         style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-success-dark)',
                             width: 32,
                             height: 32,
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            fontSize: 'var(--icon-size-lg)',
+                        }}
+                    >
+                        <FaArrowLeft />
+                    </button>
+                    <span
+                        style={{
+                            fontWeight: 700,
+                            color: 'var(--color-success-dark)',
+                            minWidth: 40,
+                            textAlign: 'center',
+                        }}
+                    >
+                        {y}
+                    </span>
+                    <button
+                        onClick={() =>
+                            setMonth(d => {
+                                const x = new Date(d);
+                                x.setFullYear(x.getFullYear() + 1);
+                                return startOfMonth(x);
+                            })
+                        }
+                        title='Próximo ano'
+                        aria-label='Próximo ano'
+                        style={{
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
                             color: 'var(--color-success-dark)',
-                            fontSize: 'var(--icon-size-lg)',
-                            userSelect: 'none',
-                        }}
-                    >
-                        <FaCalendarAlt />
-                    </button>
-                    <div
-                        style={{
-                            display: 'flex',
+                            width: 32,
+                            height: 32,
+                            display: 'inline-flex',
                             alignItems: 'center',
-                            gap: 12,
+                            justifyContent: 'center',
+                            fontSize: 'var(--icon-size-lg)',
                         }}
                     >
-                        <button
-                            onClick={() => {
-                                const d = new Date(month);
-                                d.setMonth(d.getMonth() - 1);
-                                setMonth(d);
-                            }}
-                            title='Mês anterior'
-                            aria-label='Mês anterior'
-                            style={{
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
-                                width: 36,
-                                height: 36,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: 'var(--icon-size-lg)',
-                            }}
-                        >
-                            <FaArrowLeft />
-                        </button>
-                        <button
-                            onClick={() =>
-                                document
-                                    .getElementById('hiddenMonthPicker')
-                                    ?.click()
-                            }
-                            title={`Selecionar mês — ${client.first_name} ${client.last_name}`}
-                            aria-label='Selecionar mês'
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
-                                fontWeight: 700,
-                                whiteSpace: 'nowrap',
-                                userSelect: 'none',
-                            }}
-                        >
-                            {mName.charAt(0).toUpperCase() + mName.slice(1)} {y}
-                        </button>
-                        <button
-                            onClick={() => {
-                                const d = new Date(month);
-                                d.setMonth(d.getMonth() + 1);
-                                setMonth(d);
-                            }}
-                            title='Próximo mês'
-                            aria-label='Próximo mês'
-                            style={{
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
-                                width: 36,
-                                height: 36,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: 'var(--icon-size-lg)',
-                            }}
-                        >
-                            <FaArrowRight />
-                        </button>
-                    </div>
+                        <FaArrowRight />
+                    </button>
                 </div>
-                <input
-                    id='hiddenMonthPicker'
-                    type='month'
-                    value={monthValue}
-                    onChange={e => {
-                        const [yy, mm] = e.target.value.split('-').map(Number);
-                        const d = new Date(month);
-                        d.setFullYear(yy);
-                        d.setMonth((mm || 1) - 1);
-                        d.setDate(1);
-                        setMonth(d);
-                    }}
+                {/* Linha 2: pills dos 12 meses */}
+                <div
                     style={{
-                        position: 'absolute',
-                        opacity: 0,
-                        width: 0,
-                        height: 0,
-                        pointerEvents: 'none',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
+                        gap: 4,
+                        paddingTop: 4,
+                        overflowX: 'auto',
                     }}
-                    aria-hidden='true'
-                    tabIndex={-1}
-                />
+                >
+                    {MONTH_ABBR.map((abbr, idx) => {
+                        const selected = month.getMonth() === idx;
+                        return (
+                            <button
+                                key={idx}
+                                onClick={() =>
+                                    setMonth(startOfMonth(new Date(y, idx, 1)))
+                                }
+                                aria-pressed={selected}
+                                style={{
+                                    padding: '6px 4px',
+                                    border: 'none',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    fontWeight: selected ? 800 : 500,
+                                    fontSize: '0.78rem',
+                                    background: selected
+                                        ? 'var(--color-success-dark)'
+                                        : 'transparent',
+                                    color: selected
+                                        ? 'white'
+                                        : 'var(--color-text)',
+                                    transition: 'background 0.15s',
+                                }}
+                            >
+                                {abbr}
+                            </button>
+                        );
+                    })}
+                </div>
             </StickyModalHeader>
 
             <div
                 style={{
                     display: 'grid',
                     gap: 12,
-                    margin: '0 auto',
                     width: '100%',
-                    maxWidth: '520px',
+                    maxWidth: 600,
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
                     paddingLeft: 12,
                     paddingRight: 12,
                     boxSizing: 'border-box',
@@ -367,10 +365,7 @@ export default function MonthlyAgendaModal({
                     <div>Nenhum compromisso neste mês.</div>
                 ) : (
                     <div style={{ display: 'grid', gap: 12, paddingTop: 6 }}>
-                        {(dayFilter === 'all'
-                            ? sortedDays.slice(0, visibleDaysCount)
-                            : [dayFilter]
-                        ).map(dayISO => {
+                        {sortedDays.slice(0, visibleDaysCount).map(dayISO => {
                             const day = parseISODateLocal(dayISO);
                             const label = day.toLocaleDateString('pt-BR', {
                                 weekday: 'short',
@@ -391,16 +386,7 @@ export default function MonthlyAgendaModal({
                                     >
                                         {label}
                                     </div>
-                                    {(groupedFiltered[dayISO] || []).length ===
-                                        0 && dayFilter !== 'all' ? (
-                                        <div
-                                            style={{
-                                                color: 'var(--color-muted)',
-                                            }}
-                                        >
-                                            Nenhum compromisso neste dia.
-                                        </div>
-                                    ) : null}
+
                                     {(groupedFiltered[dayISO] || []).map(a => {
                                         const end = new Date(a.end_at);
                                         const now = effectiveNowRef;
@@ -542,30 +528,26 @@ export default function MonthlyAgendaModal({
                                 </div>
                             );
                         })}
-                        {dayFilter === 'all' &&
-                            visibleDaysCount < sortedDays.length && (
-                                <div
-                                    style={{
-                                        textAlign: 'center',
-                                        padding: '8px 0',
-                                    }}
+                        {visibleDaysCount < sortedDays.length && (
+                            <div
+                                style={{
+                                    textAlign: 'center',
+                                    padding: '8px 0',
+                                }}
+                            >
+                                <button
+                                    onClick={() =>
+                                        setVisibleDaysCount(c =>
+                                            Math.min(c + 7, sortedDays.length),
+                                        )
+                                    }
+                                    style={{ padding: '8px 12px' }}
+                                    aria-label='Carregar mais dias'
                                 >
-                                    <button
-                                        onClick={() =>
-                                            setVisibleDaysCount(c =>
-                                                Math.min(
-                                                    c + 7,
-                                                    sortedDays.length,
-                                                ),
-                                            )
-                                        }
-                                        style={{ padding: '8px 12px' }}
-                                        aria-label='Carregar mais dias'
-                                    >
-                                        Mostrar mais dias
-                                    </button>
-                                </div>
-                            )}
+                                    Mostrar mais dias
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -581,6 +563,25 @@ export default function MonthlyAgendaModal({
                     />
                 )}
             </div>
+            {/* FloatingDatePicker consistente com DailyAgendaModal */}
+            <FloatingDatePicker
+                open={showPicker}
+                onClose={() => setShowPicker(false)}
+                selectedDate={month}
+                onChange={d => {
+                    setMonth(startOfMonth(d));
+                    setShowPicker(false);
+                    // Scroll até o dia selecionado (sem filtrar a lista)
+                    requestAnimationFrame(() => {
+                        const dayISO = toISODate(d);
+                        const el = document.querySelector(
+                            `[data-day="${dayISO}"]`,
+                        );
+                        if (el) el.scrollIntoView({ block: 'start' });
+                    });
+                }}
+                initialPosition={pickerPos}
+            />
         </AppModal>
     );
 }

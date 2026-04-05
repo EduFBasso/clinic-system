@@ -150,3 +150,10 @@ body {
         overflow: hidden; /* rolagem fica no painel principal (.main) */
     }
 }
+
+/* Agenda mensal: oculta sobrenome no mobile para o título não ser cortado */
+@media (max-width: 480px) {
+    .monthly-title-lastname {
+        display: none;
+    }
+}

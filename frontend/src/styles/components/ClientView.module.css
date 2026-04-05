@@ -50,7 +50,7 @@
 }
 
 .clientName {
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     font-weight: 800;
     color: var(--color-heading);
     overflow: hidden;
@@ -59,7 +59,7 @@
 }
 
 .clientSubtitle {
-    font-size: 0.88rem;
+    font-size: 1rem;
     color: var(--color-text-muted);
     margin-top: 2px;
 }
@@ -76,7 +76,7 @@
     padding: 28px;
     box-shadow: var(--shadow-panel);
     display: grid;
-    gap: 20px;
+    gap: 24px;
     max-width: 680px;
     margin: 0 auto;
     box-sizing: border-box;
@@ -90,13 +90,13 @@
 .eyebrow {
     text-transform: uppercase;
     letter-spacing: 0.18em;
-    font-size: 0.72rem;
+    font-size: 0.83rem;
     color: var(--color-accent-strong);
 }
 
 .sectionTitle {
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 1.5rem;
     font-weight: 700;
     color: var(--color-text-main);
 }
@@ -104,7 +104,7 @@
 /* ── Field grid ─────────────────────────────────────── */
 .fieldGrid {
     display: grid;
-    gap: 10px;
+    gap: 14px;
 }
 
 .fieldRow {
@@ -116,10 +116,10 @@
 }
 
 .fieldLabel {
-    font-size: 0.88rem;
+    font-size: 1.05rem;
     font-weight: 600;
     color: var(--color-text-muted, #555);
-    min-width: 180px;
+    min-width: 190px;
     flex-shrink: 0;
 }
 
@@ -132,8 +132,8 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    padding: 2px 10px;
-    font-size: 0.92rem;
+    padding: 4px 12px;
+    font-size: 1.1rem;
     font-weight: 500;
     word-break: break-word;
 }
@@ -141,12 +141,12 @@
 /* ── Anamnese sub-groups ────────────────────────────── */
 .anamnesisGroup {
     display: grid;
-    gap: 10px;
+    gap: 14px;
 }
 
 .anamnesisGroupTitle {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: 0.97rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -177,9 +177,9 @@
     }
     .fieldLabel {
         min-width: unset;
-        font-size: 0.82rem;
+        font-size: 1rem;
     }
     .fieldValue {
-        font-size: 0.92rem;
+        font-size: 1.05rem;
     }
 }

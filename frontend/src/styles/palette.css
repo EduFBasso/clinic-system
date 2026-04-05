@@ -45,9 +45,9 @@
     --color-warning: #f59e0b;
     --color-warning-bg: #fef3c7;
 
-    /* Ongoing (atendimento em curso) - tons laranja escuro/marrom + bege claro */
-    --color-ongoing: #7c2d12; /* laranja escuro puxando para marrom */
-    --color-ongoing-bg: #fff7ed; /* bege/laranja bem claro (alto contraste) */
+    /* Ongoing (atendimento em curso) - verde vivo para indicar "em andamento" */
+    --color-ongoing: #15803d; /* verde (Tailwind green-700) */
+    --color-ongoing-bg: #f0fdf4; /* verde claríssimo (Tailwind green-50) */
 
     /* Done (atendimento finalizado) - azul escuro (alto contraste) + fundo claro */
     --color-done: #1e3a8a; /* azul bem escuro (antes: #2563eb) */

@@ -108,11 +108,32 @@ function schedule(defaultWindowMs: number) {
     }, interval) as unknown as number;
 }
 
+function onVisibility() {
+    try {
+        if (document.visibilityState === 'visible') {
+            void runSweep(windowHalfMs != null ? windowHalfMs * 2 : 60_000);
+            if (!running)
+                start(windowHalfMs != null ? windowHalfMs * 2 : 60_000);
+        }
+    } catch {
+        /* ignore */
+    }
+}
+
+function onAppointmentsChanged() {
+    void runSweep(windowHalfMs != null ? windowHalfMs * 2 : 60_000);
+}
+
 function start(defaultWindowMs: number) {
     if (running) return;
     running = true;
     void runSweep(defaultWindowMs);
     schedule(defaultWindowMs);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener(
+        'appointments:changed',
+        onAppointmentsChanged as EventListener,
+    );
 }
 
 function stop() {
@@ -124,6 +145,11 @@ function stop() {
     } catch {
         /* noop */
     }
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener(
+        'appointments:changed',
+        onAppointmentsChanged as EventListener,
+    );
 }
 
 /**
@@ -141,33 +167,7 @@ export function useOngoingSweep(_now?: Date, windowMs: number = 60_000) {
         subs.add(onUpdate);
         if (subs.size === 1) start(windowMs);
 
-        function onVisibility() {
-            try {
-                if (document.visibilityState === 'visible') {
-                    // immediate sweep when returning to foreground
-                    void runSweep(windowMs);
-                    if (!running) start(windowMs);
-                }
-            } catch {
-                /* ignore */
-            }
-        }
-        document.addEventListener('visibilitychange', onVisibility);
-        function onAppointmentsChanged() {
-            // run a quick sweep after scheduling/finalizing/canceling
-            void runSweep(windowMs);
-        }
-        window.addEventListener(
-            'appointments:changed',
-            onAppointmentsChanged as EventListener,
-        );
-
         return () => {
-            document.removeEventListener('visibilitychange', onVisibility);
-            window.removeEventListener(
-                'appointments:changed',
-                onAppointmentsChanged as EventListener,
-            );
             subs.delete(onUpdate);
             if (subs.size === 0) stop();
         };

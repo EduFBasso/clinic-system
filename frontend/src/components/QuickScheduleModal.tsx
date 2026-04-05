@@ -608,6 +608,7 @@ export default function QuickScheduleModal({
                     {/* Title + client info remain; date controls standardized below */}
                     <QuickScheduleHeader
                         clientFullName={`${client.first_name} ${client.last_name}`}
+                        isEditing={!!currentEdit}
                         onClose={handleImmediateClose}
                     />
 
@@ -684,9 +685,8 @@ export default function QuickScheduleModal({
                                                     'application/json',
                                             };
                                             if (token)
-                                                headers[
-                                                    'Authorization'
-                                                ] = `Bearer ${token}`;
+                                                headers['Authorization'] =
+                                                    `Bearer ${token}`;
                                             const resp = await fetch(
                                                 `${API_BASE}/agenda/appointments/${id}/`,
                                                 { headers },
@@ -923,64 +923,6 @@ export default function QuickScheduleModal({
                             background: 'var(--color-bg)',
                         }}
                     >
-                        {/* Mini toggle "Todos" alinhado à esquerda, pequeno para não competir com os botões */}
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                            }}
-                        >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
-                                Todos
-                            </span>
-                            <button
-                                type='button'
-                                role='switch'
-                                aria-checked={dayFilter !== 'ativos'}
-                                onClick={() =>
-                                    setDayFilter(
-                                        dayFilter === 'ativos'
-                                            ? 'todos'
-                                            : 'ativos',
-                                    )
-                                }
-                                aria-label='Alternar entre todos os status e apenas ativos'
-                                title='Alternar entre todos os status e apenas ativos'
-                                style={{
-                                    position: 'relative',
-                                    width: 40,
-                                    height: 24,
-                                    borderRadius: 999,
-                                    border: '1px solid var(--color-border)',
-                                    background:
-                                        dayFilter === 'ativos'
-                                            ? '#e5e7eb'
-                                            : '#059669',
-                                    cursor: 'pointer',
-                                    padding: 0,
-                                    outline: 'none',
-                                }}
-                            >
-                                <span
-                                    aria-hidden
-                                    style={{
-                                        position: 'absolute',
-                                        top: '50%',
-                                        left: dayFilter === 'ativos' ? 2 : 20,
-                                        transform: 'translateY(-50%)',
-                                        width: 18,
-                                        height: 18,
-                                        borderRadius: '50%',
-                                        background: '#fff',
-                                        boxShadow:
-                                            '0 1px 2px rgba(0,0,0,0.1), 0 1px 1px rgba(0,0,0,0.06)',
-                                        transition:
-                                            'left 150ms ease, transform 150ms ease',
-                                    }}
-                                />
-                            </button>
-                        </div>
                         {/* Right actions: Cancel + Create/Save grouped together */}
                         <div
                             style={{
@@ -1028,8 +970,8 @@ export default function QuickScheduleModal({
                                 {saving
                                     ? 'Salvando...'
                                     : isEdit
-                                    ? 'Salvar'
-                                    : 'Criar'}
+                                      ? 'Salvar'
+                                      : 'Criar'}
                             </button>
                         </div>
                     </div>
@@ -1045,7 +987,6 @@ export default function QuickScheduleModal({
                         currentEditId={currentEdit?.id ?? null}
                         listRef={listRef}
                         minimal={true}
-                        renderMinimalToggle={false}
                         onUseTime={a => {
                             const sd = new Date(a.start_at);
                             const ed = new Date(a.end_at);
@@ -1068,9 +1009,8 @@ export default function QuickScheduleModal({
                         }}
                         onCancel={async a => {
                             try {
-                                const { cancelAppointment } = await import(
-                                    '../services/appointments'
-                                );
+                                const { cancelAppointment } =
+                                    await import('../services/appointments');
                                 const res = await cancelAppointment(a.id);
                                 if (!res.ok) {
                                     throw new Error(

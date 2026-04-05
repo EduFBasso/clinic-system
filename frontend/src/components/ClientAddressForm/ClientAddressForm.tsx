@@ -19,9 +19,14 @@ type ChangeHandler = (
 interface Props {
     formData: ClientData;
     handleChange: ChangeHandler;
+    isEdit?: boolean;
 }
 
-export default function ClientAddressForm({ formData, handleChange }: Props) {
+export default function ClientAddressForm({
+    formData,
+    handleChange,
+    isEdit = false,
+}: Props) {
     const onFound = useCallback(
         (data: {
             address: string;
@@ -43,7 +48,9 @@ export default function ClientAddressForm({ formData, handleChange }: Props) {
         <div data-theme='blue' className={styles.wrapper}>
             <div className={styles.form}>
                 <header className={styles.header}>
-                    <span className={styles.eyebrow}>Cadastro</span>
+                    <span className={styles.eyebrow}>
+                        {isEdit ? 'Editar / Apagar' : 'Cadastro'}
+                    </span>
                     <h2 className={styles.title}>Endereço</h2>
                 </header>
 
