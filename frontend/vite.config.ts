@@ -15,9 +15,45 @@ export default defineConfig({
         host: true,
         port: 5173,
         strictPort: true,
+        allowedHosts: true,
         proxy: {
             '/register': {
-                target: 'http://localhost:8000', // backend Django
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/agenda': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/anamnesis': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/inventory': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/token': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/sessions': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/health': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/media': {
+                target: 'http://localhost:8000',
                 changeOrigin: true,
                 secure: false,
             },
