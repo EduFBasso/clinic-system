@@ -13,6 +13,13 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 DEBUG = config("DEBUG", default=False, cast=bool)
 APP_VERSION = config("APP_VERSION", default="dev")
 
+# Web Push (VAPID)
+# VAPID_PRIVATE_KEY: base64url dos 32 bytes brutos da chave EC privada (sem padding).
+# VAPID_PUBLIC_KEY: base64url da chave pública uncompressed (65 bytes, sem padding).
+VAPID_PRIVATE_KEY = config("VAPID_PRIVATE_KEY", default="")
+VAPID_PUBLIC_KEY = config("VAPID_PUBLIC_KEY", default="")
+VAPID_ADMIN_EMAIL = config("VAPID_ADMIN_EMAIL", default="admin@example.com")
+
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",
     default="localhost,127.0.0.1",

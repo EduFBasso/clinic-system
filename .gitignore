@@ -28,6 +28,21 @@ info/*
 venv/
 .venv/
 /.venv-wsl/
+
+# Zip/archive files (documents, exports, etc.)
+*.zip
+*.rar
+*.tar.gz
+
+# Spreadsheets and office documents (data files, not source code)
+*.xlsx
+*.xls
+*.ods
+*.csv
+*.numbers
+*.docx
+*.doc
+*.pdf
 backend/venv*/
 backend/.venv*/
 backend/.venv-wsl/

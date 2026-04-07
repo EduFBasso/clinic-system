@@ -89,6 +89,12 @@ class Appointment(models.Model):
     )
     ended_device_info = models.TextField(blank=True, help_text="Informações técnicas do dispositivo (JSON) de finalização")
 
+    # Push reminder tracking — True after the same-day reminder has been sent
+    reminder_sent = models.BooleanField(
+        default=False,
+        help_text="True quando o lembrete push do dia já foi enviado para este agendamento.",
+    )
+
     class Meta:
         indexes = [
             models.Index(fields=["professional", "start_at"]),

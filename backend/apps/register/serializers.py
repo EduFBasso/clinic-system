@@ -5,7 +5,7 @@ from .serializers_professionals import (
 )
 from .serializers_auth import CustomTokenObtainPairSerializer
 from rest_framework import serializers
-from .models import ProfessionalSettings
+from .models import ProfessionalSettings, PushSubscription
 from typing import Any, Dict
 
 
@@ -24,6 +24,13 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
         if value not in (5, 10, 15, 20, 30, 45, 60, 90, 120):
             raise serializers.ValidationError(
                 "slot_minutes inválido. Use um dos valores: 5, 10, 15, 20, 30, 45, 60, 90, 120"
+            )
+        return value
+
+    def validate_reminder_minutes_before(self, value: int) -> int:
+        if not (1 <= value <= 1440):
+            raise serializers.ValidationError(
+                "reminder_minutes_before deve estar entre 1 e 1440 minutos."
             )
         return value
 
@@ -48,4 +55,15 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
             "confirm_message_template",
             "pix_key_type",
             "pix_key_value",
+            "reminder_enabled",
+            "reminder_minutes_before",
         ]
+
+
+class PushSubscriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PushSubscription
+        fields = ["endpoint", "p256dh", "auth", "user_agent"]
+        extra_kwargs = {
+            "user_agent": {"required": False},
+        }
