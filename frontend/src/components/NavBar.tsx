@@ -42,7 +42,6 @@ interface NavBarProps {
     openNewClientModal?: () => void;
     selectedClientId?: number | null;
     agendaOpeners?: {
-        openMonthly: (clientId: number, date?: Date) => void | Promise<void>;
         openWeekly: (date?: Date) => void | Promise<void>;
     };
 }
@@ -437,108 +436,8 @@ const NavBar: React.FC<NavBarProps> = ({
                                     }
                                 }}
                             >
-                                Agenda Semanal
+                                Agenda
                             </button>
-                            {(() => {
-                                function canShowMonthly() {
-                                    try {
-                                        const pxW = window.screen.width;
-                                        const pxH = window.screen.height;
-                                        const dpr =
-                                            window.devicePixelRatio || 1;
-                                        const diagonalInches =
-                                            Math.sqrt(pxW ** 2 + pxH ** 2) /
-                                            (dpr * 96);
-                                        const fallbackLarge =
-                                            window.innerWidth >= 1440;
-                                        return (
-                                            diagonalInches > 10 || fallbackLarge
-                                        );
-                                    } catch {
-                                        return false;
-                                    }
-                                }
-                                if (!canShowMonthly()) return null;
-                                return (
-                                    <button
-                                        className={styles.dropdownItem}
-                                        onClick={() => {
-                                            setAgendaDropdownOpen(false);
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            if (!token) {
-                                                setSessionExpiredOpen(true);
-                                                return;
-                                            }
-                                            const now = new Date();
-                                            if (
-                                                agendaOpeners &&
-                                                !isMobileDevice()
-                                            ) {
-                                                if (!selectedClientId) {
-                                                    try {
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'systemMessage',
-                                                                {
-                                                                    detail: {
-                                                                        text: 'Selecione um cliente para abrir a Agenda Mensal.',
-                                                                        type: 'info',
-                                                                        autoCloseMs: 6000,
-                                                                    },
-                                                                },
-                                                            ),
-                                                        );
-                                                    } catch {
-                                                        /* noop */
-                                                    }
-                                                    return;
-                                                }
-                                                agendaOpeners.openMonthly(
-                                                    selectedClientId,
-                                                    now,
-                                                );
-                                            } else {
-                                                const y = now.getFullYear();
-                                                const m = String(
-                                                    now.getMonth() + 1,
-                                                ).padStart(2, '0');
-                                                const d = String(
-                                                    now.getDate(),
-                                                ).padStart(2, '0');
-                                                const url = selectedClientId
-                                                    ? `/agenda?client=${selectedClientId}&date=${y}-${m}-${d}&mode=month`
-                                                    : `/agenda?date=${y}-${m}-${d}&mode=month`;
-                                                if (!selectedClientId) {
-                                                    try {
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'systemMessage',
-                                                                {
-                                                                    detail: {
-                                                                        text: 'Selecione um cliente para abrir a Agenda Mensal.',
-                                                                        type: 'info',
-                                                                        autoCloseMs: 6000,
-                                                                    },
-                                                                },
-                                                            ),
-                                                        );
-                                                    } catch {
-                                                        /* noop */
-                                                    }
-                                                }
-                                                if (isMobileDevice())
-                                                    window.location.href = url;
-                                                else window.open(url, '_self');
-                                            }
-                                        }}
-                                    >
-                                        Agenda Mensal
-                                    </button>
-                                );
-                            })()}
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {

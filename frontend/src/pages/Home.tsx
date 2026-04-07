@@ -840,7 +840,6 @@ export default function Home() {
                     openNewClientModal={handleAddClient}
                     selectedClientId={selectedClientId}
                     agendaOpeners={{
-                        openMonthly,
                         openWeekly,
                     }}
                 />

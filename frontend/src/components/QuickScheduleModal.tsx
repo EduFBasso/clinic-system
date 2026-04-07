@@ -150,6 +150,15 @@ export default function QuickScheduleModal({
         return `${weekdayLabel(d)} — ${dd}`;
     }, [selectedDate]);
 
+    // Past-date guard — disable Criar when selected date is before today
+    const isSelectedPast = React.useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const sel = new Date(selectedDate);
+        sel.setHours(0, 0, 0, 0);
+        return sel.getTime() < today.getTime();
+    }, [selectedDate]);
+
     // Pending guard (block create when client has pending)
     const { found: pendingFound, refresh: refreshPendingGuard } =
         usePendingGuard({
@@ -443,8 +452,32 @@ export default function QuickScheduleModal({
                             /* ignore */
                         }
                     }
-                    const friendly =
-                        text && text.length < 400 ? text : 'Erro ao criar';
+                    const friendly = (() => {
+                        if (!text) return 'Erro ao salvar. Tente novamente.';
+                        try {
+                            const parsed = JSON.parse(text);
+                            // DRF non_field_errors
+                            if (parsed?.non_field_errors?.length) {
+                                const msg: string = parsed.non_field_errors[0];
+                                if (/conflito/i.test(msg))
+                                    return 'Conflito de horário: já existe um compromisso neste período. Escolha outro horário.';
+                                return msg;
+                            }
+                            // DRF field errors (e.g. { start_at: ["msg"] })
+                            const firstField = Object.values(parsed).find(
+                                v => Array.isArray(v) && v.length,
+                            ) as string[] | undefined;
+                            if (firstField) return firstField[0];
+                            // DRF detail
+                            if (typeof parsed.detail === 'string')
+                                return parsed.detail;
+                        } catch {
+                            /* not JSON, fall through */
+                        }
+                        return text.length < 200
+                            ? text
+                            : 'Erro ao salvar. Tente novamente.';
+                    })();
                     throw new Error(friendly);
                 }
                 const data = (await resp.json()) as { id?: number };
@@ -615,16 +648,27 @@ export default function QuickScheduleModal({
                     <DateControlsHeader
                         currentDate={selectedDate}
                         label={sectionDateTitle}
-                        onPrev={() =>
-                            setSelectedDate(
-                                d =>
-                                    new Date(
-                                        d.getFullYear(),
-                                        d.getMonth(),
-                                        d.getDate() - 1,
-                                    ),
-                            )
+                        prevDisabled={
+                            isSelectedPast ||
+                            (() => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                const sel = new Date(selectedDate);
+                                sel.setHours(0, 0, 0, 0);
+                                return sel.getTime() <= today.getTime();
+                            })()
                         }
+                        onPrev={() => {
+                            const prev = new Date(
+                                selectedDate.getFullYear(),
+                                selectedDate.getMonth(),
+                                selectedDate.getDate() - 1,
+                            );
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            if (prev.getTime() >= today.getTime())
+                                setSelectedDate(prev);
+                        }}
                         onNext={() =>
                             setSelectedDate(
                                 d =>
@@ -945,13 +989,25 @@ export default function QuickScheduleModal({
                                 onClick={handleSave}
                                 style={{
                                     padding: '8px 12px',
-                                    background: '#059669',
+                                    background:
+                                        !isEdit && isSelectedPast
+                                            ? '#9ca3af'
+                                            : '#059669',
                                     color: '#fff',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: 8,
+                                    cursor:
+                                        !isEdit && isSelectedPast
+                                            ? 'not-allowed'
+                                            : 'pointer',
                                 }}
-                                disabled={saving}
+                                disabled={saving || (!isEdit && isSelectedPast)}
+                                title={
+                                    !isEdit && isSelectedPast
+                                        ? 'Não é permitido agendar no passado'
+                                        : undefined
+                                }
                             >
                                 {saving && (
                                     <span
@@ -1075,6 +1131,22 @@ export default function QuickScheduleModal({
                         }}
                     />
 
+                    {!isEdit && isSelectedPast && (
+                        <div
+                            style={{
+                                color: '#b45309',
+                                background: '#fffbeb',
+                                border: '1px solid #fcd34d',
+                                borderRadius: 6,
+                                padding: '8px 12px',
+                                fontSize: 13,
+                                fontWeight: 500,
+                            }}
+                        >
+                            Esta data já passou. Selecione hoje ou uma data
+                            futura para criar um compromisso.
+                        </div>
+                    )}
                     {error && (
                         <div style={{ color: '#b91c1c', fontSize: 14 }}>
                             {error}

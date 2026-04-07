@@ -246,7 +246,7 @@ export default function DesktopAgendaPage() {
                 </div>
             </div>
 
-            {/* Linha 2: Hoje + calendário à esquerda, navegação central */}
+            {/* Linha 2: navegação de data (esquerda) + filtro de status (direita) */}
             <div
                 style={{
                     display: 'flex',
@@ -255,9 +255,12 @@ export default function DesktopAgendaPage() {
                     top: 54,
                     zIndex: 15,
                     background: 'var(--color-bg)',
+                    borderBottom: '1px solid var(--color-border)',
+                    paddingBottom: 8,
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                {/* Navegação de data */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                         onClick={() => setSelectedDay(startOfDay(new Date()))}
                         style={{
@@ -295,16 +298,6 @@ export default function DesktopAgendaPage() {
                     >
                         <FaCalendarAlt />
                     </button>
-                </div>
-                <div
-                    style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 12,
-                    }}
-                >
                     <button
                         onClick={() => setSelectedDay(addDays(selectedDay, -1))}
                         title='Dia anterior'
@@ -366,50 +359,52 @@ export default function DesktopAgendaPage() {
                         <FaArrowRight />
                     </button>
                 </div>
-            </div>
-
-            {/* Filtro de status (default: Ativos) */}
-            <div
-                style={{
-                    position: 'sticky',
-                    top: 98,
-                    zIndex: 12,
-                    background: 'var(--color-bg)',
-                    borderBottom: '1px solid var(--color-border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                    paddingBottom: 6,
-                }}
-            >
-                <label htmlFor='status-filter' style={{ fontWeight: 600 }}>
-                    Status:
-                </label>
-                <select
-                    id='status-filter'
-                    value={statusFilter}
-                    onChange={e =>
-                        setStatusFilter(e.target.value as typeof statusFilter)
-                    }
+                {/* Filtro de status — botões inline (direita) */}
+                <div
                     style={{
-                        fontSize: 'var(--font-body)',
-                        padding: '6px 8px',
-                        background: 'var(--color-pending-bg)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 6,
-                        color: 'var(--color-text)',
-                        fontWeight: 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginLeft: 'auto',
+                        flexWrap: 'wrap',
                     }}
-                    aria-label='Filtro de status'
                 >
-                    <option value='all'>Todos</option>
-                    <option value='active'>Ativos</option>
-                    <option value='ongoing'>Em andamento</option>
-                    <option value='past'>Pendentes</option>
-                    <option value='done'>Concluídos</option>
-                    <option value='canceled'>Cancelados</option>
-                </select>
+                    {[
+                        { key: 'all' as const, label: 'Todos' },
+                        { key: 'past' as const, label: 'Pendentes' },
+                        { key: 'active' as const, label: 'Ativos' },
+                        { key: 'done' as const, label: 'Concluídos' },
+                        { key: 'canceled' as const, label: 'Cancelados' },
+                    ].map(({ key, label }) => (
+                        <button
+                            key={key}
+                            onClick={() => setStatusFilter(key)}
+                            aria-pressed={statusFilter === key}
+                            style={{
+                                fontSize: 'var(--font-body)',
+                                fontWeight: statusFilter === key ? 700 : 500,
+                                padding: '4px 10px',
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                border:
+                                    statusFilter === key
+                                        ? '1px solid var(--color-success-darker)'
+                                        : '1px solid var(--color-border)',
+                                background:
+                                    statusFilter === key
+                                        ? 'var(--color-success-dark)'
+                                        : 'var(--color-bg)',
+                                color:
+                                    statusFilter === key
+                                        ? 'white'
+                                        : 'var(--color-text)',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <div

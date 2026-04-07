@@ -40,11 +40,25 @@ export function useClientPendingState({
             anyClient.has_pending_appointment === true
         )
             return true;
+
+        const nowMs = now.getTime();
+
+        // Verifica last_appointment: janela de atendimento que terminou sem resolução.
+        // Cobre o caso "ongoing → pendente" sem precisar de refresh manual:
+        // quando end_at passa, o tick de 5s aciona esta branch automaticamente.
+        if (
+            client.last_appointment_status === 'scheduled' &&
+            client.last_appointment_end_at
+        ) {
+            const lastEnd = new Date(client.last_appointment_end_at).getTime();
+            if (!isNaN(lastEnd) && lastEnd <= nowMs) return true;
+        }
+
         // Caso não esteja em status scheduled mas tenhamos janela encerrada (start/end passados) e um id, tratamos também como pendente heurístico.
         const eISO = client.next_appointment_end_at;
         if (!eISO) return false;
         const e = new Date(eISO).getTime();
-        if (isNaN(e) || e > now.getTime()) return false;
+        if (isNaN(e) || e > nowMs) return false;
         if (isScheduled) return true; // scheduled + fim passado => pendente
         // Accept status null (sem atualização ainda) como heurístico se fim passou e existe id
         if (

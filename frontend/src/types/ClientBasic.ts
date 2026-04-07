@@ -26,6 +26,7 @@ export interface ClientBasic {
     next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;
     next_appointment_id?: number | null;
     last_appointment_start_at?: string | null;
+    last_appointment_end_at?: string | null;
     last_appointment_title?: string | null;
     last_appointment_notes?: string | null;
     last_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;

@@ -6,13 +6,18 @@ type Props = {
     selectedDate: Date;
     onChange: (next: Date) => void;
     initialPosition?: { x: number; y: number };
-    // Ensures the picker never renders above this Y to avoid header being clipped under sticky bars
     minTop?: number;
-    // Optional minimum selectable date (inclusive). Days before this are disabled and previous-month nav is limited.
     minDate?: Date;
 };
 
-const weekdayLabels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+type View = 'day' | 'month' | 'year';
+
+const WEEKDAY_LABELS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+const MONTH_LABELS = [
+    'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+    'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+];
+const YEAR_RANGE = 12;
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -20,19 +25,25 @@ function startOfMonth(d: Date) {
     x.setHours(0, 0, 0, 0);
     return x;
 }
-
 function addMonths(d: Date, n: number) {
     const x = new Date(d);
     x.setMonth(x.getMonth() + n);
     return x;
 }
-
 function isSameDay(a: Date, b: Date) {
     return (
         a.getFullYear() === b.getFullYear() &&
         a.getMonth() === b.getMonth() &&
         a.getDate() === b.getDate()
     );
+}
+function startOfDay(d: Date) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+function monthIndex(d: Date) {
+    return d.getFullYear() * 12 + d.getMonth();
 }
 
 export default function FloatingDatePicker({
@@ -60,19 +71,28 @@ export default function FloatingDatePicker({
     const [viewMonth, setViewMonth] = React.useState(() =>
         startOfMonth(selectedDate),
     );
+    const [view, setView] = React.useState<View>('day');
+    const [yearBase, setYearBase] = React.useState(
+        () => Math.floor(selectedDate.getFullYear() / YEAR_RANGE) * YEAR_RANGE,
+    );
 
     React.useEffect(() => {
         if (open) {
             setViewMonth(startOfMonth(selectedDate));
+            setView('day');
+            setYearBase(
+                Math.floor(selectedDate.getFullYear() / YEAR_RANGE) * YEAR_RANGE,
+            );
         }
     }, [open, selectedDate]);
 
     React.useEffect(() => {
         function onMove(e: MouseEvent) {
             if (!drag.active) return;
-            const dx = e.clientX - drag.startX;
-            const dy = e.clientY - drag.startY;
-            setPos({ x: drag.originX + dx, y: drag.originY + dy });
+            setPos({
+                x: drag.originX + (e.clientX - drag.startX),
+                y: drag.originY + (e.clientY - drag.startY),
+            });
         }
         function onUp() {
             setDrag(d => ({ ...d, active: false }));
@@ -85,187 +105,236 @@ export default function FloatingDatePicker({
         };
     }, [drag.active, drag.startX, drag.startY, drag.originX, drag.originY]);
 
-    // Helpers to control navigation when minDate is provided
-    function startOfDay(d: Date) {
-        const x = new Date(d);
-        x.setHours(0, 0, 0, 0);
-        return x;
-    }
-    const minDay = minDate ? startOfDay(minDate) : undefined;
-    function monthIndex(d: Date) {
-        return d.getFullYear() * 12 + d.getMonth();
-    }
-
     if (!open) return null;
 
-    // Build grid (Mon-Sun)
-    const first = startOfMonth(viewMonth);
-    const month = first.getMonth();
-    // JS getDay: 0=Sun..6=Sat; we want Mon=0..Sun=6
-    const offset = (first.getDay() + 6) % 7; // 0..6
-    const days: { date: Date; inMonth: boolean }[] = [];
-    // Start from the Monday of the first week
-    const start = new Date(first);
-    start.setDate(first.getDate() - offset);
-    for (let i = 0; i < 42; i++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
-        days.push({ date: d, inMonth: d.getMonth() === month });
-    }
+    const minDay = minDate ? startOfDay(minDate) : undefined;
 
-    // Clamp position so header isn't cut off and keep within horizontal bounds
     const minTopPx = typeof minTop === 'number' ? minTop : 88;
-    const minLeftPx = 8;
-    const maxLeftPx = Math.max(
-        8,
-        (typeof window !== 'undefined' ? window.innerWidth : 360) - 280 - 8,
+    const clampedX = Math.min(
+        Math.max(pos.x, 8),
+        Math.max(8, (window.innerWidth ?? 360) - 280 - 8),
     );
-    const clampedX = Math.min(Math.max(pos.x, minLeftPx), maxLeftPx);
     const clampedY = Math.max(pos.y, minTopPx);
 
-    const canPrev = (() => {
-        if (!minDay) return true;
-        const minMonth = startOfMonth(minDay);
-        return monthIndex(viewMonth) > monthIndex(minMonth);
-    })();
-
-    return (
+    const dragHandle = (
         <div
-            ref={containerRef}
+            onMouseDown={e =>
+                setDrag({
+                    active: true,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    originX: pos.x,
+                    originY: pos.y,
+                })
+            }
             style={{
-                position: 'absolute',
-                left: clampedX,
-                top: clampedY,
-                width: 280,
-                background: '#fff',
-                border: '1px solid #e5e7eb',
-                borderRadius: 8,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                zIndex: 50,
-                userSelect: drag.active ? 'none' : 'auto',
+                cursor: 'move',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f9fafb',
+                borderTopLeftRadius: 8,
+                borderTopRightRadius: 8,
             }}
         >
-            <div
-                onMouseDown={e =>
-                    setDrag({
-                        active: true,
-                        startX: e.clientX,
-                        startY: e.clientY,
-                        originX: pos.x,
-                        originY: pos.y,
-                    })
-                }
-                style={{
-                    cursor: 'move',
-                    padding: '8px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    background: '#f9fafb',
-                    borderTopLeftRadius: 8,
-                    borderTopRightRadius: 8,
-                }}
-            >
-                <button
-                    type='button'
-                    onClick={() =>
-                        canPrev && setViewMonth(addMonths(viewMonth, -1))
+            <button
+                type='button'
+                onClick={() => {
+                    if (view === 'day') {
+                        const canPrev =
+                            !minDay ||
+                            monthIndex(viewMonth) > monthIndex(startOfMonth(minDay));
+                        if (canPrev) setViewMonth(addMonths(viewMonth, -1));
+                    } else if (view === 'month') {
+                        setViewMonth(v => new Date(v.getFullYear() - 1, v.getMonth(), 1));
+                    } else {
+                        setYearBase(y => y - YEAR_RANGE);
                     }
-                    style={{
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 4,
-                        cursor: canPrev ? 'pointer' : 'not-allowed',
-                        opacity: canPrev ? 1 : 0.5,
-                    }}
-                    title='Mês anterior'
-                    disabled={!canPrev}
-                >
-                    «
-                </button>
-                <div style={{ fontWeight: 600 }}>
-                    {viewMonth.toLocaleDateString('pt-BR', {
-                        month: 'long',
-                        year: 'numeric',
-                    })}
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                }}
+                style={{ border: 'none', background: 'transparent', padding: 4, cursor: 'pointer', fontSize: 14 }}
+                title='Anterior'
+            >
+                «
+            </button>
+
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                {view === 'day' && (
+                    <>
+                        <button
+                            type='button'
+                            onClick={() => setView('month')}
+                            style={{ border: 'none', background: 'transparent', fontWeight: 600, cursor: 'pointer', padding: '2px 4px', borderRadius: 4 }}
+                            title='Selecionar mês'
+                        >
+                            {viewMonth.toLocaleDateString('pt-BR', { month: 'long' })}
+                        </button>
+                        <button
+                            type='button'
+                            onClick={() => setView('year')}
+                            style={{ border: 'none', background: 'transparent', fontWeight: 600, cursor: 'pointer', padding: '2px 4px', borderRadius: 4 }}
+                            title='Selecionar ano'
+                        >
+                            {viewMonth.getFullYear()}
+                        </button>
+                    </>
+                )}
+                {view === 'month' && (
                     <button
                         type='button'
-                        onClick={() => setViewMonth(addMonths(viewMonth, 1))}
-                        style={{
-                            border: 'none',
-                            background: 'transparent',
-                            padding: 4,
-                            cursor: 'pointer',
-                        }}
-                        title='Próximo mês'
+                        onClick={() => setView('year')}
+                        style={{ border: 'none', background: 'transparent', fontWeight: 600, cursor: 'pointer', padding: '2px 4px', borderRadius: 4 }}
+                        title='Selecionar ano'
                     >
-                        »
+                        {viewMonth.getFullYear()}
                     </button>
-                    <button
-                        type='button'
-                        onClick={onClose}
-                        style={{
-                            border: 'none',
-                            background: 'transparent',
-                            padding: 4,
-                            cursor: 'pointer',
-                        }}
-                        title='Fechar'
-                    >
-                        ✕
-                    </button>
-                </div>
+                )}
+                {view === 'year' && (
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>
+                        {yearBase} – {yearBase + YEAR_RANGE - 1}
+                    </span>
+                )}
             </div>
 
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(7, 1fr)',
-                    padding: '8px 8px 4px',
-                    gap: 4,
-                }}
-            >
-                {weekdayLabels.map(wd => (
-                    <div
-                        key={wd}
-                        style={{
-                            textAlign: 'center',
-                            fontSize: 12,
-                            color: '#6b7280',
-                        }}
-                    >
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                    type='button'
+                    onClick={() => {
+                        if (view === 'day') setViewMonth(addMonths(viewMonth, 1));
+                        else if (view === 'month') setViewMonth(v => new Date(v.getFullYear() + 1, v.getMonth(), 1));
+                        else setYearBase(y => y + YEAR_RANGE);
+                    }}
+                    style={{ border: 'none', background: 'transparent', padding: 4, cursor: 'pointer', fontSize: 14 }}
+                    title='Próximo'
+                >
+                    »
+                </button>
+                <button
+                    type='button'
+                    onClick={onClose}
+                    style={{ border: 'none', background: 'transparent', padding: 4, cursor: 'pointer' }}
+                    title='Fechar'
+                >
+                    ✕
+                </button>
+            </div>
+        </div>
+    );
+
+    // ── Year view ──────────────────────────────────────────────────────────
+    if (view === 'year') {
+        const years = Array.from({ length: YEAR_RANGE }, (_, i) => yearBase + i);
+        return (
+            <div ref={containerRef} style={containerStyle(clampedX, clampedY, drag.active)}>
+                {dragHandle}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, padding: 8 }}>
+                    {years.map(y => {
+                        const isSelected = y === viewMonth.getFullYear();
+                        return (
+                            <button
+                                key={y}
+                                type='button'
+                                onClick={() => {
+                                    setViewMonth(v => new Date(y, v.getMonth(), 1));
+                                    setView('month');
+                                }}
+                                style={{
+                                    padding: '8px 4px',
+                                    borderRadius: 6,
+                                    border: isSelected ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                                    background: '#fff',
+                                    color: isSelected ? '#2563eb' : '#111827',
+                                    fontWeight: isSelected ? 700 : 500,
+                                    cursor: 'pointer',
+                                    fontSize: 13,
+                                }}
+                            >
+                                {y}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    // ── Month view ─────────────────────────────────────────────────────────
+    if (view === 'month') {
+        return (
+            <div ref={containerRef} style={containerStyle(clampedX, clampedY, drag.active)}>
+                {dragHandle}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, padding: 8 }}>
+                    {MONTH_LABELS.map((label, idx) => {
+                        const isSelected = idx === viewMonth.getMonth();
+                        return (
+                            <button
+                                key={label}
+                                type='button'
+                                onClick={() => {
+                                    setViewMonth(new Date(viewMonth.getFullYear(), idx, 1));
+                                    setView('day');
+                                }}
+                                style={{
+                                    padding: '10px 4px',
+                                    borderRadius: 6,
+                                    border: isSelected ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                                    background: '#fff',
+                                    color: isSelected ? '#2563eb' : '#111827',
+                                    fontWeight: isSelected ? 700 : 500,
+                                    cursor: 'pointer',
+                                    fontSize: 13,
+                                }}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    // ── Day view ───────────────────────────────────────────────────────────
+    const first = startOfMonth(viewMonth);
+    const month = first.getMonth();
+    const offset = (first.getDay() + 6) % 7;
+    const gridStart = new Date(first);
+    gridStart.setDate(first.getDate() - offset);
+    const days: { date: Date; inMonth: boolean }[] = Array.from(
+        { length: 42 },
+        (_, i) => {
+            const d = new Date(gridStart);
+            d.setDate(gridStart.getDate() + i);
+            return { date: d, inMonth: d.getMonth() === month };
+        },
+    );
+
+    const canPrev =
+        !minDay || monthIndex(viewMonth) > monthIndex(startOfMonth(minDay));
+
+    return (
+        <div ref={containerRef} style={containerStyle(clampedX, clampedY, drag.active)}>
+            {dragHandle}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', padding: '8px 8px 4px', gap: 4 }}>
+                {WEEKDAY_LABELS.map(wd => (
+                    <div key={wd} style={{ textAlign: 'center', fontSize: 12, color: '#6b7280' }}>
                         {wd}
                     </div>
                 ))}
             </div>
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(7, 1fr)',
-                    padding: '0 8px 8px',
-                    gap: 4,
-                }}
-            >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', padding: '0 8px 8px', gap: 4 }}>
                 {days.map(({ date, inMonth }) => {
                     const selected = isSameDay(date, selectedDate);
                     const disabled = !!minDay && date < minDay;
-                    const isToday = (() => {
-                        const now = new Date();
-                        now.setHours(0, 0, 0, 0);
-                        const d = new Date(date);
-                        d.setHours(0, 0, 0, 0);
-                        return d.getTime() === now.getTime();
-                    })();
+                    const today = startOfDay(date).getTime() === startOfDay(new Date()).getTime();
                     return (
                         <button
                             key={date.toISOString()}
                             type='button'
+                            disabled={disabled}
                             onClick={() => {
                                 if (disabled) return;
-                                const base = selectedDate;
-                                const next = new Date(base);
+                                const next = new Date(selectedDate);
                                 next.setFullYear(date.getFullYear());
                                 next.setMonth(date.getMonth());
                                 next.setDate(date.getDate());
@@ -274,39 +343,44 @@ export default function FloatingDatePicker({
                             style={{
                                 aspectRatio: '1 / 1',
                                 borderRadius: 6,
-                                border: `${selected ? 2 : 1}px solid ${
-                                    selected && isToday
-                                        ? 'var(--color-success)'
-                                        : selected
-                                          ? '#2563eb'
-                                          : '#e5e7eb'
-                                }`,
+                                border: `${selected ? 2 : 1}px solid ${selected ? '#2563eb' : '#e5e7eb'}`,
                                 background: '#fff',
                                 color: disabled
                                     ? '#d1d5db'
                                     : selected
                                       ? '#2563eb'
-                                      : isToday
+                                      : today
                                         ? 'var(--color-success)'
                                         : inMonth
                                           ? '#111827'
                                           : '#9ca3af',
-                                fontWeight: selected
-                                    ? 700
-                                    : isToday
-                                      ? 700
-                                      : 500,
+                                fontWeight: selected || today ? 700 : 500,
                                 cursor: disabled ? 'not-allowed' : 'pointer',
                                 opacity: disabled ? 0.6 : 1,
                             }}
                             title={date.toLocaleDateString('pt-BR')}
-                            disabled={disabled}
                         >
                             {date.getDate()}
                         </button>
                     );
                 })}
             </div>
+            {!canPrev && <div style={{ display: 'none' }} aria-hidden />}
         </div>
     );
+}
+
+function containerStyle(x: number, y: number, dragging: boolean): React.CSSProperties {
+    return {
+        position: 'absolute',
+        left: x,
+        top: y,
+        width: 280,
+        background: '#fff',
+        border: '1px solid #e5e7eb',
+        borderRadius: 8,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        zIndex: 50,
+        userSelect: dragging ? 'none' : 'auto',
+    };
 }

@@ -97,6 +97,9 @@ class ClientBasicViewSet(ModelViewSet):
             last_appointment_start_at=Subquery(
                 last_appt_qs.values('start_at')[:1], output_field=DateTimeField()
             ),
+            last_appointment_end_at=Subquery(
+                last_appt_qs.values('end_at')[:1], output_field=DateTimeField()
+            ),
             last_appointment_title=Subquery(
                 last_appt_qs.values('title')[:1], output_field=CharField()
             ),

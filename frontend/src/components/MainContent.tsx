@@ -307,9 +307,20 @@ const MainContent: React.FC<MainContentProps> = ({
     // Clientes com compromisso pendente.
     // O backend popula next_appointment_* apenas com start_at >= now (futuro),
     // portanto um compromisso passado não finalizado aparece em last_appointment_status='scheduled'.
+    // Excluímos appointments que ainda estão em andamento (start_at < now < end_at) — esses
+    // são "ongoing" pelo horário e não devem aparecer como pendentes.
     const pendingClients = React.useMemo(() => {
+        const nowMs = Date.now();
         return clients
-            .filter(c => c.last_appointment_status === 'scheduled')
+            .filter(c => {
+                if (c.last_appointment_status !== 'scheduled') return false;
+                // Se temos end_at e ele ainda não passou, o atendimento está em andamento
+                if (c.last_appointment_end_at) {
+                    const endMs = new Date(c.last_appointment_end_at).getTime();
+                    if (!isNaN(endMs) && endMs > nowMs) return false;
+                }
+                return true;
+            })
             .sort((a, b) => {
                 const ta = a.last_appointment_start_at
                     ? new Date(a.last_appointment_start_at).getTime()

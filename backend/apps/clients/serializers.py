@@ -152,6 +152,7 @@ class ClientBasicSerializer(serializers.ModelSerializer):
     next_appointment_status = serializers.CharField(read_only=True)
     next_appointment_id = serializers.IntegerField(read_only=True)
     last_appointment_start_at = UTCDateTimeField(read_only=True)
+    last_appointment_end_at = UTCDateTimeField(read_only=True)
     last_appointment_title = serializers.CharField(read_only=True)
     last_appointment_status = serializers.CharField(read_only=True)
     last_appointment_notes = serializers.CharField(read_only=True)
@@ -163,5 +164,5 @@ class ClientBasicSerializer(serializers.ModelSerializer):
             'address', 'address_number', 'neighborhood', 'city', 'state', 'date_of_birth',
             'next_appointment_start_at', 'next_appointment_end_at', 'next_appointment_title', 'next_appointment_visit_type', 'next_appointment_notes', 'next_appointment_status',
             'next_appointment_id',
-            'last_appointment_start_at', 'last_appointment_title', 'last_appointment_notes', 'last_appointment_status'
+            'last_appointment_start_at', 'last_appointment_end_at', 'last_appointment_title', 'last_appointment_notes', 'last_appointment_status'
         ]

@@ -8,6 +8,7 @@ export interface DateControlsHeaderProps {
     onNext: () => void;
     onToday: () => void;
     onOpenPicker: () => void;
+    prevDisabled?: boolean;
 }
 
 export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
@@ -17,6 +18,7 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
     onNext,
     onToday,
     onOpenPicker,
+    prevDisabled = false,
 }) => {
     const isToday = (() => {
         const d = new Date(currentDate);
@@ -88,15 +90,17 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
 
                 <button
                     type='button'
-                    onClick={onPrev}
+                    onClick={prevDisabled ? undefined : onPrev}
                     aria-label='Anterior'
+                    disabled={prevDisabled}
                     style={{
                         border: '1px solid var(--color-border)',
                         background: 'var(--color-bg)',
                         padding: 6,
                         borderRadius: 6,
-                        cursor: 'pointer',
+                        cursor: prevDisabled ? 'not-allowed' : 'pointer',
                         flex: '0 0 auto',
+                        opacity: prevDisabled ? 0.35 : 1,
                     }}
                 >
                     <FaArrowLeft />
