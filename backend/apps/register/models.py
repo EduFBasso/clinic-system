@@ -33,6 +33,12 @@ class ProfessionalManager(BaseUserManager):
 class Professional(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField("Nome", max_length=50)
     last_name = models.CharField("Sobrenome", max_length=70)
+    display_name = models.CharField(
+        "Nome de exibição",
+        max_length=100,
+        blank=True,
+        help_text="Como os clientes a conhecem: ex. 'Podóloga Regiane', 'Dra. Juliana' ou 'Clínica Árcaro'. Se vazio, usa o primeiro nome.",
+    )
     phone = PhoneNumberField("Telefone", region="BR", blank=True) # type: ignore
     email = models.EmailField("E-mail", unique=True)
 

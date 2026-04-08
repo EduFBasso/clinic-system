@@ -3,6 +3,7 @@ export interface Professional {
     id: number;
     first_name: string;
     last_name: string;
+    display_name?: string;
     register_number: string;
     email: string;
     is_superuser?: boolean;

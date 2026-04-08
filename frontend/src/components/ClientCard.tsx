@@ -752,9 +752,12 @@ export default function ClientCard({
                                         const profFirstName: string = profRaw
                                             ? (() => {
                                                   try {
+                                                      const p =
+                                                          JSON.parse(profRaw);
                                                       return (
-                                                          JSON.parse(profRaw)
-                                                              ?.first_name || ''
+                                                          p?.display_name ||
+                                                          p?.first_name ||
+                                                          ''
                                                       );
                                                   } catch {
                                                       return '';

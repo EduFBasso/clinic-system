@@ -15,6 +15,7 @@ interface FormData {
     email: string;
     first_name: string;
     last_name: string;
+    display_name: string;
     password: string;
     specialty: string;
     register_number: string;
@@ -27,6 +28,7 @@ const EMPTY_FORM: FormData = {
     email: '',
     first_name: '',
     last_name: '',
+    display_name: '',
     password: '',
     specialty: '',
     register_number: '',
@@ -180,6 +182,13 @@ const ProfessionalCreateModal: React.FC<Props> = ({ open, onClose }) => {
                                 onChange={handleChange}
                                 autoComplete='new-password'
                                 required
+                            />
+                            <input
+                                name='display_name'
+                                placeholder='Nome de exibição para clientes (ex: Podóloga Regiane)'
+                                value={form.display_name}
+                                onChange={handleChange}
+                                autoComplete='off'
                             />
                             <input
                                 name='specialty'

@@ -88,8 +88,8 @@ class Command(BaseCommand):
                 visit_type_label = appt.get_visit_type_display()
                 local_time = timezone.localtime(appt.start_at).strftime("%H:%M")
 
-                # Nome da profissional (primeiro nome)
-                prof_first_name = getattr(prof, "first_name", None) or getattr(prof, "name", "") or str(prof)
+                # Nome de exibição da profissional (display_name preferido, fallback para first_name)
+                prof_first_name = getattr(prof, "display_name", None) or getattr(prof, "first_name", "") or str(prof)
 
                 # Mensagem WhatsApp pré-preenchida
                 wa_text = (

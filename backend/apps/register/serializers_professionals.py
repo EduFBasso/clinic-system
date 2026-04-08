@@ -6,7 +6,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Professional
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'register_number',
+            'id', 'email', 'first_name', 'last_name', 'display_name', 'register_number',
             'specialty', 'phone', 'city', 'state',
             'can_manage_professionals', 'is_active', 'is_staff', 'is_superuser',
             'created_at', 'deactivated_at', 'deactivation_reason',
@@ -19,7 +19,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
 class ProfessionalBasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Professional
-        fields = ['id', 'email', 'first_name', 'last_name', 'register_number']
+        fields = ['id', 'email', 'first_name', 'last_name', 'display_name', 'register_number']
 
 
 from rest_framework.permissions import BasePermission
