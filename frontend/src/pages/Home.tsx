@@ -113,10 +113,20 @@ export default function Home() {
                             if (res.ok) {
                                 const appt = (await res.json()) as {
                                     client_id?: number;
-                                    client?: { id?: number };
+                                    // API returns FK as integer ("client": 5), not nested object
+                                    client?: number | { id?: number };
                                 };
+                                const rawClient = appt.client;
                                 const clientId =
-                                    appt.client_id ?? appt.client?.id ?? null;
+                                    appt.client_id ??
+                                    (typeof rawClient === 'number'
+                                        ? rawClient
+                                        : (
+                                              rawClient as
+                                                  | { id?: number }
+                                                  | undefined
+                                          )?.id) ??
+                                    null;
                                 if (clientId) {
                                     setSelectedClientId(clientId);
                                     focusClientCard(clientId, { delayMs: 300 });
@@ -238,11 +248,18 @@ export default function Home() {
                     (
                         appt: {
                             client_id?: number;
-                            client?: { id?: number };
+                            // API returns FK as integer ("client": 5), not nested object
+                            client?: number | { id?: number };
                         } | null,
                     ) => {
+                        const rawClient = appt?.client;
                         const clientId =
-                            appt?.client_id ?? appt?.client?.id ?? null;
+                            appt?.client_id ??
+                            (typeof rawClient === 'number'
+                                ? rawClient
+                                : (rawClient as { id?: number } | undefined)
+                                      ?.id) ??
+                            null;
                         if (clientId) {
                             setSelectedClientId(clientId);
                             focusClientCard(clientId, { delayMs: 400 });
