@@ -95,6 +95,12 @@ class Appointment(models.Model):
         help_text="True quando o lembrete push do dia já foi enviado para este agendamento.",
     )
 
+    # WhatsApp confirmation tracking — True when professional opened WhatsApp to notify client
+    whatsapp_confirmed = models.BooleanField(
+        default=False,
+        help_text="True quando o profissional abriu o WhatsApp para confirmar presença do cliente.",
+    )
+
     class Meta:
         indexes = [
             models.Index(fields=["professional", "start_at"]),

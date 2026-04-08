@@ -50,10 +50,10 @@ class Command(BaseCommand):
             reminder_min = prof_settings.reminder_minutes_before
 
             # Target window: appointments whose start_at is ~reminder_min from now.
-            # Use a ±5-minute window so cron jitter doesn't cause misses.
+            # Use a ±1-minute window to absorb cron jitter without firing too early.
             # The reminder_sent flag prevents duplicate sends.
-            window_start = now + timedelta(minutes=reminder_min) - timedelta(minutes=5)
-            window_end = now + timedelta(minutes=reminder_min) + timedelta(minutes=5)
+            window_start = now + timedelta(minutes=reminder_min) - timedelta(minutes=1)
+            window_end = now + timedelta(minutes=reminder_min) + timedelta(minutes=1)
 
             appointments = Appointment.objects.filter(
                 professional=prof,

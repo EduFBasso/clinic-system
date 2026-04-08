@@ -124,6 +124,20 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         obj.save(update_fields=update_fields)
         return Response(self.get_serializer(obj).data, status=200)
 
+    @action(detail=True, methods=["post"], url_path="confirm-whatsapp")
+    def confirm_whatsapp(self, request, pk=None):
+        """Marca whatsapp_confirmed=True no agendamento.
+
+        Chamado pelo sw.js quando o profissional clica em 'Sim, enviar WhatsApp'
+        na notificação push, ou pelo modal interno do app.
+        Idempotente — chamadas repetidas retornam 200 sem erro.
+        """
+        obj = self.get_object()
+        if not obj.whatsapp_confirmed:
+            obj.whatsapp_confirmed = True
+            obj.save(update_fields=["whatsapp_confirmed", "updated_at"])
+        return Response({"ok": True, "whatsapp_confirmed": True}, status=200)
+
     @action(detail=False, methods=["get"], url_path="next")
     def next_for_client(self, request):
         """Retorna o próximo agendamento futuro opcionalmente filtrando por client=<id>."""
