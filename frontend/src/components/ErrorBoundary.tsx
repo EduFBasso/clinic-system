@@ -25,11 +25,16 @@ export default class ErrorBoundary extends React.Component<
                         padding: 16,
                         fontFamily:
                             'system-ui, -apple-system, Segoe UI, Roboto, Ubuntu',
-                        color: '#111827',
+                        color: 'var(--color-heading)',
                     }}
                 >
                     <h2 style={{ marginTop: 0 }}>Houve um erro na interface</h2>
-                    <div style={{ marginBottom: 8, color: '#6b7280' }}>
+                    <div
+                        style={{
+                            marginBottom: 8,
+                            color: 'var(--color-text-muted)',
+                        }}
+                    >
                         Detalhes técnicos:
                     </div>
                     <pre

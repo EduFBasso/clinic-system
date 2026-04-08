@@ -48,7 +48,7 @@ export default function ModalActionsBar({
                         border: 'none',
                         fontSize: 22,
                         cursor: 'pointer',
-                        color: '#111827',
+                        color: 'var(--color-heading)',
                         width: 44,
                         height: 44,
                         borderRadius: 9999,

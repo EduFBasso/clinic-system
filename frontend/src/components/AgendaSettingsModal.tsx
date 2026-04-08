@@ -439,8 +439,8 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                     {pushJustActivated && (
                         <div
                             style={{
-                                background: '#d1fae5',
-                                color: '#065f46',
+                                background: 'var(--color-success-bg)',
+                                color: 'var(--color-success)',
                                 border: '1px solid #6ee7b7',
                                 borderRadius: '0.5rem',
                                 padding: '0.5rem 0.75rem',

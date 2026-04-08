@@ -43,11 +43,15 @@
 
     /* Warning (ambar) */
     --color-warning: #f59e0b;
+    --color-warning-dark: #b45309; /* amber-700 — texto/ícone em superfície clara */
     --color-warning-bg: #fef3c7;
 
-    /* Ongoing (atendimento em curso) - verde vivo para indicar "em andamento" */
-    --color-ongoing: #15803d; /* verde (Tailwind green-700) */
-    --color-ongoing-bg: #f0fdf4; /* verde claríssimo (Tailwind green-50) */
+    /* Ongoing (atendimento em curso) - laranja para diferenciar de "concluído" */
+    --color-ongoing: #ea580c; /* laranja (Tailwind orange-600) */
+    --color-ongoing-bg: #fff7ed; /* laranja claríssimo (Tailwind orange-50) */
+
+    /* Hoje — indicador do dia atual na grid mensal (e botão de atalho) */
+    --color-hoje: #ea580c; /* mesmo laranja de "em atendimento" */
 
     /* Done (atendimento finalizado) - azul escuro (alto contraste) + fundo claro */
     --color-done: #1e3a8a; /* azul bem escuro (antes: #2563eb) */

@@ -238,8 +238,8 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
             apptWithOverride.status === 'canceled' || isOngoing
                 ? 'default'
                 : clickable
-                ? 'pointer'
-                : 'default',
+                  ? 'pointer'
+                  : 'default',
         position: 'relative',
         maxWidth: '100%',
         // Avoid forcing GPU compositing to keep text rendering crisp on Windows
@@ -515,7 +515,10 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                             minWidth: 0,
                         }}
                     >
-                        <StatusBadge status={status} size='md' />
+                        <StatusBadge
+                            status={isOngoing ? 'ongoing' : status}
+                            size='md'
+                        />
                         {!compact && (
                             <span
                                 style={{

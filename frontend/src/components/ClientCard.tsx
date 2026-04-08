@@ -735,6 +735,57 @@ export default function ClientCard({
                             </div>
                         </div>
                     )}
+                    {isScheduled && !isOngoing && (
+                        <div
+                            className={styles.infoRow}
+                            style={{ paddingTop: 2 }}
+                        >
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-end',
+                                    width: '100%',
+                                }}
+                            >
+                                <button
+                                    type='button'
+                                    className={`${styles.actionButton} ${styles.actionScheduled}`}
+                                    title='Enviar aviso de confirmação via WhatsApp'
+                                    style={{ fontWeight: 700 }}
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        const sIso =
+                                            displayStartISO ||
+                                            client.next_appointment_start_at ||
+                                            null;
+                                        const time = sIso
+                                            ? formatTime(sIso)
+                                            : '—';
+                                        const visitType =
+                                            client.next_appointment_title ||
+                                            'Consulta';
+                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para as ${time}, confirma sua presença?`;
+                                        const rawPhone = (
+                                            client.phone || ''
+                                        ).replace(/\D/g, '');
+                                        const waPhone =
+                                            rawPhone &&
+                                            !rawPhone.startsWith('55')
+                                                ? `55${rawPhone}`
+                                                : rawPhone;
+                                        if (!waPhone) return;
+                                        window.open(
+                                            `https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`,
+                                            '_blank',
+                                        );
+                                    }}
+                                >
+                                    Avisar
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
 
@@ -945,7 +996,12 @@ export default function ClientCard({
                             }}
                         />
                         {loadingFuture && (
-                            <div style={{ fontSize: 11, color: '#6b7280' }}>
+                            <div
+                                style={{
+                                    fontSize: 11,
+                                    color: 'var(--color-text-muted)',
+                                }}
+                            >
                                 Carregando…
                             </div>
                         )}

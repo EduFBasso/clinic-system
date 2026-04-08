@@ -576,8 +576,8 @@ const MainContent: React.FC<MainContentProps> = ({
                         padding: '10px 12px',
                         borderRadius: 8,
                         border: '1px solid #f59e0b33',
-                        background: '#fffbeb', // amber-50
-                        color: '#b45309', // amber-700
+                        background: 'var(--color-warning-bg)', // amber-50
+                        color: 'var(--color-warning-dark)', // amber-700
                         fontWeight: 600,
                     }}
                 >

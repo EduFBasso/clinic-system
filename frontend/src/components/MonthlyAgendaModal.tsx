@@ -381,7 +381,7 @@ export default function MonthlyAgendaModal({
                                     <div
                                         style={{
                                             fontWeight: 600,
-                                            color: '#374151',
+                                            color: 'var(--color-pending)',
                                         }}
                                     >
                                         {label}
