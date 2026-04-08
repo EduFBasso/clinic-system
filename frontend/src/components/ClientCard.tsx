@@ -745,7 +745,26 @@ export default function ClientCard({
                                         const visitType =
                                             client.next_appointment_title ||
                                             'Consulta';
-                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para as ${time}, confirma sua presença?`;
+                                        const profRaw =
+                                            localStorage.getItem(
+                                                'loggedProfessional',
+                                            );
+                                        const profFirstName: string = profRaw
+                                            ? (() => {
+                                                  try {
+                                                      return (
+                                                          JSON.parse(profRaw)
+                                                              ?.first_name || ''
+                                                      );
+                                                  } catch {
+                                                      return '';
+                                                  }
+                                              })()
+                                            : '';
+                                        const profPart = profFirstName
+                                            ? ` com ${profFirstName}`
+                                            : '';
+                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para as ${time}${profPart}, confirma sua presença?`;
                                         const rawPhone = (
                                             client.phone || ''
                                         ).replace(/\D/g, '');
