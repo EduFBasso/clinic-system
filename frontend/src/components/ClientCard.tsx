@@ -32,6 +32,7 @@ import { useClientOngoingState } from '../hooks/useClientOngoingState';
 import { formatTime } from '../utils/timeFormat';
 import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
+import { useNowTick } from '../hooks/useNowTick';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -64,33 +65,7 @@ export default function ClientCard({
     const { finishing, finalize } = useFinalizeAppointment(client.id);
     // Suprimir visual de "em andamento" por alguns segundos após finalizar/cancelar
     // suppressOngoingUntil removido (gestão dentro do hook de ongoing)
-    // Simplificado: usar hora local, mas com tick para refletir mudanças de estado (scheduled→ongoing) sem interação do usuário
-    function useNowTick(intervalMs: number) {
-        const [now, setNow] = React.useState<Date>(() => new Date());
-        React.useEffect(() => {
-            // Alinha o primeiro tick ao próximo múltiplo do intervalo para suavizar transições
-            const firstDelay = (() => {
-                const d = new Date();
-                const ms = d.getMilliseconds() + d.getSeconds() * 1000;
-                const rem = intervalMs - (ms % intervalMs);
-                return Math.max(250, Math.min(rem, intervalMs));
-            })();
-            let t1: number | null = null;
-            let t2: number | null = null;
-            t1 = window.setTimeout(() => {
-                setNow(new Date());
-                t2 = window.setInterval(
-                    () => setNow(new Date()),
-                    intervalMs,
-                ) as unknown as number;
-            }, firstDelay) as unknown as number;
-            return () => {
-                if (t1 != null) window.clearTimeout(t1 as unknown as number);
-                if (t2 != null) window.clearInterval(t2 as unknown as number);
-            };
-        }, [intervalMs]);
-        return now;
-    }
+    // Tick a cada 5 s para refletir mudanças de estado (scheduled→ongoing) sem interação do usuário
     const now = useNowTick(5000);
     // Removed resumeGrace (was used for previous ongoing suppression logic)
     // const resumeGrace = useVisibilityResumeGrace(30000);
