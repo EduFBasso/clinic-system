@@ -27,6 +27,7 @@ import type { Appointment } from '../hooks/useAppointments';
 import { useAppVersionWatcher, acceptAndReload } from '../hooks/useAppVersion';
 import { useAppointmentsLivePing } from '../hooks/useAppointmentsLivePing';
 import { dispatchers } from '../events/dispatchers';
+import { focusClientCard } from '../utils/focusClientCard';
 
 export default function Home() {
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
@@ -66,6 +67,8 @@ export default function Home() {
     const [pendingActionsOpen, setPendingActionsOpen] = useState(false);
     const [pendingAppt, setPendingAppt] =
         useState<SharedAppointmentLike | null>(null);
+
+    // (reminderModal removido — push notification foca o ClientCard diretamente)
     // Após fechamento, limpa o objeto pendente pouco depois para evitar manter props antigas vivas
     useEffect(() => {
         if (pendingActionsOpen) return;
@@ -145,6 +148,7 @@ export default function Home() {
                 const isNew = url.searchParams.get('new') === '1';
                 const editId = url.searchParams.get('edit');
                 const mode = url.searchParams.get('mode');
+                const reminderId = url.searchParams.get('reminder');
 
                 if (cid) setSelectedClientId(Number(cid));
 
@@ -161,6 +165,56 @@ export default function Home() {
 
                 if (mode === 'week') {
                     setWeeklyOpen(true);
+                }
+
+                // Push notification reminder: focus ClientCard (or save pending for post-login)
+                if (reminderId) {
+                    const token = localStorage.getItem('accessToken');
+                    if (token) {
+                        // Logged in → resolve client_id and focus card
+                        try {
+                            const res = await fetch(
+                                `${API_BASE}/agenda/appointments/${reminderId}/`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${token}`,
+                                    },
+                                },
+                            );
+                            if (res.ok) {
+                                const appt = (await res.json()) as {
+                                    client_id?: number;
+                                    client?: { id?: number };
+                                };
+                                const clientId =
+                                    appt.client_id ?? appt.client?.id ?? null;
+                                if (clientId) {
+                                    setSelectedClientId(clientId);
+                                    focusClientCard(clientId, { delayMs: 300 });
+                                }
+                            }
+                        } catch {
+                            /* silencioso */
+                        }
+                    } else {
+                        // Not logged in → save to sessionStorage; useEffect pós-login will pick it up
+                        const waPhone = url.searchParams.get('wp') ?? '';
+                        const waText = url.searchParams.get('wt') ?? '';
+                        sessionStorage.setItem(
+                            'pushPending',
+                            JSON.stringify({
+                                appointmentId: Number(reminderId),
+                                waPhone,
+                                waText,
+                            }),
+                        );
+                    }
+                    // Clean up URL params without reloading
+                    const clean = new URL(window.location.href);
+                    clean.searchParams.delete('reminder');
+                    clean.searchParams.delete('wp');
+                    clean.searchParams.delete('wt');
+                    window.history.replaceState({}, '', clean.toString());
                 }
 
                 if (editId && cid) {
@@ -207,6 +261,54 @@ export default function Home() {
                 // ignore
             }
         })();
+    }, []);
+
+    // Pós-login: se houver um pushPending salvo (clique em notificação sem estar logado),
+    // busca o appointment, seleciona e foca o ClientCard.
+    useEffect(() => {
+        const handlePostLoginFocus = () => {
+            const raw = sessionStorage.getItem('pushPending');
+            if (!raw) return;
+            const token = localStorage.getItem('accessToken');
+            if (!token) return;
+            let pending: {
+                appointmentId: number;
+                waPhone: string;
+                waText: string;
+            };
+            try {
+                pending = JSON.parse(raw);
+            } catch {
+                sessionStorage.removeItem('pushPending');
+                return;
+            }
+            sessionStorage.removeItem('pushPending');
+            fetch(`${API_BASE}/agenda/appointments/${pending.appointmentId}/`, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+                .then(r => (r.ok ? r.json() : null))
+                .then(
+                    (
+                        appt: {
+                            client_id?: number;
+                            client?: { id?: number };
+                        } | null,
+                    ) => {
+                        const clientId =
+                            appt?.client_id ?? appt?.client?.id ?? null;
+                        if (clientId) {
+                            setSelectedClientId(clientId);
+                            focusClientCard(clientId, { delayMs: 400 });
+                        }
+                    },
+                )
+                .catch(() => {
+                    /* silencioso */
+                });
+        };
+        window.addEventListener('updateClients', handlePostLoginFocus);
+        return () =>
+            window.removeEventListener('updateClients', handlePostLoginFocus);
     }, []);
 
     // Listener global para mensagens do sistema
@@ -916,6 +1018,7 @@ export default function Home() {
                         }}
                     />
                 )}
+                {/* Reminder: push notification click focuses the ClientCard directly (no modal) */}
             </div>
         </>
     );

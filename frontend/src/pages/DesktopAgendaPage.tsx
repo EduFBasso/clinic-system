@@ -96,8 +96,25 @@ export default function DesktopAgendaPage() {
         'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing'
     >('active');
 
-    // Effective now reference (stable for one render lifecycle)
-    const effectiveNowRef = React.useMemo(() => new Date(), []);
+    // Tick a cada 30 s para detectar transição scheduled → ongoing sem precisar recarregar
+    const [effectiveNowRef, setEffectiveNowRef] = React.useState(
+        () => new Date(),
+    );
+    React.useEffect(() => {
+        const t = window.setInterval(
+            () => setEffectiveNowRef(new Date()),
+            30_000,
+        );
+        return () => window.clearInterval(t);
+    }, []);
+
+    // Recarregar quando qualquer compromisso for criado/alterado/cancelado
+    React.useEffect(() => {
+        const onChanged = () => setReloadKey(x => x + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, []);
 
     const enriched: EnrichedAppt[] = React.useMemo(() => {
         const nowRef = effectiveNowRef;
@@ -126,7 +143,7 @@ export default function DesktopAgendaPage() {
             case 'all':
                 return true;
             case 'active':
-                return (status === 'scheduled' || a._isOngoing) && !a._isPast;
+                return status === 'scheduled' && !a._isPast && !a._isOngoing;
             case 'past':
                 return status === 'scheduled' && a._isPast;
             case 'done':
@@ -371,39 +388,55 @@ export default function DesktopAgendaPage() {
                 >
                     {[
                         { key: 'all' as const, label: 'Todos' },
+                        { key: 'ongoing' as const, label: 'Atendimento' },
                         { key: 'past' as const, label: 'Pendentes' },
                         { key: 'active' as const, label: 'Ativos' },
                         { key: 'done' as const, label: 'Concluídos' },
                         { key: 'canceled' as const, label: 'Cancelados' },
-                    ].map(({ key, label }) => (
-                        <button
-                            key={key}
-                            onClick={() => setStatusFilter(key)}
-                            aria-pressed={statusFilter === key}
-                            style={{
-                                fontSize: 'var(--font-body)',
-                                fontWeight: statusFilter === key ? 700 : 500,
-                                padding: '4px 10px',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                border:
-                                    statusFilter === key
-                                        ? '1px solid var(--color-success-darker)'
-                                        : '1px solid var(--color-border)',
-                                background:
-                                    statusFilter === key
-                                        ? 'var(--color-success-dark)'
-                                        : 'var(--color-bg)',
-                                color:
-                                    statusFilter === key
-                                        ? 'white'
-                                        : 'var(--color-text)',
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            {label}
-                        </button>
-                    ))}
+                    ].map(({ key, label }) => {
+                        const activeBg =
+                            key === 'ongoing'
+                                ? 'var(--color-ongoing)'
+                                : key === 'past'
+                                  ? 'var(--color-pending)'
+                                  : key === 'active'
+                                    ? 'var(--color-primary)'
+                                    : key === 'done'
+                                      ? 'var(--color-done)'
+                                      : key === 'canceled'
+                                        ? 'var(--color-canceled)'
+                                        : 'var(--color-heading)';
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => setStatusFilter(key)}
+                                aria-pressed={statusFilter === key}
+                                style={{
+                                    fontSize: 'var(--font-body)',
+                                    fontWeight:
+                                        statusFilter === key ? 700 : 500,
+                                    padding: '4px 10px',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    border:
+                                        statusFilter === key
+                                            ? `1px solid ${activeBg}`
+                                            : '1px solid var(--color-border)',
+                                    background:
+                                        statusFilter === key
+                                            ? activeBg
+                                            : 'var(--color-bg)',
+                                    color:
+                                        statusFilter === key
+                                            ? 'white'
+                                            : 'var(--color-text)',
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -427,7 +460,10 @@ export default function DesktopAgendaPage() {
                 )}
                 {!loading &&
                     sorted.map(a => {
-                        const isActive = a.status === 'scheduled' && !a._isPast;
+                        const isActive =
+                            a.status === 'scheduled' &&
+                            !a._isPast &&
+                            !a._isOngoing;
                         const isEditing = inlineEditId === a.id;
                         return (
                             <div

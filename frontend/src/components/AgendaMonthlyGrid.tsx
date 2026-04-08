@@ -8,12 +8,20 @@ import { enrichAppointment } from '../utils/appointments/status';
 import DateControlsHeader from './shared/DateControlsHeader';
 import FloatingDatePicker from './FloatingDatePicker';
 
-type StatusFilter = 'all' | 'pending' | 'active' | 'done' | 'canceled';
+type StatusFilter =
+    | 'all'
+    | 'ongoing'
+    | 'pending'
+    | 'active'
+    | 'done'
+    | 'canceled';
 
 const MAX_BADGES = 5;
 
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'] as const;
-const WEEKDAY_COLORS: Record<string, string | undefined> = { Dom: '#dc2626' };
+const WEEKDAY_COLORS: Record<string, string | undefined> = {
+    Dom: 'var(--color-danger)',
+};
 
 function toISODate(d: Date): string {
     const y = d.getFullYear();
@@ -127,6 +135,14 @@ export default function AgendaMonthlyGrid() {
 
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
     const [showPicker, setShowPicker] = React.useState(false);
+    const [reloadKey, setReloadKey] = React.useState(0);
+
+    React.useEffect(() => {
+        const onChanged = () => setReloadKey(x => x + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, []);
 
     const monthStart = React.useMemo(
         () => new Date(anchorMonth.getFullYear(), anchorMonth.getMonth(), 1),
@@ -138,13 +154,23 @@ export default function AgendaMonthlyGrid() {
         [anchorMonth],
     );
 
-    const { items, loading } = useAppointmentsRange(monthStart, monthEnd);
+    const { items, loading } = useAppointmentsRange(
+        monthStart,
+        monthEnd,
+        undefined,
+        reloadKey,
+    );
 
     const filtered = React.useMemo(() => {
         if (statusFilter === 'all') return items;
         // Use fresh Date() for accuracy; `now` state exists only to trigger
         // re-renders every minute so ongoing status updates automatically.
         const currentNow = new Date();
+        if (statusFilter === 'ongoing')
+            return items.filter(a => {
+                const e = enrichAppointment(a, currentNow);
+                return e._derivedStatus === 'ongoing';
+            });
         if (statusFilter === 'pending')
             return items.filter(a => {
                 const e = enrichAppointment(a, currentNow);
@@ -153,11 +179,7 @@ export default function AgendaMonthlyGrid() {
         if (statusFilter === 'active')
             return items.filter(a => {
                 const e = enrichAppointment(a, currentNow);
-                return (
-                    e._derivedStatus === 'scheduled' ||
-                    e._derivedStatus === 'ongoing' ||
-                    a.status === 'ongoing'
-                );
+                return e._derivedStatus === 'scheduled';
             });
         if (statusFilter === 'done')
             return items.filter(a => a.status === 'done');
@@ -236,6 +258,7 @@ export default function AgendaMonthlyGrid() {
                     {(
                         [
                             'all',
+                            'ongoing',
                             'pending',
                             'active',
                             'done',
@@ -245,24 +268,28 @@ export default function AgendaMonthlyGrid() {
                         const label =
                             f === 'all'
                                 ? 'Todos'
-                                : f === 'pending'
-                                  ? 'Pendentes'
-                                  : f === 'active'
-                                    ? 'Ativos'
-                                    : f === 'done'
-                                      ? 'Concluídos'
-                                      : 'Cancelados';
+                                : f === 'ongoing'
+                                  ? 'Atendimento'
+                                  : f === 'pending'
+                                    ? 'Pendentes'
+                                    : f === 'active'
+                                      ? 'Ativos'
+                                      : f === 'done'
+                                        ? 'Concluídos'
+                                        : 'Cancelados';
                         const isSelected = statusFilter === f;
                         const activeBg =
-                            f === 'pending'
-                                ? 'var(--color-pending)'
-                                : f === 'active'
-                                  ? 'var(--color-ongoing)'
-                                  : f === 'done'
-                                    ? 'var(--color-done)'
-                                    : f === 'canceled'
-                                      ? 'var(--color-canceled)'
-                                      : 'var(--color-heading)';
+                            f === 'ongoing'
+                                ? 'var(--color-ongoing)'
+                                : f === 'pending'
+                                  ? 'var(--color-pending)'
+                                  : f === 'active'
+                                    ? 'var(--color-success)'
+                                    : f === 'done'
+                                      ? 'var(--color-done)'
+                                      : f === 'canceled'
+                                        ? 'var(--color-canceled)'
+                                        : 'var(--color-heading)';
                         return (
                             <button
                                 key={f}
@@ -415,7 +442,7 @@ export default function AgendaMonthlyGrid() {
                                         style={{
                                             fontSize: '0.72rem',
                                             fontWeight: 700,
-                                            color: '#ea580c',
+                                            color: 'var(--color-hoje)',
                                             letterSpacing: '0.04em',
                                             textTransform: 'uppercase',
                                         }}
@@ -440,7 +467,7 @@ export default function AgendaMonthlyGrid() {
                                     {visible.map(a => {
                                         const enriched = enrichAppointment(
                                             a,
-                                            new Date(),
+                                            now,
                                         );
                                         const { border, bg, text } =
                                             statusColors(

@@ -419,20 +419,10 @@ const NavBar: React.FC<NavBarProps> = ({
                                         return;
                                     }
                                     const now = new Date();
-                                    if (agendaOpeners && !isMobileDevice()) {
+                                    if (agendaOpeners) {
                                         agendaOpeners.openWeekly(now);
                                     } else {
-                                        const y = now.getFullYear();
-                                        const m = String(
-                                            now.getMonth() + 1,
-                                        ).padStart(2, '0');
-                                        const d = String(
-                                            now.getDate(),
-                                        ).padStart(2, '0');
-                                        const url = `/agenda?date=${y}-${m}-${d}&mode=week`;
-                                        if (isMobileDevice())
-                                            window.location.href = url;
-                                        else window.open(url, '_self');
+                                        emit('openDailyAgenda', {});
                                     }
                                 }}
                             >

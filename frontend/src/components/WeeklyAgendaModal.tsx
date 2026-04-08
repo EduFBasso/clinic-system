@@ -88,7 +88,13 @@ function WeeklyAgendaContent({
         [anchorDate],
     );
     const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
-    const [reloadKey] = React.useState(0);
+    const [reloadKey, setReloadKey] = React.useState(0);
+    React.useEffect(() => {
+        const onChanged = () => setReloadKey(x => x + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, []);
     const { items, loading, error } = useAppointmentsRange(
         weekStart,
         weekEnd,

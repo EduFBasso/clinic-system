@@ -26,6 +26,13 @@ export default defineConfig({
                 target: 'http://localhost:8000',
                 changeOrigin: true,
                 secure: false,
+                bypass(req) {
+                    // Proxy only real API calls (/agenda/appointments/, etc.)
+                    // React route /agenda or /agenda?... → serve index.html
+                    const url = req.url ?? '';
+                    if (url.startsWith('/agenda/')) return null; // proxy
+                    return '/index.html'; // SPA fallback
+                },
             },
             '/anamnesis': {
                 target: 'http://localhost:8000',
