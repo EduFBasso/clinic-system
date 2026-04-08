@@ -24,10 +24,10 @@ describe('DesktopAgendaPage', () => {
         expect(
             await screen.findByText(/Agenda — Desktop/i),
         ).toBeInTheDocument();
-        const select = screen.getByLabelText(/Filtro de status/i);
-        expect(select).toBeInTheDocument();
-        // Default is Ativos
-        expect((select as HTMLSelectElement).value).toBe('active');
+        // Default filter: the "Ativos" pill should have aria-pressed=true
+        const ativosBtn = screen.getByRole('button', { name: 'Ativos' });
+        expect(ativosBtn).toBeInTheDocument();
+        expect(ativosBtn.getAttribute('aria-pressed')).toBe('true');
     });
 
     it('allows navigating days via buttons', async () => {

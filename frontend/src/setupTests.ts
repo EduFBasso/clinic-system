@@ -48,3 +48,20 @@ if (
     (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
         MockResizeObserver as unknown;
 }
+
+// window.matchMedia stub for jsdom (used by WeeklyAgendaModal and others)
+if (typeof window !== 'undefined' && !window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: (query: string) => ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+        }),
+    });
+}

@@ -31,20 +31,24 @@ describe('MonthlyAgendaModal header UX (unified simplified)', () => {
             } as unknown as typeof ResizeObserver;
         }
     });
-    it('renders Hoje button + calendar icon + month selector', () => {
+    it('renders Mês Atual button + year navigation + month pills', () => {
         render(<MonthlyAgendaModal open onClose={() => {}} client={client} />);
-        // Hoje button
+        // "Mês Atual" button (aria-label Ir para o mês atual)
         expect(
-            screen.getByRole('button', { name: /ir para hoje/i }),
+            screen.getByRole('button', { name: /ir para o mês atual/i }),
         ).toBeInTheDocument();
-        // Calendar icon button (aria-label Abrir calendário)
+        // Year navigation buttons
         expect(
-            screen.getByRole('button', { name: /abrir calendário/i }),
+            screen.getByRole('button', { name: /ano anterior/i }),
         ).toBeInTheDocument();
-        // Month selector button (aria-label Selecionar mês)
         expect(
-            screen.getByRole('button', { name: /selecionar mês/i }),
+            screen.getByRole('button', { name: /próximo ano/i }),
         ).toBeInTheDocument();
+        // Month pills — the current month pill should have aria-pressed=true
+        const pressedPills = screen
+            .getAllByRole('button')
+            .filter(b => b.getAttribute('aria-pressed') === 'true');
+        expect(pressedPills.length).toBeGreaterThanOrEqual(1);
     });
     it('Hoje button jumps to current month if different', () => {
         // Start from an arbitrary past month
@@ -57,17 +61,33 @@ describe('MonthlyAgendaModal header UX (unified simplified)', () => {
                 initialMonth={past}
             />,
         );
-        const todayBtn = screen.getByRole('button', { name: /ir para hoje/i });
-        fireEvent.click(todayBtn);
-        // After click, month selector button should reflect current month/year
-        const now = new Date();
-        const currentMonthName = now
-            .toLocaleString('pt-BR', { month: 'long' })
-            .charAt(0)
-            .toUpperCase();
-        const monthBtn = screen.getByRole('button', {
-            name: /selecionar mês/i,
+        const todayBtn = screen.getByRole('button', {
+            name: /ir para o mês atual/i,
         });
-        expect(monthBtn.textContent).toMatch(new RegExp(currentMonthName, 'i'));
+        fireEvent.click(todayBtn);
+        // After click, the current month pill should have aria-pressed=true
+        const now = new Date();
+        const currentMonthAbbr = [
+            'Jan',
+            'Fev',
+            'Mar',
+            'Abr',
+            'Mai',
+            'Jun',
+            'Jul',
+            'Ago',
+            'Set',
+            'Out',
+            'Nov',
+            'Dez',
+        ][now.getMonth()];
+        const pressedPill = screen
+            .getAllByRole('button')
+            .find(
+                b =>
+                    b.getAttribute('aria-pressed') === 'true' &&
+                    b.textContent === currentMonthAbbr,
+            );
+        expect(pressedPill).toBeTruthy();
     });
 });

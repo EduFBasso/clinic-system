@@ -12,6 +12,19 @@ import React from 'react';
 import QuickScheduleModal from '../components/QuickScheduleModal';
 import type { ClientBasic } from '../types/ClientBasic';
 
+// Stub ensureDeviceSession so it never consumes fetch mock slots
+vi.mock('../services/sessions', () => ({
+    default: () => Promise.resolve(),
+    ensureDeviceSession: () => Promise.resolve(),
+}));
+
+// We'll mock findFirstPendingForClient per-test via vi.mocked()
+const mockFindFirstPending = vi.fn();
+vi.mock('../services/pending', () => ({
+    findFirstPendingForClient: (...args: unknown[]) =>
+        mockFindFirstPending(...args),
+}));
+
 interface FetchResponse {
     ok: boolean;
     headers?: { get: (k: string) => string | null };
@@ -124,44 +137,46 @@ describe('QuickScheduleModal', () => {
         expect((tipo as HTMLSelectElement).value).toBe('consulta');
     });
 
-    it('clicking a pending minicard fires pendingActions:open', async () => {
+    it('clicking Resolver agora fires pendingActions:open', async () => {
         const fetchMock = globalThis.fetch as unknown as Mock;
-        // First call: create attempt blocked (simula texto pendente)
-        fetchMock.mockResolvedValueOnce({
-            ok: false,
-            headers: { get: () => 'text/plain' },
-            text: async () => 'Cliente possui compromisso pendente',
-        } as unknown as Response);
-        // Second call: list pending appointments
         const pendingEnd = new Date(Date.now() - 5 * 60_000).toISOString();
+        const pendingStart = new Date(Date.now() - 30 * 60_000).toISOString();
+
+        // usePendingGuard will call findFirstPendingForClient — mock to return pending
+        mockFindFirstPending.mockResolvedValue({
+            id: 555,
+            status: 'scheduled',
+            start_at: pendingStart,
+            end_at: pendingEnd,
+            client: client.id,
+            title: 'Consulta',
+            notes: undefined,
+            client_name: client.first_name,
+        });
+
+        // "Resolver agora" fetch: GET /appointments/555/
         fetchMock.mockResolvedValueOnce({
             ok: true,
-            json: async () => [
-                {
-                    id: 555,
-                    status: 'scheduled',
-                    start_at: new Date(Date.now() - 30 * 60_000).toISOString(),
-                    end_at: pendingEnd,
-                    client: { id: client.id, name: client.first_name },
-                },
-            ],
+            json: async () => ({
+                id: 555,
+                status: 'scheduled',
+                start_at: pendingStart,
+                end_at: pendingEnd,
+                client: { id: client.id, name: client.first_name },
+                title: 'Consulta',
+                notes: null,
+            }),
         } as unknown as Response);
 
         const listener = vi.fn<(e: Event) => void>();
         window.addEventListener('pendingActions:open', listener);
         openModal();
 
-        const createBtn = await screen.findByRole('button', { name: /criar/i });
-        fireEvent.click(createBtn);
-
-        await waitFor(() =>
-            expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2),
-        );
-
-        // The pending card should now be rendered; select by status badge text 'Pendente' (ou 'Past'?)
-        // Procurar um botão/div com role=button e texto do nome do cliente
-        const card = await screen.findByText(/c l/i); // nome abreviado no card (C L)
-        fireEvent.click(card);
+        // Pending guard detects the pending → "Resolver agora" button appears
+        const resolverBtn = await screen.findByRole('button', {
+            name: /resolver agora/i,
+        });
+        fireEvent.click(resolverBtn);
 
         await waitFor(() => expect(listener).toHaveBeenCalled());
         interface PendingDetail {

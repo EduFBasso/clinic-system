@@ -51,9 +51,11 @@ describe('DesktopAgendaPage early closed pill regression', () => {
 
     it('shows "Cancelado às" pill for early canceled appointment after selecting canceled filter', async () => {
         render(<DesktopAgendaPage />);
-        // Change status filter to 'canceled' so the card is visible
-        const select = await screen.findByLabelText(/Status:/i);
-        fireEvent.change(select, { target: { value: 'canceled' } });
+        // Change status filter to 'canceled' by clicking the pill button
+        const canceladosBtn = await screen.findByRole('button', {
+            name: 'Cancelados',
+        });
+        fireEvent.click(canceladosBtn);
 
         // The pill should render with localized label containing "Cancelado às"
         const pill = await screen.findByText(/Cancelado às/i);
