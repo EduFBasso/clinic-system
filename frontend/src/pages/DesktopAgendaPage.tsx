@@ -12,6 +12,14 @@ import InlineAppointmentEditor from '../components/InlineAppointmentEditor';
 import TimeRangeLabel from '../components/shared/TimeRangeLabel';
 import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
+import {
+    STATUS_ORDER,
+    isClientLike,
+    makeClientBasic,
+    matchesStatusFilter,
+    type ClientLike,
+} from '../utils/appointments/agendaHelpers';
+import { useNowTick } from '../hooks/useNowTick';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -25,12 +33,6 @@ function addDays(d: Date, n: number) {
 }
 
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
-const STATUS_ORDER: StatusKey[] = ['ongoing', 'scheduled', 'done', 'canceled'];
-
-interface ClientLike {
-    id: number;
-    name: string;
-}
 type RawClientField = ClientLike | number | undefined | null;
 type EnrichedAppt = Appointment & {
     _start: Date;
@@ -96,17 +98,8 @@ export default function DesktopAgendaPage() {
         'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing'
     >('active');
 
-    // Tick a cada 30 s para detectar transição scheduled → ongoing sem precisar recarregar
-    const [effectiveNowRef, setEffectiveNowRef] = React.useState(
-        () => new Date(),
-    );
-    React.useEffect(() => {
-        const t = window.setInterval(
-            () => setEffectiveNowRef(new Date()),
-            30_000,
-        );
-        return () => window.clearInterval(t);
-    }, []);
+    // Reactive now — ticks every 30 s to detect ongoing/past transitions
+    const effectiveNowRef = useNowTick(30_000);
 
     // Recarregar quando qualquer compromisso for criado/alterado/cancelado
     React.useEffect(() => {
@@ -138,23 +131,7 @@ export default function DesktopAgendaPage() {
 
     const filtered = enriched.filter(a => {
         const ov = getAppointmentOverride(a.id)?.status;
-        const status = (ov as StatusKey) ?? a.status;
-        switch (statusFilter) {
-            case 'all':
-                return true;
-            case 'active':
-                return status === 'scheduled' && !a._isPast && !a._isOngoing;
-            case 'past':
-                return status === 'scheduled' && a._isPast;
-            case 'done':
-                return status === 'done';
-            case 'canceled':
-                return status === 'canceled';
-            case 'ongoing':
-                return a._isOngoing || status === 'ongoing';
-            default:
-                return true;
-        }
+        return matchesStatusFilter(statusFilter, a, ov);
     });
 
     const sorted = filtered.slice().sort((a, b) => {
@@ -174,49 +151,6 @@ export default function DesktopAgendaPage() {
     const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
     const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
     const [inlineEditId, setInlineEditId] = React.useState<number | null>(null);
-
-    function splitName(full?: string): { first: string; last: string } {
-        if (!full) return { first: 'Cliente', last: '' };
-        const parts = full.trim().split(/\s+/);
-        if (parts.length === 1) return { first: parts[0], last: '' };
-        const last = parts.pop() || '';
-        return { first: parts.join(' '), last };
-    }
-
-    function isClientLike(x: unknown): x is { id: number; name?: string } {
-        return (
-            typeof x === 'object' &&
-            x !== null &&
-            'id' in (x as Record<string, unknown>) &&
-            typeof (x as { id: unknown }).id === 'number'
-        );
-    }
-
-    function makeClientBasic(a: EnrichedAppt): ClientBasic {
-        const c: ClientLike | number | undefined = a.client as
-            | ClientLike
-            | number
-            | undefined;
-        const displayName = (isClientLike(c) && c.name) || a.client_name || '';
-        const { first, last } = splitName(displayName);
-        let clientId = 0;
-        if (typeof c === 'number') clientId = c;
-        else if (isClientLike(c)) clientId = c.id;
-        return {
-            id: clientId,
-            first_name: first,
-            last_name: last,
-            phone: '',
-            email: '',
-            next_appointment_id: a.id,
-            next_appointment_status: a.status,
-            next_appointment_start_at: a.start_at,
-            next_appointment_end_at: a.end_at,
-            next_appointment_title: a.title,
-            next_appointment_visit_type: a.visit_type,
-            next_appointment_notes: a.notes || null,
-        } as ClientBasic;
-    }
 
     return (
         <div

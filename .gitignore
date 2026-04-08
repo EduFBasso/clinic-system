@@ -43,6 +43,7 @@ venv/
 *.docx
 *.doc
 *.pdf
+*.txt
 backend/venv*/
 backend/.venv*/
 backend/.venv-wsl/

@@ -3,7 +3,7 @@ import StatusBadge from './StatusBadge';
 // StatusKind is exported from StatusBadge; not needed explicitly here
 import TimeRangeLabel from './TimeRangeLabel';
 import { formatTime } from '../../utils/timeFormat';
-import { FaEdit, FaBan } from 'react-icons/fa';
+import { FaEdit, FaBan, FaWhatsapp } from 'react-icons/fa';
 import { useAppointmentCardState } from '../../hooks/useAppointmentCardState.ts';
 import {
     getAppointmentOverride,
@@ -25,6 +25,8 @@ export interface SharedAppointmentLike {
     client?: { id: number; name: string } | number;
     // Optional pre-fetched photo URL for the client; avoids an extra fetch in details modal when available
     client_photo?: string | null;
+    // True once the professional opened WhatsApp to notify the client
+    whatsapp_confirmed?: boolean;
 }
 
 export interface AppointmentCardProps<
@@ -519,6 +521,23 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                             status={isOngoing ? 'ongoing' : status}
                             size='md'
                         />
+                        {appt.whatsapp_confirmed && status === 'scheduled' && (
+                            <span
+                                title='WhatsApp enviado'
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 2,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    color: '#25d366',
+                                    marginTop: 2,
+                                }}
+                            >
+                                <FaWhatsapp size={11} />
+                                enviado
+                            </span>
+                        )}
                         {!compact && (
                             <span
                                 style={{

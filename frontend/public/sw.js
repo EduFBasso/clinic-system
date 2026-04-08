@@ -45,7 +45,11 @@ self.addEventListener('push', event => {
             tag: 'agenda-reminder',
             renotify: true,
             requireInteraction: true,
-            data: { wa_phone: data.wa_phone, wa_text: data.wa_text },
+            data: {
+                wa_phone: data.wa_phone,
+                wa_text: data.wa_text,
+                appointment_id: data.appointment_id,
+            },
             actions,
         }),
     );
@@ -59,40 +63,36 @@ self.addEventListener('notificationclick', event => {
     const { wa_phone, wa_text, appointment_id } = event.notification.data || {};
 
     if (event.action === 'whatsapp' && wa_phone && wa_text) {
-        const waUrl = `https://wa.me/${wa_phone}?text=${encodeURIComponent(wa_text)}`;
-
-        // Mark whatsapp_confirmed on the backend (fire-and-forget)
-        const confirmPromise = appointment_id
-            ? self.clients
-                  .matchAll({ type: 'window', includeUncontrolled: true })
-                  .then(clientList => {
-                      // Try to get the token from any open window's localStorage
-                      const tokenPromise =
-                          clientList.length > 0
-                              ? clientList[0].navigate
-                                  ? Promise.resolve(null) // navigate not useful here
-                                  : Promise.resolve(null)
-                              : Promise.resolve(null);
-                      return tokenPromise.then(() => {
-                          // Best-effort fetch — no token needed as we use cookie/session fallback
-                          // The app will also confirm via modal, this is just the SW path
-                          return fetch(
-                              `/agenda/appointments/${appointment_id}/confirm-whatsapp/`,
-                              {
-                                  method: 'POST',
-                                  headers: {
-                                      'Content-Type': 'application/json',
-                                  },
-                              },
-                          ).catch(() => {
-                              /* silencioso */
-                          });
-                      });
-                  })
-            : Promise.resolve();
+        // Navigate the app with reminder params so it can call confirm-whatsapp
+        // (authenticated) and open WhatsApp. The SW has no auth token, so this
+        // approach delegates the confirm call to the React app.
+        let appUrl = '/';
+        if (appointment_id) {
+            const params = new URLSearchParams({
+                reminder: String(appointment_id),
+                wa: '1',
+            });
+            params.set('wp', wa_phone);
+            params.set('wt', wa_text);
+            appUrl = '/?' + params.toString();
+        }
 
         event.waitUntil(
-            confirmPromise.then(() => self.clients.openWindow(waUrl)),
+            self.clients
+                .matchAll({ type: 'window', includeUncontrolled: true })
+                .then(clientList => {
+                    for (const client of clientList) {
+                        if ('navigate' in client) {
+                            return client
+                                .navigate(appUrl)
+                                .then(c => c && c.focus());
+                        }
+                        if ('focus' in client) return client.focus();
+                    }
+                    if (self.clients.openWindow) {
+                        return self.clients.openWindow(appUrl);
+                    }
+                }),
         );
         return;
     }

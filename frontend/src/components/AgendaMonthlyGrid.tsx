@@ -4,7 +4,12 @@ import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
-import { enrichAppointment } from '../utils/appointments/status';
+import {
+    enrichAppointment,
+    statusStripeColor,
+    statusBackgroundColor,
+} from '../utils/appointments/status';
+import { useNowTick } from '../hooks/useNowTick';
 import DateControlsHeader from './shared/DateControlsHeader';
 import FloatingDatePicker from './FloatingDatePicker';
 
@@ -42,51 +47,6 @@ function formatClientName(name: string | undefined): string {
     return `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
 
-function statusColors(status: Appointment['status'] | 'past'): {
-    border: string;
-    bg: string;
-    text: string;
-} {
-    switch (status) {
-        case 'scheduled':
-            return {
-                border: 'var(--color-success)',
-                bg: 'var(--color-success-bg)',
-                text: 'var(--color-success)',
-            };
-        case 'past':
-            return {
-                border: 'var(--color-pending)',
-                bg: 'var(--color-pending-bg)',
-                text: 'var(--color-pending)',
-            };
-        case 'ongoing':
-            return {
-                border: 'var(--color-ongoing)',
-                bg: 'var(--color-ongoing-bg)',
-                text: 'var(--color-ongoing)',
-            };
-        case 'done':
-            return {
-                border: 'var(--color-done)',
-                bg: 'var(--color-done-bg)',
-                text: 'var(--color-done)',
-            };
-        case 'canceled':
-            return {
-                border: 'var(--color-canceled)',
-                bg: 'var(--color-canceled-bg)',
-                text: 'var(--color-canceled)',
-            };
-        default:
-            return {
-                border: 'var(--color-pending)',
-                bg: 'var(--color-pending-bg)',
-                text: 'var(--color-pending)',
-            };
-    }
-}
-
 function buildCalendarWeeks(year: number, month: number): (Date | null)[][] {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -121,12 +81,8 @@ function groupByDay(items: Appointment[]): Record<string, Appointment[]> {
 export default function AgendaMonthlyGrid() {
     const todayISO = React.useMemo(() => toISODate(new Date()), []);
 
-    // Ticks every minute so time-based enrichment (ongoing) stays accurate
-    const [now, setNow] = React.useState(() => new Date());
-    React.useEffect(() => {
-        const id = setInterval(() => setNow(new Date()), 60_000);
-        return () => clearInterval(id);
-    }, []);
+    // Ticks every 30 s (shared interval) so ongoing/past detection stays accurate
+    const now = useNowTick(30_000);
 
     const [anchorMonth, setAnchorMonth] = React.useState<Date>(() => {
         const t = new Date();
@@ -469,10 +425,13 @@ export default function AgendaMonthlyGrid() {
                                             a,
                                             now,
                                         );
-                                        const { border, bg, text } =
-                                            statusColors(
-                                                enriched._derivedStatus,
-                                            );
+                                        const border = statusStripeColor(
+                                            enriched._derivedStatus,
+                                        );
+                                        const bg = statusBackgroundColor(
+                                            enriched._derivedStatus,
+                                        );
+                                        const text = border;
                                         const label = `${formatTime(a.start_at)} · ${formatClientName(a.client_name)}`;
                                         return (
                                             <div

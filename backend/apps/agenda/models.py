@@ -126,7 +126,7 @@ class Appointment(models.Model):
         qs = (
             Appointment.objects.filter(professional=self.professional)
             .exclude(pk=self.pk)
-            .exclude(status=Appointment.Status.CANCELED)
+            .exclude(status__in=[Appointment.Status.CANCELED, Appointment.Status.DONE])
             .filter(start_at__lt=self.end_at, end_at__gt=self.start_at)
         )
         return qs.exists()

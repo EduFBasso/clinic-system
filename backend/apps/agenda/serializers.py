@@ -36,6 +36,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "status",
             "finalized_at",
             "canceled_at",
+            "whatsapp_confirmed",
             "created_device_id",
             "created_device_info",
             "ended_device_id",
@@ -53,6 +54,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "ended_device_info",
             "finalized_at",
             "canceled_at",
+            "whatsapp_confirmed",
         ]
 
     # Semântica de tempos:
@@ -162,7 +164,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
             conflict = (
                 Appointment.objects.filter(professional=professional)
-                .exclude(status=Appointment.Status.CANCELED)
+                .exclude(status__in=[Appointment.Status.CANCELED, Appointment.Status.DONE])
                 .filter(Q(start_at__lt=end) & Q(end_at__gt=start))
             )
             if inst is not None:
