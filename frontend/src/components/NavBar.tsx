@@ -514,18 +514,9 @@ const NavBar: React.FC<NavBarProps> = ({
                 {loggedProfessional ? (
                     <div className={styles.loggedInfo}>
                         <div className={styles.proNameBlock}>
-                            {/* Relógio removido por decisão de produto */}
                             <span className={styles.nameLine}>
-                                Dr(a) {loggedProfessional.first_name}{' '}
-                                {loggedProfessional.last_name}
+                                Olá, {loggedProfessional.first_name}
                             </span>
-                            {loggedProfessional.register_number ? (
-                                <span className={styles.idLine}>
-                                    CRM/COP:{' '}
-                                    {loggedProfessional.register_number}
-                                </span>
-                            ) : null}
-                            {/* Relógio removido para simplificação */}
                         </div>
                         <button
                             className={

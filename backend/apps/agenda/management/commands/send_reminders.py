@@ -79,10 +79,6 @@ class Command(BaseCommand):
                     if hasattr(client, "first_name")
                     else str(client)
                 )
-                # Sr. / Sra. baseado no sexo cadastrado
-                sex = getattr(client, "sex", "") or ""
-                honorific = "Sra." if sex == "feminino" else "Sr."
-
                 # Telefone para WhatsApp — remove caracteres não numéricos e garante DDI 55
                 raw_phone = getattr(client, "phone", "") or ""
                 digits = "".join(c for c in str(raw_phone) if c.isdigit())
@@ -92,10 +88,14 @@ class Command(BaseCommand):
                 visit_type_label = appt.get_visit_type_display()
                 local_time = timezone.localtime(appt.start_at).strftime("%H:%M")
 
+                # Nome da profissional (primeiro nome)
+                prof_first_name = getattr(prof, "first_name", None) or getattr(prof, "name", "") or str(prof)
+
                 # Mensagem WhatsApp pré-preenchida
                 wa_text = (
-                    f"{honorific} {client_name}, "
-                    f"{visit_type_label} agendada para as {local_time}, "
+                    f"Ol\u00e1 {client_name}, "
+                    f"{visit_type_label} agendada para as {local_time} "
+                    f"com {prof_first_name}, "
                     f"confirma sua presen\u00e7a?"
                 )
 
