@@ -99,6 +99,13 @@ export default function ClientAddressForm({
                         placeholder='Ex: 123'
                     />
                     <InputField
+                        label='Complemento'
+                        name='address_complement'
+                        value={formData.address_complement ?? ''}
+                        onChange={e => handleChange(e)}
+                        placeholder='Ex: Apto 12, 2º andar'
+                    />
+                    <InputField
                         label='Bairro'
                         name='neighborhood'
                         value={formData.neighborhood ?? ''}

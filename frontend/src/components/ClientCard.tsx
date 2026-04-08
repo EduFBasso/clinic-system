@@ -470,6 +470,11 @@ export default function ClientCard({
                                 Nº {client.address_number}
                             </span>
                         )}
+                        {client.address_complement && (
+                            <span style={{ marginLeft: 4 }}>
+                                — {client.address_complement}
+                            </span>
+                        )}
                     </span>
                 </div>
             )}

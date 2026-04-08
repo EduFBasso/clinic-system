@@ -65,6 +65,7 @@ class Client(models.Model):
     postal_code = models.CharField("CEP", max_length=20, null=True, blank=True)
     date_of_birth = models.DateField("Data de nascimento", null=True, blank=True)
     address_number = models.CharField("Número", max_length=16, null=True, blank=True)
+    address_complement = models.CharField("Complemento", max_length=100, null=True, blank=True)
 
     # Registro
     created_at = models.DateTimeField("Criado em", auto_now_add=True)
