@@ -181,7 +181,7 @@ export default function FutureAppointmentsList({
                     <div
                         style={{
                             fontSize: 11,
-                            color: '#6b7280',
+                            color: 'var(--color-text-muted)',
                             padding: '2px 4px',
                         }}
                     >

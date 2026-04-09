@@ -8,6 +8,7 @@ export interface ClientBasic {
     photo?: string | null;
     address?: string;
     address_number?: string;
+    address_complement?: string | null;
     neighborhood?: string;
     city?: string;
     state?: string;
@@ -26,6 +27,7 @@ export interface ClientBasic {
     next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;
     next_appointment_id?: number | null;
     last_appointment_start_at?: string | null;
+    last_appointment_end_at?: string | null;
     last_appointment_title?: string | null;
     last_appointment_notes?: string | null;
     last_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;

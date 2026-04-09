@@ -3,10 +3,13 @@ import { API_BASE } from '../config/api';
 import React, { useEffect, useRef, useState } from 'react';
 import { normalizeDOBForApi } from '../utils/dateOfBirth';
 import type { ClientData } from '../types/ClientData';
-import ClientFormDesktop from './ClientFormDesktop';
-import ClientFormMobile from './ClientFormMobile';
-import useIsMobile from '../hooks/useIsMobile';
+import ClientPersonalDataForm from './ClientPersonalDataForm/ClientPersonalDataForm';
+import ClientAddressForm from './ClientAddressForm/ClientAddressForm';
+import ClientAnamnesisForm from './ClientAnamnesisForm/ClientAnamnesisForm';
+import styles from './ClientForm.module.css';
 import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
+import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
+import type { AnamnesisResponse } from '../types/AnamnesisTypes';
 import { useNavigate } from 'react-router-dom';
 
 export default function ClientForm({
@@ -74,16 +77,16 @@ export default function ClientForm({
                     field === 'email'
                         ? 'E-mail'
                         : field === 'phone'
-                        ? 'Telefone'
-                        : field === 'state'
-                        ? 'Estado'
-                        : field === 'city'
-                        ? 'Cidade'
-                        : field === 'postal_code'
-                        ? 'CEP'
-                        : field === 'profession'
-                        ? 'Profissão'
-                        : field.replace(/_/g, ' ');
+                          ? 'Telefone'
+                          : field === 'state'
+                            ? 'Estado'
+                            : field === 'city'
+                              ? 'Cidade'
+                              : field === 'postal_code'
+                                ? 'CEP'
+                                : field === 'profession'
+                                  ? 'Profissão'
+                                  : field.replace(/_/g, ' ');
                 const toText = (v: unknown) =>
                     Array.isArray(v)
                         ? v.map(x => String(x)).join(', ')
@@ -114,6 +117,12 @@ export default function ClientForm({
         email: cliente?.email ?? '',
         phone: cliente?.phone ?? '',
         profession: cliente?.profession ?? '',
+        rg: cliente?.rg ?? '',
+        document_type: cliente?.document_type ?? '',
+        document_number: cliente?.document_number ?? '',
+        sex: cliente?.sex ?? '',
+        marital_status: cliente?.marital_status ?? '',
+        nationality: cliente?.nationality ?? '',
         address: cliente?.address ?? '',
         neighborhood: cliente?.neighborhood ?? '',
         city: cliente?.city ?? 'Limeira',
@@ -182,7 +191,9 @@ export default function ClientForm({
     function handleChange(
         fieldOrEvent:
             | keyof ClientData
-            | React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+            | React.ChangeEvent<
+                  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+              >,
         value?: ClientData[keyof ClientData],
     ) {
         if (typeof fieldOrEvent === 'string') {
@@ -221,6 +232,35 @@ export default function ClientForm({
     }, [formData]);
     // Enable guard only when there are unsaved changes
     useUnsavedChangesGuard(dirty, 'Há alterações não salvas. Deseja sair?');
+
+    // Anamnesis fields (loaded once for the authenticated professional)
+    const { fields: anamnesisFields } = useAnamnesisFields();
+    // fieldId → selected value
+    const [anamnesisValues, setAnamnesisValues] = useState<
+        Record<number, string>
+    >({});
+
+    // Load existing responses when editing a client
+    useEffect(() => {
+        if (!cliente?.id) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        fetch(`${API_BASE}/anamnesis/responses/?client=${cliente.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => (r.ok ? r.json() : Promise.resolve([])))
+            .then((data: AnamnesisResponse[]) => {
+                const map: Record<number, string> = {};
+                data.forEach(r => {
+                    if (r.field !== null) map[r.field] = r.value;
+                });
+                setAnamnesisValues(map);
+            })
+            .catch(() => {
+                /* silent */
+            });
+    }, [cliente?.id]);
+
     const uploadPhotoIfNeeded = async (clientId: number, token: string) => {
         if (!selectedPhotoFile) return null;
         const fd = new FormData();
@@ -242,6 +282,27 @@ export default function ClientForm({
             throw new Error(errTxt || 'Falha ao enviar foto');
         }
         return await res.json();
+    };
+
+    const saveAnamnesis = async (
+        clientId: number,
+        token: string,
+    ): Promise<void> => {
+        const entries = Object.entries(anamnesisValues).map(
+            ([fieldId, value]) => ({
+                field: Number(fieldId),
+                value,
+            }),
+        );
+        if (entries.length === 0) return;
+        await fetch(`${API_BASE}/anamnesis/responses/bulk_save/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ client: clientId, responses: entries }),
+        });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -339,9 +400,6 @@ export default function ClientForm({
                         }
                         // Demais erros: banner
                         setFeedback({ type: 'error', message: errorMsg });
-                        if (isMobile) {
-                            setTimeout(() => setFeedback(null), 3000);
-                        }
                         const err: HandledError = new Error(
                             errorMsg,
                         ) as HandledError;
@@ -363,6 +421,17 @@ export default function ClientForm({
                     } catch (err) {
                         console.warn(
                             'Falha ao enviar foto (não bloqueante):',
+                            err,
+                        );
+                    }
+                    // Save anamnesis responses (non-blocking)
+                    try {
+                        if (createdClient?.id) {
+                            await saveAnamnesis(createdClient.id, token);
+                        }
+                    } catch (err) {
+                        console.warn(
+                            'Falha ao salvar anamnese (não bloqueante):',
                             err,
                         );
                     }
@@ -405,6 +474,12 @@ export default function ClientForm({
                             email: '',
                             phone: '',
                             profession: '',
+                            rg: '',
+                            document_type: '',
+                            document_number: '',
+                            sex: '',
+                            marital_status: '',
+                            nationality: '',
                             address: '',
                             neighborhood: '',
                             city: 'Limeira',
@@ -449,6 +524,12 @@ export default function ClientForm({
                             email: '',
                             phone: '',
                             profession: '',
+                            rg: '',
+                            document_type: '',
+                            document_number: '',
+                            sex: '',
+                            marital_status: '',
+                            nationality: '',
                             address: '',
                             neighborhood: '',
                             city: 'Limeira',
@@ -475,6 +556,7 @@ export default function ClientForm({
                             other_procedures: '',
                         });
                         setDirty(false);
+                        setAnamnesisValues({});
                         // Mantém na página, sem modal
                         return;
                     }
@@ -492,9 +574,6 @@ export default function ClientForm({
                         type: 'error',
                         message: 'Erro ao cadastrar: ' + (err?.message || ''),
                     });
-                    if (isMobile) {
-                        setTimeout(() => setFeedback(null), 3000);
-                    }
                 });
             return;
         }
@@ -590,9 +669,6 @@ export default function ClientForm({
                     }
                     // Demais erros: banner
                     setFeedback({ type: 'error', message: errorMsg });
-                    if (isMobile) {
-                        setTimeout(() => setFeedback(null), 3000);
-                    }
                     const err: HandledError = new Error(
                         errorMsg,
                     ) as HandledError;
@@ -613,6 +689,17 @@ export default function ClientForm({
                     }
                 } catch (err) {
                     console.warn('Falha ao enviar foto (não bloqueante):', err);
+                }
+                // Save anamnesis responses (non-blocking)
+                try {
+                    if (cliente?.id) {
+                        await saveAnamnesis(cliente.id, token);
+                    }
+                } catch (err) {
+                    console.warn(
+                        'Falha ao salvar anamnese (não bloqueante):',
+                        err,
+                    );
                 }
                 // Reset baseline after successful update
                 initialRef.current = JSON.stringify(formData);
@@ -754,10 +841,6 @@ export default function ClientForm({
                             type: 'error',
                             message: 'Erro ao excluir cliente',
                         });
-                        // No mobile, exibe erro por 3s
-                        if (isMobile) {
-                            setTimeout(() => setFeedback(null), 3000);
-                        }
                         throw new Error('Erro ao excluir cliente');
                     }
                     // Sucesso: sai imediatamente da tela de edição e atualiza a lista
@@ -819,9 +902,7 @@ export default function ClientForm({
 
     const isEdit = !!cliente?.id;
 
-    const isMobile = useIsMobile();
-
-    // Render modal de sucesso (desktop & mobile) quando existir mensagem
+    // Render modal de sucesso quando existir mensagem
     const SuccessModal = infoModal ? (
         <div
             role='dialog'
@@ -878,70 +959,67 @@ export default function ClientForm({
         </div>
     ) : null;
 
-    if (isMobile) {
-        return (
-            <>
-                {feedback?.type === 'error' && (
-                    <div
-                        style={{
-                            color: 'red',
-                            background: '#f8f8f8',
-                            border: '1px solid #d32f2f',
-                            borderRadius: 6,
-                            padding: '0.75rem',
-                            marginBottom: '1rem',
-                            textAlign: 'center',
-                            fontWeight: 'bold',
-                        }}
-                    >
-                        {feedback.message}
-                    </div>
-                )}
-                <ClientFormMobile
-                    formData={formData}
-                    handleChange={handleChange}
-                    handleSubmit={handleSubmit}
-                    handleCancel={handleCancel}
-                    handleDelete={handleDelete}
-                    isEdit={isEdit}
-                    onPhotoSelected={setSelectedPhotoFile}
-                    initialPhotoUrl={cliente?.photo || null}
-                />
-                {SuccessModal}
-            </>
-        );
-    }
     return (
         <>
-            {feedback?.type === 'error' && (
-                <div
-                    style={{
-                        color: 'red',
-                        background: '#f8f8f8',
-                        border: '1px solid #d32f2f',
-                        borderRadius: 6,
-                        padding: '0.75rem',
-                        marginBottom: '1rem',
-                        textAlign: 'center',
-                        fontWeight: 'bold',
-                    }}
-                >
-                    {feedback.message}
+            <form
+                ref={formRef}
+                onSubmit={handleSubmit}
+                noValidate
+                data-theme='blue'
+            >
+                <ClientPersonalDataForm
+                    formData={formData}
+                    handleChange={handleChange}
+                    feedback={feedback}
+                    isEdit={isEdit}
+                />
+                <ClientAddressForm
+                    formData={formData}
+                    handleChange={handleChange}
+                    isEdit={isEdit}
+                />
+                <ClientAnamnesisForm
+                    fields={anamnesisFields}
+                    values={anamnesisValues}
+                    isEdit={isEdit}
+                    onChange={(fieldId, value) =>
+                        setAnamnesisValues(prev => ({
+                            ...prev,
+                            [fieldId]: value,
+                        }))
+                    }
+                />
+                <div className={styles.footer}>
+                    {!isEdit && (
+                        <button
+                            type='submit'
+                            className={styles.btnSecondary}
+                            onClick={() => onQuickSubmit()}
+                        >
+                            Salvar e novo
+                        </button>
+                    )}
+                    <button type='submit' className={styles.btnPrimary}>
+                        Salvar
+                    </button>
+                    <button
+                        type='button'
+                        className={styles.btnSecondary}
+                        onClick={handleCancel}
+                    >
+                        Cancelar
+                    </button>
+                    {isEdit && (
+                        <button
+                            type='button'
+                            className={styles.btnDanger}
+                            onClick={handleDelete}
+                        >
+                            Apagar
+                        </button>
+                    )}
                 </div>
-            )}
-            <ClientFormDesktop
-                formData={formData}
-                setFormData={setFormData}
-                handleChange={handleChange}
-                handleSubmit={handleSubmit}
-                handleCancel={handleCancel}
-                handleDelete={handleDelete}
-                isEdit={isEdit}
-                onQuickSubmit={onQuickSubmit}
-                formRef={formRef}
-                initialPhotoUrl={cliente?.photo || null}
-                onPhotoSelected={setSelectedPhotoFile}
-            />
+            </form>
             {SuccessModal}
         </>
     );

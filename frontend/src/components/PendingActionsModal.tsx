@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppModal from './Modal';
 import { clearOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
@@ -21,13 +22,13 @@ interface PendingActionsModalProps {
 
 const labelStyle: React.CSSProperties = {
     fontSize: 14,
-    color: '#374151',
+    color: 'var(--color-pending)',
     fontWeight: 700,
 };
 
 const valueStyle: React.CSSProperties = {
     fontSize: 14,
-    color: '#111827',
+    color: 'var(--color-heading)',
 };
 
 export default function PendingActionsModal({
@@ -192,6 +193,7 @@ export default function PendingActionsModal({
             }
         }
     }
+    const navigate = useNavigate();
     if (!appt) return null;
     // Regra revisada: permitir finalizar assim que o compromisso INICIA (antes o bloqueio aguardava o fim)
     // Mantém bloqueio apenas se ainda não chegou no horário de início.
@@ -212,8 +214,8 @@ export default function PendingActionsModal({
         typeof appt.client === 'number'
             ? appt.client
             : appt.client && 'id' in appt.client
-            ? (appt.client as { id: number }).id
-            : undefined;
+              ? (appt.client as { id: number }).id
+              : undefined;
 
     const clientName =
         appt.client_name ||
@@ -342,8 +344,8 @@ export default function PendingActionsModal({
                     resp.status === 403
                         ? 'Sem permissão para cancelar este agendamento (403).'
                         : resp.status === 401
-                        ? 'Sessão expirada (401).'
-                        : `Falha ao cancelar: ${resp.error || resp.status}`;
+                          ? 'Sessão expirada (401).'
+                          : `Falha ao cancelar: ${resp.error || resp.status}`;
                 throw new Error(friendly);
             }
             // Evento de resolução imediata (pendente -> estado final) para limpar UI do ClientCard
@@ -486,6 +488,10 @@ export default function PendingActionsModal({
     async function doFinalize() {
         if (busy) return;
         setBusy('finalize');
+        // Captura antes de qualquer operação async (props podem mudar)
+        const capturedClientName = clientName;
+        const capturedStartAt = appt?.start_at ?? '';
+        const capturedEndAt = appt?.end_at ?? '';
         try {
             const id = apptId;
             await Promise.race([
@@ -577,6 +583,23 @@ export default function PendingActionsModal({
                 } catch {
                     /* noop */
                 }
+                // Navega para ConsultaPage com dados do atendimento
+                try {
+                    navigate('/consulta', {
+                        state: {
+                            appointmentId: id,
+                            clientName: capturedClientName,
+                            clientId:
+                                typeof apptClientId === 'number'
+                                    ? apptClientId
+                                    : undefined,
+                            startAt: capturedStartAt,
+                            endAt: capturedEndAt,
+                        },
+                    });
+                } catch {
+                    /* noop */
+                }
                 setTimeout(() => {
                     try {
                         window.dispatchEvent(new Event('ensureScrollUnlocked'));
@@ -642,7 +665,12 @@ export default function PendingActionsModal({
                     {realClosedLine && (
                         <div>
                             <span style={labelStyle}>Encerrado real: </span>
-                            <span style={{ ...valueStyle, color: '#065f46' }}>
+                            <span
+                                style={{
+                                    ...valueStyle,
+                                    color: 'var(--color-success)',
+                                }}
+                            >
                                 {realClosedLine}
                             </span>
                         </div>
@@ -656,10 +684,10 @@ export default function PendingActionsModal({
                                     timeStatus.tone === 'progress'
                                         ? '#2563eb'
                                         : timeStatus.tone === 'late'
-                                        ? '#b91c1c'
-                                        : timeStatus.tone === 'future'
-                                        ? '#4b5563'
-                                        : undefined,
+                                          ? 'var(--color-canceled)'
+                                          : timeStatus.tone === 'future'
+                                            ? '#4b5563'
+                                            : undefined,
                             }}
                         >
                             {timeStatus.label}
@@ -681,7 +709,7 @@ export default function PendingActionsModal({
                         <div
                             style={{
                                 marginRight: 'auto',
-                                color: '#b91c1c',
+                                color: 'var(--color-canceled)',
                                 fontSize: 13,
                                 lineHeight: 1.2,
                                 maxWidth: 360,
@@ -733,8 +761,8 @@ export default function PendingActionsModal({
                         {busy === 'finalize'
                             ? 'Concluindo…'
                             : finalizeTimeLock
-                            ? 'Aguardando início'
-                            : 'Concluir'}
+                              ? 'Aguardando início'
+                              : 'Concluir'}
                     </button>
                     <button
                         onClick={doCancel}
@@ -742,7 +770,7 @@ export default function PendingActionsModal({
                         style={{
                             padding: '8px 12px',
                             background: '#ef4444',
-                            color: '#fff',
+                            color: 'var(--color-bg-section)',
                             fontWeight: 700,
                         }}
                         title='Cancelar compromisso'

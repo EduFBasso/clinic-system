@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import DesktopAgendaPage from '../DesktopAgendaPage';
 
 describe('DesktopAgendaPage', () => {
@@ -20,18 +21,26 @@ describe('DesktopAgendaPage', () => {
     });
 
     it('renders header and status filter', async () => {
-        render(<DesktopAgendaPage />);
+        render(
+            <MemoryRouter>
+                <DesktopAgendaPage />
+            </MemoryRouter>,
+        );
         expect(
             await screen.findByText(/Agenda — Desktop/i),
         ).toBeInTheDocument();
-        const select = screen.getByLabelText(/Filtro de status/i);
-        expect(select).toBeInTheDocument();
-        // Default is Ativos
-        expect((select as HTMLSelectElement).value).toBe('active');
+        // Default filter: the "Ativos" pill should have aria-pressed=true
+        const ativosBtn = screen.getByRole('button', { name: 'Ativos' });
+        expect(ativosBtn).toBeInTheDocument();
+        expect(ativosBtn.getAttribute('aria-pressed')).toBe('true');
     });
 
     it('allows navigating days via buttons', async () => {
-        render(<DesktopAgendaPage />);
+        render(
+            <MemoryRouter>
+                <DesktopAgendaPage />
+            </MemoryRouter>,
+        );
         const left = screen.getByLabelText(/Dia anterior/i);
         const right = screen.getByLabelText(/Próximo dia/i);
         expect(left).toBeInTheDocument();

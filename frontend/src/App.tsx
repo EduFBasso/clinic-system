@@ -14,12 +14,14 @@ const LazyDesktopAgenda: React.ComponentType = React.lazy(async () => {
     }
 });
 import ClientFormPage from './pages/Clients/ClientFormPage';
+import AdminPage from './pages/AdminPage';
 import { useEffect } from 'react';
 import ensureDeviceSession from './services/sessions';
 import ProductFormPage from './pages/Catalog/ProductFormPage';
 import ServiceFormPage from './pages/Catalog/ServiceFormPage';
 import ProductListPage from './pages/Catalog/ProductListPage';
 import ServiceListPage from './pages/Catalog/ServiceListPage';
+import ConsultaPage from './pages/ConsultaPage';
 
 function App() {
     useEffect(() => {
@@ -44,6 +46,10 @@ function App() {
                     element={<ProductFormPage />}
                 />
                 <Route
+                    path='/catalog/products/:id'
+                    element={<ProductFormPage />}
+                />
+                <Route
                     path='/catalog/services/new'
                     element={<ServiceFormPage />}
                 />
@@ -53,6 +59,8 @@ function App() {
                 />
                 <Route path='/catalog/products' element={<ProductListPage />} />
                 <Route path='/catalog/services' element={<ServiceListPage />} />
+                <Route path='/admin' element={<AdminPage />} />
+                <Route path='/consulta' element={<ConsultaPage />} />
                 {/* Full-page scheduler for mobile */}
                 {/** Rota /schedule removida para unificar experiência via modais */}
                 {/* Rota /agenda/settings removida */}

@@ -114,7 +114,11 @@ export const TimePicker10: React.FC<TimePicker10Props> = ({
     return (
         <label style={{ display: 'flex', flexDirection: 'column', ...style }}>
             {label && (
-                <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+                <span
+                    style={{ fontSize: 12, color: 'var(--color-text-muted)' }}
+                >
+                    {label}
+                </span>
             )}
             <div style={{ display: 'flex', gap: 4 }}>
                 <select

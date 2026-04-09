@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { API_BASE } from '../../config/api';
 import { apiFetch, ApiError } from '../../utils/apiFetch';
 import InputField from '../../components/FormElements/InputField';
@@ -13,6 +13,12 @@ type ProductType = 'PRODUCT' | 'MEDICATION';
 
 export default function ProductFormPage() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const { id } = useParams<{ id: string }>();
+    const returnTo: string =
+        (location.state as { returnTo?: string } | null)?.returnTo ??
+        '/catalog/products';
+
     const [name, setName] = useState('');
     const [type, setType] = useState<ProductType>('PRODUCT');
     const [scientificName, setScientificName] = useState('');
@@ -25,6 +31,7 @@ export default function ProductFormPage() {
     const [quantityStr, setQuantityStr] = useState<string>('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     function format2DecimalsBR(value: number): string {
         return value.toLocaleString('pt-BR', {
@@ -48,6 +55,47 @@ export default function ProductFormPage() {
         return Number.isFinite(n) ? n : 0;
     }
 
+    // Carregar dados existentes no modo edição
+    useEffect(() => {
+        if (!id) return;
+        let mounted = true;
+        (async () => {
+            try {
+                const data = await apiFetch(
+                    `${API_BASE}/inventory/products/${id}/`,
+                );
+                if (!mounted) return;
+                const p = data as {
+                    name: string;
+                    type: ProductType;
+                    scientific_name?: string;
+                    sku?: string;
+                    unit?: string;
+                    price: number;
+                    cost: number;
+                    track_inventory: boolean;
+                    quantity_on_hand: number;
+                };
+                setName(p.name ?? '');
+                setType(p.type ?? 'PRODUCT');
+                setScientificName(p.scientific_name ?? '');
+                setSku(p.sku ?? '');
+                setUnit(p.unit ?? 'un');
+                setPriceStr(format2DecimalsBR(p.price ?? 0));
+                setCostStr(format2DecimalsBR(p.cost ?? 0));
+                setTrackInventory(p.track_inventory ?? true);
+                setQuantityStr(String(Math.round(p.quantity_on_hand ?? 0)));
+            } catch (err) {
+                if (!mounted) return;
+                const msg = err instanceof ApiError ? err.message : String(err);
+                setLoadError(msg || 'Erro ao carregar produto');
+            }
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, [id]);
+
     async function onSubmit(e: React.FormEvent) {
         e.preventDefault();
         setError(null);
@@ -68,15 +116,24 @@ export default function ProductFormPage() {
                 track_inventory: !!trackInventory,
                 quantity_on_hand: parseIntOnlyDigits(quantityStr) || 0,
             };
-            await apiFetch(`${API_BASE}/inventory/products/`, {
-                method: 'POST',
-                body,
-            });
+            if (id) {
+                await apiFetch(`${API_BASE}/inventory/products/${id}/`, {
+                    method: 'PATCH',
+                    body,
+                });
+            } else {
+                await apiFetch(`${API_BASE}/inventory/products/`, {
+                    method: 'POST',
+                    body,
+                });
+            }
             try {
                 localStorage.setItem(
                     'pendingSystemMessage',
                     JSON.stringify({
-                        text: 'Produto salvo com sucesso.',
+                        text: id
+                            ? 'Produto atualizado com sucesso.'
+                            : 'Produto salvo com sucesso.',
                         type: 'success',
                         autoCloseMs: 6000,
                     }),
@@ -84,7 +141,11 @@ export default function ProductFormPage() {
             } catch {
                 // ignore storage errors
             }
-            navigate('/');
+            if (returnTo === '/consulta') {
+                navigate(-1);
+            } else {
+                navigate(returnTo);
+            }
         } catch (err) {
             const msg = err instanceof ApiError ? err.message : String(err);
             setError(msg || 'Erro ao salvar');
@@ -94,8 +155,22 @@ export default function ProductFormPage() {
     }
 
     return (
-        <FormPage title='Novo Produto' onSubmit={onSubmit}>
+        <FormPage
+            title={id ? 'Editar Produto' : 'Novo Produto'}
+            onSubmit={onSubmit}
+        >
             <FormSection title='Dados do produto'>
+                {loadError && (
+                    <div
+                        style={{
+                            color: 'crimson',
+                            fontSize: 13,
+                            marginBottom: 8,
+                        }}
+                    >
+                        {loadError}
+                    </div>
+                )}
                 <InputField
                     label='Nome'
                     value={name}
@@ -153,6 +228,7 @@ export default function ProductFormPage() {
                                 const cleaned = v.replace(/[^0-9.,]/g, '');
                                 setPriceStr(cleaned);
                             }}
+                            onFocus={e => e.target.select()}
                             onBlur={e => {
                                 const n = parseBRToNumber(
                                     (e.target as HTMLInputElement).value,
@@ -173,6 +249,7 @@ export default function ProductFormPage() {
                                 const cleaned = v.replace(/[^0-9.,]/g, '');
                                 setCostStr(cleaned);
                             }}
+                            onFocus={e => e.target.select()}
                             onBlur={e => {
                                 const n = parseBRToNumber(
                                     (e.target as HTMLInputElement).value,
@@ -211,6 +288,7 @@ export default function ProductFormPage() {
                                 const cleaned = v.replace(/[^0-9]/g, '');
                                 setQuantityStr(cleaned);
                             }}
+                            onFocus={e => e.target.select()}
                             onBlur={e => {
                                 const cleaned = (
                                     e.target as HTMLInputElement

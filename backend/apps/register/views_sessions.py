@@ -73,9 +73,6 @@ def _get_or_create_session(request):
         if changed:
             update_fields = ['is_active', 'user_agent', 'ip_address']
             session.save(update_fields=update_fields)
-        else:
-            # Força update para auto_now? Só se quisermos precisão milissegundo
-            pass
     return session, created
 
 
@@ -123,8 +120,7 @@ def _parse_ua(ua: str):
             browser_version = m.group('ver')
             break
     if browser == 'Safari' and 'Chrome/' in ua:
-        # Safari token dentro do Chrome -> já teria sido capturado por Chrome
-        pass
+        browser = 'Chrome'
     return device_type, os, f"{browser} {browser_version}".strip()
 
 
@@ -155,11 +151,11 @@ def sessions_active(request):
     for s in qs.order_by('-last_seen_at'):
         device_type, os_name, browser_name = _parse_ua(s.user_agent)
         items.append({
-            'id': str(s.id),
+            'id': str(s.id), # type: ignore
             'device_id': s.device_id,
             'created_at': s.created_at.isoformat(),
             'last_seen': s.last_seen_at.isoformat() if s.last_seen_at else now_iso,
-            'is_current': session and s.pk == session.pk,
+            'is_current': session is not None and s.pk == session.pk,
             'ua': s.user_agent,
             'device_type': device_type,
             'os': os_name,

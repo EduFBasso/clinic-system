@@ -1,11 +1,12 @@
 # backend\apps\register\views_professionals.py
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.viewsets import ModelViewSet
-from .models import Professional, ProfessionalSettings
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+from .models import Professional, ProfessionalSettings, PushSubscription
 from .serializers import (
     ProfessionalSerializer,
     ProfessionalBasicSerializer,
     ProfessionalSettingsSerializer,
+    PushSubscriptionSerializer,
 )
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -69,8 +70,44 @@ class ProfessionalViewSet(ModelViewSet):
         user.save(update_fields=list(payload.keys()))
         return Response(ProfessionalBasicSerializer(user).data)
 
+    @action(detail=False, methods=["post", "delete"], url_path="push-subscription")
+    def push_subscription(self, request):
+        """POST: cria ou atualiza uma assinatura push por endpoint.
+        DELETE: remove a assinatura pelo endpoint informado no body.
+        """
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"detail": "Authentication required."}, status=401)
 
-class ProfessionalBasicViewSet(ModelViewSet):
+        if request.method.upper() == "DELETE":
+            endpoint = request.data.get("endpoint", "")
+            if not endpoint:
+                return Response({"detail": "endpoint obrigatório."}, status=400)
+            deleted, _ = PushSubscription.objects.filter(
+                professional_id=user.id, endpoint=endpoint
+            ).delete()
+            if deleted:
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            return Response({"detail": "Assinatura não encontrada."}, status=404)
+
+        # POST — upsert by endpoint
+        serializer = PushSubscriptionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        endpoint = serializer.validated_data["endpoint"]
+        user_agent = request.META.get("HTTP_USER_AGENT", "")[:256]
+        PushSubscription.objects.update_or_create(
+            professional_id=user.id,
+            endpoint=endpoint,
+            defaults={
+                "p256dh": serializer.validated_data["p256dh"],
+                "auth": serializer.validated_data["auth"],
+                "user_agent": user_agent,
+            },
+        )
+        return Response(status=status.HTTP_201_CREATED)
+
+
+class ProfessionalBasicViewSet(ReadOnlyModelViewSet):
     serializer_class = ProfessionalBasicSerializer
     permission_classes = [AllowAny]
 

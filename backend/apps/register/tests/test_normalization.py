@@ -1,5 +1,5 @@
 import pytest
-from apps.register.serializers_clients import _normalize_uf, _normalize_cep
+from apps.clients.serializers import _normalize_uf, _normalize_cep
 
 @pytest.mark.parametrize("raw,expected", [
     ("sp", "SP"),

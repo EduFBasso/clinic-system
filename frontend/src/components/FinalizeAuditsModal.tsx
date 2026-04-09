@@ -65,7 +65,7 @@ export default function FinalizeAuditsModal({
                             gap: 4,
                         }}
                     >
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                             Device ID
                         </span>
                         <input
@@ -81,7 +81,7 @@ export default function FinalizeAuditsModal({
                             gap: 4,
                         }}
                     >
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                             ID do Compromisso
                         </span>
                         <input
@@ -97,7 +97,7 @@ export default function FinalizeAuditsModal({
                             gap: 4,
                         }}
                     >
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                             Início (ISO)
                         </span>
                         <input
@@ -113,7 +113,7 @@ export default function FinalizeAuditsModal({
                             gap: 4,
                         }}
                     >
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                             Fim (ISO)
                         </span>
                         <input

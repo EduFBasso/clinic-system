@@ -12,6 +12,16 @@ import InlineAppointmentEditor from '../components/InlineAppointmentEditor';
 import TimeRangeLabel from '../components/shared/TimeRangeLabel';
 import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
+import {
+    STATUS_ORDER,
+    isClientLike,
+    makeClientBasic,
+    matchesStatusFilter,
+    type ClientLike,
+} from '../utils/appointments/agendaHelpers';
+import { useNowTick } from '../hooks/useNowTick';
+import { API_BASE } from '../config/api';
+import { useLocation } from 'react-router-dom';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -25,18 +35,13 @@ function addDays(d: Date, n: number) {
 }
 
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
-const STATUS_ORDER: StatusKey[] = ['ongoing', 'scheduled', 'done', 'canceled'];
-
-interface ClientLike {
-    id: number;
-    name: string;
-}
 type RawClientField = ClientLike | number | undefined | null;
 type EnrichedAppt = Appointment & {
     _start: Date;
     _end: Date;
     _isPast: boolean;
     _isOngoing: boolean;
+    _derivedStatus: 'scheduled' | 'done' | 'canceled' | 'ongoing' | 'past';
     client?: ClientLike | number;
 };
 
@@ -75,11 +80,37 @@ export default function DesktopAgendaPage() {
         startOfDay(new Date()),
     );
     const [reloadKey, setReloadKey] = React.useState(0);
+    const location = useLocation();
     // Removido: estado local de PendingActions; usar evento global
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+
+    // Reabre AppointmentDetailsModal após retorno da página de edição de charges
+    React.useEffect(() => {
+        const raw = sessionStorage.getItem('reopenAppointmentDetails');
+        if (!raw) return;
+        sessionStorage.removeItem('reopenAppointmentDetails');
+        const apptId = parseInt(raw, 10);
+        if (!apptId) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        fetch(`${API_BASE}/agenda/appointments/${apptId}/`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => (r.ok ? r.json() : null))
+            .then(appt => {
+                if (appt) {
+                    setDetailsAppt(appt as Appointment);
+                    setDetailsOpen(true);
+                }
+            })
+            .catch(() => {
+                /* noop */
+            });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location]);
 
     const dayStart = React.useMemo(
         () => startOfDay(selectedDay),
@@ -96,8 +127,16 @@ export default function DesktopAgendaPage() {
         'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing'
     >('active');
 
-    // Effective now reference (stable for one render lifecycle)
-    const effectiveNowRef = React.useMemo(() => new Date(), []);
+    // Reactive now — ticks every 30 s to detect ongoing/past transitions
+    const effectiveNowRef = useNowTick(30_000);
+
+    // Recarregar quando qualquer compromisso for criado/alterado/cancelado
+    React.useEffect(() => {
+        const onChanged = () => setReloadKey(x => x + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, []);
 
     const enriched: EnrichedAppt[] = React.useMemo(() => {
         const nowRef = effectiveNowRef;
@@ -121,23 +160,7 @@ export default function DesktopAgendaPage() {
 
     const filtered = enriched.filter(a => {
         const ov = getAppointmentOverride(a.id)?.status;
-        const status = (ov as StatusKey) ?? a.status;
-        switch (statusFilter) {
-            case 'all':
-                return true;
-            case 'active':
-                return (status === 'scheduled' || a._isOngoing) && !a._isPast;
-            case 'past':
-                return status === 'scheduled' && a._isPast;
-            case 'done':
-                return status === 'done';
-            case 'canceled':
-                return status === 'canceled';
-            case 'ongoing':
-                return a._isOngoing || status === 'ongoing';
-            default:
-                return true;
-        }
+        return matchesStatusFilter(statusFilter, a, ov);
     });
 
     const sorted = filtered.slice().sort((a, b) => {
@@ -157,49 +180,6 @@ export default function DesktopAgendaPage() {
     const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
     const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
     const [inlineEditId, setInlineEditId] = React.useState<number | null>(null);
-
-    function splitName(full?: string): { first: string; last: string } {
-        if (!full) return { first: 'Cliente', last: '' };
-        const parts = full.trim().split(/\s+/);
-        if (parts.length === 1) return { first: parts[0], last: '' };
-        const last = parts.pop() || '';
-        return { first: parts.join(' '), last };
-    }
-
-    function isClientLike(x: unknown): x is { id: number; name?: string } {
-        return (
-            typeof x === 'object' &&
-            x !== null &&
-            'id' in (x as Record<string, unknown>) &&
-            typeof (x as { id: unknown }).id === 'number'
-        );
-    }
-
-    function makeClientBasic(a: EnrichedAppt): ClientBasic {
-        const c: ClientLike | number | undefined = a.client as
-            | ClientLike
-            | number
-            | undefined;
-        const displayName = (isClientLike(c) && c.name) || a.client_name || '';
-        const { first, last } = splitName(displayName);
-        let clientId = 0;
-        if (typeof c === 'number') clientId = c;
-        else if (isClientLike(c)) clientId = c.id;
-        return {
-            id: clientId,
-            first_name: first,
-            last_name: last,
-            phone: '',
-            email: '',
-            next_appointment_id: a.id,
-            next_appointment_status: a.status,
-            next_appointment_start_at: a.start_at,
-            next_appointment_end_at: a.end_at,
-            next_appointment_title: a.title,
-            next_appointment_visit_type: a.visit_type,
-            next_appointment_notes: a.notes || null,
-        } as ClientBasic;
-    }
 
     return (
         <div
@@ -246,7 +226,7 @@ export default function DesktopAgendaPage() {
                 </div>
             </div>
 
-            {/* Linha 2: Hoje + calendário à esquerda, navegação central */}
+            {/* Linha 2: navegação de data (esquerda) + filtro de status (direita) */}
             <div
                 style={{
                     display: 'flex',
@@ -255,9 +235,12 @@ export default function DesktopAgendaPage() {
                     top: 54,
                     zIndex: 15,
                     background: 'var(--color-bg)',
+                    borderBottom: '1px solid var(--color-border)',
+                    paddingBottom: 8,
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                {/* Navegação de data */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                         onClick={() => setSelectedDay(startOfDay(new Date()))}
                         style={{
@@ -295,16 +278,6 @@ export default function DesktopAgendaPage() {
                     >
                         <FaCalendarAlt />
                     </button>
-                </div>
-                <div
-                    style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 12,
-                    }}
-                >
                     <button
                         onClick={() => setSelectedDay(addDays(selectedDay, -1))}
                         title='Dia anterior'
@@ -366,50 +339,68 @@ export default function DesktopAgendaPage() {
                         <FaArrowRight />
                     </button>
                 </div>
-            </div>
-
-            {/* Filtro de status (default: Ativos) */}
-            <div
-                style={{
-                    position: 'sticky',
-                    top: 98,
-                    zIndex: 12,
-                    background: 'var(--color-bg)',
-                    borderBottom: '1px solid var(--color-border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                    paddingBottom: 6,
-                }}
-            >
-                <label htmlFor='status-filter' style={{ fontWeight: 600 }}>
-                    Status:
-                </label>
-                <select
-                    id='status-filter'
-                    value={statusFilter}
-                    onChange={e =>
-                        setStatusFilter(e.target.value as typeof statusFilter)
-                    }
+                {/* Filtro de status — botões inline (direita) */}
+                <div
                     style={{
-                        fontSize: 'var(--font-body)',
-                        padding: '6px 8px',
-                        background: 'var(--color-pending-bg)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 6,
-                        color: 'var(--color-text)',
-                        fontWeight: 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginLeft: 'auto',
+                        flexWrap: 'wrap',
                     }}
-                    aria-label='Filtro de status'
                 >
-                    <option value='all'>Todos</option>
-                    <option value='active'>Ativos</option>
-                    <option value='ongoing'>Em andamento</option>
-                    <option value='past'>Pendentes</option>
-                    <option value='done'>Concluídos</option>
-                    <option value='canceled'>Cancelados</option>
-                </select>
+                    {[
+                        { key: 'all' as const, label: 'Todos' },
+                        { key: 'ongoing' as const, label: 'Atendimento' },
+                        { key: 'past' as const, label: 'Pendentes' },
+                        { key: 'active' as const, label: 'Ativos' },
+                        { key: 'done' as const, label: 'Concluídos' },
+                        { key: 'canceled' as const, label: 'Cancelados' },
+                    ].map(({ key, label }) => {
+                        const activeBg =
+                            key === 'ongoing'
+                                ? 'var(--color-ongoing)'
+                                : key === 'past'
+                                  ? 'var(--color-pending)'
+                                  : key === 'active'
+                                    ? 'var(--color-primary)'
+                                    : key === 'done'
+                                      ? 'var(--color-done)'
+                                      : key === 'canceled'
+                                        ? 'var(--color-canceled)'
+                                        : 'var(--color-heading)';
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => setStatusFilter(key)}
+                                aria-pressed={statusFilter === key}
+                                style={{
+                                    fontSize: 'var(--font-body)',
+                                    fontWeight:
+                                        statusFilter === key ? 700 : 500,
+                                    padding: '4px 10px',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    border:
+                                        statusFilter === key
+                                            ? `1px solid ${activeBg}`
+                                            : '1px solid var(--color-border)',
+                                    background:
+                                        statusFilter === key
+                                            ? activeBg
+                                            : 'var(--color-bg)',
+                                    color:
+                                        statusFilter === key
+                                            ? 'white'
+                                            : 'var(--color-text)',
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             <div
@@ -432,7 +423,10 @@ export default function DesktopAgendaPage() {
                 )}
                 {!loading &&
                     sorted.map(a => {
-                        const isActive = a.status === 'scheduled' && !a._isPast;
+                        const isActive =
+                            a.status === 'scheduled' &&
+                            !a._isPast &&
+                            !a._isOngoing;
                         const isEditing = inlineEditId === a.id;
                         return (
                             <div

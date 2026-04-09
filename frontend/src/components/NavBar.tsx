@@ -23,8 +23,7 @@ type VerifyResponse = {
     device_id?: string;
     message?: string;
 };
-import { useProfessionals } from '../hooks/useProfessionals';
-import type { ProfessionalBasic } from '../hooks/useProfessionals';
+import type { Professional as ProfessionalBasic } from '../types/models';
 import styles from '../styles/components/NavBar.module.css';
 import AgendaSettingsModal from './AgendaSettingsModal';
 // formatTime removido: não exibimos mais relógio no header
@@ -32,12 +31,17 @@ import AppModal from './Modal';
 import '../styles/modal-message.css';
 import { isTokenExpired } from '../utils/jwt';
 import { emit } from '../events/bus';
+import ProfessionalCreateModal from './ProfessionalCreateModal';
+import TotpAdminResetModal from './TotpAdminResetModal';
+import {
+    startRegistration,
+    startAuthentication,
+} from '@simplewebauthn/browser';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
     selectedClientId?: number | null;
     agendaOpeners?: {
-        openMonthly: (clientId: number, date?: Date) => void | Promise<void>;
         openWeekly: (date?: Date) => void | Promise<void>;
     };
 }
@@ -48,23 +52,16 @@ const NavBar: React.FC<NavBarProps> = ({
     agendaOpeners,
 }) => {
     // Viewport listener removido (usado apenas pelo relógio)
-    const [selectedProfessional, setSelectedProfessional] =
-        useState<string>('');
-    const [codeSent, setCodeSent] = useState(false);
-    const [otp, setOtp] = useState('');
+    const [loginEmail, setLoginEmail] = useState<string>(
+        () => localStorage.getItem('lastLoginEmail') ?? '',
+    );
+    const [totpCode, setTotpCode] = useState('');
     const [loadingOtp, setLoadingOtp] = useState(false);
     const [loggedProfessional, setLoggedProfessional] =
         useState<ProfessionalBasic | null>(() => {
             const stored = localStorage.getItem('loggedProfessional');
             return stored ? JSON.parse(stored) : null;
         });
-
-    const [professionalDropdownOpen, setProfessionalDropdownOpen] =
-        useState(false);
-
-    const professionalDropdownRef = useRef<HTMLDivElement>(null);
-
-    const { professionals, loading, error } = useProfessionals();
 
     // Dropdown state
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -83,10 +80,19 @@ const NavBar: React.FC<NavBarProps> = ({
     // Estados de decisão de novo compromisso removidos após simplificação do menu
     // Modal configurações agenda
     const [agendaSettingsOpen, setAgendaSettingsOpen] = useState(false);
-    // Quando true após solicitar OTP com sucesso, só revela o campo após clicar em OK no modal
-    const [otpSentConfirmPending, setOtpSentConfirmPending] = useState(false);
+
     // About modal state
     const [aboutOpen, setAboutOpen] = useState(false);
+    // Admin modals (superuser only)
+    const [createProfOpen, setCreateProfOpen] = useState(false);
+    const [totpResetOpen, setTotpResetOpen] = useState(false);
+    // Biometric / WebAuthn
+    const [offerBiometricOpen, setOfferBiometricOpen] = useState(false);
+    const [biometricLoading, setBiometricLoading] = useState(false);
+    // true when a passkey has been registered for the current email on this device
+    const hasWebAuthn =
+        !!loginEmail &&
+        !!localStorage.getItem(`hasWebAuthn_${loginEmail.toLowerCase()}`);
     // Trigger summary fetch when dropdown toggles open
     const { summary } = useSessionsSummary(dropdownOpen);
 
@@ -168,6 +174,152 @@ const NavBar: React.FC<NavBarProps> = ({
     // Edição via menu Agenda removida (opção Editar retirada)
 
     // handleAgendaNew removido (menu Novo Compromisso retirado)
+
+    // --- WebAuthn: register biometric after TOTP login ---
+    const handleRegisterBiometric = async () => {
+        setBiometricLoading(true);
+        try {
+            const token = localStorage.getItem('accessToken');
+            const beginRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/register-begin/`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({}),
+                },
+            );
+            if (!beginRes.ok) throw new Error('Erro ao iniciar registro.');
+            const options = await beginRes.json();
+            const credential = await startRegistration({
+                optionsJSON: options,
+            });
+            const ua = navigator.userAgent;
+            const deviceName = /iPhone/.test(ua)
+                ? 'iPhone'
+                : /iPad/.test(ua)
+                  ? 'iPad'
+                  : /Mac/.test(ua)
+                    ? 'Mac'
+                    : 'Dispositivo';
+            const completeRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/register-complete/`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        credential,
+                        device_name: deviceName,
+                    }),
+                },
+            );
+            if (!completeRes.ok) throw new Error('Erro ao concluir registro.');
+            localStorage.setItem(
+                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                '1',
+            );
+            setOfferBiometricOpen(false);
+            setModalMessage('Face ID ativado para futuros logins!');
+            setModalOpen(true);
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error
+                    ? err.message
+                    : 'Erro ao registrar biometria.';
+            setModalMessage(msg);
+            setModalOpen(true);
+        } finally {
+            setBiometricLoading(false);
+        }
+    };
+
+    // --- WebAuthn: login with biometric ---
+    const handleWebAuthnLogin = async () => {
+        setBiometricLoading(true);
+        try {
+            const beginRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/login-begin/`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: loginEmail }),
+                },
+            );
+            if (!beginRes.ok) throw new Error('Erro ao iniciar autenticação.');
+            const options = await beginRes.json();
+            const assertion = await startAuthentication({
+                optionsJSON: options,
+            });
+            const deviceIdKey = 'device_id';
+            const deviceId = getOrCreateDeviceId(deviceIdKey);
+            const completeRes = await fetch(
+                `${API_BASE}/register/auth/webauthn/login-complete/`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: loginEmail,
+                        assertion,
+                        device_id: deviceId,
+                    }),
+                },
+            );
+            let data: VerifyResponse = {};
+            try {
+                data = await completeRes.json();
+            } catch {
+                data = { message: 'Falha ao interpretar resposta do servidor' };
+            }
+            if (completeRes.ok && data.access) {
+                let successMsg = 'Login realizado!';
+                if (typeof data.active_sessions_count === 'number') {
+                    successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
+                }
+                setModalMessage(successMsg);
+                setModalOpen(true);
+                localStorage.setItem('accessToken', data.access);
+                localStorage.setItem(
+                    'loggedProfessional',
+                    JSON.stringify(data.professional),
+                );
+                if (data.device_id) {
+                    localStorage.setItem(deviceIdKey, String(data.device_id));
+                }
+                setLoggedProfessional(data.professional || null);
+                if (data.professional?.is_superuser) {
+                    window.location.href = '/admin';
+                    return;
+                }
+                window.dispatchEvent(new Event('updateClients'));
+                window.dispatchEvent(new Event('clearClients'));
+            } else {
+                setModalMessage(
+                    String(data.message || 'Autenticação biométrica falhou.'),
+                );
+                setModalOpen(true);
+            }
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error
+                    ? err.message
+                    : 'Erro na autenticação biométrica.';
+            // User cancelled the prompt → just ignore, no error modal
+            if (
+                !msg.toLowerCase().includes('cancel') &&
+                !msg.toLowerCase().includes('not allowed')
+            ) {
+                setModalMessage(msg);
+                setModalOpen(true);
+            }
+        } finally {
+            setBiometricLoading(false);
+        }
+    };
 
     return (
         <div className={styles.navBar}>
@@ -271,125 +423,15 @@ const NavBar: React.FC<NavBarProps> = ({
                                         return;
                                     }
                                     const now = new Date();
-                                    if (agendaOpeners && !isMobileDevice()) {
+                                    if (agendaOpeners) {
                                         agendaOpeners.openWeekly(now);
                                     } else {
-                                        const y = now.getFullYear();
-                                        const m = String(
-                                            now.getMonth() + 1,
-                                        ).padStart(2, '0');
-                                        const d = String(
-                                            now.getDate(),
-                                        ).padStart(2, '0');
-                                        const url = `/agenda?date=${y}-${m}-${d}&mode=week`;
-                                        if (isMobileDevice())
-                                            window.location.href = url;
-                                        else window.open(url, '_self');
+                                        emit('openDailyAgenda', {});
                                     }
                                 }}
                             >
-                                Agenda Semanal
+                                Agenda
                             </button>
-                            {(() => {
-                                function canShowMonthly() {
-                                    try {
-                                        const pxW = window.screen.width;
-                                        const pxH = window.screen.height;
-                                        const dpr =
-                                            window.devicePixelRatio || 1;
-                                        const diagonalInches =
-                                            Math.sqrt(pxW ** 2 + pxH ** 2) /
-                                            (dpr * 96);
-                                        const fallbackLarge =
-                                            window.innerWidth >= 1440;
-                                        return (
-                                            diagonalInches > 10 || fallbackLarge
-                                        );
-                                    } catch {
-                                        return false;
-                                    }
-                                }
-                                if (!canShowMonthly()) return null;
-                                return (
-                                    <button
-                                        className={styles.dropdownItem}
-                                        onClick={() => {
-                                            setAgendaDropdownOpen(false);
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            if (!token) {
-                                                setSessionExpiredOpen(true);
-                                                return;
-                                            }
-                                            const now = new Date();
-                                            if (
-                                                agendaOpeners &&
-                                                !isMobileDevice()
-                                            ) {
-                                                if (!selectedClientId) {
-                                                    try {
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'systemMessage',
-                                                                {
-                                                                    detail: {
-                                                                        text: 'Selecione um cliente para abrir a Agenda Mensal.',
-                                                                        type: 'info',
-                                                                        autoCloseMs: 6000,
-                                                                    },
-                                                                },
-                                                            ),
-                                                        );
-                                                    } catch {
-                                                        /* noop */
-                                                    }
-                                                    return;
-                                                }
-                                                agendaOpeners.openMonthly(
-                                                    selectedClientId,
-                                                    now,
-                                                );
-                                            } else {
-                                                const y = now.getFullYear();
-                                                const m = String(
-                                                    now.getMonth() + 1,
-                                                ).padStart(2, '0');
-                                                const d = String(
-                                                    now.getDate(),
-                                                ).padStart(2, '0');
-                                                const url = selectedClientId
-                                                    ? `/agenda?client=${selectedClientId}&date=${y}-${m}-${d}&mode=month`
-                                                    : `/agenda?date=${y}-${m}-${d}&mode=month`;
-                                                if (!selectedClientId) {
-                                                    try {
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'systemMessage',
-                                                                {
-                                                                    detail: {
-                                                                        text: 'Selecione um cliente para abrir a Agenda Mensal.',
-                                                                        type: 'info',
-                                                                        autoCloseMs: 6000,
-                                                                    },
-                                                                },
-                                                            ),
-                                                        );
-                                                    } catch {
-                                                        /* noop */
-                                                    }
-                                                }
-                                                if (isMobileDevice())
-                                                    window.location.href = url;
-                                                else window.open(url, '_self');
-                                            }
-                                        }}
-                                    >
-                                        Agenda Mensal
-                                    </button>
-                                );
-                            })()}
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
@@ -419,6 +461,22 @@ const NavBar: React.FC<NavBarProps> = ({
                     </button>
                     {consultaDropdownOpen && (
                         <div className={styles.dropdownMenu}>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setConsultaDropdownOpen(false);
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
+                                    }
+                                    window.location.href = '/consulta';
+                                }}
+                                title='Registrar Atendimento'
+                            >
+                                🩺 Atendimento
+                            </button>
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
@@ -476,18 +534,9 @@ const NavBar: React.FC<NavBarProps> = ({
                 {loggedProfessional ? (
                     <div className={styles.loggedInfo}>
                         <div className={styles.proNameBlock}>
-                            {/* Relógio removido por decisão de produto */}
                             <span className={styles.nameLine}>
-                                Dr(a) {loggedProfessional.first_name}{' '}
-                                {loggedProfessional.last_name}
+                                Olá, {loggedProfessional.first_name}
                             </span>
-                            {loggedProfessional.register_number ? (
-                                <span className={styles.idLine}>
-                                    CRM/COP:{' '}
-                                    {loggedProfessional.register_number}
-                                </span>
-                            ) : null}
-                            {/* Relógio removido para simplificação */}
                         </div>
                         <button
                             className={
@@ -498,266 +547,185 @@ const NavBar: React.FC<NavBarProps> = ({
                                 localStorage.removeItem('loggedProfessional');
                                 localStorage.removeItem('newClientId');
                                 setLoggedProfessional(null);
-                                setSelectedProfessional('');
-                                setCodeSent(false);
-                                setOtp('');
+                                setLoginEmail('');
+                                setTotpCode('');
                                 window.dispatchEvent(new Event('clearClients'));
                             }}
                         >
                             Sair
                         </button>
+                        {/* Superusers são redirecionados para /admin no login e não usam ações do NavBar */}
                     </div>
                 ) : (
                     <>
-                        <div
-                            className={styles.dropdownWrapper}
-                            style={{ marginRight: 12 }}
-                            ref={professionalDropdownRef}
-                        >
-                            <button
-                                className={styles.menuButton}
-                                onClick={() =>
-                                    setProfessionalDropdownOpen(open => !open)
-                                }
-                                aria-haspopup='true'
-                                aria-expanded={professionalDropdownOpen}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                }}
-                            >
-                                <span style={{ fontSize: 18 }}>👨‍⚕️</span>
-                                <span>
-                                    {selectedProfessional
-                                        ? professionals.find(
-                                              p =>
-                                                  p.email ===
-                                                  selectedProfessional,
-                                          )?.first_name +
-                                          ' ' +
-                                          professionals.find(
-                                              p =>
-                                                  p.email ===
-                                                  selectedProfessional,
-                                          )?.last_name
-                                        : 'Profissionais'}
-                                </span>
-                                <span className={styles.caret}>▼</span>
-                            </button>
-                            {professionalDropdownOpen && (
-                                <div className={styles.dropdownMenu}>
-                                    <div
-                                        className={styles.dropdownItem}
-                                        style={{
-                                            fontWeight: 'bold',
-                                            cursor: 'default',
-                                        }}
-                                    >
-                                        Profissionais
-                                    </div>
-                                    {loading && (
-                                        <div className={styles.dropdownItem}>
-                                            Carregando...
-                                        </div>
-                                    )}
-                                    {error && (
-                                        <div className={styles.dropdownItem}>
-                                            Erro ao carregar
-                                        </div>
-                                    )}
-                                    {professionals.map(prof => (
-                                        <button
-                                            key={prof.id}
-                                            className={styles.dropdownItem}
-                                            onClick={() => {
-                                                setSelectedProfessional(
-                                                    prof.email,
-                                                );
-                                                setProfessionalDropdownOpen(
-                                                    false,
-                                                );
-                                                setCodeSent(false);
-                                                setOtp('');
-                                            }}
-                                        >
-                                            {prof.first_name} {prof.last_name}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        {/* Botão para enviar código aparece após seleção do profissional, antes do envio */}
-                        {selectedProfessional && !codeSent && (
+                        {/* TOTP login: email + código do Google Authenticator */}
+                        <input
+                            type='email'
+                            placeholder='E-mail'
+                            className={styles.loginInput}
+                            value={loginEmail}
+                            onChange={e => setLoginEmail(e.target.value)}
+                            style={{ marginRight: 6 }}
+                            autoComplete='username'
+                        />
+                        <input
+                            type='text'
+                            inputMode='numeric'
+                            placeholder='Código (6 dígitos)'
+                            className={styles.loginInput}
+                            value={totpCode}
+                            onChange={e =>
+                                setTotpCode(
+                                    e.target.value
+                                        .replace(/\D/g, '')
+                                        .slice(0, 6),
+                                )
+                            }
+                            style={{ marginRight: 6, width: 120 }}
+                            autoComplete='one-time-code'
+                            onKeyDown={e => {
+                                if (e.key === 'Enter')
+                                    e.currentTarget
+                                        .closest('form')
+                                        ?.requestSubmit();
+                            }}
+                        />
+                        {hasWebAuthn && (
                             <button
                                 className={styles.loginButton}
-                                style={{ marginRight: 8 }}
-                                disabled={loadingOtp}
-                                onClick={async () => {
-                                    setLoadingOtp(true);
-                                    try {
-                                        console.debug(
-                                            '[NavBar] API_BASE =',
-                                            API_BASE,
-                                            'fetch ->',
-                                            `${API_BASE}/register/auth/request-code/`,
-                                        );
-                                        const res = await fetch(
-                                            `${API_BASE}/register/auth/request-code/`,
-                                            {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type':
-                                                        'application/json',
-                                                },
-                                                body: JSON.stringify({
-                                                    email: selectedProfessional,
-                                                }),
-                                            },
-                                        );
-                                        const data = await res.json();
-                                        // Se vier message e status 200, considera sucesso
-                                        if (data.message && res.ok) {
-                                            setModalMessage(data.message);
-                                            setModalOpen(true);
-                                            // Aguarda confirmação do usuário para revelar o campo de OTP
-                                            setOtpSentConfirmPending(true);
-                                        } else {
-                                            setModalMessage(
-                                                data.message ||
-                                                    'Erro ao enviar código',
-                                            );
-                                            setModalOpen(true);
-                                            setOtpSentConfirmPending(false);
-                                        }
-                                    } catch {
-                                        setModalMessage(
-                                            'Erro ao enviar código',
-                                        );
-                                        setModalOpen(true);
-                                        setOtpSentConfirmPending(false);
-                                    }
-                                    setLoadingOtp(false);
-                                }}
+                                disabled={biometricLoading || !loginEmail}
+                                onClick={handleWebAuthnLogin}
+                                title='Entrar com biometria'
+                                style={{ marginRight: 6 }}
                             >
-                                Enviar código
+                                {biometricLoading ? '...' : '🔒 Face ID'}
                             </button>
                         )}
-
-                        {/* Input e botão Entrar só aparecem após envio do código */}
-                        {selectedProfessional && codeSent && (
-                            <>
-                                <input
-                                    type='password'
-                                    placeholder='Senha'
-                                    className={styles.loginInput}
-                                    value={otp}
-                                    onChange={e => setOtp(e.target.value)}
-                                    style={{ marginRight: 8 }}
-                                />
-                                <button
-                                    className={styles.loginButton}
-                                    onClick={async () => {
-                                        setLoadingOtp(true);
-                                        try {
-                                            console.debug(
-                                                '[NavBar] API_BASE =',
-                                                API_BASE,
-                                                'fetch ->',
-                                                `${API_BASE}/register/auth/verify-code/`,
-                                            );
-                                            // Ensure device_id exists and send it for device session tracking
-                                            const deviceIdKey = 'device_id';
-                                            const deviceId =
-                                                getOrCreateDeviceId(
-                                                    deviceIdKey,
-                                                );
-                                            const res = await fetch(
-                                                `${API_BASE}/register/auth/verify-code/`,
-                                                {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type':
-                                                            'application/json',
-                                                    },
-                                                    body: JSON.stringify({
-                                                        email: selectedProfessional,
-                                                        code: otp,
-                                                        device_id: deviceId,
-                                                    }),
-                                                },
-                                            );
-                                            let data: VerifyResponse = {};
-                                            try {
-                                                data = await res.json();
-                                            } catch {
-                                                data = {
-                                                    message:
-                                                        'Falha ao interpretar resposta do servidor',
-                                                };
-                                            }
-                                            // Substitui alert por modal para validação do código
-                                            if (res.ok && data.access) {
-                                                let successMsg =
-                                                    'Login realizado! Dados dos clientes liberados.';
-                                                if (
-                                                    typeof data.active_sessions_count ===
-                                                    'number'
-                                                ) {
-                                                    successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
-                                                }
-                                                setModalMessage(successMsg);
-                                                setModalOpen(true);
-                                                localStorage.setItem(
-                                                    'accessToken',
-                                                    data.access,
-                                                );
-                                                setOtp('');
-                                                setLoggedProfessional(
-                                                    data.professional || null,
-                                                );
-                                                localStorage.setItem(
-                                                    'loggedProfessional',
-                                                    JSON.stringify(
-                                                        data.professional,
-                                                    ),
-                                                );
-                                                if (data.device_id) {
-                                                    localStorage.setItem(
-                                                        deviceIdKey,
-                                                        String(data.device_id),
-                                                    );
-                                                }
-                                                window.dispatchEvent(
-                                                    new Event('updateClients'),
-                                                );
-                                                // Limpa erro de sessão expirada imediatamente
-                                                window.dispatchEvent(
-                                                    new Event('clearClients'),
-                                                );
-                                            } else {
-                                                setModalMessage(
-                                                    String(
-                                                        data.message ||
-                                                            'Código inválido',
-                                                    ),
-                                                );
-                                                setModalOpen(true);
-                                            }
-                                        } catch {
-                                            setModalMessage(
-                                                'Erro ao validar código',
-                                            );
-                                            setModalOpen(true);
+                        <button
+                            className={styles.loginButton}
+                            disabled={
+                                loadingOtp ||
+                                !loginEmail ||
+                                totpCode.length !== 6
+                            }
+                            onClick={async () => {
+                                setLoadingOtp(true);
+                                try {
+                                    const deviceIdKey = 'device_id';
+                                    const deviceId =
+                                        getOrCreateDeviceId(deviceIdKey);
+                                    const res = await fetch(
+                                        `${API_BASE}/register/auth/totp/verify/`,
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type':
+                                                    'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                email: loginEmail,
+                                                code: totpCode,
+                                                device_id: deviceId,
+                                            }),
+                                        },
+                                    );
+                                    let data: VerifyResponse = {};
+                                    try {
+                                        data = await res.json();
+                                    } catch {
+                                        data = {
+                                            message:
+                                                'Falha ao interpretar resposta do servidor',
+                                        };
+                                    }
+                                    if (res.ok && data.access) {
+                                        let successMsg =
+                                            'Login realizado! Dados dos clientes liberados.';
+                                        if (
+                                            typeof data.active_sessions_count ===
+                                            'number'
+                                        ) {
+                                            successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
                                         }
-                                        setLoadingOtp(false);
-                                    }}
-                                    disabled={loadingOtp || !otp}
-                                >
-                                    Entrar
-                                </button>
-                            </>
-                        )}
+                                        setModalMessage(successMsg);
+                                        setModalOpen(true);
+                                        localStorage.setItem(
+                                            'accessToken',
+                                            data.access,
+                                        );
+                                        setTotpCode('');
+                                        setLoggedProfessional(
+                                            data.professional || null,
+                                        );
+                                        localStorage.setItem(
+                                            'loggedProfessional',
+                                            JSON.stringify(data.professional),
+                                        );
+                                        if (data.device_id) {
+                                            localStorage.setItem(
+                                                deviceIdKey,
+                                                String(data.device_id),
+                                            );
+                                        }
+                                        if (data.professional?.is_superuser) {
+                                            window.location.href = '/admin';
+                                            return;
+                                        }
+                                        window.dispatchEvent(
+                                            new Event('updateClients'),
+                                        );
+                                        window.dispatchEvent(
+                                            new Event('clearClients'),
+                                        );
+                                        localStorage.setItem(
+                                            'lastLoginEmail',
+                                            loginEmail,
+                                        );
+                                        // Offer biometric registration if not already set
+                                        if (
+                                            !localStorage.getItem(
+                                                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                                            ) &&
+                                            typeof PublicKeyCredential !==
+                                                'undefined' &&
+                                            typeof (
+                                                PublicKeyCredential as {
+                                                    isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
+                                                }
+                                            )
+                                                .isUserVerifyingPlatformAuthenticatorAvailable ===
+                                                'function'
+                                        ) {
+                                            try {
+                                                const ok = await (
+                                                    PublicKeyCredential as {
+                                                        isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean>;
+                                                    }
+                                                ).isUserVerifyingPlatformAuthenticatorAvailable();
+                                                if (ok)
+                                                    setOfferBiometricOpen(true);
+                                            } catch {
+                                                /* ignore */
+                                            }
+                                        }
+                                    } else {
+                                        setModalMessage(
+                                            String(
+                                                data.message ||
+                                                    'Código inválido',
+                                            ),
+                                        );
+                                        setModalOpen(true);
+                                    }
+                                } catch {
+                                    setModalMessage('Erro ao validar código');
+                                    setModalOpen(true);
+                                }
+                                setLoadingOtp(false);
+                            }}
+                        >
+                            Entrar
+                        </button>
                     </>
                 )}
             </div>
@@ -765,28 +733,12 @@ const NavBar: React.FC<NavBarProps> = ({
             {/* Modal padrão para mensagens */}
             <AppModal
                 open={modalOpen}
-                onClose={() => {
-                    if (otpSentConfirmPending) {
-                        setCodeSent(true);
-                        setOtpSentConfirmPending(false);
-                    }
-                    setModalOpen(false);
-                }}
+                onClose={() => setModalOpen(false)}
                 unmountOnClose
             >
                 <div className='modal-message'>
                     <h3>{modalMessage}</h3>
-                    <button
-                        onClick={() => {
-                            if (otpSentConfirmPending) {
-                                setCodeSent(true);
-                                setOtpSentConfirmPending(false);
-                            }
-                            setModalOpen(false);
-                        }}
-                    >
-                        Ok
-                    </button>
+                    <button onClick={() => setModalOpen(false)}>Ok</button>
                 </div>
             </AppModal>
 
@@ -811,6 +763,45 @@ const NavBar: React.FC<NavBarProps> = ({
                     import.meta.env?.VITE_BUILD_TIME as string | undefined
                 }
             />
+            <ProfessionalCreateModal
+                open={createProfOpen}
+                onClose={() => setCreateProfOpen(false)}
+            />
+            <TotpAdminResetModal
+                open={totpResetOpen}
+                onClose={() => setTotpResetOpen(false)}
+            />
+            {/* Modal: oferecer registro de biometria após login TOTP */}
+            <AppModal
+                open={offerBiometricOpen}
+                onClose={() => setOfferBiometricOpen(false)}
+                unmountOnClose
+            >
+                <div className='modal-message'>
+                    <h3>Ativar Face ID / Touch ID?</h3>
+                    <p style={{ fontSize: 14, marginBottom: 16 }}>
+                        Use a biometria do dispositivo para entrar sem digitar o
+                        código nas próximas vezes.
+                    </p>
+                    <div
+                        style={{
+                            display: 'flex',
+                            gap: 8,
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <button
+                            onClick={handleRegisterBiometric}
+                            disabled={biometricLoading}
+                        >
+                            {biometricLoading ? 'Aguarde...' : 'Sim, ativar'}
+                        </button>
+                        <button onClick={() => setOfferBiometricOpen(false)}>
+                            Agora não
+                        </button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 };

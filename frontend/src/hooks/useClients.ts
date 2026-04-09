@@ -84,12 +84,18 @@ export function useClients() {
         window.addEventListener('updateClients', handleUpdateClients);
         // Refresh explícito mais forte (ex: após criação e auto-close) – reutiliza mesmo fetch
         window.addEventListener('clients:forceRefresh', handleUpdateClients);
+        // Atualiza clientes quando appointments mudam (ex: finalizou/cancelou → pode remover pendência)
+        window.addEventListener('appointments:changed', handleUpdateClients);
         window.addEventListener('focus', handleFocus);
         return () => {
             window.removeEventListener('clearClients', handleClearClients);
             window.removeEventListener('updateClients', handleUpdateClients);
             window.removeEventListener(
                 'clients:forceRefresh',
+                handleUpdateClients,
+            );
+            window.removeEventListener(
+                'appointments:changed',
                 handleUpdateClients,
             );
             window.removeEventListener('focus', handleFocus);

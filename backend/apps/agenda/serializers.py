@@ -1,7 +1,17 @@
 from rest_framework import serializers
+from django.db import transaction
 from django.utils import timezone
 
-from .models import Appointment, FinalizeAudit
+from apps.inventory.models import Product, Service
+
+from .models import (
+    Appointment,
+    Charge,
+    ChargeItem,
+    ClinicalRecord,
+    Encounter,
+    FinalizeAudit,
+)
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -27,6 +37,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "status",
             "finalized_at",
             "canceled_at",
+            "whatsapp_confirmed",
             "created_device_id",
             "created_device_info",
             "ended_device_id",
@@ -34,17 +45,18 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-    read_only_fields = [
-        "created_at",
-        "updated_at",
-        "professional",
-        "created_device_id",
-        "created_device_info",
-        "ended_device_id",
-        "ended_device_info",
-        "finalized_at",
-        "canceled_at",
-    ]
+        read_only_fields = [
+            "created_at",
+            "updated_at",
+            "professional",
+            "created_device_id",
+            "created_device_info",
+            "ended_device_id",
+            "ended_device_info",
+            "finalized_at",
+            "canceled_at",
+            "whatsapp_confirmed",
+        ]
 
     # Semântica de tempos:
     # - end_at: término planejado OU real (se finalize antecipado encurta end_at = now).
@@ -153,7 +165,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
             conflict = (
                 Appointment.objects.filter(professional=professional)
-                .exclude(status=Appointment.Status.CANCELED)
+                .exclude(status__in=[Appointment.Status.CANCELED, Appointment.Status.DONE])
                 .filter(Q(start_at__lt=end) & Q(end_at__gt=start))
             )
             if inst is not None:
@@ -188,101 +200,295 @@ class FinalizeAuditSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class IntegrationConsultationSerializer(serializers.Serializer):
-    """Serializer de integração (read-only) que expõe compromissos concluídos
-    no formato esperado pelo ERP (ex.: Odoo).
+class EncounterSerializer(serializers.ModelSerializer):
+    professional = serializers.PrimaryKeyRelatedField(read_only=True)
+    professional_name = serializers.SerializerMethodField(read_only=True)
+    client_name = serializers.SerializerMethodField(read_only=True)
 
-    Nota: consultation_id e appointment_id são aliases (mesmo valor).
-    """
+    class Meta:
+        model = Encounter
+        fields = [
+            "id",
+            "professional",
+            "professional_name",
+            "client",
+            "client_name",
+            "appointment",
+            "started_at",
+            "ended_at",
+            "chief_complaint",
+            "assessment",
+            "plan",
+            "notes",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["professional", "professional_name", "client_name", "created_at", "updated_at"]
 
-    consultation_id = serializers.IntegerField(source="id")
-    appointment_id = serializers.IntegerField(source="id")
+    def get_professional_name(self, obj):
+        return f"{obj.professional.first_name} {obj.professional.last_name}".strip()
 
-    client = serializers.SerializerMethodField()
-    professional = serializers.SerializerMethodField()
+    def get_client_name(self, obj):
+        return f"{obj.client.first_name} {obj.client.last_name}".strip()
 
-    visit_type = serializers.CharField()
-    title = serializers.CharField()
-    notes = serializers.CharField()
+    def validate(self, attrs):
+        professional = getattr(self.context.get("request"), "user", None) or getattr(self.instance, "professional", None)
+        client = attrs.get("client", getattr(self.instance, "client", None))
+        appointment = attrs.get("appointment", getattr(self.instance, "appointment", None))
+        started_at = attrs.get("started_at", getattr(self.instance, "started_at", timezone.now()))
+        ended_at = attrs.get("ended_at", getattr(self.instance, "ended_at", None))
+        chief_complaint = attrs.get("chief_complaint", getattr(self.instance, "chief_complaint", ""))
+        assessment = attrs.get("assessment", getattr(self.instance, "assessment", ""))
+        plan = attrs.get("plan", getattr(self.instance, "plan", ""))
+        notes = attrs.get("notes", getattr(self.instance, "notes", ""))
+        status = attrs.get("status", getattr(self.instance, "status", Encounter.Status.OPEN))
 
-    performed_at = serializers.DateTimeField(source="end_at")
-    start_at = serializers.DateTimeField()
-    end_at = serializers.DateTimeField()
-    duration_minutes = serializers.SerializerMethodField()
+        instance = Encounter(
+            professional=professional,
+            client=client,
+            appointment=appointment,
+            started_at=started_at,
+            ended_at=ended_at,
+            chief_complaint=chief_complaint,
+            assessment=assessment,
+            plan=plan,
+            notes=notes,
+            status=status,
+        )
+        if self.instance:
+            instance.pk = self.instance.pk
+        instance.full_clean()
+        return attrs
 
-    status = serializers.CharField()
-    updated_at = serializers.DateTimeField()
 
-    external_invoice_id = serializers.SerializerMethodField()
+class ClinicalRecordSerializer(serializers.ModelSerializer):
+    professional = serializers.PrimaryKeyRelatedField(read_only=True)
+    professional_name = serializers.SerializerMethodField(read_only=True)
+    client_name = serializers.SerializerMethodField(read_only=True)
 
-    # Optional provisional pricing fields for analytics/integration testing
-    amount_minor = serializers.SerializerMethodField()
-    currency = serializers.SerializerMethodField()
-    billable = serializers.SerializerMethodField()
-    pricing_mode = serializers.SerializerMethodField()
-    price_source = serializers.SerializerMethodField()
+    class Meta:
+        model = ClinicalRecord
+        fields = [
+            "id",
+            "professional",
+            "professional_name",
+            "client",
+            "client_name",
+            "encounter",
+            "record_type",
+            "title",
+            "content",
+            "recorded_at",
+            "is_confidential",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["professional", "professional_name", "client_name", "created_at", "updated_at"]
 
-    def get_client(self, obj: Appointment):
-        c = getattr(obj, "client", None)
-        if c and getattr(c, "id", None):
-            name = f"{getattr(c, 'first_name', '')} {getattr(c, 'last_name', '')}".strip()
-            return {"id": c.id, "name": name}
-        return None
+    def get_professional_name(self, obj):
+        return f"{obj.professional.first_name} {obj.professional.last_name}".strip()
 
-    def get_professional(self, obj: Appointment):
-        p = getattr(obj, "professional", None)
-        if p and getattr(p, "id", None):
-            name = f"{getattr(p, 'first_name', '')} {getattr(p, 'last_name', '')}".strip()
-            return {"id": p.id, "name": name}
-        return None
+    def get_client_name(self, obj):
+        return f"{obj.client.first_name} {obj.client.last_name}".strip()
 
-    def get_duration_minutes(self, obj: Appointment) -> int:
-        try:
-            if obj.start_at and obj.end_at:
-                total_seconds = (obj.end_at - obj.start_at).total_seconds()
-                # Garantir não-negativo
-                if total_seconds < 0:
-                    total_seconds = 0
-                return int(total_seconds // 60)
-        except Exception:
-            pass
-        return 0
+    def validate(self, attrs):
+        professional = getattr(self.context.get("request"), "user", None) or getattr(self.instance, "professional", None)
+        client = attrs.get("client", getattr(self.instance, "client", None))
+        encounter = attrs.get("encounter", getattr(self.instance, "encounter", None))
+        record_type = attrs.get("record_type", getattr(self.instance, "record_type", ClinicalRecord.RecordType.EVOLUTION))
+        title = attrs.get("title", getattr(self.instance, "title", ""))
+        content = attrs.get("content", getattr(self.instance, "content", ""))
+        recorded_at = attrs.get("recorded_at", getattr(self.instance, "recorded_at", timezone.now()))
+        is_confidential = attrs.get("is_confidential", getattr(self.instance, "is_confidential", False))
 
-    def get_external_invoice_id(self, obj: Appointment):
-        # Fase 1: não vinculamos a nenhum documento no ERP; manter nulo
-        return None
+        instance = ClinicalRecord(
+            professional=professional,
+            client=client,
+            encounter=encounter,
+            record_type=record_type,
+            title=title,
+            content=content,
+            recorded_at=recorded_at,
+            is_confidential=is_confidential,
+        )
+        if self.instance:
+            instance.pk = self.instance.pk
+        instance.full_clean()
+        return attrs
 
-    # --- Provisional pricing logic (optional) ---
-    _PRICE_TABLE = {
-        Appointment.VisitType.CONSULTA: 13000,
-        Appointment.VisitType.AVALIACAO: 5000,
-        Appointment.VisitType.PROCEDIMENTO: 16000,
-        Appointment.VisitType.RETORNO: 0,
-        Appointment.VisitType.OUTRO: None,  # exige valor manual, manter None
-    }
 
-    def _price_for(self, obj: Appointment):
-        try:
-            return self._PRICE_TABLE.get(obj.visit_type, None)
-        except Exception:
-            return None
+class ChargeItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    charge = serializers.IntegerField(source="charge_id", read_only=True)
+    item_type = serializers.ChoiceField(choices=ChargeItem.ItemType.choices)
+    service = serializers.PrimaryKeyRelatedField(queryset=Service.objects.all(), allow_null=True, required=False)
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), allow_null=True, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    quantity = serializers.DecimalField(max_digits=10, decimal_places=2)
+    unit_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    line_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    sort_order = serializers.IntegerField(required=False, default=0)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    paid = serializers.BooleanField(required=False, default=False)
+    paid_at = serializers.DateTimeField(required=False, allow_null=True, default=None)
 
-    def get_amount_minor(self, obj: Appointment):
-        return self._price_for(obj)
 
-    def get_currency(self, obj: Appointment):
-        return "BRL"
+class ChargeSerializer(serializers.ModelSerializer):
+    professional = serializers.PrimaryKeyRelatedField(read_only=True)
+    professional_name = serializers.SerializerMethodField(read_only=True)
+    client_name = serializers.SerializerMethodField(read_only=True)
+    items = ChargeItemSerializer(many=True)
 
-    def get_billable(self, obj: Appointment):
-        # Retorno não é faturável (0)
-        try:
-            return obj.visit_type != Appointment.VisitType.RETORNO
-        except Exception:
-            return True
+    class Meta:
+        model = Charge
+        fields = [
+            "id",
+            "professional",
+            "professional_name",
+            "client",
+            "client_name",
+            "encounter",
+            "appointment",
+            "charge_type",
+            "status",
+            "title",
+            "notes",
+            "recipient_name",
+            "recipient_phone",
+            "currency",
+            "total_amount",
+            "shared_at",
+            "paid_at",
+            "items",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "professional",
+            "professional_name",
+            "client_name",
+            "total_amount",
+            "created_at",
+            "updated_at",
+        ]
 
-    def get_pricing_mode(self, obj: Appointment):
-        # "suggested" para indicar que é uma sugestão provisória (não contábil)
-        return "suggested"
+    def get_professional_name(self, obj):
+        return f"{obj.professional.first_name} {obj.professional.last_name}".strip()
 
-    def get_price_source(self, obj: Appointment):
-        return "clinic-system-defaults"
+    def get_client_name(self, obj):
+        return f"{obj.client.first_name} {obj.client.last_name}".strip()
+
+    def validate(self, attrs):
+        professional = getattr(self.context.get("request"), "user", None) or getattr(self.instance, "professional", None)
+        client = attrs.get("client", getattr(self.instance, "client", None))
+        encounter = attrs.get("encounter", getattr(self.instance, "encounter", None))
+        appointment = attrs.get("appointment", getattr(self.instance, "appointment", None))
+        charge_type = attrs.get("charge_type", getattr(self.instance, "charge_type", Charge.ChargeType.CHARGE))
+        # status and paid_at are derived from item-level paid flags in _save_items; ignore frontend values
+        status = getattr(self.instance, "status", Charge.Status.DRAFT)
+        title = attrs.get("title", getattr(self.instance, "title", ""))
+        notes = attrs.get("notes", getattr(self.instance, "notes", ""))
+        recipient_name = attrs.get("recipient_name", getattr(self.instance, "recipient_name", ""))
+        recipient_phone = attrs.get("recipient_phone", getattr(self.instance, "recipient_phone", ""))
+        currency = attrs.get("currency", getattr(self.instance, "currency", "BRL"))
+        shared_at = attrs.get("shared_at", getattr(self.instance, "shared_at", None))
+        paid_at = getattr(self.instance, "paid_at", None)
+
+        instance = Charge(
+            professional=professional,
+            client=client,
+            encounter=encounter,
+            appointment=appointment,
+            charge_type=charge_type,
+            status=status,
+            title=title,
+            notes=notes,
+            recipient_name=recipient_name,
+            recipient_phone=recipient_phone,
+            currency=currency,
+            shared_at=shared_at,
+            paid_at=paid_at,
+        )
+        if self.instance:
+            instance.pk = self.instance.pk
+            instance._state.adding = False  # prevent false unique-id error on PATCH
+            instance.total_amount = self.instance.total_amount
+        instance.full_clean()
+
+        items = attrs.get("items")
+        if self.instance and items is None:
+            items = [
+                {
+                    "item_type": item.item_type,
+                    "service": item.service,
+                    "product": item.product,
+                    "description": item.description,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "sort_order": item.sort_order,
+                    "notes": item.notes,
+                    "paid": item.paid,
+                    "paid_at": item.paid_at,
+                }
+                for item in self.instance.items.all()
+            ]
+
+        if not items:
+            raise serializers.ValidationError({"items": "Informe ao menos um item na cobrança."})
+
+        for raw_item in items:
+            item = ChargeItem(charge=instance, **raw_item)
+            item.clean()
+
+        return attrs
+
+    def _save_items(self, charge, items_data):
+        with transaction.atomic():
+            charge.items.all().delete()
+            for index, item_data in enumerate(items_data):
+                payload = dict(item_data)
+                payload.setdefault("sort_order", index)
+                ChargeItem.objects.create(
+                    charge=charge,
+                    **payload,
+                )
+            charge.recalculate_total(save=True)
+            # Derive charge-level status and paid_at from item-level flags
+            all_paid = charge.items.filter(paid=False).count() == 0 and charge.items.count() > 0
+            any_paid = charge.items.filter(paid=True).exists()
+            if all_paid:
+                latest_paid_at = charge.items.order_by("-paid_at").values_list("paid_at", flat=True).first()
+                Charge.objects.filter(pk=charge.pk).update(
+                    status=Charge.Status.PAID,
+                    paid_at=latest_paid_at,
+                )
+            elif any_paid:
+                latest_paid_at = charge.items.filter(paid=True).order_by("-paid_at").values_list("paid_at", flat=True).first()
+                Charge.objects.filter(pk=charge.pk).update(
+                    status=Charge.Status.DRAFT,
+                    paid_at=latest_paid_at,
+                )
+            else:
+                Charge.objects.filter(pk=charge.pk).update(
+                    status=Charge.Status.DRAFT,
+                    paid_at=None,
+                )
+            charge.refresh_from_db()
+
+    def create(self, validated_data):
+        items_data = validated_data.pop("items")
+        charge = Charge.objects.create(**validated_data)
+        self._save_items(charge, items_data)
+        charge.refresh_from_db()
+        return charge
+
+    def update(self, instance, validated_data):
+        items_data = validated_data.pop("items", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if items_data is not None:
+            self._save_items(instance, items_data)
+            instance.refresh_from_db()
+        return instance

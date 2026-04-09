@@ -32,6 +32,7 @@ const MainContent: React.FC<MainContentProps> = ({
 }) => {
     const { clients, loading, error, setError } = useClients();
     const [filter, setFilter] = useState('');
+    const [showPending, setShowPending] = useState(false);
     const [selectedClient, setSelectedClient] = useState<ClientData | null>(
         null,
     );
@@ -303,6 +304,43 @@ const MainContent: React.FC<MainContentProps> = ({
         ),
     );
 
+    // Clientes com compromisso pendente.
+    // O backend popula next_appointment_* apenas com start_at >= now (futuro),
+    // portanto um compromisso passado não finalizado aparece em last_appointment_status='scheduled'.
+    // Excluímos appointments que ainda estão em andamento (start_at < now < end_at) — esses
+    // são "ongoing" pelo horário e não devem aparecer como pendentes.
+    const pendingClients = React.useMemo(() => {
+        const nowMs = Date.now();
+        return clients
+            .filter(c => {
+                if (c.last_appointment_status !== 'scheduled') return false;
+                // Se temos end_at e ele ainda não passou, o atendimento está em andamento
+                if (c.last_appointment_end_at) {
+                    const endMs = new Date(c.last_appointment_end_at).getTime();
+                    if (!isNaN(endMs) && endMs > nowMs) return false;
+                }
+                return true;
+            })
+            .sort((a, b) => {
+                const ta = a.last_appointment_start_at
+                    ? new Date(a.last_appointment_start_at).getTime()
+                    : 0;
+                const tb = b.last_appointment_start_at
+                    ? new Date(b.last_appointment_start_at).getTime()
+                    : 0;
+                return ta - tb;
+            });
+    }, [clients]);
+
+    const pendingCount = pendingClients.length;
+
+    // Se o filtro de pendentes estiver ativo mas não houver mais pendentes, desativa
+    React.useEffect(() => {
+        if (showPending && pendingCount === 0) setShowPending(false);
+    }, [showPending, pendingCount]);
+
+    const displayedClients = showPending ? pendingClients : filteredClients;
+
     // Abre modal de "Nenhum cliente encontrado" quando não houver resultados.
     React.useEffect(() => {
         if (!filter) {
@@ -473,20 +511,41 @@ const MainContent: React.FC<MainContentProps> = ({
         <main className={styles.main}>
             <div className={styles.filterContainer}>
                 <div className={styles.filterRow}>
-                    <label
-                        htmlFor='client-filter'
-                        className={styles.filterLabel}
-                    >
-                        Filtrar Cliente:
-                    </label>
+                    {pendingCount === 0 && (
+                        <label
+                            htmlFor='client-filter'
+                            className={styles.filterLabel}
+                        >
+                            Filtrar Cliente:
+                        </label>
+                    )}
                     <input
                         id='client-filter'
                         type='text'
                         className={styles.filterInput}
                         placeholder='Digite o nome do cliente...'
                         value={filter}
-                        onChange={e => setFilter(e.target.value)}
+                        onChange={e => {
+                            setFilter(e.target.value);
+                            if (showPending) setShowPending(false);
+                        }}
                     />
+                    {pendingCount > 0 && (
+                        <button
+                            className={`${styles.pendingFilterBtn}${showPending ? ' ' + styles.pendingFilterBtnActive : ''}`}
+                            onClick={() => {
+                                setShowPending(p => !p);
+                                setFilter('');
+                            }}
+                            title={
+                                showPending
+                                    ? 'Mostrar todos os clientes'
+                                    : `${pendingCount} compromisso${pendingCount > 1 ? 's' : ''} n\u00e3o finalizado${pendingCount > 1 ? 's' : ''}`
+                            }
+                        >
+                            {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+                        </button>
+                    )}
                 </div>
             </div>
             {loading && clients.length === 0 && (
@@ -517,8 +576,8 @@ const MainContent: React.FC<MainContentProps> = ({
                         padding: '10px 12px',
                         borderRadius: 8,
                         border: '1px solid #f59e0b33',
-                        background: '#fffbeb', // amber-50
-                        color: '#b45309', // amber-700
+                        background: 'var(--color-warning-bg)', // amber-50
+                        color: 'var(--color-warning-dark)', // amber-700
                         fontWeight: 600,
                     }}
                 >
@@ -526,7 +585,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 </div>
             )}
             <div className={styles.cardsGrid}>
-                {filteredClients.map(client => (
+                {displayedClients.map(client => (
                     <div
                         key={client.id}
                         ref={el => {

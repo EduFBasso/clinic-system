@@ -1,5 +1,6 @@
 from rest_framework import viewsets, permissions
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import Supplier, Product, StockMove, Service, ServiceMaterial
@@ -12,13 +13,9 @@ from .serializers import (
 )
 
 
-class IsAuthenticated(permissions.IsAuthenticated):
-    pass
-
-
 class BaseScopedViewSet(viewsets.ModelViewSet):
     authentication_classes = (JWTAuthentication, SessionAuthentication, BasicAuthentication)
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (permissions.IsAuthenticated,)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -54,7 +51,7 @@ class ServiceMaterialViewSet(BaseScopedViewSet):
     serializer_class = ServiceMaterialSerializer
 
     def get_queryset(self):
-        qs = super(viewsets.ModelViewSet, self).get_queryset()  # bypass BaseScopedViewSet filter
+        qs = super(BaseScopedViewSet, self).get_queryset()
         user = self.request.user
         # Filtra por materiais cujo serviço pertence ao profissional logado
         return qs.filter(service__professional=user)
@@ -62,7 +59,6 @@ class ServiceMaterialViewSet(BaseScopedViewSet):
     def perform_create(self, serializer):
         # Garante que o material está associado a um serviço do profissional logado
         service = serializer.validated_data.get('service')
-        if service and service.professional_id != self.request.user.id:
-            from rest_framework.exceptions import PermissionDenied
+        if service and service.professional_id != self.request.user.id: # type: ignore
             raise PermissionDenied('Serviço não pertence ao profissional atual.')
         serializer.save()

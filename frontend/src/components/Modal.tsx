@@ -1159,11 +1159,9 @@ export default function AppModal(props: AppModalProps) {
                             style={actionsBarStyle}
                         />
                     )}
-                    {/* Reserve a right-side safe area so content never goes under the sticky close (X) */}
+                    {/* Content fills full width — no right padding needed since the close bar sits above */}
                     <div
                         style={{
-                            // Reserve space for larger touch target (44px) + small gutter
-                            paddingRight: showCloseButton ? 48 : 0,
                             pointerEvents: 'auto',
                         }}
                     >

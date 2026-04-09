@@ -1,10 +1,9 @@
-# backend\clinic_project\settings.py
 import os
 from datetime import timedelta
 from pathlib import Path
 
 from decouple import config
-from corsheaders.defaults import default_headers  # for extending allowed CORS headers
+from corsheaders.defaults import default_headers
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,16 +13,24 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 DEBUG = config("DEBUG", default=False, cast=bool)
 APP_VERSION = config("APP_VERSION", default="dev")
 
+# Web Push (VAPID)
+# VAPID_PRIVATE_KEY: base64url dos 32 bytes brutos da chave EC privada (sem padding).
+# VAPID_PUBLIC_KEY: base64url da chave pública uncompressed (65 bytes, sem padding).
+VAPID_PRIVATE_KEY = config("VAPID_PRIVATE_KEY", default="")
+VAPID_PUBLIC_KEY = config("VAPID_PUBLIC_KEY", default="")
+VAPID_ADMIN_EMAIL = config("VAPID_ADMIN_EMAIL", default="admin@example.com")
+
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",
     default="localhost,127.0.0.1",
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
-# ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'rest_framework',
     'apps.agenda',
+    'apps.anamnesis',
+    'apps.clients',
     'apps.register',
     'apps.inventory',
     'django.contrib.admin',
@@ -38,57 +45,40 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'register.Professional'
 
 MIDDLEWARE = [
-    # Security first
     'django.middleware.security.SecurityMiddleware',
-    # CORS must be as high as possible to ensure headers on all responses (incl. preflight)
     'corsheaders.middleware.CorsMiddleware',
-    # Serve static files efficiently (must be right after SecurityMiddleware)
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    # Custom instrumentation (kept early for realistic timings)
     'clinic_project.middleware.QueryTimingMiddleware',
     'clinic_project.middleware.VersionHeaderMiddleware',
-    # Sessions
     'django.contrib.sessions.middleware.SessionMiddleware',
-    # Standard Django middlewares
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
-    default=(
-        "http://localhost:5173,"
-        "http://127.0.0.1:5173,"
-        "http://192.168.0.129:5173"
-    ),
+    default="http://localhost:5173,http://127.0.0.1:5173",
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
-# Optional: allow regex origins via env var for preview deployments (e.g., Vercel)
-# Example: CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\.vercel\.app$
-_cors_regex_csv = config("CORS_ALLOWED_ORIGIN_REGEXES", default="", cast=str)
-CORS_ALLOWED_ORIGIN_REGEXES = [r.strip() for r in _cors_regex_csv.split(",") if r.strip()]
+CORS_ALLOWED_ORIGIN_REGEXES = config(
+    "CORS_ALLOWED_ORIGIN_REGEXES",
+    default="",
+    cast=lambda v: [r.strip() for r in v.split(",") if r.strip()],
+)
 
-# Allow enabling a permissive CORS mode from environment for quick testing.
-# In production prefer setting `CORS_ALLOWED_ORIGINS` to a CSV of trusted origins.
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)
-
-# Optional: allow credentials via env var if needed (useful when cookies are used).
 CORS_ALLOW_CREDENTIALS = config("CORS_ALLOW_CREDENTIALS", default=False, cast=bool)
 
-# Explicitly allow custom headers used by the frontend (device/session correlation, future versioning)
-# NOTE: keep header names in lowercase (browsers send them lowercased in preflight)
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-device-id',
     'x-device-info',
     'x-client-now',
-    # 'x-app-version',  # reserve for future use
 ]
 
-# Cache preflight responses to reduce OPTIONS noise between Vite (5173) and Django (8000)
-# Browsers may reuse preflight results for requests with the same method and headers within this window.
 CORS_PREFLIGHT_MAX_AGE = config("CORS_PREFLIGHT_MAX_AGE", default=600, cast=int)
 
 ROOT_URLCONF = 'clinic_project.urls'
@@ -110,12 +100,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'clinic_project.wsgi.application'
 
-import os as _os
-_IN_CI = _os.environ.get('GITHUB_ACTIONS') == 'true'
-# Test DB strategy:
-# - Default: use the configured Postgres to mirror production usage.
-# - To run tests sem Postgres (ex.: máquina nova/CI), defina TEST_USE_SQLITE=true
-#   para usar SQLite em memória de forma isolada e rápida.
+_IN_CI = os.environ.get('GITHUB_ACTIONS') == 'true'
 _USE_SQLITE_FOR_TESTS = config('TEST_USE_SQLITE', default=False, cast=bool) or _IN_CI
 if _USE_SQLITE_FOR_TESTS:
     DATABASES = {
@@ -127,44 +112,19 @@ if _USE_SQLITE_FOR_TESTS:
 else:
     DATABASES = {
         'default': {
-            'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+            'ENGINE': 'django.db.backends.postgresql',
             'NAME': config('DB_NAME', default='clinic'),
             'USER': config('DB_USER', default='clinic'),
             'PASSWORD': config('DB_PASSWORD', default='clinic'),
             'HOST': config('DB_HOST', default='localhost'),
             'PORT': config('DB_PORT', default='5432'),
+            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+            'OPTIONS': {'options': '-c client_encoding=UTF8'},
         }
     }
-    # Keep DB connections open for a short period to reduce reconnect overhead in production.
-    # Helps avoid intermittent latency spikes and health-check timeouts on platforms like Render.
-    # Set via env DB_CONN_MAX_AGE (seconds). Reasonable values: 60-300.
-    try:
-        DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=60, cast=int)
-    except Exception:
-        # Fallback silently if environment parsing fails
-        DATABASES['default']['CONN_MAX_AGE'] = 60
 
-# Garante transações automáticas por requisição (evita estados parciais em exceptions)
 ATOMIC_REQUESTS = True
 
-# Prefer psycopg3 on Windows to avoid legacy encoding issues with psycopg2.
-try:
-    _engine = DATABASES['default'].get('ENGINE', '')
-    if _engine.endswith('postgresql'):
-        # Switch to the psycopg (v3) backend name if available
-        try:
-            import psycopg  # noqa: F401
-            DATABASES['default']['ENGINE'] = 'django.db.backends.postgresql'
-            DATABASES['default'].setdefault('OPTIONS', {})
-            DATABASES['default']['OPTIONS'].setdefault('options', '-c client_encoding=UTF8')
-        except Exception:
-            # Fallback: still ensure UTF8 option for older driver
-            DATABASES['default'].setdefault('OPTIONS', {})
-            DATABASES['default']['OPTIONS'].setdefault('options', '-c client_encoding=UTF8')
-except Exception:
-    pass
-
-# Safety: avoid using remote DB while DEBUG=True unless explicitly allowed.
 ALLOW_REMOTE_DB_IN_DEBUG = config("ALLOW_REMOTE_DB_IN_DEBUG", default=False, cast=bool)
 if DEBUG and not ALLOW_REMOTE_DB_IN_DEBUG:
     try:
@@ -178,18 +138,10 @@ if DEBUG and not ALLOW_REMOTE_DB_IN_DEBUG:
         )
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 LOCALE_PATHS = [os.path.join(BASE_DIR, 'locale')]
@@ -202,7 +154,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Media (uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
@@ -210,10 +161,8 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'apps.register.auth_device.JWTDeviceAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        # Enable session auth (useful for Django test client and local admin)
         'rest_framework.authentication.SessionAuthentication',
     ),
-    # Em produção removemos o BrowsableAPI para performance/segurança mínima
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ] if not DEBUG else [
@@ -222,64 +171,48 @@ REST_FRAMEWORK = {
     ],
 }
 
-# CSRF trusted origins (only needed if using cookies/session auth or admin from another origin).
-# Example: CSRF_TRUSTED_ORIGINS=https://your-app.vercel.app,https://*.yourdomain.com
-_csrf_trusted_csv = config("CSRF_TRUSTED_ORIGINS", default="", cast=str)
-CSRF_TRUSTED_ORIGINS = [s.strip() for s in _csrf_trusted_csv.split(",") if s.strip()]
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="",
+    cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
+)
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),      # token de acesso válido por 10h
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),       # opcional, se quiser usar depois
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# Security toggles
-# Allows a temporary OTP fallback code ONLY when explicitly enabled via env.
-# In production, keep ALLOW_OTP_FALLBACK=False.
 ALLOW_OTP_FALLBACK = config("ALLOW_OTP_FALLBACK", default=False, cast=bool)
 OTP_FALLBACK_CODE = config("OTP_FALLBACK_CODE", default="")
 
-# Device sessions policy
 MAX_ACTIVE_DEVICE_SESSIONS = config("MAX_ACTIVE_DEVICE_SESSIONS", default=2, cast=int)
 
 _configured_email_backend = config("EMAIL_BACKEND", default="")
-# Em desenvolvimento, use o backend de console por padrão para evitar falhas de SMTP.
-# Pode desativar esse comportamento com USE_CONSOLE_EMAIL_IN_DEBUG=False se quiser testar SMTP localmente.
 USE_CONSOLE_EMAIL_IN_DEBUG = config("USE_CONSOLE_EMAIL_IN_DEBUG", default=True, cast=bool)
 if DEBUG and USE_CONSOLE_EMAIL_IN_DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
     EMAIL_BACKEND = _configured_email_backend or 'django.core.mail.backends.smtp.EmailBackend'
 
-## Notes: operational/how-to content moved to docs (see scripts/db/README.md) to keep settings lean.
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@clinicsystem.app")
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.mail.me.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 
-# --- Production security hardening (active when DEBUG=False) ---
-if not DEBUG:
-    # Trust proxy header so Django knows requests are HTTPS behind Render's proxy
+if not DEBUG and not _IN_CI:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    # Redirect all HTTP to HTTPS
     SECURE_SSL_REDIRECT = True
-    # Secure cookies
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    # HSTS to enforce HTTPS in browsers
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-# SMTP configuration (read from environment in all modes; backend selection above)
-EMAIL_HOST = config("EMAIL_HOST", default="")
-EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
-EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=False, cast=bool)
-# Default sender
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER or "webmaster@localhost")
-
-# Logging básico para capturar erros não tratados e avisos importantes.
 LOG_LEVEL = 'DEBUG' if DEBUG else 'INFO'
 LOGGING = {
     'version': 1,
@@ -303,7 +236,6 @@ LOGGING = {
     'loggers': {
         'django.db.backends': {
             'handlers': ['console'],
-            # Mude para DEBUG temporariamente se quiser ver SQL.
             'level': 'INFO',
             'propagate': False,
         },
@@ -314,3 +246,17 @@ LOGGING = {
         }
     }
 }
+
+# === TOTP ===
+TOTP_ISSUER = config("TOTP_ISSUER", default="ClinicSystem")
+
+# === WebAuthn / Passkeys ===
+# rpId: domain sem esquema/porta. localhost para dev; domínio real em produção.
+WEBAUTHN_RP_ID = config("WEBAUTHN_RP_ID", default="localhost")
+WEBAUTHN_RP_NAME = config("WEBAUTHN_RP_NAME", default="ClinicSystem")
+# Origens aceitas separadas por vírgula (incluir http em dev, https em produção)
+WEBAUTHN_ORIGINS = config(
+    "WEBAUTHN_ORIGINS",
+    default="http://localhost:5173",
+    cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
+)

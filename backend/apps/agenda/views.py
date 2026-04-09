@@ -1,14 +1,15 @@
 from rest_framework import viewsets, permissions, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.conf import settings
 from django.utils import timezone
 
-from .models import Appointment, FinalizeAudit
+from .models import Appointment, Charge, ClinicalRecord, Encounter, FinalizeAudit
 from .serializers import (
     AppointmentSerializer,
+    ChargeSerializer,
+    ClinicalRecordSerializer,
+    EncounterSerializer,
     FinalizeAuditSerializer,
-    IntegrationConsultationSerializer,
 )
 
 
@@ -24,6 +25,20 @@ class IsProfessionalOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         return getattr(request.user, "id", None) == getattr(obj.professional, "id", None)
+
+
+class ProfessionalOwnedViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsProfessionalOrReadOnly]
+
+    def get_queryset(self):
+        qs = self.queryset
+        user = getattr(self.request, "user", None)
+        if user and getattr(user, "id", None):
+            qs = qs.filter(professional_id=user.id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(professional=self.request.user)
 
 
 class AppointmentViewSet(viewsets.ModelViewSet):
@@ -109,33 +124,19 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         obj.save(update_fields=update_fields)
         return Response(self.get_serializer(obj).data, status=200)
 
-    @action(detail=False, methods=["post"], url_path="purge")
-    def purge(self, request):
-        """Apaga compromissos do profissional autenticado (DEV-only).
+    @action(detail=True, methods=["post"], url_path="confirm-whatsapp")
+    def confirm_whatsapp(self, request, pk=None):
+        """Marca whatsapp_confirmed=True no agendamento.
 
-        Aceita JSON opcional {start: ISO, end: ISO} para limitar por intervalo.
-        Somente disponível com settings.DEBUG=True para evitar uso em produção.
+        Chamado pelo sw.js quando o profissional clica em 'Sim, enviar WhatsApp'
+        na notificação push, ou pelo modal interno do app.
+        Idempotente — chamadas repetidas retornam 200 sem erro.
         """
-        if not settings.DEBUG:
-            return Response({"detail": "forbidden"}, status=403)
-        user = getattr(request, "user", None)
-        if not (user and getattr(user, "id", None)):
-            return Response({"detail": "unauthorized"}, status=401)
-
-        qs = Appointment.objects.filter(professional_id=user.id)
-        start = request.data.get("start")
-        end = request.data.get("end")
-        try:
-            if start:
-                qs = qs.filter(start_at__gte=start)
-            if end:
-                qs = qs.filter(end_at__lte=end)
-        except Exception:
-            # Se datas inválidas forem passadas, ignore filtros e apague tudo do profissional
-            pass
-
-        deleted, _ = qs.delete()
-        return Response({"deleted": deleted})
+        obj = self.get_object()
+        if not obj.whatsapp_confirmed:
+            obj.whatsapp_confirmed = True
+            obj.save(update_fields=["whatsapp_confirmed", "updated_at"])
+        return Response({"ok": True, "whatsapp_confirmed": True}, status=200)
 
     @action(detail=False, methods=["get"], url_path="next")
     def next_for_client(self, request):
@@ -295,57 +296,127 @@ class FinalizeAuditListView(generics.ListAPIView):
         return qs.order_by("-created_at")
 
 
-class IntegrationConsultationsListView(generics.ListAPIView):
-    """Endpoint de leitura para integrações externas (ex.: Odoo).
-
-    Retorna compromissos finalizados (status=done) no formato de "consultations".
-    Requer autenticação padrão do sistema (JWT/Session). No futuro, podemos adicionar
-    um token específico de integração.
-
-    Filtros suportados:
-    - start: ISO datetime (start_at >=)
-    - end: ISO datetime (end_at <=)
-    - updated_since: ISO datetime (updated_at >=) para pulls incrementais
-    - client: id
-    - professional: id (admin/staff pode ver outros; profissional comum vê apenas os seus)
-    """
-
-    serializer_class = IntegrationConsultationSerializer
-    permission_classes = [IsProfessionalOrReadOnly]
+class EncounterViewSet(ProfessionalOwnedViewSet):
+    serializer_class = EncounterSerializer
+    queryset = Encounter.objects.select_related("professional", "client", "appointment")
 
     def get_queryset(self):
-        qs = Appointment.objects.select_related("professional", "client").filter(status=Appointment.Status.DONE)
-        user = getattr(self.request, "user", None)
-
-        # Profissional comum: restringe aos seus próprios compromissos
-        if user and getattr(user, "id", None) and not getattr(user, "is_staff", False):
-            qs = qs.filter(professional_id=user.id)
-
-        start = self.request.query_params.get("start")
-        end = self.request.query_params.get("end")
-        updated_since = self.request.query_params.get("updated_since")
+        qs = super().get_queryset()
         client_id = self.request.query_params.get("client")
-        professional_id = self.request.query_params.get("professional")
-
-        if start:
-            try:
-                qs = qs.filter(start_at__gte=start)
-            except Exception:
-                pass
-        if end:
-            try:
-                qs = qs.filter(end_at__lte=end)
-            except Exception:
-                pass
-        if updated_since:
-            try:
-                qs = qs.filter(updated_at__gte=updated_since)
-            except Exception:
-                pass
+        appointment_id = self.request.query_params.get("appointment")
+        status_val = self.request.query_params.get("status")
         if client_id:
             qs = qs.filter(client_id=client_id)
-        if professional_id:
-            qs = qs.filter(professional_id=professional_id)
+        if appointment_id:
+            qs = qs.filter(appointment_id=appointment_id)
+        if status_val:
+            qs = qs.filter(status=status_val)
+        return qs
 
-        # Ordenação padrão: updated_at crescente para facilitar pulls incrementais determinísticos
-        return qs.order_by("updated_at", "id")
+    def destroy(self, request, *args, **kwargs):
+        return Response({"detail": "Exclusão não permitida. Cancele ou encerre o atendimento."}, status=405)
+
+    @action(detail=True, methods=["post"], url_path="close")
+    def close(self, request, pk=None):
+        encounter = self.get_object()
+        if encounter.status == Encounter.Status.CLOSED:
+            return Response(self.get_serializer(encounter).data, status=200)
+        if encounter.status == Encounter.Status.CANCELED:
+            return Response({"detail": "Atendimento cancelado não pode ser encerrado."}, status=400)
+        encounter.status = Encounter.Status.CLOSED
+        if encounter.ended_at is None:
+            encounter.ended_at = timezone.now()
+        encounter.save()
+        return Response(self.get_serializer(encounter).data, status=200)
+
+    @action(detail=True, methods=["post"], url_path="cancel")
+    def cancel(self, request, pk=None):
+        encounter = self.get_object()
+        if encounter.status == Encounter.Status.CANCELED:
+            return Response(self.get_serializer(encounter).data, status=200)
+        encounter.status = Encounter.Status.CANCELED
+        if encounter.ended_at is None:
+            encounter.ended_at = timezone.now()
+        encounter.save()
+        return Response(self.get_serializer(encounter).data, status=200)
+
+
+class ClinicalRecordViewSet(ProfessionalOwnedViewSet):
+    serializer_class = ClinicalRecordSerializer
+    queryset = ClinicalRecord.objects.select_related("professional", "client", "encounter")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        client_id = self.request.query_params.get("client")
+        encounter_id = self.request.query_params.get("encounter")
+        record_type = self.request.query_params.get("record_type")
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+        if encounter_id:
+            qs = qs.filter(encounter_id=encounter_id)
+        if record_type:
+            qs = qs.filter(record_type=record_type)
+        return qs
+
+    def destroy(self, request, *args, **kwargs):
+        return Response({"detail": "Exclusão não permitida. Preserve o histórico do prontuário."}, status=405)
+
+
+class ChargeViewSet(ProfessionalOwnedViewSet):
+    serializer_class = ChargeSerializer
+    queryset = Charge.objects.select_related(
+        "professional", "client", "encounter", "appointment"
+    ).prefetch_related("items")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        client_id = self.request.query_params.get("client")
+        encounter_id = self.request.query_params.get("encounter")
+        appointment_id = self.request.query_params.get("appointment")
+        status_val = self.request.query_params.get("status")
+        charge_type = self.request.query_params.get("charge_type")
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+        if encounter_id:
+            qs = qs.filter(encounter_id=encounter_id)
+        if appointment_id:
+            qs = qs.filter(appointment_id=appointment_id)
+        if status_val:
+            qs = qs.filter(status=status_val)
+        if charge_type:
+            qs = qs.filter(charge_type=charge_type)
+        return qs
+
+    def destroy(self, request, *args, **kwargs):
+        return Response({"detail": "Exclusão não permitida. Cancele a cobrança."}, status=405)
+
+    @action(detail=True, methods=["post"], url_path="mark-sent")
+    def mark_sent(self, request, pk=None):
+        charge = self.get_object()
+        if charge.status == Charge.Status.CANCELED:
+            return Response({"detail": "Cobrança cancelada não pode ser enviada."}, status=400)
+        charge.status = Charge.Status.SENT
+        if charge.shared_at is None:
+            charge.shared_at = timezone.now()
+        charge.save()
+        return Response(self.get_serializer(charge).data, status=200)
+
+    @action(detail=True, methods=["post"], url_path="mark-paid")
+    def mark_paid(self, request, pk=None):
+        charge = self.get_object()
+        if charge.status == Charge.Status.CANCELED:
+            return Response({"detail": "Cobrança cancelada não pode ser paga."}, status=400)
+        charge.status = Charge.Status.PAID
+        if charge.paid_at is None:
+            charge.paid_at = timezone.now()
+        charge.save()
+        return Response(self.get_serializer(charge).data, status=200)
+
+    @action(detail=True, methods=["post"], url_path="cancel")
+    def cancel(self, request, pk=None):
+        charge = self.get_object()
+        if charge.status == Charge.Status.PAID:
+            return Response({"detail": "Cobrança paga não pode ser cancelada."}, status=400)
+        charge.status = Charge.Status.CANCELED
+        charge.save()
+        return Response(self.get_serializer(charge).data, status=200)

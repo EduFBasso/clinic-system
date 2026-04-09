@@ -23,15 +23,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
 
         # Adiciona dados extras ao payload do frontend
-        data['professional'] = {
-            'id': user.id,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'email': user.email,
-            'register_number': user.register_number,
-            'specialty': user.specialty
+        data['professional'] = {  # type: ignore[assignment]
+            'id': user.id,  # type: ignore[union-attr]
+            'first_name': user.first_name,  # type: ignore[union-attr]
+            'last_name': user.last_name,  # type: ignore[union-attr]
+            'email': user.email,  # type: ignore[union-attr]
+            'register_number': user.register_number,  # type: ignore[union-attr]
+            'specialty': user.specialty  # type: ignore[union-attr]
         }
 
         return data
-    
     

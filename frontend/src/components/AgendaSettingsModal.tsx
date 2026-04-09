@@ -1,6 +1,8 @@
 import React from 'react';
 import AppModal from './Modal';
 import modalStyles from '../styles/components/AgendaSettingsModal.module.css';
+import { usePushSubscription } from '../hooks/usePushSubscription';
+import { API_BASE } from '../config/api';
 
 interface AgendaSettingsModalProps {
     open: boolean;
@@ -67,10 +69,23 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     const firstFieldRef = React.useRef<HTMLInputElement | null>(null);
     const openRef = React.useRef(false);
 
+    // Notification settings (backend-stored)
+    const [reminderEnabled, setReminderEnabled] = React.useState(false);
+    const [reminderMinutesBefore, setReminderMinutesBefore] =
+        React.useState(90);
+    const { state: pushState, subscribe, unsubscribe } = usePushSubscription();
+    const [pushJustActivated, setPushJustActivated] = React.useState(false);
+
     React.useEffect(() => {
         if (!open) return;
         setSavedMsg(null);
         setMsgType(null);
+        // Check if subscription was just completed (survives iOS modal close)
+        if (sessionStorage.getItem('pushJustActivated')) {
+            sessionStorage.removeItem('pushJustActivated');
+            setPushJustActivated(true);
+            setTimeout(() => setPushJustActivated(false), 5000);
+        }
         setWorkStart(
             clampHM(
                 localStorage.getItem(LS_KEYS.workStart) || DEFAULTS.workStart,
@@ -108,6 +123,29 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 : DEFAULTS.defaultVisitType,
         );
 
+        // Load notification settings from backend
+        (async () => {
+            const token = localStorage.getItem('accessToken');
+            if (!token) return;
+            try {
+                const res = await fetch(
+                    `${API_BASE}/register/professionals/settings/`,
+                    {
+                        headers: { Authorization: `Bearer ${token}` },
+                    },
+                );
+                if (!res.ok) return;
+                const data = (await res.json()) as {
+                    reminder_enabled?: boolean;
+                    reminder_minutes_before?: number;
+                };
+                setReminderEnabled(data.reminder_enabled ?? false);
+                setReminderMinutesBefore(data.reminder_minutes_before ?? 90);
+            } catch {
+                /* silencioso */
+            }
+        })();
+
         // Manage initial focus only first time after open flag toggles true
         requestAnimationFrame(() => {
             if (firstFieldRef.current) {
@@ -128,6 +166,25 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
         localStorage.setItem(LS_KEYS.slotInterval, String(slotInterval));
         localStorage.setItem(LS_KEYS.defaultDuration, String(defaultDuration));
         localStorage.setItem(LS_KEYS.defaultVisitType, defaultVisitType);
+
+        // Persist notification settings to the backend (fire-and-forget with feedback)
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+            fetch(`${API_BASE}/register/professionals/settings/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    reminder_enabled: reminderEnabled,
+                    reminder_minutes_before: reminderMinutesBefore,
+                }),
+            }).catch(() => {
+                /* silencioso */
+            });
+        }
+
         setSavedMsg('Configurações salvas.');
         setMsgType('success');
         if (onApply) onApply();
@@ -301,6 +358,164 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                 </option>
                             ))}
                         </select>
+                    </div>
+                </div>
+
+                {/* ── Notificações Push ─────────────────────────────── */}
+                <div
+                    style={{
+                        borderTop: '1px solid #e5e7eb',
+                        paddingTop: '1rem',
+                    }}
+                >
+                    <p
+                        style={{
+                            margin: '0 0 0.75rem',
+                            fontWeight: 600,
+                            fontSize: '0.95rem',
+                            color: '#374151',
+                        }}
+                    >
+                        Notificações Push
+                    </p>
+
+                    {/* Reminder toggle */}
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.625rem',
+                            marginBottom: '0.75rem',
+                        }}
+                    >
+                        <input
+                            id='agenda-reminderEnabled'
+                            type='checkbox'
+                            checked={reminderEnabled}
+                            onChange={e => setReminderEnabled(e.target.checked)}
+                            style={{
+                                width: '1rem',
+                                height: '1rem',
+                                cursor: 'pointer',
+                            }}
+                        />
+                        <label
+                            htmlFor='agenda-reminderEnabled'
+                            className={modalStyles.label}
+                            style={{ cursor: 'pointer' }}
+                        >
+                            Ativar lembrete antes do compromisso
+                        </label>
+                    </div>
+
+                    {/* Minutes before */}
+                    <div
+                        className={modalStyles.fieldGroup}
+                        style={{ maxWidth: 220, marginBottom: '0.75rem' }}
+                    >
+                        <label
+                            htmlFor='agenda-reminderMinutes'
+                            className={modalStyles.label}
+                        >
+                            Minutos de antecedência
+                        </label>
+                        <input
+                            id='agenda-reminderMinutes'
+                            type='number'
+                            min={1}
+                            max={1440}
+                            className={modalStyles.input}
+                            value={reminderMinutesBefore}
+                            disabled={!reminderEnabled}
+                            onChange={e => {
+                                const v = parseInt(e.target.value, 10);
+                                if (!isNaN(v) && v >= 1 && v <= 1440)
+                                    setReminderMinutesBefore(v);
+                            }}
+                        />
+                    </div>
+
+                    {/* Push subscription status */}
+                    {pushJustActivated && (
+                        <div
+                            style={{
+                                background: 'var(--color-success-bg)',
+                                color: 'var(--color-success)',
+                                border: '1px solid #6ee7b7',
+                                borderRadius: '0.5rem',
+                                padding: '0.5rem 0.75rem',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                marginBottom: '0.5rem',
+                            }}
+                        >
+                            ✔ Notificações ativadas neste dispositivo!
+                        </div>
+                    )}
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            flexWrap: 'wrap',
+                        }}
+                    >
+                        <span
+                            style={{
+                                fontSize: '0.85rem',
+                                color:
+                                    pushState === 'subscribed'
+                                        ? '#065f46'
+                                        : '#6b7280',
+                                fontWeight:
+                                    pushState === 'subscribed' ? 600 : 400,
+                            }}
+                        >
+                            {pushState === 'unsupported' &&
+                                'Este navegador não suporta notificações push.'}
+                            {pushState === 'denied' &&
+                                'Notificações bloqueadas pelo navegador.'}
+                            {pushState === 'subscribed' &&
+                                '✔ Este dispositivo receberá lembretes.'}
+                            {pushState === 'unsubscribed' &&
+                                'Este dispositivo não está inscrito.'}
+                            {pushState === 'loading' && 'Verificando…'}
+                        </span>
+                        {(pushState === 'subscribed' ||
+                            pushState === 'unsubscribed') && (
+                            <button
+                                type='button'
+                                className={`${modalStyles.buttonBase} ${modalStyles.secondary}`}
+                                style={{
+                                    padding: '0.35rem 0.8rem',
+                                    fontSize: '0.85rem',
+                                }}
+                                onClick={async () => {
+                                    if (pushState === 'subscribed') {
+                                        await unsubscribe();
+                                        setPushJustActivated(false);
+                                    } else {
+                                        const ok = await subscribe();
+                                        if (ok) {
+                                            sessionStorage.setItem(
+                                                'pushJustActivated',
+                                                '1',
+                                            );
+                                            setPushJustActivated(true);
+                                            setTimeout(
+                                                () =>
+                                                    setPushJustActivated(false),
+                                                5000,
+                                            );
+                                        }
+                                    }
+                                }}
+                            >
+                                {pushState === 'subscribed'
+                                    ? 'Remover inscrição'
+                                    : 'Ativar neste dispositivo'}
+                            </button>
+                        )}
                     </div>
                 </div>
 

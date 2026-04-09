@@ -4,7 +4,8 @@ from typing import Optional, Dict, Any, List
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.register.models import Client, Professional
+from apps.clients.models import Client
+from apps.register.models import Professional
 
 
 def normalize_phone_digits(phone: Optional[str]) -> Optional[str]:
@@ -47,7 +48,7 @@ class Command(BaseCommand):
             if not local_prof:
                 raise CommandError('Nenhum Professional ativo encontrado para associar clientes.')
 
-        self.stdout.write(self.style.NOTICE(f'Importando para o Professional local: {local_prof.email} (id={local_prof.id})'))
+        self.stdout.write(self.style.NOTICE(f'Importando para o Professional local: {local_prof.email} (id={local_prof.id})')) # type: ignore
 
         # Lê CSV
         rows: List[Dict[str, Any]] = []
@@ -138,7 +139,7 @@ class Command(BaseCommand):
                 if existing:
                     changed = False
                     updates = {
-                        'professional': local_prof if existing.professional_id != local_prof.id else existing.professional,
+                        'professional': local_prof if existing.professional_id != local_prof.id else existing.professional, # type: ignore
                         'first_name': first_name or existing.first_name,
                         'last_name': last_name or existing.last_name,
                         'email': email_remote or existing.email,

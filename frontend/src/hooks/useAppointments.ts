@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 
@@ -40,6 +40,15 @@ export function useAppointmentsRange(
         return { startISO: s.toISOString(), endISO: e.toISOString() };
     }, [startDate, endDate]);
 
+    // Track last fetched range to distinguish navigation (new range) from
+    // background refreshes (same range, reloadKey bumped). Only show the
+    // loading indicator on navigation so the UI never flickers on auto-refresh.
+    const rangeRef = useRef<{
+        startISO: string;
+        endISO: string;
+        clientId?: number;
+    } | null>(null);
+
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         if (isTokenExpired(token)) {
@@ -48,7 +57,15 @@ export function useAppointmentsRange(
             setError(null);
             return;
         }
-        setLoading(true);
+        const isNavigation =
+            rangeRef.current?.startISO !== startISO ||
+            rangeRef.current?.endISO !== endISO ||
+            rangeRef.current?.clientId !== clientId;
+        if (isNavigation) {
+            setLoading(true);
+            setItems([]);
+        }
+        rangeRef.current = { startISO, endISO, clientId };
         const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
             startISO,
         )}&end=${encodeURIComponent(endISO)}${

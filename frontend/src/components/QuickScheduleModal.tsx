@@ -10,7 +10,6 @@ import QuickScheduleDayList, {
 } from './quickschedule/QuickScheduleDayList';
 // PendingActionsModal é global (Home)
 import AppointmentDetailsModal from './AppointmentDetailsModal';
-import ensureDeviceSession from '../services/sessions';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
@@ -20,12 +19,12 @@ import {
     getWorkTimes,
     getDefaultDuration,
 } from '../utils/agendaSettings';
-import { AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE } from '../config/limits';
 import { API_BASE } from '../config/api';
 import { track } from '../utils/telemetry';
-import { buildDeviceHeaders } from '../services/device';
 import { usePendingGuard } from '../hooks/usePendingGuard';
 import { focusClientCard } from '../utils/focusClientCard';
+import { useQuickScheduleSave } from '../hooks/useQuickScheduleSave';
+import { pad2, toMinutes, fromMinutes, weekdayLabel } from '../utils/hmTime';
 
 type VisitType = Appointment['visit_type'];
 type ClientMaybeNext = ClientBasic & { next_appointment_id?: number };
@@ -38,25 +37,6 @@ interface QuickScheduleModalProps {
     afterPersist?: (id?: number, action?: 'created' | 'updated') => void;
     futureAppointments?: Array<unknown>;
     maxFutureAppointments?: number;
-}
-
-function pad2(n: number) {
-    return String(n).padStart(2, '0');
-}
-function toMinutes(hm: string): number {
-    const [h, m] = hm.split(':').map(s => parseInt(s || '0', 10));
-    return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
-}
-function fromMinutes(mins: number): string {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${pad2(h)}:${pad2(m)}`;
-}
-function weekdayLabel(d: Date) {
-    const s = d
-        .toLocaleDateString('pt-BR', { weekday: 'short' })
-        .replace('.', '');
-    return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export default function QuickScheduleModal({
@@ -99,8 +79,6 @@ export default function QuickScheduleModal({
     const [notes, setNotes] = React.useState<string>(
         (isEdit && editAppointment && editAppointment.notes) || '',
     );
-    const [saving, setSaving] = React.useState(false);
-    const [error, setError] = React.useState<string | null>(null);
     const [reloadKey, setReloadKey] = React.useState(0);
     const [currentEdit, setCurrentEdit] = React.useState<Appointment | null>(
         editAppointment || null,
@@ -133,6 +111,10 @@ export default function QuickScheduleModal({
         useAppointmentsRange(dayStart, dayEnd, undefined, reloadKey);
 
     const [dayFilter, setDayFilter] = React.useState<DayFilter>('todos');
+    const [cancelError, setCancelError] = React.useState<string | null>(null);
+    function setError(msg: string) {
+        setCancelError(msg);
+    }
 
     // Details modal for viewing completed (done) appointments
     const [detailsOpen, setDetailsOpen] = React.useState(false);
@@ -148,6 +130,15 @@ export default function QuickScheduleModal({
             d.getMonth() + 1,
         )}/${d.getFullYear()}`;
         return `${weekdayLabel(d)} — ${dd}`;
+    }, [selectedDate]);
+
+    // Past-date guard — disable Criar when selected date is before today
+    const isSelectedPast = React.useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const sel = new Date(selectedDate);
+        sel.setHours(0, 0, 0, 0);
+        return sel.getTime() < today.getTime();
     }, [selectedDate]);
 
     // Pending guard (block create when client has pending)
@@ -209,377 +200,21 @@ export default function QuickScheduleModal({
         onClose();
     }, [onClose, refreshPendingGuard]);
 
-    const handleSave = React.useCallback(async () => {
-        setError(null);
-        setSaving(true);
-        const t0 = performance.now();
-        // Normalize minutes if flex mode is off to respect slot interval
-        const slot = getSlotInterval();
-        function snapIfNeeded(hm: string): string {
-            const [h, m] = hm.split(':').map(n => parseInt(n, 10));
-            if (isNaN(h) || isNaN(m)) return hm;
-            const snapped = Math.round(m / slot) * slot;
-            const finalM = Math.min(59, Math.max(0, snapped));
-            return `${pad2(h)}:${pad2(finalM)}`;
-        }
-        const normalizedStartHM = snapIfNeeded(startHM);
-        let normalizedEndHM = snapIfNeeded(endHM);
-        // Ensure end >= start
-        if (toMinutes(normalizedEndHM) <= toMinutes(normalizedStartHM)) {
-            const mins = toMinutes(normalizedStartHM) + getDefaultDuration();
-            normalizedEndHM = fromMinutes(mins);
-        }
-        // Build start/end using Date API to avoid invalid strings like "24:00"
-        // and clamp to the same-day window [00:00, 23:59]. Ensure end > start.
-        const MAX_MINUTE = 23 * 60 + 59;
-        const startMin0 = toMinutes(normalizedStartHM);
-        const endMin0 = toMinutes(normalizedEndHM);
-        const startMin = Math.max(0, Math.min(MAX_MINUTE, startMin0));
-        let endMin = Math.max(0, Math.min(MAX_MINUTE, endMin0));
-        if (endMin <= startMin) {
-            // Guarantee at least 1 minute duration if clamping caused equality
-            endMin = Math.min(MAX_MINUTE, startMin + 1);
-        }
-        const baseDate = new Date(selectedDate);
-        const startDate = new Date(baseDate);
-        startDate.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
-        const endDate = new Date(baseDate);
-        endDate.setHours(Math.floor(endMin / 60), endMin % 60, 0, 0);
-        const startISO = startDate.toISOString();
-        const endISO = endDate.toISOString();
-        const visitTitles: Record<string, string> = {
-            consulta: 'Consulta',
-            avaliacao: 'Avaliação',
-            retorno: 'Retorno',
-            procedimento: 'Procedimento',
-            outro: 'Outro',
-        };
-        const title = visitTitles[String(visitType)] || 'Consulta';
-        const token = localStorage.getItem('accessToken') || '';
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        try {
-            let updatedId: number | undefined;
-            const wasEdit = !!currentEdit;
-            if (currentEdit) {
-                const resp = await fetch(
-                    `${API_BASE}/agenda/appointments/${currentEdit.id}/`,
-                    {
-                        method: 'PATCH',
-                        headers,
-                        body: JSON.stringify({
-                            title,
-                            start_at: startISO,
-                            end_at: endISO,
-                            visit_type: visitType,
-                            notes,
-                        }),
-                    },
-                );
-                if (!resp.ok) throw new Error('Erro ao atualizar');
-                updatedId = currentEdit.id;
-            } else {
-                // Ensure device session exists before POST create
-                try {
-                    await ensureDeviceSession();
-                } catch {
-                    /* noop */
-                }
-                let resp = await fetch(`${API_BASE}/agenda/appointments/`, {
-                    method: 'POST',
-                    headers: { ...headers, ...buildDeviceHeaders() },
-                    body: JSON.stringify({
-                        client: client.id,
-                        title,
-                        start_at: startISO,
-                        end_at: endISO,
-                        visit_type: visitType,
-                        status: 'scheduled',
-                        notes,
-                    }),
-                });
-                if (resp.status === 401 || resp.status === 403) {
-                    try {
-                        await ensureDeviceSession(true);
-                    } catch {
-                        /* noop */
-                    }
-                    resp = await fetch(`${API_BASE}/agenda/appointments/`, {
-                        method: 'POST',
-                        headers: { ...headers, ...buildDeviceHeaders() },
-                        body: JSON.stringify({
-                            client: client.id,
-                            title,
-                            start_at: startISO,
-                            end_at: endISO,
-                            visit_type: visitType,
-                            status: 'scheduled',
-                            notes,
-                        }),
-                    });
-                }
-                if (!resp.ok) {
-                    let text = '';
-                    try {
-                        const ct = resp.headers.get('Content-Type') || '';
-                        if (ct.includes('application/json')) {
-                            const j = await resp.json();
-                            text =
-                                typeof j === 'string' ? j : JSON.stringify(j);
-                        } else {
-                            text = await resp.text();
-                        }
-                    } catch {
-                        /* ignore */
-                    }
-                    // If backend indicates pending, open resolver
-                    if (/pendente/i.test(text)) {
-                        try {
-                            const token2 =
-                                localStorage.getItem('accessToken') || '';
-                            const headers2: Record<string, string> = {};
-                            if (token2)
-                                headers2['Authorization'] = `Bearer ${token2}`;
-                            const url = `${API_BASE}/agenda/appointments/?client=${
-                                client.id
-                            }&status=scheduled&ordering=-end_at&limit=50&ts=${Date.now()}`;
-                            const r = await fetch(url, {
-                                headers: headers2,
-                                cache: 'no-store',
-                            });
-                            if (r.ok) {
-                                const data = (await r.json()) as Appointment[];
-                                const nowMs = Date.now();
-                                const pending = Array.isArray(data)
-                                    ? data.find(ap => {
-                                          const endMs = new Date(
-                                              ap.end_at,
-                                          ).getTime();
-                                          return (
-                                              ap.status === 'scheduled' &&
-                                              isFinite(endMs) &&
-                                              endMs <= nowMs
-                                          );
-                                      })
-                                    : null;
-                                if (pending) {
-                                    try {
-                                        const a = pending as Appointment;
-                                        const anyAppt = a as unknown as Record<
-                                            string,
-                                            unknown
-                                        >;
-                                        const clientName = (():
-                                            | string
-                                            | undefined => {
-                                            if (
-                                                typeof anyAppt.client_name ===
-                                                'string'
-                                            )
-                                                return anyAppt.client_name as string;
-                                            const c = anyAppt.client as unknown;
-                                            if (
-                                                c &&
-                                                typeof c === 'object' &&
-                                                'name' in
-                                                    (c as Record<
-                                                        string,
-                                                        unknown
-                                                    >)
-                                            ) {
-                                                const n = (
-                                                    c as { name?: unknown }
-                                                ).name;
-                                                if (typeof n === 'string')
-                                                    return n;
-                                            }
-                                            return undefined;
-                                        })();
-                                        const clientField = ((): unknown => {
-                                            const c = anyAppt.client as unknown;
-                                            if (
-                                                typeof c === 'number' ||
-                                                typeof c === 'object'
-                                            )
-                                                return c;
-                                            return undefined;
-                                        })();
-                                        const payload = {
-                                            id: a.id,
-                                            start_at: a.start_at,
-                                            end_at: a.end_at,
-                                            status: a.status,
-                                            notes: a.notes,
-                                            client_name: clientName,
-                                            client: clientField,
-                                            title: a.title,
-                                        } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                        window.dispatchEvent(
-                                            new CustomEvent(
-                                                'pendingActions:open',
-                                                { detail: { appt: payload } },
-                                            ),
-                                        );
-                                    } catch {
-                                        /* noop */
-                                    }
-                                    try {
-                                        window.dispatchEvent(
-                                            new CustomEvent('systemMessage', {
-                                                detail: {
-                                                    text: 'Há uma pendência anterior. Resolva-a antes de criar um novo compromisso.',
-                                                    type: 'warning',
-                                                },
-                                            }),
-                                        );
-                                    } catch {
-                                        /* noop */
-                                    }
-                                }
-                            }
-                        } catch {
-                            /* ignore */
-                        }
-                    }
-                    const friendly =
-                        text && text.length < 400 ? text : 'Erro ao criar';
-                    throw new Error(friendly);
-                }
-                const data = (await resp.json()) as { id?: number };
-                updatedId = data?.id;
-            }
-
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: {
-                            text: wasEdit
-                                ? 'Compromisso atualizado'
-                                : 'Compromisso criado',
-                            type: 'success',
-                        },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-
-            try {
-                // Dispara imediatamente e também agenda via dispatcher para coalescer com outros eventos próximos
-                dispatchers.updateClients();
-                dispatchers.appointmentsChanged();
-                // Sinal adicional opcional: nudge 'appointments:maybeRefresh' para hooks que escutam pings leves
-                try {
-                    window.dispatchEvent(
-                        new Event('appointments:maybeRefresh'),
-                    );
-                } catch {
-                    /* noop */
-                }
-            } catch {
-                /* noop */
-            }
-
-            setReloadKey(k => k + 1);
-            if (updatedId) setLastEditedId(updatedId);
-            if (afterPersist)
-                afterPersist(updatedId, wasEdit ? 'updated' : 'created');
-
-            try {
-                if (!wasEdit && updatedId) {
-                    track({
-                        type: 'appointment_created',
-                        payload: {
-                            id: updatedId,
-                            client_id: client.id,
-                            start_at: startISO,
-                        },
-                    });
-                } else if (wasEdit && updatedId) {
-                    track({
-                        type: 'appointment_updated',
-                        payload: { id: updatedId, start_at: startISO },
-                    });
-                }
-            } catch {
-                /* noop */
-            }
-
-            if (!wasEdit && AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE) {
-                try {
-                    window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                } catch {
-                    /* noop */
-                }
-                setTimeout(() => {
-                    try {
-                        // Mantemos forceRefresh direto (uso específico), mas coalescemos eventos globais
-                        window.dispatchEvent(new Event('clients:forceRefresh'));
-                    } catch {
-                        /* noop */
-                    }
-                    handleImmediateClose();
-                }, 160);
-            }
-        } catch (e) {
-            const msg =
-                e && typeof e === 'object' && 'message' in e
-                    ? String((e as Error).message)
-                    : 'Erro ao salvar';
-            setError(msg);
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: { text: msg, type: 'error' },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-        } finally {
-            setSaving(false);
-            const t1 = performance.now();
-            console.debug(
-                '[QuickSchedule] handleSave latency ms',
-                (t1 - t0).toFixed(1),
-            );
-            try {
-                window.dispatchEvent(new Event('ensureScrollUnlocked'));
-            } catch {
-                /* noop */
-            }
-        }
-    }, [
+    const { saving, error, handleSave } = useQuickScheduleSave({
         selectedDate,
         startHM,
         endHM,
         visitType,
         notes,
+        clientId: client.id,
         currentEdit,
-        client.id,
         afterPersist,
-        handleImmediateClose,
-    ]);
-
-    React.useEffect(() => {
-        if (!saving) return;
-        const id = window.setTimeout(() => {
-            setSaving(false);
-            setError(
-                prev =>
-                    prev ||
-                    'Operação demorou demais. Verifique conexão e tente novamente.',
-            );
-            try {
-                window.dispatchEvent(new Event('ensureScrollUnlocked'));
-            } catch {
-                /* noop */
-            }
-        }, 20000);
-        return () => window.clearTimeout(id);
-    }, [saving]);
+        onSuccess: updatedId => {
+            setReloadKey(k => k + 1);
+            if (updatedId) setLastEditedId(updatedId);
+        },
+        onImmediateClose: handleImmediateClose,
+    });
 
     return (
         <>
@@ -608,22 +243,34 @@ export default function QuickScheduleModal({
                     {/* Title + client info remain; date controls standardized below */}
                     <QuickScheduleHeader
                         clientFullName={`${client.first_name} ${client.last_name}`}
+                        isEditing={!!currentEdit}
                         onClose={handleImmediateClose}
                     />
 
                     <DateControlsHeader
                         currentDate={selectedDate}
                         label={sectionDateTitle}
-                        onPrev={() =>
-                            setSelectedDate(
-                                d =>
-                                    new Date(
-                                        d.getFullYear(),
-                                        d.getMonth(),
-                                        d.getDate() - 1,
-                                    ),
-                            )
+                        prevDisabled={
+                            isSelectedPast ||
+                            (() => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                const sel = new Date(selectedDate);
+                                sel.setHours(0, 0, 0, 0);
+                                return sel.getTime() <= today.getTime();
+                            })()
                         }
+                        onPrev={() => {
+                            const prev = new Date(
+                                selectedDate.getFullYear(),
+                                selectedDate.getMonth(),
+                                selectedDate.getDate() - 1,
+                            );
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            if (prev.getTime() >= today.getTime())
+                                setSelectedDate(prev);
+                        }}
                         onNext={() =>
                             setSelectedDate(
                                 d =>
@@ -684,9 +331,8 @@ export default function QuickScheduleModal({
                                                     'application/json',
                                             };
                                             if (token)
-                                                headers[
-                                                    'Authorization'
-                                                ] = `Bearer ${token}`;
+                                                headers['Authorization'] =
+                                                    `Bearer ${token}`;
                                             const resp = await fetch(
                                                 `${API_BASE}/agenda/appointments/${id}/`,
                                                 { headers },
@@ -923,64 +569,6 @@ export default function QuickScheduleModal({
                             background: 'var(--color-bg)',
                         }}
                     >
-                        {/* Mini toggle "Todos" alinhado à esquerda, pequeno para não competir com os botões */}
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                            }}
-                        >
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>
-                                Todos
-                            </span>
-                            <button
-                                type='button'
-                                role='switch'
-                                aria-checked={dayFilter !== 'ativos'}
-                                onClick={() =>
-                                    setDayFilter(
-                                        dayFilter === 'ativos'
-                                            ? 'todos'
-                                            : 'ativos',
-                                    )
-                                }
-                                aria-label='Alternar entre todos os status e apenas ativos'
-                                title='Alternar entre todos os status e apenas ativos'
-                                style={{
-                                    position: 'relative',
-                                    width: 40,
-                                    height: 24,
-                                    borderRadius: 999,
-                                    border: '1px solid var(--color-border)',
-                                    background:
-                                        dayFilter === 'ativos'
-                                            ? '#e5e7eb'
-                                            : '#059669',
-                                    cursor: 'pointer',
-                                    padding: 0,
-                                    outline: 'none',
-                                }}
-                            >
-                                <span
-                                    aria-hidden
-                                    style={{
-                                        position: 'absolute',
-                                        top: '50%',
-                                        left: dayFilter === 'ativos' ? 2 : 20,
-                                        transform: 'translateY(-50%)',
-                                        width: 18,
-                                        height: 18,
-                                        borderRadius: '50%',
-                                        background: '#fff',
-                                        boxShadow:
-                                            '0 1px 2px rgba(0,0,0,0.1), 0 1px 1px rgba(0,0,0,0.06)',
-                                        transition:
-                                            'left 150ms ease, transform 150ms ease',
-                                    }}
-                                />
-                            </button>
-                        </div>
                         {/* Right actions: Cancel + Create/Save grouped together */}
                         <div
                             style={{
@@ -1003,13 +591,25 @@ export default function QuickScheduleModal({
                                 onClick={handleSave}
                                 style={{
                                     padding: '8px 12px',
-                                    background: '#059669',
+                                    background:
+                                        !isEdit && isSelectedPast
+                                            ? '#9ca3af'
+                                            : '#059669',
                                     color: '#fff',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: 8,
+                                    cursor:
+                                        !isEdit && isSelectedPast
+                                            ? 'not-allowed'
+                                            : 'pointer',
                                 }}
-                                disabled={saving}
+                                disabled={saving || (!isEdit && isSelectedPast)}
+                                title={
+                                    !isEdit && isSelectedPast
+                                        ? 'Não é permitido agendar no passado'
+                                        : undefined
+                                }
                             >
                                 {saving && (
                                     <span
@@ -1028,8 +628,8 @@ export default function QuickScheduleModal({
                                 {saving
                                     ? 'Salvando...'
                                     : isEdit
-                                    ? 'Salvar'
-                                    : 'Criar'}
+                                      ? 'Salvar'
+                                      : 'Criar'}
                             </button>
                         </div>
                     </div>
@@ -1045,7 +645,6 @@ export default function QuickScheduleModal({
                         currentEditId={currentEdit?.id ?? null}
                         listRef={listRef}
                         minimal={true}
-                        renderMinimalToggle={false}
                         onUseTime={a => {
                             const sd = new Date(a.start_at);
                             const ed = new Date(a.end_at);
@@ -1068,9 +667,8 @@ export default function QuickScheduleModal({
                         }}
                         onCancel={async a => {
                             try {
-                                const { cancelAppointment } = await import(
-                                    '../services/appointments'
-                                );
+                                const { cancelAppointment } =
+                                    await import('../services/appointments');
                                 const res = await cancelAppointment(a.id);
                                 if (!res.ok) {
                                     throw new Error(
@@ -1135,6 +733,22 @@ export default function QuickScheduleModal({
                         }}
                     />
 
+                    {!isEdit && isSelectedPast && (
+                        <div
+                            style={{
+                                color: '#b45309',
+                                background: '#fffbeb',
+                                border: '1px solid #fcd34d',
+                                borderRadius: 6,
+                                padding: '8px 12px',
+                                fontSize: 13,
+                                fontWeight: 500,
+                            }}
+                        >
+                            Esta data já passou. Selecione hoje ou uma data
+                            futura para criar um compromisso.
+                        </div>
+                    )}
                     {error && (
                         <div style={{ color: '#b91c1c', fontSize: 14 }}>
                             {error}

@@ -26,6 +26,14 @@ function runtimeResolveApiBase(): string {
             !host.includes('vercel.app') &&
             buildApiIsLocal
         ) {
+            // Tunnel hosts (localtunnel, ngrok, cloudflared, etc): use empty base — Vite proxy handles routing
+            if (
+                host.includes('.loca.lt') ||
+                host.includes('.ngrok') ||
+                host.includes('.trycloudflare.com')
+            ) {
+                return '';
+            }
             return `${protocol}//${host}:8000`.replace(/\/+$/, '');
         }
         return BUILD_API.replace(/\/+$/, '');
@@ -33,7 +41,15 @@ function runtimeResolveApiBase(): string {
 
     // If running locally from another device on the LAN (e.g., iPhone hitting http://<PC-IP>:5173),
     // prefer using that same hostname with backend port 8000.
+    // Exception: tunnel hosts — Vite proxy handles routing, use empty base.
     if (inWindow && !isLocalHost && !host.includes('vercel.app')) {
+        if (
+            host.includes('.loca.lt') ||
+            host.includes('.ngrok') ||
+            host.includes('.trycloudflare.com')
+        ) {
+            return '';
+        }
         return `${protocol}//${host}:8000`.replace(/\/+$/, '');
     }
 

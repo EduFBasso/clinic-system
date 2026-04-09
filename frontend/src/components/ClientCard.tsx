@@ -18,7 +18,6 @@ import WeeklyAgendaModal from './WeeklyAgendaModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
 // PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
 import { useClientPendingState } from '../hooks/useClientPendingState';
-// import type { SharedAppointmentLike } from './shared/AppointmentCard'; // no longer needed after pending hook extraction
 import FinalizeButton from './clientCard/FinalizeButton';
 // SolveButton lives in clientCard folder along with FinalizeButton
 import SolveButton from './clientCard/SolveButton';
@@ -33,8 +32,7 @@ import { useClientOngoingState } from '../hooks/useClientOngoingState';
 import { formatTime } from '../utils/timeFormat';
 import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
-// Inline editor desativado temporariamente para isolar atraso no botão
-// import InlineAppointmentEditor from './InlineAppointmentEditor';
+import { useNowTick } from '../hooks/useNowTick';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -67,33 +65,7 @@ export default function ClientCard({
     const { finishing, finalize } = useFinalizeAppointment(client.id);
     // Suprimir visual de "em andamento" por alguns segundos após finalizar/cancelar
     // suppressOngoingUntil removido (gestão dentro do hook de ongoing)
-    // Simplificado: usar hora local, mas com tick para refletir mudanças de estado (scheduled→ongoing) sem interação do usuário
-    function useNowTick(intervalMs: number) {
-        const [now, setNow] = React.useState<Date>(() => new Date());
-        React.useEffect(() => {
-            // Alinha o primeiro tick ao próximo múltiplo do intervalo para suavizar transições
-            const firstDelay = (() => {
-                const d = new Date();
-                const ms = d.getMilliseconds() + d.getSeconds() * 1000;
-                const rem = intervalMs - (ms % intervalMs);
-                return Math.max(250, Math.min(rem, intervalMs));
-            })();
-            let t1: number | null = null;
-            let t2: number | null = null;
-            t1 = window.setTimeout(() => {
-                setNow(new Date());
-                t2 = window.setInterval(
-                    () => setNow(new Date()),
-                    intervalMs,
-                ) as unknown as number;
-            }, firstDelay) as unknown as number;
-            return () => {
-                if (t1 != null) window.clearTimeout(t1 as unknown as number);
-                if (t2 != null) window.clearInterval(t2 as unknown as number);
-            };
-        }, [intervalMs]);
-        return now;
-    }
+    // Tick a cada 5 s para refletir mudanças de estado (scheduled→ongoing) sem interação do usuário
     const now = useNowTick(5000);
     // Removed resumeGrace (was used for previous ongoing suppression logic)
     // const resumeGrace = useVisibilityResumeGrace(30000);
@@ -227,7 +199,9 @@ export default function ClientCard({
                 await tryOpenPendingElseQuick(() => {});
             },
         });
-        if (ok) afterFinalizeSuccess();
+        if (ok) {
+            afterFinalizeSuccess();
+        }
     }, [
         effectiveApptId,
         isOngoing,
@@ -498,6 +472,11 @@ export default function ClientCard({
                                 Nº {client.address_number}
                             </span>
                         )}
+                        {client.address_complement && (
+                            <span style={{ marginLeft: 4 }}>
+                                — {client.address_complement}
+                            </span>
+                        )}
                     </span>
                 </div>
             )}
@@ -738,6 +717,79 @@ export default function ClientCard({
                             </div>
                         </div>
                     )}
+                    {isScheduled && !isOngoing && (
+                        <div
+                            className={styles.infoRow}
+                            style={{ paddingTop: 2 }}
+                        >
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-end',
+                                    width: '100%',
+                                }}
+                            >
+                                <button
+                                    type='button'
+                                    className={`${styles.actionButton} ${styles.actionScheduled}`}
+                                    title='Enviar aviso de confirmação via WhatsApp'
+                                    style={{ fontWeight: 700 }}
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        const sIso =
+                                            displayStartISO ||
+                                            client.next_appointment_start_at ||
+                                            null;
+                                        const time = sIso
+                                            ? formatTime(sIso)
+                                            : '—';
+                                        const visitType =
+                                            client.next_appointment_title ||
+                                            'Consulta';
+                                        const profRaw =
+                                            localStorage.getItem(
+                                                'loggedProfessional',
+                                            );
+                                        const profFirstName: string = profRaw
+                                            ? (() => {
+                                                  try {
+                                                      const p =
+                                                          JSON.parse(profRaw);
+                                                      return (
+                                                          p?.display_name ||
+                                                          p?.first_name ||
+                                                          ''
+                                                      );
+                                                  } catch {
+                                                      return '';
+                                                  }
+                                              })()
+                                            : '';
+                                        const profPart = profFirstName
+                                            ? ` com ${profFirstName}`
+                                            : '';
+                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para as ${time}${profPart}, confirma sua presença?`;
+                                        const rawPhone = (
+                                            client.phone || ''
+                                        ).replace(/\D/g, '');
+                                        const waPhone =
+                                            rawPhone &&
+                                            !rawPhone.startsWith('55')
+                                                ? `55${rawPhone}`
+                                                : rawPhone;
+                                        if (!waPhone) return;
+                                        window.open(
+                                            `https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`,
+                                            '_blank',
+                                        );
+                                    }}
+                                >
+                                    Avisar
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
 
@@ -948,7 +1000,12 @@ export default function ClientCard({
                             }}
                         />
                         {loadingFuture && (
-                            <div style={{ fontSize: 11, color: '#6b7280' }}>
+                            <div
+                                style={{
+                                    fontSize: 11,
+                                    color: 'var(--color-text-muted)',
+                                }}
+                            >
                                 Carregando…
                             </div>
                         )}

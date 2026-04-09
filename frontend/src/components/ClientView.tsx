@@ -1,116 +1,208 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ClientData } from '../types/ClientData';
+import type {
+    AnamnesisField,
+    AnamnesisResponse,
+} from '../types/AnamnesisTypes';
 import styles from '../styles/components/ClientView.module.css';
 import { formatPhone } from '../utils/formatPhone';
 import { formatDOBWithAge } from '../utils/dateOfBirth';
+import { formatCpf, formatCnpj, formatRg, formatCep } from '../utils/formatCpf';
+import { API_BASE } from '../config/api';
+import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
 
 interface ClientViewProps {
     client: ClientData & {
         address_number?: string | null;
-        date_of_birth?: string | null; // pode vir ISO ou dd/mm/YYYY
+        date_of_birth?: string | null;
     };
 }
 
-// Definimos uma lista ordenada e labels; campos com render customizado tratados adiante
-// Nota: ID (código) exibido manualmente antes desta lista para permitir label customizado "Código".
-const fieldOrder: Array<keyof ClientData> = [
-    'first_name',
-    'last_name',
-    'date_of_birth',
-    'phone',
-    'email',
-    'profession',
-    'address',
-    'neighborhood',
-    'city',
-    'state',
-    'postal_code',
-    'sport_activity',
-    'academic_activity',
-    'takes_medication',
-    'had_surgery',
-    'is_pregnant',
-    'pain_sensitivity',
-    'clinical_history',
-    'plantar_view_left',
-    'plantar_view_right',
-    'dermatological_pathologies_left',
-    'dermatological_pathologies_right',
-    'nail_changes_left',
-    'nail_changes_right',
-    'deformities_left',
-    'deformities_right',
-    'sensitivity_test',
-    'other_procedures',
-];
+// ── label maps ──────────────────────────────────────────────────────────────
 
-const fieldLabels: Partial<Record<keyof ClientData, string>> = {
-    first_name: 'Nome',
-    last_name: 'Sobrenome',
-    date_of_birth: 'Data de Nascimento',
-    email: 'E-mail',
-    phone: 'Telefone',
-    profession: 'Profissão',
-    address: 'Endereço',
-    neighborhood: 'Bairro',
-    city: 'Cidade',
-    state: 'Estado',
-    postal_code: 'CEP',
-    sport_activity: 'Pratica esportes?',
-    academic_activity: 'Pratica academia?',
-    takes_medication: 'Toma medicação?',
-    had_surgery: 'Já fez cirurgia?',
-    is_pregnant: 'Está grávida?',
-    pain_sensitivity: 'Sensibilidade à dor',
-    clinical_history: 'Histórico clínico',
-    plantar_view_left: 'Vista plantar (pé esquerdo)',
-    plantar_view_right: 'Vista plantar (pé direito)',
-    dermatological_pathologies_left: 'Patologias dermatológicas (pé esquerdo)',
-    dermatological_pathologies_right: 'Patologias dermatológicas (pé direito)',
-    nail_changes_left: 'Alterações ungueais (pé esquerdo)',
-    nail_changes_right: 'Alterações ungueais (pé direito)',
-    deformities_left: 'Deformidades (pé esquerdo)',
-    deformities_right: 'Deformidades (pé direito)',
-    sensitivity_test: 'Teste de sensibilidade',
-    other_procedures: 'Outros procedimentos / Observações',
+const SEX_LABELS: Record<string, string> = {
+    masculino: 'Masculino',
+    feminino: 'Feminino',
+    outro: 'Outro',
+    nao_informado: 'Prefiro não informar',
 };
 
-function formatBirthAndAge(raw?: string | null): string {
-    const formatted = formatDOBWithAge(raw);
-    return formatted || '-';
+const MARITAL_LABELS: Record<string, string> = {
+    solteiro: 'Solteiro(a)',
+    casado: 'Casado(a)',
+    divorciado: 'Divorciado(a)',
+    viuvo: 'Viúvo(a)',
+    uniao_estavel: 'União estável',
+};
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+    cpf: 'CPF',
+    cnpj: 'CNPJ',
+};
+
+// ── helper: format a raw client field value ──────────────────────────────────
+
+function formatField(
+    k: keyof ClientData,
+    raw: unknown,
+    client: ClientData,
+): string {
+    if (k === 'date_of_birth') return formatDOBWithAge(raw as string) || '-';
+    if (k === 'phone') return formatPhone(String(raw));
+    if (k === 'sex') return SEX_LABELS[raw as string] ?? String(raw);
+    if (k === 'marital_status')
+        return MARITAL_LABELS[raw as string] ?? String(raw);
+    if (k === 'document_type')
+        return DOC_TYPE_LABELS[raw as string] ?? String(raw);
+    if (k === 'document_number') {
+        return client.document_type === 'cnpj'
+            ? formatCnpj(String(raw))
+            : formatCpf(String(raw));
+    }
+    if (k === 'rg') return formatRg(String(raw));
+    if (k === 'postal_code') return formatCep(String(raw));
+    return String(raw);
 }
 
-function formatAddress(address?: string, number?: string): string {
-    const a = (address || '').trim();
-    const n = (number || '').trim();
-    if (!a && !n) return '-';
-    if (a && n) return `${a}, Nº ${n}`;
-    return a || `Nº ${n}`;
+// ── sub-component: a read-only section panel ─────────────────────────────────
+
+function ViewSection({
+    eyebrow,
+    title,
+    rows,
+}: {
+    eyebrow: string;
+    title: string;
+    rows: { label: string; value: string }[];
+}) {
+    if (rows.length === 0) return null;
+    return (
+        <section data-theme='blue' className={styles.section}>
+            <div className={styles.sectionInner}>
+                <header className={styles.sectionHeader}>
+                    <span className={styles.eyebrow}>{eyebrow}</span>
+                    <h2 className={styles.sectionTitle}>{title}</h2>
+                </header>
+                <div className={styles.fieldGrid}>
+                    {rows.map(({ label, value }) => (
+                        <div className={styles.fieldRow} key={label}>
+                            <span className={styles.fieldLabel}>{label}</span>
+                            <span className={styles.fieldValue}>{value}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
 }
+
+// ── main component ───────────────────────────────────────────────────────────
 
 const ClientView: React.FC<ClientViewProps> = ({ client }) => {
     const photoUrl = client.photo || null;
     const initials = React.useMemo(() => {
         const fn = String(client.first_name || '').trim();
         const ln = String(client.last_name || '').trim();
-        const a = fn ? fn[0] : '';
-        const b = ln ? ln[0] : '';
-        return (a + b || 'C').toUpperCase();
+        return ((fn[0] ?? '') + (ln[0] ?? '') || 'C').toUpperCase();
     }, [client.first_name, client.last_name]);
+
+    // Load anamnesis fields (schema) and responses (values for this client)
+    const { fields } = useAnamnesisFields();
+    const [responses, setResponses] = useState<AnamnesisResponse[]>([]);
+
+    useEffect(() => {
+        if (!client.id) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        fetch(`${API_BASE}/anamnesis/responses/?client=${client.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => (r.ok ? r.json() : []))
+            .then((data: AnamnesisResponse[]) => setResponses(data))
+            .catch(() => {
+                /* silent */
+            });
+    }, [client.id]);
+
+    // Build a map fieldId → value for quick lookup
+    const responseMap = React.useMemo(() => {
+        const m: Record<number, string> = {};
+        responses.forEach(r => {
+            if (r.field !== null) m[r.field] = r.value;
+        });
+        return m;
+    }, [responses]);
+
+    // ── Dados Pessoais rows ──────────────────────────────────────────────────
+    const personalFields: Array<[keyof ClientData, string]> = [
+        ['first_name', 'Nome'],
+        ['last_name', 'Sobrenome'],
+        ['sex', 'Sexo'],
+        ['phone', 'Telefone'],
+        ['email', 'E-mail'],
+        ['date_of_birth', 'Data de Nascimento'],
+        ['profession', 'Profissão'],
+        ['rg', 'RG'],
+        ['document_type', 'Tipo de documento'],
+        ['document_number', 'Número do documento'],
+        ['marital_status', 'Estado civil'],
+        ['nationality', 'Nacionalidade'],
+    ];
+
+    const personalRows = personalFields
+        .filter(([k]) => {
+            const v = client[k];
+            return v !== null && v !== undefined && v !== '';
+        })
+        .map(([k, label]) => ({
+            label,
+            value: formatField(k, client[k], client as ClientData),
+        }));
+
+    // Add Código at the top
+    if (client.id) {
+        personalRows.unshift({ label: 'Código', value: String(client.id) });
+    }
+
+    // ── Endereço rows ────────────────────────────────────────────────────────
+    const addressFields: Array<[keyof ClientData, string]> = [
+        ['postal_code', 'CEP'],
+        ['address', 'Rua'],
+        ['address_number', 'Número'],
+        ['neighborhood', 'Bairro'],
+        ['city', 'Cidade'],
+        ['state', 'Estado'],
+    ];
+
+    const addressRows = addressFields
+        .filter(([k]) => {
+            const v = client[k];
+            return v !== null && v !== undefined && v !== '';
+        })
+        .map(([k, label]) => ({
+            label,
+            value: formatField(k, client[k], client as ClientData),
+        }));
+
+    // ── Anamnese sectors ─────────────────────────────────────────────────────
+    const sectorMap = new Map<
+        string,
+        { order: number; fields: AnamnesisField[] }
+    >();
+    for (const f of fields) {
+        if (!sectorMap.has(f.sector)) {
+            sectorMap.set(f.sector, { order: f.sector_order, fields: [] });
+        }
+        sectorMap.get(f.sector)!.fields.push(f);
+    }
+    const sectors = Array.from(sectorMap.entries()).sort(
+        (a, b) => a[1].order - b[1].order,
+    );
+
     return (
-        <div
-            className={styles.clientViewCard}
-            style={{
-                background: 'var(--color-selected-bg)',
-                border: '2px solid var(--color-selected-border)',
-                boxShadow: '0 0 8px 2px var(--color-selected-border)',
-                borderRadius: '12px',
-                padding: '32px 24px',
-                transition: 'background 0.2s, border 0.2s, box-shadow 0.2s',
-            }}
-        >
-            {/* Foto do cliente (se houver) */}
-            <div className={styles.headerRow}>
+        <div className={styles.viewRoot}>
+            {/* ── Header: avatar + nome ── */}
+            <div data-theme='blue' className={styles.headerCard}>
                 {photoUrl ? (
                     <img
                         src={photoUrl}
@@ -131,59 +223,106 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                 ) : (
                     <div
                         className={styles.avatarFallback}
+                        data-avatar-fallback
                         aria-hidden
-                        title={`${client.first_name} ${client.last_name}`}
                     >
                         {initials}
                     </div>
                 )}
-                <div style={{ minWidth: 0 }}>
-                    <div
-                        className={styles.clientName}
-                        title={`${client.first_name} ${client.last_name}`}
-                    >
+                <div>
+                    <div className={styles.clientName}>
                         {client.first_name} {client.last_name}
                     </div>
+                    {client.phone && (
+                        <div className={styles.clientSubtitle}>
+                            {formatPhone(String(client.phone))}
+                        </div>
+                    )}
                 </div>
             </div>
-            <div className={styles.fieldRow}>
-                <span className={styles.fieldLabel}>Código:</span>
-                <span className={styles.fieldValue}>{client.id}</span>
-            </div>
-            {fieldOrder.map(k => {
-                const label = fieldLabels[k];
-                if (!label) return null; // segurança
-                let value: string;
-                if (k === 'date_of_birth') {
-                    value = formatBirthAndAge(
-                        client.date_of_birth || undefined,
-                    );
-                } else if (k === 'address') {
-                    // Endereço + número
-                    value = formatAddress(
-                        client.address,
-                        client.address_number || undefined,
-                    );
-                } else if (k === 'is_pregnant') {
-                    const v = client.is_pregnant;
-                    value = v === true ? 'Sim' : v === false ? 'Não' : '-';
-                } else if (k === 'phone') {
-                    const raw = (client.phone || '').toString();
-                    value = raw ? formatPhone(raw) : '-';
-                } else {
-                    value = String((client[k] as unknown) ?? '-');
-                }
-                const labelSuffix = label.trim().endsWith('?') ? '' : ':';
-                return (
-                    <div className={styles.fieldRow} key={k}>
-                        <span className={styles.fieldLabel}>
-                            {label}
-                            {labelSuffix}
-                        </span>
-                        <span className={styles.fieldValue}>{value}</span>
+
+            {/* ── Dados Pessoais ── */}
+            <ViewSection
+                eyebrow='Visualização'
+                title='Dados Pessoais'
+                rows={personalRows}
+            />
+
+            {/* ── Endereço ── */}
+            <ViewSection
+                eyebrow='Visualização'
+                title='Endereço'
+                rows={addressRows}
+            />
+
+            {/* ── Anamnese ── */}
+            {fields.length > 0 && (
+                <section data-theme='blue' className={styles.section}>
+                    <div className={styles.sectionInner}>
+                        <header className={styles.sectionHeader}>
+                            <span className={styles.eyebrow}>Visualização</span>
+                            <h2 className={styles.sectionTitle}>Anamnese</h2>
+                        </header>
+                        {sectors.map(
+                            ([sectorName, { fields: sectorFields }]) => {
+                                const sectorRows = sectorFields
+                                    .sort((a, b) => a.order - b.order)
+                                    .filter(
+                                        f =>
+                                            responseMap[f.id] !== undefined &&
+                                            responseMap[f.id] !== '',
+                                    )
+                                    .map(f => ({
+                                        label: f.label,
+                                        value: responseMap[f.id],
+                                    }));
+                                if (sectorRows.length === 0) return null;
+                                return (
+                                    <div
+                                        key={sectorName}
+                                        className={styles.anamnesisGroup}
+                                    >
+                                        <h3
+                                            className={
+                                                styles.anamnesisGroupTitle
+                                            }
+                                        >
+                                            {sectorName}
+                                        </h3>
+                                        <div className={styles.fieldGrid}>
+                                            {sectorRows.map(
+                                                ({ label, value }) => (
+                                                    <div
+                                                        className={
+                                                            styles.fieldRow
+                                                        }
+                                                        key={label}
+                                                    >
+                                                        <span
+                                                            className={
+                                                                styles.fieldLabel
+                                                            }
+                                                        >
+                                                            {label}
+                                                        </span>
+                                                        <span
+                                                            className={
+                                                                styles.fieldValue
+                                                            }
+                                                        >
+                                                            {value}
+                                                        </span>
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            },
+                        )}
                     </div>
-                );
-            })}
+                </section>
+            )}
         </div>
     );
 };

@@ -163,13 +163,13 @@ export default function ScheduleEditorCore({
     const prevColor = prevActive
         ? ARROW_ACTIVE
         : prevHover
-        ? ARROW_HOVER
-        : TITLE_GREEN;
+          ? ARROW_HOVER
+          : TITLE_GREEN;
     const nextColor = nextActive
         ? ARROW_ACTIVE
         : nextHover
-        ? ARROW_HOVER
-        : TITLE_GREEN;
+          ? ARROW_HOVER
+          : TITLE_GREEN;
 
     function persistSelectedDay(nd: Date) {
         setSelectedDay(nd);
@@ -573,12 +573,25 @@ export default function ScheduleEditorCore({
 
     return (
         <div style={{ display: 'grid', gap: 12, minWidth: 280 }}>
-            <div style={{ fontWeight: 800, fontSize: 20, color: '#111827' }}>
+            <div
+                style={{
+                    fontWeight: 800,
+                    fontSize: 20,
+                    color: 'var(--color-heading)',
+                }}
+            >
                 {editingId ? 'Editar compromisso' : 'Agendar compromisso'}
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Tipo</span>
+                    <span
+                        style={{
+                            fontSize: 12,
+                            color: 'var(--color-text-muted)',
+                        }}
+                    >
+                        Tipo
+                    </span>
                     <select
                         value={visitType}
                         onChange={e =>
@@ -606,7 +619,7 @@ export default function ScheduleEditorCore({
                     <div
                         style={{
                             fontSize: 16,
-                            color: '#6b7280',
+                            color: 'var(--color-text-muted)',
                             marginBottom: 4,
                             fontWeight: 600,
                         }}
@@ -616,7 +629,7 @@ export default function ScheduleEditorCore({
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {dayFreeSegments.map((seg, idx) => {
                             const h = seg.start.getHours();
-                            let bg = '#ecfdf5';
+                            let bg = 'var(--color-success-bg)';
                             let border = 'var(--color-success)';
                             if (h >= cutNoon && h < cutEvening) {
                                 bg = '#fffbeb';
@@ -643,7 +656,7 @@ export default function ScheduleEditorCore({
                                         gap: 6,
                                         alignItems: 'center',
                                         fontWeight: 600,
-                                        color: '#111827',
+                                        color: 'var(--color-heading)',
                                     }}
                                     onClick={() => {
                                         const s = new Date(seg.start);
@@ -768,7 +781,7 @@ export default function ScheduleEditorCore({
                         border: `1px solid ${
                             dateFocused ? 'var(--color-success)' : TITLE_GREEN
                         }`,
-                        background: '#ecfdf5',
+                        background: 'var(--color-success-bg)',
                         color: TITLE_GREEN,
                         outlineColor: TITLE_GREEN,
                         accentColor: TITLE_GREEN,
@@ -817,7 +830,7 @@ export default function ScheduleEditorCore({
                         <div
                             style={{
                                 fontSize: 16,
-                                color: '#6b7280',
+                                color: 'var(--color-text-muted)',
                                 marginBottom: 4,
                             }}
                         >
@@ -843,7 +856,7 @@ export default function ScheduleEditorCore({
                                             textAlign: 'left',
                                             padding: '8px 10px',
                                             background: selected
-                                                ? '#ecfdf5'
+                                                ? 'var(--color-success-bg)'
                                                 : 'transparent',
                                             color: ok
                                                 ? 'var(--color-success-dark)'
@@ -873,7 +886,7 @@ export default function ScheduleEditorCore({
                         <div
                             style={{
                                 fontSize: 16,
-                                color: '#6b7280',
+                                color: 'var(--color-text-muted)',
                                 marginBottom: 4,
                             }}
                         >
@@ -908,7 +921,7 @@ export default function ScheduleEditorCore({
                                             padding: '8px 10px',
                                             background: selected
                                                 ? allowed
-                                                    ? '#ecfdf5'
+                                                    ? 'var(--color-success-bg)'
                                                     : 'var(--color-danger-bg)'
                                                 : 'transparent',
                                             color: allowed
@@ -944,7 +957,7 @@ export default function ScheduleEditorCore({
                     <div
                         style={{
                             fontSize: 16,
-                            color: '#6b7280',
+                            color: 'var(--color-text-muted)',
                             marginBottom: 4,
                         }}
                     >
@@ -964,7 +977,7 @@ export default function ScheduleEditorCore({
                                             ? '2px solid var(--color-success)'
                                             : '1px solid #e5e7eb',
                                         background: selected
-                                            ? '#ecfdf5'
+                                            ? 'var(--color-success-bg)'
                                             : 'white',
                                         color: 'var(--color-success-dark)',
                                         fontWeight: 700,
