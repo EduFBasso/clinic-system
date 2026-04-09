@@ -6,6 +6,7 @@ export default defineConfig({
     plugins: [react()],
     build: {
         chunkSizeWarningLimit: 1000, // KB — aviso só acima de 1MB
+        cssMinify: 'esbuild', // avoid lightningcss linux native binary issue on Vercel/CI
     },
     // Prevent duplicated React instances in monorepo/workspaces scenarios
     resolve: {
