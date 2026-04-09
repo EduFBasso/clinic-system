@@ -141,7 +141,11 @@ export default function ProductFormPage() {
             } catch {
                 // ignore storage errors
             }
-            navigate(returnTo === '/consulta' ? -1 : returnTo);
+            if (returnTo === '/consulta') {
+                navigate(-1);
+            } else {
+                navigate(returnTo);
+            }
         } catch (err) {
             const msg = err instanceof ApiError ? err.message : String(err);
             setError(msg || 'Erro ao salvar');

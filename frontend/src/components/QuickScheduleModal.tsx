@@ -111,6 +111,10 @@ export default function QuickScheduleModal({
         useAppointmentsRange(dayStart, dayEnd, undefined, reloadKey);
 
     const [dayFilter, setDayFilter] = React.useState<DayFilter>('todos');
+    const [cancelError, setCancelError] = React.useState<string | null>(null);
+    function setError(msg: string) {
+        setCancelError(msg);
+    }
 
     // Details modal for viewing completed (done) appointments
     const [detailsOpen, setDetailsOpen] = React.useState(false);

@@ -138,8 +138,10 @@ export default function DailyAgendaModal({
         _end: Date;
         _isPast: boolean;
         _isOngoing: boolean;
+        _derivedStatus: 'scheduled' | 'done' | 'canceled' | 'ongoing' | 'past';
         client?: ClientLike | number;
     };
+    type RawClientField = ClientLike | number | undefined;
     // Reactive now — ticks every 30 s so ongoing/past status stays accurate
     const effectiveNowRef = useNowTick(30_000);
 

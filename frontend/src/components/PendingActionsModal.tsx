@@ -490,8 +490,8 @@ export default function PendingActionsModal({
         setBusy('finalize');
         // Captura antes de qualquer operação async (props podem mudar)
         const capturedClientName = clientName;
-        const capturedStartAt = appt.start_at;
-        const capturedEndAt = appt.end_at;
+        const capturedStartAt = appt?.start_at ?? '';
+        const capturedEndAt = appt?.end_at ?? '';
         try {
             const id = apptId;
             await Promise.race([

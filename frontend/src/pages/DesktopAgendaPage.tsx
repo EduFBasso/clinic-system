@@ -41,6 +41,7 @@ type EnrichedAppt = Appointment & {
     _end: Date;
     _isPast: boolean;
     _isOngoing: boolean;
+    _derivedStatus: 'scheduled' | 'done' | 'canceled' | 'ongoing' | 'past';
     client?: ClientLike | number;
 };
 

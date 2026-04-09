@@ -8,6 +8,7 @@ export interface ClientBasic {
     photo?: string | null;
     address?: string;
     address_number?: string;
+    address_complement?: string | null;
     neighborhood?: string;
     city?: string;
     state?: string;

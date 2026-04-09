@@ -17,8 +17,8 @@ export function useNowTick(intervalMs = 30_000): Date {
             const rem = intervalMs - (ms % intervalMs);
             return Math.max(250, Math.min(rem, intervalMs));
         })();
-        let t1: ReturnType<typeof window.setTimeout> | null = null;
-        let t2: ReturnType<typeof window.setInterval> | null = null;
+        let t1: number | null = null;
+        let t2: number | null = null;
         t1 = window.setTimeout(() => {
             setNow(new Date());
             t2 = window.setInterval(() => setNow(new Date()), intervalMs);
