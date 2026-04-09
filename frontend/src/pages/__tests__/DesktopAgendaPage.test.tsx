@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import DesktopAgendaPage from '../DesktopAgendaPage';
 
 describe('DesktopAgendaPage', () => {
@@ -20,7 +21,11 @@ describe('DesktopAgendaPage', () => {
     });
 
     it('renders header and status filter', async () => {
-        render(<DesktopAgendaPage />);
+        render(
+            <MemoryRouter>
+                <DesktopAgendaPage />
+            </MemoryRouter>,
+        );
         expect(
             await screen.findByText(/Agenda — Desktop/i),
         ).toBeInTheDocument();
@@ -31,7 +36,11 @@ describe('DesktopAgendaPage', () => {
     });
 
     it('allows navigating days via buttons', async () => {
-        render(<DesktopAgendaPage />);
+        render(
+            <MemoryRouter>
+                <DesktopAgendaPage />
+            </MemoryRouter>,
+        );
         const left = screen.getByLabelText(/Dia anterior/i);
         const right = screen.getByLabelText(/Próximo dia/i);
         expect(left).toBeInTheDocument();

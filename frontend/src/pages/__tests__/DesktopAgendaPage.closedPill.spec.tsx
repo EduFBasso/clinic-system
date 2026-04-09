@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import DesktopAgendaPage from '../DesktopAgendaPage';
 import {
     setAppointmentOverride,
@@ -50,7 +51,11 @@ describe('DesktopAgendaPage early closed pill regression', () => {
     });
 
     it('shows "Cancelado às" pill for early canceled appointment after selecting canceled filter', async () => {
-        render(<DesktopAgendaPage />);
+        render(
+            <MemoryRouter>
+                <DesktopAgendaPage />
+            </MemoryRouter>,
+        );
         // Change status filter to 'canceled' by clicking the pill button
         const canceladosBtn = await screen.findByRole('button', {
             name: 'Cancelados',

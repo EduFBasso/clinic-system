@@ -20,6 +20,7 @@ ALLOWED_REGISTER_MODELS = {
     "devicesession",
     "professionalsettings",
     "webauthncredential",
+    "pushsubscription",
 }
 
 
