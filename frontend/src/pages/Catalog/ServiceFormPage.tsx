@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { API_BASE } from '../../config/api';
 import { apiFetch, ApiError } from '../../utils/apiFetch';
 import InputField from '../../components/FormElements/InputField';
@@ -33,7 +33,11 @@ function parseBRToNumber(str: string): number {
 
 export default function ServiceFormPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { id } = useParams<{ id: string }>();
+    const returnTo: string =
+        (location.state as { returnTo?: string } | null)?.returnTo ??
+        '/catalog/services';
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [basePriceStr, setBasePriceStr] = useState<string>('');
@@ -113,7 +117,7 @@ export default function ServiceFormPage() {
             } catch {
                 /* noop */
             }
-            navigate('/catalog/services');
+            navigate(returnTo === '/consulta' ? -1 : returnTo);
         } catch (err) {
             const msg = err instanceof ApiError ? err.message : String(err);
             setError(msg || 'Erro ao salvar');
@@ -157,6 +161,7 @@ export default function ServiceFormPage() {
                                 const cleaned = v.replace(/[^0-9.,]/g, '');
                                 setBasePriceStr(cleaned);
                             }}
+                            onFocus={e => e.target.select()}
                             onBlur={e => {
                                 const n = parseBRToNumber(
                                     (e.target as HTMLInputElement).value,
@@ -178,6 +183,7 @@ export default function ServiceFormPage() {
                                     ),
                                 )
                             }
+                            onFocus={e => e.target.select()}
                             min={5}
                         />
                     </div>

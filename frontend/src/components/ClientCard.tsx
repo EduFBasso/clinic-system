@@ -199,7 +199,9 @@ export default function ClientCard({
                 await tryOpenPendingElseQuick(() => {});
             },
         });
-        if (ok) afterFinalizeSuccess();
+        if (ok) {
+            afterFinalizeSuccess();
+        }
     }, [
         effectiveApptId,
         isOngoing,

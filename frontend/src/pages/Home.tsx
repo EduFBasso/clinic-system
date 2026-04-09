@@ -24,8 +24,25 @@ import { focusClientCard } from '../utils/focusClientCard';
 import { useAgendaModals, ensureClientBasic } from '../hooks/useAgendaModals';
 import { API_BASE } from '../config/api';
 import { usePendingActionsListeners } from '../hooks/usePendingActionsListeners';
+import { useLocation } from 'react-router-dom';
 
 export default function Home() {
+    // Superusers go straight to /admin — they are not practitioners
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('loggedProfessional');
+            if (stored) {
+                const prof = JSON.parse(stored);
+                if (prof?.is_superuser) {
+                    window.location.replace('/admin');
+                }
+            }
+        } catch {
+            /* noop */
+        }
+    }, []);
+
+    const location = useLocation();
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
         null,
     );
@@ -344,6 +361,38 @@ export default function Home() {
         }
     }, []);
 
+    // Reabre AppointmentDetailsModal após retorno da página de edição de charges
+    // e exibe mensagem de sessão expirada quando redirecionado de outra página
+    useEffect(() => {
+        const loginMsg = sessionStorage.getItem('loginRequiredMsg');
+        if (loginMsg) {
+            sessionStorage.removeItem('loginRequiredMsg');
+            setSysMsg({ text: loginMsg, type: 'error', autoCloseMs: 8000 });
+        }
+
+        const raw = sessionStorage.getItem('reopenAppointmentDetails');
+        if (!raw) return;
+        sessionStorage.removeItem('reopenAppointmentDetails');
+        const apptId = parseInt(raw, 10);
+        if (!apptId) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        fetch(`${API_BASE}/agenda/appointments/${apptId}/`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => (r.ok ? r.json() : null))
+            .then(appt => {
+                if (appt) {
+                    setDetailsAppt(appt as Appointment);
+                    setDetailsOpen(true);
+                }
+            })
+            .catch(() => {
+                /* noop */
+            });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location]);
+
     // Aberturas diretas dos modais da Agenda
     // openMonthly, openWeekly, openDaily e clearAgendaRouteFlags definidos em useAgendaModals
 
@@ -511,11 +560,16 @@ export default function Home() {
                     onClose={() => setSysMsg(null)}
                     autoCloseMs={sysMsg?.autoCloseMs ?? 10000}
                 />
-                <AppointmentDetailsModal
-                    open={detailsOpen}
-                    appt={(detailsAppt as Appointment) || null}
-                    onClose={() => setDetailsOpen(false)}
-                />
+                {detailsAppt && (
+                    <AppointmentDetailsModal
+                        open={detailsOpen}
+                        appt={detailsAppt as Appointment}
+                        onClose={() => {
+                            setDetailsOpen(false);
+                            setDetailsAppt(null);
+                        }}
+                    />
+                )}
                 {pendingActionsOpen && pendingAppt && (
                     <PendingActionsModal
                         open

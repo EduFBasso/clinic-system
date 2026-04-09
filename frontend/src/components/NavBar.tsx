@@ -291,6 +291,10 @@ const NavBar: React.FC<NavBarProps> = ({
                     localStorage.setItem(deviceIdKey, String(data.device_id));
                 }
                 setLoggedProfessional(data.professional || null);
+                if (data.professional?.is_superuser) {
+                    window.location.href = '/admin';
+                    return;
+                }
                 window.dispatchEvent(new Event('updateClients'));
                 window.dispatchEvent(new Event('clearClients'));
             } else {
@@ -467,6 +471,22 @@ const NavBar: React.FC<NavBarProps> = ({
                                         setSessionExpiredOpen(true);
                                         return;
                                     }
+                                    window.location.href = '/consulta';
+                                }}
+                                title='Registrar Atendimento'
+                            >
+                                🩺 Atendimento
+                            </button>
+                            <button
+                                className={styles.dropdownItem}
+                                onClick={() => {
+                                    setConsultaDropdownOpen(false);
+                                    const token =
+                                        localStorage.getItem('accessToken');
+                                    if (!token) {
+                                        setSessionExpiredOpen(true);
+                                        return;
+                                    }
                                     window.location.href = '/catalog/services';
                                 }}
                                 title='Procedimentos'
@@ -534,26 +554,7 @@ const NavBar: React.FC<NavBarProps> = ({
                         >
                             Sair
                         </button>
-                        {loggedProfessional.is_superuser && (
-                            <>
-                                <button
-                                    className={styles.loginButton}
-                                    style={{ marginLeft: 6 }}
-                                    onClick={() => setCreateProfOpen(true)}
-                                    title='Criar novo profissional'
-                                >
-                                    + Profissional
-                                </button>
-                                <button
-                                    className={styles.loginButton}
-                                    style={{ marginLeft: 4 }}
-                                    onClick={() => setTotpResetOpen(true)}
-                                    title='Resetar autenticador de profissional'
-                                >
-                                    🔑 Reset
-                                </button>
-                            </>
-                        )}
+                        {/* Superusers são redirecionados para /admin no login e não usam ações do NavBar */}
                     </div>
                 ) : (
                     <>
@@ -665,6 +666,10 @@ const NavBar: React.FC<NavBarProps> = ({
                                                 deviceIdKey,
                                                 String(data.device_id),
                                             );
+                                        }
+                                        if (data.professional?.is_superuser) {
+                                            window.location.href = '/admin';
+                                            return;
                                         }
                                         window.dispatchEvent(
                                             new Event('updateClients'),

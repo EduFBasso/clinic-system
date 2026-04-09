@@ -1,5 +1,7 @@
 import re
+import io
 import pyotp
+import qrcode
 import logging
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -7,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
+from django.core.mail import EmailMessage
 from .models import Professional, DeviceSession
 from .serializers import ProfessionalSerializer
 
@@ -158,6 +161,7 @@ def professional_create(request):
     first_name = (request.data.get("first_name") or "").strip()
     last_name = (request.data.get("last_name") or "").strip()
     password = request.data.get("password") or ""
+    display_name = (request.data.get("display_name") or "").strip()
     specialty = (request.data.get("specialty") or "").strip()
     register_number = (request.data.get("register_number") or "").strip() or None
     phone = (request.data.get("phone") or "").strip() or ""
@@ -182,6 +186,7 @@ def professional_create(request):
         password=password,
         first_name=first_name,
         last_name=last_name,
+        display_name=display_name,
         specialty=specialty,
         register_number=register_number,
         phone=phone,
@@ -241,6 +246,35 @@ def totp_admin_reset(request):
         professional.email,
         request.user.email,  # type: ignore[union-attr]
     )
+
+    # Send email to professional with new QR code attached
+    try:
+        qr_img = qrcode.make(uri)
+        buf = io.BytesIO()
+        qr_img.save(buf, format="PNG")
+        buf.seek(0)
+
+        subject = f"[{issuer}] Seu novo código de autenticação"
+        body = (
+            f"Olá, {professional.first_name}!\n\n"
+            "Seu autenticador foi redefinido por um administrador.\n"
+            "Abra o Google Authenticator (ou app compatível) e escaneie\n"
+            "o QR code em anexo para configurar o novo código de entrada.\n\n"
+            "Se você não solicitou esta alteração, entre em contato com o administrador imediatamente.\n\n"
+            f"— {issuer}"
+        )
+        email_msg = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@clinicsystem.app"),
+            to=[professional.email],
+        )
+        email_msg.attach("authenticator-qrcode.png", buf.read(), "image/png")
+        email_msg.send(fail_silently=True)
+        logger.info("[TOTP Admin Reset] QR code email sent to %s", professional.email)
+    except Exception as exc:
+        logger.warning("[TOTP Admin Reset] Failed to send email to %s: %s", professional.email, exc)
+
     return Response({
         "secret": secret,
         "otpauth_uri": uri,

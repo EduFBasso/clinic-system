@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import transaction
 from django.utils import timezone
 
 from apps.inventory.models import Product, Service
@@ -329,6 +330,8 @@ class ChargeItemSerializer(serializers.Serializer):
     line_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     sort_order = serializers.IntegerField(required=False, default=0)
     notes = serializers.CharField(required=False, allow_blank=True)
+    paid = serializers.BooleanField(required=False, default=False)
+    paid_at = serializers.DateTimeField(required=False, allow_null=True, default=None)
 
 
 class ChargeSerializer(serializers.ModelSerializer):
@@ -382,14 +385,15 @@ class ChargeSerializer(serializers.ModelSerializer):
         encounter = attrs.get("encounter", getattr(self.instance, "encounter", None))
         appointment = attrs.get("appointment", getattr(self.instance, "appointment", None))
         charge_type = attrs.get("charge_type", getattr(self.instance, "charge_type", Charge.ChargeType.CHARGE))
-        status = attrs.get("status", getattr(self.instance, "status", Charge.Status.DRAFT))
+        # status and paid_at are derived from item-level paid flags in _save_items; ignore frontend values
+        status = getattr(self.instance, "status", Charge.Status.DRAFT)
         title = attrs.get("title", getattr(self.instance, "title", ""))
         notes = attrs.get("notes", getattr(self.instance, "notes", ""))
         recipient_name = attrs.get("recipient_name", getattr(self.instance, "recipient_name", ""))
         recipient_phone = attrs.get("recipient_phone", getattr(self.instance, "recipient_phone", ""))
         currency = attrs.get("currency", getattr(self.instance, "currency", "BRL"))
         shared_at = attrs.get("shared_at", getattr(self.instance, "shared_at", None))
-        paid_at = attrs.get("paid_at", getattr(self.instance, "paid_at", None))
+        paid_at = getattr(self.instance, "paid_at", None)
 
         instance = Charge(
             professional=professional,
@@ -408,6 +412,7 @@ class ChargeSerializer(serializers.ModelSerializer):
         )
         if self.instance:
             instance.pk = self.instance.pk
+            instance._state.adding = False  # prevent false unique-id error on PATCH
             instance.total_amount = self.instance.total_amount
         instance.full_clean()
 
@@ -423,6 +428,8 @@ class ChargeSerializer(serializers.ModelSerializer):
                     "unit_price": item.unit_price,
                     "sort_order": item.sort_order,
                     "notes": item.notes,
+                    "paid": item.paid,
+                    "paid_at": item.paid_at,
                 }
                 for item in self.instance.items.all()
             ]
@@ -437,15 +444,37 @@ class ChargeSerializer(serializers.ModelSerializer):
         return attrs
 
     def _save_items(self, charge, items_data):
-        charge.items.all().delete()
-        for index, item_data in enumerate(items_data):
-            payload = dict(item_data)
-            payload.setdefault("sort_order", index)
-            ChargeItem.objects.create(
-                charge=charge,
-                **payload,
-            )
-        charge.recalculate_total(save=True)
+        with transaction.atomic():
+            charge.items.all().delete()
+            for index, item_data in enumerate(items_data):
+                payload = dict(item_data)
+                payload.setdefault("sort_order", index)
+                ChargeItem.objects.create(
+                    charge=charge,
+                    **payload,
+                )
+            charge.recalculate_total(save=True)
+            # Derive charge-level status and paid_at from item-level flags
+            all_paid = charge.items.filter(paid=False).count() == 0 and charge.items.count() > 0
+            any_paid = charge.items.filter(paid=True).exists()
+            if all_paid:
+                latest_paid_at = charge.items.order_by("-paid_at").values_list("paid_at", flat=True).first()
+                Charge.objects.filter(pk=charge.pk).update(
+                    status=Charge.Status.PAID,
+                    paid_at=latest_paid_at,
+                )
+            elif any_paid:
+                latest_paid_at = charge.items.filter(paid=True).order_by("-paid_at").values_list("paid_at", flat=True).first()
+                Charge.objects.filter(pk=charge.pk).update(
+                    status=Charge.Status.DRAFT,
+                    paid_at=latest_paid_at,
+                )
+            else:
+                Charge.objects.filter(pk=charge.pk).update(
+                    status=Charge.Status.DRAFT,
+                    paid_at=None,
+                )
+            charge.refresh_from_db()
 
     def create(self, validated_data):
         items_data = validated_data.pop("items")

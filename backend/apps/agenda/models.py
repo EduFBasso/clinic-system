@@ -434,9 +434,6 @@ class Charge(models.Model):
             if encounter_appointment_id != appointment_id:
                 errors["appointment"] = "Agendamento e atendimento precisam estar alinhados."
 
-        if self.status == self.Status.PAID and self.paid_at is None:
-            errors["paid_at"] = "Informe quando a cobrança foi paga."
-
         if self.status == self.Status.CANCELED and self.paid_at is not None:
             errors["status"] = "Cobrança cancelada não pode ficar como paga."
 
@@ -501,6 +498,8 @@ class ChargeItem(models.Model):
     description = models.CharField("Descrição", max_length=255, blank=True)
     quantity = models.DecimalField("Quantidade", max_digits=10, decimal_places=2, default=Decimal("1.00"))
     unit_price = models.DecimalField("Preço unitário", max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    paid = models.BooleanField("Pago", default=False)
+    paid_at = models.DateTimeField("Pago em", null=True, blank=True)
     sort_order = models.PositiveIntegerField("Ordem", default=0)
     notes = models.CharField("Notas", max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

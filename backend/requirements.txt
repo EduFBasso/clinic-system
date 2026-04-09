@@ -22,6 +22,7 @@ psycopg[binary]==3.2.10
 
 # Media/images
 Pillow==10.4.0
+qrcode[pil]==8.2
 
 # Config
 python-decouple==3.8

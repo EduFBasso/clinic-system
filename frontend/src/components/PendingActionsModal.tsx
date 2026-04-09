@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppModal from './Modal';
 import { clearOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
@@ -192,6 +193,7 @@ export default function PendingActionsModal({
             }
         }
     }
+    const navigate = useNavigate();
     if (!appt) return null;
     // Regra revisada: permitir finalizar assim que o compromisso INICIA (antes o bloqueio aguardava o fim)
     // Mantém bloqueio apenas se ainda não chegou no horário de início.
@@ -486,6 +488,10 @@ export default function PendingActionsModal({
     async function doFinalize() {
         if (busy) return;
         setBusy('finalize');
+        // Captura antes de qualquer operação async (props podem mudar)
+        const capturedClientName = clientName;
+        const capturedStartAt = appt.start_at;
+        const capturedEndAt = appt.end_at;
         try {
             const id = apptId;
             await Promise.race([
@@ -574,6 +580,23 @@ export default function PendingActionsModal({
                     debugLog(
                         'PendingActions: systemMessage success (finalize)',
                     );
+                } catch {
+                    /* noop */
+                }
+                // Navega para ConsultaPage com dados do atendimento
+                try {
+                    navigate('/consulta', {
+                        state: {
+                            appointmentId: id,
+                            clientName: capturedClientName,
+                            clientId:
+                                typeof apptClientId === 'number'
+                                    ? apptClientId
+                                    : undefined,
+                            startAt: capturedStartAt,
+                            endAt: capturedEndAt,
+                        },
+                    });
                 } catch {
                     /* noop */
                 }

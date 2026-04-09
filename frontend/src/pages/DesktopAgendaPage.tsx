@@ -20,6 +20,8 @@ import {
     type ClientLike,
 } from '../utils/appointments/agendaHelpers';
 import { useNowTick } from '../hooks/useNowTick';
+import { API_BASE } from '../config/api';
+import { useLocation } from 'react-router-dom';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -77,11 +79,37 @@ export default function DesktopAgendaPage() {
         startOfDay(new Date()),
     );
     const [reloadKey, setReloadKey] = React.useState(0);
+    const location = useLocation();
     // Removido: estado local de PendingActions; usar evento global
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+
+    // Reabre AppointmentDetailsModal após retorno da página de edição de charges
+    React.useEffect(() => {
+        const raw = sessionStorage.getItem('reopenAppointmentDetails');
+        if (!raw) return;
+        sessionStorage.removeItem('reopenAppointmentDetails');
+        const apptId = parseInt(raw, 10);
+        if (!apptId) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        fetch(`${API_BASE}/agenda/appointments/${apptId}/`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => (r.ok ? r.json() : null))
+            .then(appt => {
+                if (appt) {
+                    setDetailsAppt(appt as Appointment);
+                    setDetailsOpen(true);
+                }
+            })
+            .catch(() => {
+                /* noop */
+            });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location]);
 
     const dayStart = React.useMemo(
         () => startOfDay(selectedDay),
