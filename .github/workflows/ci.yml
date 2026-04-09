@@ -54,7 +54,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies (monorepo root)
-        run: npm ci
+        run: npm install
 
       - name: Run unit tests (Vitest)
         run: npm run -s -w frontend test -- --run
