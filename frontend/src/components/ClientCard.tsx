@@ -201,6 +201,8 @@ export default function ClientCard({
         });
         if (ok) {
             afterFinalizeSuccess();
+            // Rola e foca o card após fechar o modal de finalização (mesmo padrão da notificação push)
+            focusClientCard(client.id, { delayMs: 400 });
         }
     }, [
         effectiveApptId,
@@ -208,6 +210,7 @@ export default function ClientCard({
         finalize,
         tryOpenPendingElseQuick,
         afterFinalizeSuccess,
+        client.id,
     ]);
     // Fechar modo edição ao clicar fora do card
     // Efeito de clique fora removido enquanto editor inline está desativado

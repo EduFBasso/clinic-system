@@ -1,7 +1,7 @@
 // Função utilitária para formatar CPF progressivamente
 export function formatCpf(cpf: string): string {
-    // Remove tudo que não é número
-    cpf = cpf.replace(/\D/g, '');
+    // Remove tudo que não é número e limita a 11 dígitos
+    cpf = cpf.replace(/\D/g, '').slice(0, 11);
     // Aplica máscara conforme o tamanho
     if (cpf.length <= 3) return cpf;
     if (cpf.length <= 6) return cpf.replace(/(\d{3})(\d+)/, '$1.$2');
@@ -11,7 +11,8 @@ export function formatCpf(cpf: string): string {
 
 // Função utilitária para formatar CNPJ progressivamente: 00.000.000/0000-00
 export function formatCnpj(cnpj: string): string {
-    cnpj = cnpj.replace(/\D/g, '');
+    // Remove tudo que não é número e limita a 14 dígitos
+    cnpj = cnpj.replace(/\D/g, '').slice(0, 14);
     if (cnpj.length <= 2) return cnpj;
     if (cnpj.length <= 5) return cnpj.replace(/(\d{2})(\d+)/, '$1.$2');
     if (cnpj.length <= 8)
