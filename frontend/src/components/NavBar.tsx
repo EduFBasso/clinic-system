@@ -471,22 +471,6 @@ const NavBar: React.FC<NavBarProps> = ({
                                         setSessionExpiredOpen(true);
                                         return;
                                     }
-                                    window.location.href = '/consulta';
-                                }}
-                                title='Registrar Atendimento'
-                            >
-                                🩺 Atendimento
-                            </button>
-                            <button
-                                className={styles.dropdownItem}
-                                onClick={() => {
-                                    setConsultaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
-                                        return;
-                                    }
                                     window.location.href = '/catalog/services';
                                 }}
                                 title='Procedimentos'
