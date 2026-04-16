@@ -15,9 +15,19 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("work_start_hour deve estar entre 0 e 23")
         return value
 
+    def validate_work_start_minute(self, value: int) -> int:
+        if not (0 <= value <= 59):
+            raise serializers.ValidationError("work_start_minute deve estar entre 0 e 59")
+        return value
+
     def validate_work_end_hour(self, value: int) -> int:
         if not (1 <= value <= 24):
             raise serializers.ValidationError("work_end_hour deve estar entre 1 e 24")
+        return value
+
+    def validate_work_end_minute(self, value: int) -> int:
+        if not (0 <= value <= 59):
+            raise serializers.ValidationError("work_end_minute deve estar entre 0 e 59")
         return value
 
     def validate_slot_minutes(self, value: int) -> int:
@@ -37,11 +47,21 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         instance = getattr(self, 'instance', None)
         start = attrs.get('work_start_hour', getattr(instance, 'work_start_hour', 8))
+        start_minute = attrs.get(
+            'work_start_minute', getattr(instance, 'work_start_minute', 0)
+        )
         end = attrs.get('work_end_hour', getattr(instance, 'work_end_hour', 18))
-        if start >= end:
+        end_minute = attrs.get('work_end_minute', getattr(instance, 'work_end_minute', 0))
+        if end == 24 and end_minute != 0:
+            raise serializers.ValidationError({
+                'work_end_minute': ['work_end_minute deve ser 0 quando work_end_hour for 24']
+            })
+        start_total = (start * 60) + start_minute
+        end_total = (end * 60) + end_minute
+        if start_total >= end_total:
             raise serializers.ValidationError({
                 'non_field_errors': [
-                    'Intervalo inválido: work_start_hour deve ser menor que work_end_hour'
+                    'Intervalo inválido: o início deve ser menor que o fim do expediente'
                 ]
             })
         return attrs
@@ -49,7 +69,9 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
         model = ProfessionalSettings
         fields = [
             "work_start_hour",
+            "work_start_minute",
             "work_end_hour",
+            "work_end_minute",
             "slot_minutes",
             "confirm_message_enabled",
             "confirm_message_template",

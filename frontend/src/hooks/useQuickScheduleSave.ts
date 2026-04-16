@@ -1,7 +1,7 @@
 import React from 'react';
 import { dispatchers } from '../events/dispatchers';
 import type { Appointment } from '../hooks/useAppointments';
-import { getSlotInterval, getDefaultDuration } from '../utils/agendaSettings';
+import { useAgendaSettings } from './useAgendaSettings';
 import { AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE } from '../config/limits';
 import { API_BASE } from '../config/api';
 import { track } from '../utils/telemetry';
@@ -43,6 +43,7 @@ export function useQuickScheduleSave({
 } {
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+    const agendaSettings = useAgendaSettings();
 
     const clearError = React.useCallback(() => setError(null), []);
 
@@ -51,7 +52,7 @@ export function useQuickScheduleSave({
         setSaving(true);
         const t0 = performance.now();
 
-        const slot = getSlotInterval();
+        const slot = agendaSettings.slotInterval;
         function snapIfNeeded(hm: string): string {
             const [h, m] = hm.split(':').map(n => parseInt(n, 10));
             if (isNaN(h) || isNaN(m)) return hm;
@@ -63,7 +64,8 @@ export function useQuickScheduleSave({
         const normalizedStartHM = snapIfNeeded(startHM);
         let normalizedEndHM = snapIfNeeded(endHM);
         if (toMinutes(normalizedEndHM) <= toMinutes(normalizedStartHM)) {
-            const mins = toMinutes(normalizedStartHM) + getDefaultDuration();
+            const mins =
+                toMinutes(normalizedStartHM) + agendaSettings.defaultDuration;
             normalizedEndHM = fromMinutes(mins);
         }
 
@@ -423,6 +425,8 @@ export function useQuickScheduleSave({
         afterPersist,
         onSuccess,
         onImmediateClose,
+        agendaSettings.defaultDuration,
+        agendaSettings.slotInterval,
     ]);
 
     // Timeout guard: abort save after 20 s to avoid stuck spinner

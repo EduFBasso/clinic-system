@@ -22,16 +22,40 @@ import ServiceFormPage from './pages/Catalog/ServiceFormPage';
 import ProductListPage from './pages/Catalog/ProductListPage';
 import ServiceListPage from './pages/Catalog/ServiceListPage';
 import ConsultaPage from './pages/ConsultaPage';
+import {
+    hydrateAgendaSettings,
+    resetAgendaSettings,
+} from './utils/agendaSettings';
 
 function App() {
     useEffect(() => {
         // Pre-warm device session once app loads if token exists
         try {
             const token = localStorage.getItem('accessToken');
-            if (token) ensureDeviceSession().catch(() => {});
+            if (token) {
+                ensureDeviceSession().catch(() => {});
+                hydrateAgendaSettings().catch(() => {});
+            } else {
+                resetAgendaSettings();
+            }
         } catch {
             /* noop */
         }
+
+        const handleLogin = () => {
+            hydrateAgendaSettings(true).catch(() => {});
+        };
+        const handleLogout = () => {
+            resetAgendaSettings();
+        };
+
+        window.addEventListener('updateClients', handleLogin);
+        window.addEventListener('clearClients', handleLogout);
+
+        return () => {
+            window.removeEventListener('updateClients', handleLogin);
+            window.removeEventListener('clearClients', handleLogout);
+        };
     }, []);
     return (
         <Router>

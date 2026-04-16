@@ -15,15 +15,14 @@ import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import { getNow } from '../utils/now';
 import {
-    getSlotInterval,
-    getWorkTimes,
-    getDefaultDuration,
+    getWorkTimesFromSnapshot,
 } from '../utils/agendaSettings';
 import { API_BASE } from '../config/api';
 import { track } from '../utils/telemetry';
 import { usePendingGuard } from '../hooks/usePendingGuard';
 import { focusClientCard } from '../utils/focusClientCard';
 import { useQuickScheduleSave } from '../hooks/useQuickScheduleSave';
+import { useAgendaSettings } from '../hooks/useAgendaSettings';
 import { pad2, toMinutes, fromMinutes, weekdayLabel } from '../utils/hmTime';
 
 type VisitType = Appointment['visit_type'];
@@ -47,6 +46,12 @@ export default function QuickScheduleModal({
     afterPersist,
 }: QuickScheduleModalProps) {
     const isEdit = !!editAppointment;
+    const agendaSettings = useAgendaSettings();
+    const workTimes = React.useMemo(
+        () => getWorkTimesFromSnapshot(agendaSettings),
+        [agendaSettings],
+    );
+    const slotInterval = agendaSettings.slotInterval as 1 | 5 | 10 | 15 | 20 | 30;
     const [selectedDate, setSelectedDate] = React.useState<Date>(() => {
         if (isEdit && editAppointment)
             return new Date(editAppointment.start_at);
@@ -67,7 +72,7 @@ export default function QuickScheduleModal({
             const d = new Date(editAppointment.end_at);
             return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
         }
-        const mins = toMinutes(startHM) + getDefaultDuration();
+        const mins = toMinutes(startHM) + agendaSettings.defaultDuration;
         return fromMinutes(mins);
     });
     const [visitType, setVisitType] = React.useState<VisitType>(
@@ -90,7 +95,6 @@ export default function QuickScheduleModal({
     >(currentEdit?.id ?? null);
     const [showPicker, setShowPicker] = React.useState(false);
     const listRef = React.useRef<HTMLDivElement | null>(null);
-    const workTimes = getWorkTimes();
     // Removed: flexible minute mode (minuto livre) — simplificação: sempre respeita intervalo configurado
 
     // Day range for list
@@ -481,7 +485,8 @@ export default function QuickScheduleModal({
                             onChange={val => {
                                 setStartHM(val);
                                 const sMin = toMinutes(val);
-                                let newEnd = sMin + getDefaultDuration();
+                                    let newEnd =
+                                        sMin + agendaSettings.defaultDuration;
                                 const max =
                                     workTimes.endHour * 60 + workTimes.endMin;
                                 if (newEnd > max) newEnd = max;
@@ -495,9 +500,7 @@ export default function QuickScheduleModal({
                             maxHM={`${pad2(workTimes.endHour)}:${pad2(
                                 workTimes.endMin,
                             )}`}
-                            stepMinutes={
-                                getSlotInterval() as 1 | 5 | 10 | 15 | 20 | 30
-                            }
+                            stepMinutes={slotInterval}
                         />
                         <TimePicker10
                             label='Fim'
@@ -511,9 +514,7 @@ export default function QuickScheduleModal({
                             maxHM={`${pad2(workTimes.endHour)}:${pad2(
                                 workTimes.endMin,
                             )}`}
-                            stepMinutes={
-                                getSlotInterval() as 1 | 5 | 10 | 15 | 20 | 30
-                            }
+                            stepMinutes={slotInterval}
                         />
                         {/* Removed: "Minuto livre" checkbox (flexible minute mode) */}
                         <label

@@ -2,7 +2,14 @@ import React from 'react';
 import AppModal from './Modal';
 import modalStyles from '../styles/components/AgendaSettingsModal.module.css';
 import { usePushSubscription } from '../hooks/usePushSubscription';
-import { API_BASE } from '../config/api';
+import {
+    DEFAULT_AGENDA_SETTINGS,
+    type DefaultDuration,
+    type DefaultVisitType,
+    getAgendaSettingsSnapshot,
+    hydrateAgendaSettings,
+    saveAgendaSettings,
+} from '../utils/agendaSettings';
 
 interface AgendaSettingsModalProps {
     open: boolean;
@@ -10,17 +17,8 @@ interface AgendaSettingsModalProps {
     onApply?: () => void; // callback após salvar
 }
 
-// Chaves de localStorage
-const LS_KEYS = {
-    workStart: 'agenda.workStart',
-    workEnd: 'agenda.workEnd',
-    slotInterval: 'agenda.slotInterval',
-    defaultDuration: 'agenda.defaultDuration',
-    defaultVisitType: 'defaultVisitType', // já usada anteriormente
-};
-
 const intervalOptions = [5, 10, 15, 20, 30];
-const durationOptions = [30, 40, 50, 60, 90];
+const durationOptions = [30, 60, 90, 120, 150];
 const visitTypes = [
     { value: 'consulta', label: 'Consulta' },
     { value: 'avaliacao', label: 'Avaliação' },
@@ -38,13 +36,7 @@ function clampHM(v: string, fallback: string) {
     ).padStart(2, '0')}`;
 }
 
-const DEFAULTS = {
-    workStart: '06:00',
-    workEnd: '21:00',
-    slotInterval: 10,
-    defaultDuration: 60,
-    defaultVisitType: 'consulta',
-};
+const DEFAULTS = DEFAULT_AGENDA_SETTINGS;
 
 const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     open,
@@ -78,6 +70,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
 
     React.useEffect(() => {
         if (!open) return;
+        let active = true;
         setSavedMsg(null);
         setMsgType(null);
         // Check if subscription was just completed (survives iOS modal close)
@@ -86,65 +79,30 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
             setPushJustActivated(true);
             setTimeout(() => setPushJustActivated(false), 5000);
         }
-        setWorkStart(
-            clampHM(
-                localStorage.getItem(LS_KEYS.workStart) || DEFAULTS.workStart,
-                DEFAULTS.workStart,
-            ),
-        );
-        setWorkEnd(
-            clampHM(
-                localStorage.getItem(LS_KEYS.workEnd) || DEFAULTS.workEnd,
-                DEFAULTS.workEnd,
-            ),
-        );
-        const si = parseInt(
-            localStorage.getItem(LS_KEYS.slotInterval) ||
-                String(DEFAULTS.slotInterval),
-            10,
-        );
-        setSlotInterval(
-            intervalOptions.includes(si) ? si : DEFAULTS.slotInterval,
-        );
-        const dd = parseInt(
-            localStorage.getItem(LS_KEYS.defaultDuration) ||
-                String(DEFAULTS.defaultDuration),
-            10,
-        );
-        setDefaultDuration(
-            durationOptions.includes(dd) ? dd : DEFAULTS.defaultDuration,
-        );
-        const vt =
-            localStorage.getItem(LS_KEYS.defaultVisitType) ||
-            DEFAULTS.defaultVisitType;
-        setDefaultVisitType(
-            visitTypes.some(v => v.value === vt)
-                ? vt
-                : DEFAULTS.defaultVisitType,
-        );
 
-        // Load notification settings from backend
-        (async () => {
-            const token = localStorage.getItem('accessToken');
-            if (!token) return;
-            try {
-                const res = await fetch(
-                    `${API_BASE}/register/professionals/settings/`,
-                    {
-                        headers: { Authorization: `Bearer ${token}` },
-                    },
-                );
-                if (!res.ok) return;
-                const data = (await res.json()) as {
-                    reminder_enabled?: boolean;
-                    reminder_minutes_before?: number;
-                };
-                setReminderEnabled(data.reminder_enabled ?? false);
-                setReminderMinutesBefore(data.reminder_minutes_before ?? 90);
-            } catch {
+        const current = getAgendaSettingsSnapshot();
+        setWorkStart(clampHM(current.workStart, DEFAULTS.workStart));
+        setWorkEnd(clampHM(current.workEnd, DEFAULTS.workEnd));
+        setSlotInterval(current.slotInterval);
+        setDefaultDuration(current.defaultDuration);
+        setDefaultVisitType(current.defaultVisitType);
+        setReminderEnabled(current.reminderEnabled);
+        setReminderMinutesBefore(current.reminderMinutesBefore);
+
+        void hydrateAgendaSettings()
+            .then(settings => {
+                if (!active) return;
+                setWorkStart(clampHM(settings.workStart, DEFAULTS.workStart));
+                setWorkEnd(clampHM(settings.workEnd, DEFAULTS.workEnd));
+                setSlotInterval(settings.slotInterval);
+                setDefaultDuration(settings.defaultDuration);
+                setDefaultVisitType(settings.defaultVisitType);
+                setReminderEnabled(settings.reminderEnabled);
+                setReminderMinutesBefore(settings.reminderMinutesBefore);
+            })
+            .catch(() => {
                 /* silencioso */
-            }
-        })();
+            });
 
         // Manage initial focus only first time after open flag toggles true
         requestAnimationFrame(() => {
@@ -153,36 +111,35 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
             }
         });
         openRef.current = true;
+        return () => {
+            active = false;
+        };
     }, [open]);
 
-    function save() {
+    async function save() {
         if (workEnd <= workStart) {
             setSavedMsg('Fim deve ser maior que início.');
             setMsgType('error');
             return;
         }
-        localStorage.setItem(LS_KEYS.workStart, workStart);
-        localStorage.setItem(LS_KEYS.workEnd, workEnd);
-        localStorage.setItem(LS_KEYS.slotInterval, String(slotInterval));
-        localStorage.setItem(LS_KEYS.defaultDuration, String(defaultDuration));
-        localStorage.setItem(LS_KEYS.defaultVisitType, defaultVisitType);
-
-        // Persist notification settings to the backend (fire-and-forget with feedback)
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-            fetch(`${API_BASE}/register/professionals/settings/`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    reminder_enabled: reminderEnabled,
-                    reminder_minutes_before: reminderMinutesBefore,
-                }),
-            }).catch(() => {
-                /* silencioso */
+        try {
+            await saveAgendaSettings({
+                workStart,
+                workEnd,
+                slotInterval,
+                defaultDuration,
+                defaultVisitType,
+                reminderEnabled,
+                reminderMinutesBefore,
             });
+        } catch (error) {
+            setSavedMsg(
+                error instanceof Error
+                    ? error.message
+                    : 'Erro ao salvar configurações.',
+            );
+            setMsgType('error');
+            return;
         }
 
         setSavedMsg('Configurações salvas.');
@@ -224,7 +181,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 onKeyDown={handleKeyDown}
                 onSubmit={e => {
                     e.preventDefault();
-                    save();
+                    void save();
                 }}
             >
                 <h2 className={modalStyles.header}>Configurações da Agenda</h2>
@@ -326,7 +283,10 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                 value={defaultDuration}
                                 onChange={e =>
                                     setDefaultDuration(
-                                        parseInt(e.target.value, 10),
+                                        parseInt(
+                                            e.target.value,
+                                            10,
+                                        ) as DefaultDuration,
                                     )
                                 }
                             >
@@ -350,7 +310,11 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                             id='agenda-defaultVisitType'
                             className={modalStyles.select}
                             value={defaultVisitType}
-                            onChange={e => setDefaultVisitType(e.target.value)}
+                            onChange={e =>
+                                setDefaultVisitType(
+                                    e.target.value as DefaultVisitType,
+                                )
+                            }
                         >
                             {visitTypes.map(v => (
                                 <option key={v.value} value={v.value}>

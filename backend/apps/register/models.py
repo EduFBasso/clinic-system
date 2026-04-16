@@ -136,8 +136,8 @@ class DeviceSession(models.Model):
 class ProfessionalSettings(models.Model):
     """Configurações por profissional para a agenda e comunicação.
 
-    - work_start_hour: hora de início padrão da agenda (0..23)
-    - work_end_hour: hora de fim padrão (1..24)
+    - work_start_hour/work_start_minute: início padrão da agenda
+    - work_end_hour/work_end_minute: fim padrão da agenda
     - slot_minutes: duração dos slots (ex.: 15, 30, 60)
     - confirm_message_enabled: ativa envio de confirmação (futuro)
     - confirm_message_template: template opcional da mensagem
@@ -149,9 +149,11 @@ class ProfessionalSettings(models.Model):
         related_name="settings",
         verbose_name="Profissional",
     )
-    work_start_hour = models.PositiveSmallIntegerField(default=8)
-    work_end_hour = models.PositiveSmallIntegerField(default=18)
-    slot_minutes = models.PositiveSmallIntegerField(default=30)
+    work_start_hour = models.PositiveSmallIntegerField(default=6)
+    work_start_minute = models.PositiveSmallIntegerField(default=0)
+    work_end_hour = models.PositiveSmallIntegerField(default=21)
+    work_end_minute = models.PositiveSmallIntegerField(default=0)
+    slot_minutes = models.PositiveSmallIntegerField(default=10)
 
     confirm_message_enabled = models.BooleanField(default=False)
     confirm_message_template = models.TextField(blank=True)
@@ -183,7 +185,9 @@ class ProfessionalSettings(models.Model):
         verbose_name_plural = "Configurações de Profissionais"
 
     def __str__(self):
-        return f"Config {self.professional.email} ({self.work_start_hour}-{self.work_end_hour}/{self.slot_minutes}m)"
+        start = f"{self.work_start_hour:02d}:{self.work_start_minute:02d}"
+        end = f"{self.work_end_hour:02d}:{self.work_end_minute:02d}"
+        return f"Config {self.professional.email} ({start}-{end}/{self.slot_minutes}m)"
 
 
 class PushSubscription(models.Model):
