@@ -78,7 +78,7 @@ describe('AgendaSettingsModal', () => {
         expect(screen.getByLabelText(/Intervalo/)).toHaveValue('15');
     });
 
-    it('saves persisted fields to backend and local-only preferences locally', async () => {
+    it('saves persisted fields to backend', async () => {
         localStorage.setItem('accessToken', 'token');
         vi.mocked(fetch)
             .mockResolvedValueOnce({
@@ -124,13 +124,17 @@ describe('AgendaSettingsModal', () => {
         await waitFor(() => {
             expect(fetch).toHaveBeenCalledTimes(2);
         });
-        expect(localStorage.getItem(LS_KEYS.defaultDuration)).toBe('90');
-        expect(localStorage.getItem(LS_KEYS.defaultVisitType)).toBe('consulta');
         expect(vi.mocked(fetch).mock.calls[1]?.[1]).toMatchObject({
             method: 'PATCH',
         });
         expect(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body)).toContain(
             '"work_start_minute":30',
+        );
+        expect(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body)).toContain(
+            '"default_duration_minutes":90',
+        );
+        expect(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body)).toContain(
+            '"default_visit_type":"consulta"',
         );
         await waitFor(() => {
             expect(screen.getByRole('status')).toHaveTextContent(

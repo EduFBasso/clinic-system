@@ -37,6 +37,20 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_default_duration_minutes(self, value: int) -> int:
+        if value not in (30, 60, 90, 120, 150):
+            raise serializers.ValidationError(
+                "default_duration_minutes inválido. Use um dos valores: 30, 60, 90, 120, 150"
+            )
+        return value
+
+    def validate_default_visit_type(self, value: str) -> str:
+        if value not in ("consulta", "avaliacao", "retorno", "procedimento", "outro"):
+            raise serializers.ValidationError(
+                "default_visit_type inválido. Use consulta, avaliacao, retorno, procedimento ou outro"
+            )
+        return value
+
     def validate_reminder_minutes_before(self, value: int) -> int:
         if not (1 <= value <= 1440):
             raise serializers.ValidationError(
@@ -73,6 +87,8 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
             "work_end_hour",
             "work_end_minute",
             "slot_minutes",
+            "default_duration_minutes",
+            "default_visit_type",
             "confirm_message_enabled",
             "confirm_message_template",
             "pix_key_type",

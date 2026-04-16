@@ -139,9 +139,19 @@ class ProfessionalSettings(models.Model):
     - work_start_hour/work_start_minute: início padrão da agenda
     - work_end_hour/work_end_minute: fim padrão da agenda
     - slot_minutes: duração dos slots (ex.: 15, 30, 60)
+    - default_duration_minutes: duração sugerida para novos compromissos
+    - default_visit_type: tipo sugerido para novos compromissos
     - confirm_message_enabled: ativa envio de confirmação (futuro)
     - confirm_message_template: template opcional da mensagem
     """
+
+    DEFAULT_VISIT_TYPE_CHOICES = (
+        ("consulta", "Consulta"),
+        ("avaliacao", "Avaliação"),
+        ("retorno", "Retorno"),
+        ("procedimento", "Procedimento"),
+        ("outro", "Outro"),
+    )
 
     professional = models.OneToOneField(
         Professional,
@@ -154,6 +164,12 @@ class ProfessionalSettings(models.Model):
     work_end_hour = models.PositiveSmallIntegerField(default=21)
     work_end_minute = models.PositiveSmallIntegerField(default=0)
     slot_minutes = models.PositiveSmallIntegerField(default=10)
+    default_duration_minutes = models.PositiveSmallIntegerField(default=60)
+    default_visit_type = models.CharField(
+        max_length=20,
+        choices=DEFAULT_VISIT_TYPE_CHOICES,
+        default="consulta",
+    )
 
     confirm_message_enabled = models.BooleanField(default=False)
     confirm_message_template = models.TextField(blank=True)
@@ -187,7 +203,10 @@ class ProfessionalSettings(models.Model):
     def __str__(self):
         start = f"{self.work_start_hour:02d}:{self.work_start_minute:02d}"
         end = f"{self.work_end_hour:02d}:{self.work_end_minute:02d}"
-        return f"Config {self.professional.email} ({start}-{end}/{self.slot_minutes}m)"
+        return (
+            f"Config {self.professional.email} "
+            f"({start}-{end}/{self.slot_minutes}m/{self.default_duration_minutes}m)"
+        )
 
 
 class PushSubscription(models.Model):

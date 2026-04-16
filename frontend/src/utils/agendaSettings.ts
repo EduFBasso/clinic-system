@@ -32,6 +32,8 @@ type ProfessionalSettingsResponse = {
     work_end_hour?: number;
     work_end_minute?: number;
     slot_minutes?: number;
+    default_duration_minutes?: number;
+    default_visit_type?: DefaultVisitType;
     reminder_enabled?: boolean;
     reminder_minutes_before?: number;
 };
@@ -50,15 +52,14 @@ type LegacyPersistedSettings = {
     workStart?: string;
     workEnd?: string;
     slotInterval?: number;
+    defaultDuration?: DefaultDuration;
+    defaultVisitType?: DefaultVisitType;
 };
 
 const LEGACY_PERSISTED_KEYS = {
     workStart: 'agenda.workStart',
     workEnd: 'agenda.workEnd',
     slotInterval: 'agenda.slotInterval',
-} as const;
-
-const LOCAL_ONLY_KEYS = {
     defaultDuration: 'agenda.defaultDuration',
     defaultVisitType: 'defaultVisitType',
 } as const;
@@ -142,10 +143,7 @@ function formatApiTime(
 }
 
 function createDefaultSnapshot(): AgendaSettingsSnapshot {
-    return {
-        ...DEFAULT_AGENDA_SETTINGS,
-        ...readLocalOnlyPreferences(),
-    };
+    return { ...DEFAULT_AGENDA_SETTINGS };
 }
 
 function emitChange(): void {
@@ -166,44 +164,27 @@ function readAccessToken(): string {
     }
 }
 
-function readLocalOnlyPreferences(): Pick<
-    AgendaSettingsSnapshot,
-    'defaultDuration' | 'defaultVisitType'
-> {
-    try {
-        return {
-            defaultDuration: normalizeDefaultDuration(
-                localStorage.getItem(LOCAL_ONLY_KEYS.defaultDuration),
-            ),
-            defaultVisitType: normalizeDefaultVisitType(
-                localStorage.getItem(LOCAL_ONLY_KEYS.defaultVisitType),
-            ),
-        };
-    } catch {
-        return {
-            defaultDuration: DEFAULT_AGENDA_SETTINGS.defaultDuration,
-            defaultVisitType: DEFAULT_AGENDA_SETTINGS.defaultVisitType,
-        };
-    }
-}
-
-function writeLocalOnlyPreferences(
-    data: Pick<AgendaSettingsSnapshot, 'defaultDuration' | 'defaultVisitType'>,
-): void {
-    localStorage.setItem(
-        LOCAL_ONLY_KEYS.defaultDuration,
-        String(data.defaultDuration),
-    );
-    localStorage.setItem(LOCAL_ONLY_KEYS.defaultVisitType, data.defaultVisitType);
-}
-
 function readLegacyPersistedSettings(): LegacyPersistedSettings | null {
     try {
         const workStart = localStorage.getItem(LEGACY_PERSISTED_KEYS.workStart);
         const workEnd = localStorage.getItem(LEGACY_PERSISTED_KEYS.workEnd);
         const slotRaw = localStorage.getItem(LEGACY_PERSISTED_KEYS.slotInterval);
+        const durationRaw = localStorage.getItem(LEGACY_PERSISTED_KEYS.defaultDuration);
+        const visitTypeRaw = localStorage.getItem(LEGACY_PERSISTED_KEYS.defaultVisitType);
         const slotInterval = slotRaw ? normalizeSlotInterval(slotRaw) : undefined;
-        if (!workStart && !workEnd && slotInterval === undefined) {
+        const defaultDuration = durationRaw
+            ? normalizeDefaultDuration(durationRaw)
+            : undefined;
+        const defaultVisitType = visitTypeRaw
+            ? normalizeDefaultVisitType(visitTypeRaw)
+            : undefined;
+        if (
+            !workStart &&
+            !workEnd &&
+            slotInterval === undefined &&
+            defaultDuration === undefined &&
+            defaultVisitType === undefined
+        ) {
             return null;
         }
         return {
@@ -214,6 +195,8 @@ function readLegacyPersistedSettings(): LegacyPersistedSettings | null {
                 ? normalizeTimeString(workEnd, DEFAULT_AGENDA_SETTINGS.workEnd)
                 : undefined,
             slotInterval,
+            defaultDuration,
+            defaultVisitType,
         };
     } catch {
         return null;
@@ -237,6 +220,8 @@ function normalizeApiSettings(
     | 'workStart'
     | 'workEnd'
     | 'slotInterval'
+    | 'defaultDuration'
+    | 'defaultVisitType'
     | 'reminderEnabled'
     | 'reminderMinutesBefore'
 > {
@@ -252,6 +237,8 @@ function normalizeApiSettings(
             DEFAULT_AGENDA_SETTINGS.workEnd,
         ),
         slotInterval: normalizeSlotInterval(data.slot_minutes),
+        defaultDuration: normalizeDefaultDuration(data.default_duration_minutes),
+        defaultVisitType: normalizeDefaultVisitType(data.default_visit_type),
         reminderEnabled: Boolean(data.reminder_enabled ?? false),
         reminderMinutesBefore: clamp(
             Number(data.reminder_minutes_before) ||
@@ -280,6 +267,8 @@ function buildApiPayload(
         | 'workStart'
         | 'workEnd'
         | 'slotInterval'
+        | 'defaultDuration'
+        | 'defaultVisitType'
         | 'reminderEnabled'
         | 'reminderMinutesBefore'
     >,
@@ -292,6 +281,8 @@ function buildApiPayload(
         work_end_hour: end.hour,
         work_end_minute: end.minute,
         slot_minutes: normalizeSlotInterval(data.slotInterval),
+        default_duration_minutes: normalizeDefaultDuration(data.defaultDuration),
+        default_visit_type: normalizeDefaultVisitType(data.defaultVisitType),
         reminder_enabled: Boolean(data.reminderEnabled),
         reminder_minutes_before: clamp(
             Number(data.reminderMinutesBefore) ||
@@ -385,13 +376,11 @@ export async function hydrateAgendaSettings(
     if (hydratePromise && !force) return hydratePromise;
 
     hydratePromise = (async () => {
-        const localOnly = readLocalOnlyPreferences();
         const token = readAccessToken();
 
         if (!token) {
             return replaceCurrentSettings({
                 ...DEFAULT_AGENDA_SETTINGS,
-                ...localOnly,
                 hydrated: true,
             });
         }
@@ -400,7 +389,6 @@ export async function hydrateAgendaSettings(
             const response = await fetchProfessionalSettings({ method: 'GET' });
             let next: AgendaSettingsSnapshot = {
                 ...DEFAULT_AGENDA_SETTINGS,
-                ...localOnly,
                 ...normalizeApiSettings(response),
                 hydrated: true,
             };
@@ -412,6 +400,10 @@ export async function hydrateAgendaSettings(
                     workStart: legacy.workStart || next.workStart,
                     workEnd: legacy.workEnd || next.workEnd,
                     slotInterval: legacy.slotInterval || next.slotInterval,
+                    defaultDuration:
+                        legacy.defaultDuration || next.defaultDuration,
+                    defaultVisitType:
+                        legacy.defaultVisitType || next.defaultVisitType,
                 };
 
                 try {
@@ -434,7 +426,6 @@ export async function hydrateAgendaSettings(
         } catch {
             return replaceCurrentSettings({
                 ...DEFAULT_AGENDA_SETTINGS,
-                ...localOnly,
                 hydrated: true,
             });
         }
@@ -470,10 +461,6 @@ export async function saveAgendaSettings(
         body: JSON.stringify(buildApiPayload(normalizedInput)),
     });
 
-    writeLocalOnlyPreferences({
-        defaultDuration: normalizedInput.defaultDuration,
-        defaultVisitType: normalizedInput.defaultVisitType,
-    });
     clearLegacyPersistedSettings();
 
     return replaceCurrentSettings({

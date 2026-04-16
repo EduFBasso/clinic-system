@@ -70,6 +70,8 @@ class ProfessionalSettingsAdmin(admin.ModelAdmin):
         "work_end_hour",
         "work_end_minute",
         "slot_minutes",
+        "default_duration_minutes",
+        "default_visit_type",
         "updated_at",
     )
     search_fields = ("professional__email", "pix_key_value")
@@ -86,6 +88,8 @@ class ProfessionalSettingsAdmin(admin.ModelAdmin):
                     "work_end_hour",
                     "work_end_minute",
                     "slot_minutes",
+                    "default_duration_minutes",
+                    "default_visit_type",
                 )
             },
         ),

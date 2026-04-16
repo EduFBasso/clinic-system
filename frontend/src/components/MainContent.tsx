@@ -558,6 +558,7 @@ const MainContent: React.FC<MainContentProps> = ({
                         setError(null);
                         localStorage.removeItem('accessToken');
                         localStorage.removeItem('loggedProfessional');
+                        window.dispatchEvent(new Event('auth:logout'));
                         window.dispatchEvent(new Event('clearClients'));
                         window.location.reload();
                     }}

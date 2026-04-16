@@ -49,12 +49,12 @@ function App() {
             resetAgendaSettings();
         };
 
-        window.addEventListener('updateClients', handleLogin);
-        window.addEventListener('clearClients', handleLogout);
+        window.addEventListener('auth:login', handleLogin);
+        window.addEventListener('auth:logout', handleLogout);
 
         return () => {
-            window.removeEventListener('updateClients', handleLogin);
-            window.removeEventListener('clearClients', handleLogout);
+            window.removeEventListener('auth:login', handleLogin);
+            window.removeEventListener('auth:logout', handleLogout);
         };
     }, []);
     return (

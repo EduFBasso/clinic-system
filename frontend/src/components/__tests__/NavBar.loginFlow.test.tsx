@@ -12,10 +12,24 @@ vi.mock('../../hooks/useUtcClock', () => ({
     }),
 }));
 
+vi.mock('@simplewebauthn/browser', () => ({
+    startRegistration: vi.fn(),
+    startAuthentication: vi.fn(),
+}));
+
 describe('NavBar login code flow', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         const store: Record<string, string> = {};
+        class MockPublicKeyCredential {}
+        (
+            MockPublicKeyCredential as typeof PublicKeyCredential & {
+                isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean>;
+            }
+        ).isUserVerifyingPlatformAuthenticatorAvailable = vi
+            .fn()
+            .mockResolvedValue(true);
+        vi.stubGlobal('PublicKeyCredential', MockPublicKeyCredential);
         // @ts-expect-error test shim
         global.localStorage = {
             getItem: (k: string) => (k in store ? store[k] : null),
@@ -29,6 +43,20 @@ describe('NavBar login code flow', () => {
                 Object.keys(store).forEach(k => delete store[k]);
             },
         };
+    });
+
+    it('exibe o botao Face ID quando o email esta preenchido mesmo sem marcador local', async () => {
+        render(<NavBar />);
+
+        fireEvent.change(screen.getByPlaceholderText('E-mail'), {
+            target: { value: 'brunadentista@mail.com' },
+        });
+
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: /Face ID/i }),
+            ).toBeInTheDocument();
+        });
     });
 
     it('preenche email e código TOTP e autentica', async () => {

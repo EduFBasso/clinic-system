@@ -89,10 +89,9 @@ const NavBar: React.FC<NavBarProps> = ({
     // Biometric / WebAuthn
     const [offerBiometricOpen, setOfferBiometricOpen] = useState(false);
     const [biometricLoading, setBiometricLoading] = useState(false);
-    // true when a passkey has been registered for the current email on this device
-    const hasWebAuthn =
-        !!loginEmail &&
-        !!localStorage.getItem(`hasWebAuthn_${loginEmail.toLowerCase()}`);
+    const [platformAuthenticatorAvailable, setPlatformAuthenticatorAvailable] =
+        useState(false);
+    const hasWebAuthn = !!loginEmail && platformAuthenticatorAvailable;
     // Trigger summary fetch when dropdown toggles open
     const { summary } = useSessionsSummary(dropdownOpen);
 
@@ -134,6 +133,40 @@ const NavBar: React.FC<NavBarProps> = ({
             const stored = localStorage.getItem('loggedProfessional');
             if (stored) setLoggedProfessional(JSON.parse(stored));
         }
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        async function detectPlatformAuthenticator() {
+            try {
+                if (
+                    typeof PublicKeyCredential === 'undefined' ||
+                    typeof (
+                        PublicKeyCredential as {
+                            isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
+                        }
+                    ).isUserVerifyingPlatformAuthenticatorAvailable !==
+                        'function'
+                ) {
+                    if (active) setPlatformAuthenticatorAvailable(false);
+                    return;
+                }
+
+                const available = await (
+                    PublicKeyCredential as {
+                        isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean>;
+                    }
+                ).isUserVerifyingPlatformAuthenticatorAvailable();
+                if (active) setPlatformAuthenticatorAvailable(Boolean(available));
+            } catch {
+                if (active) setPlatformAuthenticatorAvailable(false);
+            }
+        }
+
+        void detectPlatformAuthenticator();
+        return () => {
+            active = false;
+        };
     }, []);
 
     // Handler para abrir modal de novo cliente (integração futura)
@@ -283,6 +316,11 @@ const NavBar: React.FC<NavBarProps> = ({
                 setModalMessage(successMsg);
                 setModalOpen(true);
                 localStorage.setItem('accessToken', data.access);
+                localStorage.setItem('lastLoginEmail', loginEmail);
+                localStorage.setItem(
+                    `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                    '1',
+                );
                 localStorage.setItem(
                     'loggedProfessional',
                     JSON.stringify(data.professional),
@@ -295,6 +333,7 @@ const NavBar: React.FC<NavBarProps> = ({
                     window.location.href = '/admin';
                     return;
                 }
+                window.dispatchEvent(new Event('auth:login'));
                 window.dispatchEvent(new Event('updateClients'));
                 window.dispatchEvent(new Event('clearClients'));
             } else {
@@ -533,6 +572,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 setLoggedProfessional(null);
                                 setLoginEmail('');
                                 setTotpCode('');
+                                window.dispatchEvent(new Event('auth:logout'));
                                 window.dispatchEvent(new Event('clearClients'));
                             }}
                         >
@@ -656,6 +696,9 @@ const NavBar: React.FC<NavBarProps> = ({
                                             return;
                                         }
                                         window.dispatchEvent(
+                                            new Event('auth:login'),
+                                        );
+                                        window.dispatchEvent(
                                             new Event('updateClients'),
                                         );
                                         window.dispatchEvent(
@@ -734,6 +777,7 @@ const NavBar: React.FC<NavBarProps> = ({
                     // Opcional: Limpar token e recarregar página
                     localStorage.removeItem('accessToken');
                     localStorage.removeItem('loggedProfessional');
+                    window.dispatchEvent(new Event('auth:logout'));
                     window.location.reload();
                 }}
             />
