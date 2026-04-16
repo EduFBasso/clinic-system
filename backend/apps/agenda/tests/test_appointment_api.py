@@ -12,7 +12,7 @@ def api_client():
 
 @pytest.fixture
 def professional(db):
-    return Professional.objects.create_user(
+    return Professional.objects.create_user( # type: ignore
         email='agendaapi@example.com', password='secret123', first_name='Agenda', last_name='API'
     )
 
@@ -86,6 +86,34 @@ def test_create_future_and_conflict(auth_client, client_obj):
     # Mensagem geral ou detail
     combined = ' '.join(str(v) for v in body.values())
     assert 'conflit' in combined.lower()
+
+
+@pytest.mark.django_db
+def test_multiple_same_day_allowed_if_no_overlap(auth_client, client_obj):
+    base = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    if base <= timezone.now():
+        base = base + timezone.timedelta(days=1)
+
+    first_payload = {
+        'client': client_obj.id,
+        'title': 'Sessão manhã',
+        'visit_type': 'avaliacao',
+        'start_at': base.isoformat(),
+        'end_at': (base + timezone.timedelta(minutes=30)).isoformat(),
+    }
+    r1 = auth_client.post('/agenda/appointments/', first_payload, format='json')
+    assert r1.status_code == 201, r1.content
+
+    second_start = base.replace(hour=10)
+    second_payload = {
+        'client': client_obj.id,
+        'title': 'Sessão tarde',
+        'visit_type': 'retorno',
+        'start_at': second_start.isoformat(),
+        'end_at': (second_start + timezone.timedelta(minutes=30)).isoformat(),
+    }
+    r2 = auth_client.post('/agenda/appointments/', second_payload, format='json')
+    assert r2.status_code == 201, r2.content
 
 
 @pytest.mark.django_db

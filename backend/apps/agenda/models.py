@@ -558,9 +558,9 @@ class ChargeItem(models.Model):
         product = getattr(self, "product", None)
         if not self.description:
             if service is not None:
-                self.description = self.service.name
+                self.description = service.name
             elif product is not None:
-                self.description = self.product.name
+                self.description = product.name
         self.full_clean()
         result = super().save(*args, **kwargs)
         self.charge.recalculate_total(save=True)

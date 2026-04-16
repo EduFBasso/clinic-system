@@ -85,7 +85,8 @@ class Command(BaseCommand):
                 if digits and not digits.startswith("55"):
                     digits = "55" + digits
 
-                visit_type_label = appt.get_visit_type_display()
+                # Django injects get_<field>_display() dynamically for choice fields.
+                visit_type_label = appt.get_visit_type_display()  # pyright: ignore[reportAttributeAccessIssue]
                 local_time = timezone.localtime(appt.start_at).strftime("%H:%M")
 
                 # Nome de exibição da profissional (display_name preferido, fallback para first_name)

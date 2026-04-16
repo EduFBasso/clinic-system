@@ -1,5 +1,9 @@
+from typing import cast
+
+from django.db.models import QuerySet
 from rest_framework import viewsets, permissions, generics
 from rest_framework.decorators import action
+from rest_framework.request import Request
 from rest_framework.response import Response
 from django.utils import timezone
 
@@ -13,12 +17,25 @@ from .serializers import (
 )
 
 
+class TypedRequestMixin:
+    def drf_request(self) -> Request:
+        return cast(Request, getattr(self, "request"))
+
+    def query_param(self, key: str) -> str | None:
+        return self.drf_request().query_params.get(key)
+
+    def base_queryset(self) -> QuerySet:
+        queryset = getattr(self, "queryset", None)
+        assert queryset is not None, f"{self.__class__.__name__} must define queryset"
+        return cast(QuerySet, queryset)
+
+
 class IsProfessionalOrReadOnly(permissions.BasePermission):
     """Permissão simples: usuário autenticado pode ler; alterações restritas ao próprio profissional.
     Assumimos que request.user é Professional.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request, view):  # pyright: ignore[reportIncompatibleMethodOverride]
         return request.user and request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj: Appointment):
@@ -27,11 +44,11 @@ class IsProfessionalOrReadOnly(permissions.BasePermission):
         return getattr(request.user, "id", None) == getattr(obj.professional, "id", None)
 
 
-class ProfessionalOwnedViewSet(viewsets.ModelViewSet):
+class ProfessionalOwnedViewSet(TypedRequestMixin, viewsets.ModelViewSet):
     permission_classes = [IsProfessionalOrReadOnly]
 
-    def get_queryset(self):
-        qs = self.queryset
+    def get_queryset(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+        qs = self.base_queryset()
         user = getattr(self.request, "user", None)
         if user and getattr(user, "id", None):
             qs = qs.filter(professional_id=user.id)
@@ -41,9 +58,10 @@ class ProfessionalOwnedViewSet(viewsets.ModelViewSet):
         serializer.save(professional=self.request.user)
 
 
-class AppointmentViewSet(viewsets.ModelViewSet):
+class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     permission_classes = [IsProfessionalOrReadOnly]
+    queryset = Appointment.objects.select_related("professional", "client")
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -51,17 +69,17 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         ctx["request"] = getattr(self, "request", None)
         return ctx
 
-    def get_queryset(self):
-        qs = Appointment.objects.all()
+    def get_queryset(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+        qs = self.base_queryset()
         user = getattr(self.request, "user", None)
         # restringe a agenda ao profissional logado
         if user and getattr(user, "id", None):
             qs = qs.filter(professional_id=user.id)
         # filtros opcionais ?start=2025-09-01T00:00:00&end=2025-09-02T00:00:00&client=<id>
-        start = self.request.query_params.get("start")
-        end = self.request.query_params.get("end")
-        client_id = self.request.query_params.get("client")
-        status_val = self.request.query_params.get("status")
+        start = self.query_param("start")
+        end = self.query_param("end")
+        client_id = self.query_param("client")
+        status_val = self.query_param("status")
 
         if start:
             try:
@@ -77,7 +95,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(client_id=client_id)
         if status_val:
             qs = qs.filter(status=status_val)
-        return qs.select_related("professional", "client")
+        return qs
 
     def perform_create(self, serializer):
         # profissional sempre é o usuário autenticado
@@ -253,11 +271,11 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
 
 class IsStaffOnly(permissions.BasePermission):
-    def has_permission(self, request, view):
+    def has_permission(self, request, view):  # pyright: ignore[reportIncompatibleMethodOverride]
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
 
 
-class FinalizeAuditListView(generics.ListAPIView):
+class FinalizeAuditListView(TypedRequestMixin, generics.ListAPIView):
     """Admin-only list endpoint to inspect finalize audits with optional filters.
 
     Query params:
@@ -269,13 +287,14 @@ class FinalizeAuditListView(generics.ListAPIView):
 
     serializer_class = FinalizeAuditSerializer
     permission_classes = [IsStaffOnly]
+    queryset = FinalizeAudit.objects.select_related("appointment", "professional", "client")
 
-    def get_queryset(self):
-        qs = FinalizeAudit.objects.select_related("appointment", "professional", "client").all()
-        appt_id = self.request.query_params.get("appointment")
-        device_id = self.request.query_params.get("device_id")
-        start = self.request.query_params.get("start")
-        end = self.request.query_params.get("end")
+    def get_queryset(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+        qs = self.base_queryset()
+        appt_id = self.query_param("appointment")
+        device_id = self.query_param("device_id")
+        start = self.query_param("start")
+        end = self.query_param("end")
         if appt_id:
             try:
                 qs = qs.filter(appointment_id=int(appt_id))
@@ -302,9 +321,9 @@ class EncounterViewSet(ProfessionalOwnedViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        client_id = self.request.query_params.get("client")
-        appointment_id = self.request.query_params.get("appointment")
-        status_val = self.request.query_params.get("status")
+        client_id = self.query_param("client")
+        appointment_id = self.query_param("appointment")
+        status_val = self.query_param("status")
         if client_id:
             qs = qs.filter(client_id=client_id)
         if appointment_id:
@@ -347,9 +366,9 @@ class ClinicalRecordViewSet(ProfessionalOwnedViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        client_id = self.request.query_params.get("client")
-        encounter_id = self.request.query_params.get("encounter")
-        record_type = self.request.query_params.get("record_type")
+        client_id = self.query_param("client")
+        encounter_id = self.query_param("encounter")
+        record_type = self.query_param("record_type")
         if client_id:
             qs = qs.filter(client_id=client_id)
         if encounter_id:
@@ -370,11 +389,11 @@ class ChargeViewSet(ProfessionalOwnedViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        client_id = self.request.query_params.get("client")
-        encounter_id = self.request.query_params.get("encounter")
-        appointment_id = self.request.query_params.get("appointment")
-        status_val = self.request.query_params.get("status")
-        charge_type = self.request.query_params.get("charge_type")
+        client_id = self.query_param("client")
+        encounter_id = self.query_param("encounter")
+        appointment_id = self.query_param("appointment")
+        status_val = self.query_param("status")
+        charge_type = self.query_param("charge_type")
         if client_id:
             qs = qs.filter(client_id=client_id)
         if encounter_id:

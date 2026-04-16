@@ -79,6 +79,9 @@ def test_delete_is_blocked(api_client, client1):
     assert del_res.status_code == 405
     assert 'Exclusão não permitida' in str(del_res.data)
 
+    get_res = api_client.get(f'/agenda/appointments/{appt_id}/')
+    assert get_res.status_code == 200
+
 
 def test_cancel_action(api_client, client1):
     start, end = make_future()

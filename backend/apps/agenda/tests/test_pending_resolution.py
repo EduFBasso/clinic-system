@@ -108,27 +108,3 @@ def test_pending_then_finalize_allows_new(auth_client, professional, client_obj)
     # Agora deve permitir criar
     r_ok = auth_client.post('/agenda/appointments/', payload, format='json')
     assert r_ok.status_code == 201, r_ok.content
-
-
-@pytest.mark.django_db
-def test_delete_not_allowed_keeps_record(auth_client, client_obj):
-    # Cria um futuro
-    future_base = (timezone.now() + timezone.timedelta(hours=4)).replace(minute=0, second=0, microsecond=0)
-    payload = {
-        'client': client_obj.id,
-        'title': 'Futuro',
-        'visit_type': 'avaliacao',
-        'start_at': future_base.isoformat(),
-        'end_at': (future_base + timezone.timedelta(minutes=30)).isoformat(),
-    }
-    r_new = auth_client.post('/agenda/appointments/', payload, format='json')
-    assert r_new.status_code == 201, r_new.content
-    appt_id = r_new.json()['id']
-
-    # DELETE não é permitido
-    r_del = auth_client.delete(f'/agenda/appointments/{appt_id}/')
-    assert r_del.status_code == 405
-
-    # Registro continua acessível
-    r_get = auth_client.get(f'/agenda/appointments/{appt_id}/')
-    assert r_get.status_code == 200
