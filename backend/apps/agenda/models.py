@@ -440,7 +440,16 @@ class Charge(models.Model):
         if errors:
             raise ValidationError(errors)
 
+    def sync_status_fields(self):
+        if self.status == self.Status.PAID:
+            if self.paid_at is None:
+                self.paid_at = timezone.now()
+            return
+
+        self.paid_at = None
+
     def save(self, *args, **kwargs):
+        self.sync_status_fields()
         self.full_clean()
         return super().save(*args, **kwargs)
 

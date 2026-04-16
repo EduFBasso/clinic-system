@@ -1,4 +1,5 @@
 import pytest
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -207,6 +208,69 @@ def test_charge_mark_paid_sets_paid_at(auth_client, client_obj):
     data = response.json()
     assert data["status"] == "paid"
     assert data["paid_at"] is not None
+
+
+def test_paid_charge_keeps_status_when_items_are_updated(auth_client, client_obj):
+    charge = Charge.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        charge_type=Charge.ChargeType.CHARGE,
+        status=Charge.Status.PAID,
+        title="Cobrança paga",
+    )
+    original_paid_at = charge.paid_at
+    charge.items.create(
+        item_type="custom",
+        description="Consulta",
+        quantity="1.00",
+        unit_price="100.00",
+        paid=False,
+        paid_at=None,
+    )
+
+    response = auth_client.patch(
+        f"/agenda/charges/{charge.id}/",
+        {
+            "client": client_obj.id,
+            "charge_type": "charge",
+            "title": "Cobrança paga",
+            "items": [
+                {
+                    "item_type": "custom",
+                    "description": "Consulta atualizada",
+                    "quantity": "1.00",
+                    "unit_price": "120.00",
+                    "paid": False,
+                    "paid_at": None,
+                }
+            ],
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert data["status"] == "paid"
+    returned_paid_at = parse_datetime(data["paid_at"])
+    assert returned_paid_at == original_paid_at
+
+
+def test_mark_sent_does_not_downgrade_paid_charge(auth_client, client_obj):
+    charge = Charge.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        charge_type=Charge.ChargeType.CHARGE,
+        status=Charge.Status.PAID,
+        title="Cobrança já paga",
+    )
+
+    response = auth_client.post(f"/agenda/charges/{charge.id}/mark-sent/", format="json")
+
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert data["status"] == "paid"
+    assert data["paid_at"] is not None
+    assert data["shared_at"] is not None
 
 
 def test_clinical_record_delete_is_blocked(auth_client, client_obj):

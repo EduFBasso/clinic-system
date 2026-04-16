@@ -434,7 +434,6 @@ export default function ConsultaPage() {
         setSaving(true);
         setError(null);
         try {
-            const anyPaid = selectedItems.some(i => i.paid);
             const payload: Record<string, unknown> = {
                 client: apptState.clientId,
                 appointment: apptState.appointmentId ?? null,
@@ -453,7 +452,7 @@ export default function ConsultaPage() {
                         i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
                 })),
             };
-            // status and paid_at on Charge are derived by the backend from item-level flags
+            // Item-level paid flags remain consultation annotations; charge status is controlled separately.
             if (apptState.chargeId) {
                 await apiFetch(
                     `${API_BASE}/agenda/charges/${apptState.chargeId}/`,

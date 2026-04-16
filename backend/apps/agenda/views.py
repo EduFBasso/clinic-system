@@ -414,7 +414,8 @@ class ChargeViewSet(ProfessionalOwnedViewSet):
         charge = self.get_object()
         if charge.status == Charge.Status.CANCELED:
             return Response({"detail": "Cobrança cancelada não pode ser enviada."}, status=400)
-        charge.status = Charge.Status.SENT
+        if charge.status != Charge.Status.PAID:
+            charge.status = Charge.Status.SENT
         if charge.shared_at is None:
             charge.shared_at = timezone.now()
         charge.save()

@@ -385,15 +385,15 @@ class ChargeSerializer(serializers.ModelSerializer):
         encounter = attrs.get("encounter", getattr(self.instance, "encounter", None))
         appointment = attrs.get("appointment", getattr(self.instance, "appointment", None))
         charge_type = attrs.get("charge_type", getattr(self.instance, "charge_type", Charge.ChargeType.CHARGE))
-        # status and paid_at are derived from item-level paid flags in _save_items; ignore frontend values
-        status = getattr(self.instance, "status", Charge.Status.DRAFT)
+        # Charge.status is the canonical state; item-level paid flags remain per-consultation annotations.
+        status = attrs.get("status", getattr(self.instance, "status", Charge.Status.DRAFT))
         title = attrs.get("title", getattr(self.instance, "title", ""))
         notes = attrs.get("notes", getattr(self.instance, "notes", ""))
         recipient_name = attrs.get("recipient_name", getattr(self.instance, "recipient_name", ""))
         recipient_phone = attrs.get("recipient_phone", getattr(self.instance, "recipient_phone", ""))
         currency = attrs.get("currency", getattr(self.instance, "currency", "BRL"))
         shared_at = attrs.get("shared_at", getattr(self.instance, "shared_at", None))
-        paid_at = getattr(self.instance, "paid_at", None)
+        paid_at = attrs.get("paid_at", getattr(self.instance, "paid_at", None))
 
         instance = Charge(
             professional=professional,
@@ -454,26 +454,6 @@ class ChargeSerializer(serializers.ModelSerializer):
                     **payload,
                 )
             charge.recalculate_total(save=True)
-            # Derive charge-level status and paid_at from item-level flags
-            all_paid = charge.items.filter(paid=False).count() == 0 and charge.items.count() > 0
-            any_paid = charge.items.filter(paid=True).exists()
-            if all_paid:
-                latest_paid_at = charge.items.order_by("-paid_at").values_list("paid_at", flat=True).first()
-                Charge.objects.filter(pk=charge.pk).update(
-                    status=Charge.Status.PAID,
-                    paid_at=latest_paid_at,
-                )
-            elif any_paid:
-                latest_paid_at = charge.items.filter(paid=True).order_by("-paid_at").values_list("paid_at", flat=True).first()
-                Charge.objects.filter(pk=charge.pk).update(
-                    status=Charge.Status.DRAFT,
-                    paid_at=latest_paid_at,
-                )
-            else:
-                Charge.objects.filter(pk=charge.pk).update(
-                    status=Charge.Status.DRAFT,
-                    paid_at=None,
-                )
             charge.refresh_from_db()
 
     def create(self, validated_data):
