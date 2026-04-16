@@ -33,8 +33,8 @@ export default function ProductFormPage() {
     const [error, setError] = useState<string | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
 
-    function format2DecimalsBR(value: number): string {
-        return value.toLocaleString('pt-BR', {
+    function format2DecimalsBR(value: number | string): string {
+        return Number(value || 0).toLocaleString('pt-BR', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });

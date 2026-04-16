@@ -51,20 +51,20 @@ function formatBRL(val: number): string {
 // ─── Style constants ─────────────────────────────────────────────────────────
 
 const thStyle: React.CSSProperties = {
-    padding: '8px 10px',
+    padding: '10px 12px',
     textAlign: 'left',
-    fontWeight: 600,
-    fontSize: 12,
-    color: 'var(--color-text-muted)',
+    fontWeight: 700,
+    fontSize: 14,
+    color: '#4b5563',
     borderBottom: '2px solid var(--color-border)',
     whiteSpace: 'nowrap',
 };
 
 const tdStyle: React.CSSProperties = {
-    padding: '9px 10px',
+    padding: '11px 12px',
     verticalAlign: 'middle',
     color: 'var(--color-text)',
-    fontSize: 14,
+    fontSize: 16,
 };
 
 const addBtnStyle: React.CSSProperties = {
@@ -72,9 +72,9 @@ const addBtnStyle: React.CSSProperties = {
     color: '#fff',
     border: 'none',
     borderRadius: 6,
-    width: 30,
-    height: 30,
-    fontSize: 20,
+    width: 34,
+    height: 34,
+    fontSize: 22,
     lineHeight: '1',
     display: 'flex',
     alignItems: 'center',
@@ -89,9 +89,9 @@ const editBtnStyle: React.CSSProperties = {
     color: 'var(--color-text-muted)',
     border: '1px solid var(--color-border)',
     borderRadius: 6,
-    width: 28,
-    height: 28,
-    fontSize: 14,
+    width: 32,
+    height: 32,
+    fontSize: 16,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -106,10 +106,10 @@ const linkBtnStyle: React.CSSProperties = {
     color: 'var(--color-primary)',
     border: '1px dashed var(--color-primary)',
     borderRadius: 8,
-    padding: '7px 14px',
-    fontWeight: 500,
+    padding: '9px 16px',
+    fontWeight: 600,
     cursor: 'pointer',
-    fontSize: 13,
+    fontSize: 15,
     marginTop: 8,
 };
 
@@ -130,7 +130,7 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
                 style={{
                     width: '100%',
                     borderCollapse: 'collapse',
-                    fontSize: 14,
+                    fontSize: 16,
                 }}
             >
                 <thead>
@@ -158,10 +158,10 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
                             <td
                                 colSpan={3}
                                 style={{
-                                    padding: '12px 8px',
+                                    padding: '14px 10px',
                                     color: 'var(--color-text-muted)',
                                     textAlign: 'center',
-                                    fontSize: 13,
+                                    fontSize: 15,
                                 }}
                             >
                                 {emptyMsg}
@@ -405,6 +405,13 @@ export default function ConsultaPage() {
     }
 
     function togglePaid(key: string) {
+        const targetItem = selectedItems.find(i => i.key === key);
+        if (targetItem?.paid) {
+            const shouldUnmark = window.confirm(
+                'Remover a marcacao de pago deste item?',
+            );
+            if (!shouldUnmark) return;
+        }
         setSelectedItems(prev =>
             prev.map(i =>
                 i.key === key
@@ -452,23 +459,22 @@ export default function ConsultaPage() {
                         i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
                 })),
             };
+            if (apptState.appointmentId) {
+                try {
+                    sessionStorage.setItem(
+                        'reopenAppointmentDetails',
+                        String(apptState.appointmentId),
+                    );
+                } catch {
+                    /* noop */
+                }
+            }
             // Item-level paid flags remain consultation annotations; charge status is controlled separately.
             if (apptState.chargeId) {
                 await apiFetch(
                     `${API_BASE}/agenda/charges/${apptState.chargeId}/`,
                     { method: 'PATCH', body: payload },
                 );
-                // Sinaliza que deve reabrir o modal de detalhes ao voltar
-                if (apptState.appointmentId) {
-                    try {
-                        sessionStorage.setItem(
-                            'reopenAppointmentDetails',
-                            String(apptState.appointmentId),
-                        );
-                    } catch {
-                        /* noop */
-                    }
-                }
             } else {
                 await apiFetch(`${API_BASE}/agenda/charges/`, {
                     method: 'POST',
@@ -554,7 +560,7 @@ export default function ConsultaPage() {
                         <div
                             style={{
                                 fontWeight: 800,
-                                fontSize: 15,
+                                fontSize: 21,
                                 color: 'var(--color-heading)',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -602,7 +608,7 @@ export default function ConsultaPage() {
                     <div
                         style={{
                             color: 'var(--color-text-muted)',
-                            fontSize: 13,
+                            fontSize: 15,
                             padding: '10px 0',
                         }}
                     >
@@ -623,7 +629,9 @@ export default function ConsultaPage() {
                         />
                         <button
                             type='button'
-                            onClick={() => navigate('/catalog/services/new')}
+                            onClick={() =>
+                                saveAndNavigateToCatalog('/catalog/services')
+                            }
                             style={linkBtnStyle}
                         >
                             + Novo procedimento
@@ -638,7 +646,7 @@ export default function ConsultaPage() {
                     <div
                         style={{
                             color: 'var(--color-text-muted)',
-                            fontSize: 13,
+                            fontSize: 15,
                             padding: '10px 0',
                         }}
                     >
@@ -659,7 +667,9 @@ export default function ConsultaPage() {
                         />
                         <button
                             type='button'
-                            onClick={() => navigate('/catalog/products/new')}
+                            onClick={() =>
+                                saveAndNavigateToCatalog('/catalog/products')
+                            }
                             style={linkBtnStyle}
                         >
                             + Novo produto
@@ -674,7 +684,7 @@ export default function ConsultaPage() {
                     <p
                         style={{
                             color: 'var(--color-text-muted)',
-                            fontSize: 14,
+                            fontSize: 16,
                             margin: '8px 0 16px',
                         }}
                     >
@@ -687,7 +697,7 @@ export default function ConsultaPage() {
                                 style={{
                                     width: '100%',
                                     borderCollapse: 'collapse',
-                                    fontSize: 14,
+                                    fontSize: 16,
                                 }}
                             >
                                 <thead>
@@ -703,6 +713,9 @@ export default function ConsultaPage() {
                                                 ...thStyle,
                                                 width: 80,
                                                 textAlign: 'center',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                             }}
                                         >
                                             Qtd
@@ -711,6 +724,9 @@ export default function ConsultaPage() {
                                             style={{
                                                 ...thStyle,
                                                 textAlign: 'right',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                             }}
                                         >
                                             Subtotal
@@ -718,8 +734,11 @@ export default function ConsultaPage() {
                                         <th
                                             style={{
                                                 ...thStyle,
-                                                width: 140,
+                                                width: 180,
                                                 textAlign: 'center',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                             }}
                                         />
                                     </tr>
@@ -740,7 +759,7 @@ export default function ConsultaPage() {
                                             <td style={tdStyle}>
                                                 <span
                                                     style={{
-                                                        fontSize: 12,
+                                                        fontSize: 16,
                                                         marginRight: 6,
                                                     }}
                                                 >
@@ -754,6 +773,7 @@ export default function ConsultaPage() {
                                                 style={{
                                                     ...tdStyle,
                                                     textAlign: 'center',
+                                                    fontSize: 16,
                                                 }}
                                             >
                                                 <input
@@ -774,8 +794,8 @@ export default function ConsultaPage() {
                                                         textAlign: 'center',
                                                         border: '1px solid var(--color-border)',
                                                         borderRadius: 6,
-                                                        padding: '4px 6px',
-                                                        fontSize: 14,
+                                                        padding: '6px 8px',
+                                                        fontSize: 16,
                                                         background:
                                                             'var(--color-bg)',
                                                         color: 'var(--color-text)',
@@ -788,6 +808,7 @@ export default function ConsultaPage() {
                                                     textAlign: 'right',
                                                     whiteSpace: 'nowrap',
                                                     fontWeight: 600,
+                                                    fontSize: 16,
                                                 }}
                                             >
                                                 R${' '}
@@ -809,7 +830,7 @@ export default function ConsultaPage() {
                                                         display: 'flex',
                                                         flexDirection: 'column',
                                                         alignItems: 'center',
-                                                        gap: 4,
+                                                        gap: 8,
                                                     }}
                                                 >
                                                     <div
@@ -817,7 +838,7 @@ export default function ConsultaPage() {
                                                             display: 'flex',
                                                             alignItems:
                                                                 'center',
-                                                            gap: 6,
+                                                            gap: 8,
                                                         }}
                                                     >
                                                         <button
@@ -856,11 +877,9 @@ export default function ConsultaPage() {
                                                             }
                                                             style={{
                                                                 display: 'flex',
-                                                                flexDirection:
-                                                                    'column',
                                                                 alignItems:
                                                                     'center',
-                                                                gap: 1,
+                                                                gap: 6,
                                                                 background:
                                                                     item.paid
                                                                         ? 'var(--color-success, #22c55e)'
@@ -873,9 +892,9 @@ export default function ConsultaPage() {
                                                                     : '1.5px solid var(--color-border)',
                                                                 borderRadius: 20,
                                                                 padding:
-                                                                    '3px 10px 3px 6px',
-                                                                fontSize: 12,
-                                                                fontWeight: 600,
+                                                                    '6px 12px 6px 8px',
+                                                                fontSize: 16,
+                                                                fontWeight: 700,
                                                                 cursor: 'pointer',
                                                                 whiteSpace:
                                                                     'nowrap',
@@ -895,7 +914,7 @@ export default function ConsultaPage() {
                                                             >
                                                                 <span
                                                                     style={{
-                                                                        fontSize: 14,
+                                                                        fontSize: 16,
                                                                         lineHeight: 1,
                                                                     }}
                                                                 >
@@ -905,29 +924,6 @@ export default function ConsultaPage() {
                                                                 </span>
                                                                 Pago
                                                             </span>
-                                                            {item.paid &&
-                                                                item.paidAt && (
-                                                                    <span
-                                                                        style={{
-                                                                            fontSize: 10,
-                                                                            opacity: 0.9,
-                                                                            letterSpacing:
-                                                                                '0.01em',
-                                                                        }}
-                                                                    >
-                                                                        {new Date(
-                                                                            item.paidAt +
-                                                                                'T12:00:00',
-                                                                        ).toLocaleDateString(
-                                                                            'pt-BR',
-                                                                            {
-                                                                                day: '2-digit',
-                                                                                month: '2-digit',
-                                                                                year: '2-digit',
-                                                                            },
-                                                                        )}
-                                                                    </span>
-                                                                )}
                                                         </button>
                                                     </div>
                                                     {item.paid && (
@@ -951,8 +947,8 @@ export default function ConsultaPage() {
                                                                 border: '1px solid var(--color-success, #22c55e)',
                                                                 borderRadius: 6,
                                                                 padding:
-                                                                    '3px 6px',
-                                                                fontSize: 11,
+                                                                    '6px 8px',
+                                                                fontSize: 16,
                                                                 background:
                                                                     'var(--color-bg)',
                                                                 color: 'var(--color-text)',
@@ -960,7 +956,7 @@ export default function ConsultaPage() {
                                                                     'none',
                                                                 appearance:
                                                                     'none',
-                                                                width: 118,
+                                                                width: 136,
                                                                 boxSizing:
                                                                     'border-box',
                                                             }}
@@ -983,7 +979,7 @@ export default function ConsultaPage() {
                                 gap: 10,
                                 padding: '10px 4px',
                                 fontWeight: 700,
-                                fontSize: 17,
+                                fontSize: 18,
                                 color: 'var(--color-text)',
                                 borderTop: '2px solid var(--color-border)',
                                 marginBottom: 4,
@@ -1000,7 +996,7 @@ export default function ConsultaPage() {
                     <label
                         style={{
                             display: 'block',
-                            fontSize: 13,
+                            fontSize: 16,
                             fontWeight: 600,
                             color: 'var(--color-text-muted)',
                             marginBottom: 6,
@@ -1019,7 +1015,7 @@ export default function ConsultaPage() {
                             border: '1px solid var(--color-border)',
                             borderRadius: 8,
                             padding: '10px 12px',
-                            fontSize: 14,
+                            fontSize: 16,
                             resize: 'vertical',
                             background: 'var(--color-bg)',
                             color: 'var(--color-text)',
@@ -1047,9 +1043,9 @@ export default function ConsultaPage() {
                             border: '1px solid var(--color-border)',
                             borderRadius: 8,
                             padding: '10px 22px',
-                            fontWeight: 500,
+                            fontWeight: 600,
                             cursor: 'pointer',
-                            fontSize: 14,
+                            fontSize: 16,
                         }}
                     >
                         Pular
@@ -1075,7 +1071,7 @@ export default function ConsultaPage() {
                                 selectedItems.length === 0 || saving
                                     ? 'default'
                                     : 'pointer',
-                            fontSize: 14,
+                            fontSize: 16,
                             transition: 'background 0.2s',
                         }}
                     >

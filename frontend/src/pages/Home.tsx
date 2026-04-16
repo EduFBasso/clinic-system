@@ -361,7 +361,7 @@ export default function Home() {
         }
     }, []);
 
-    // Reabre AppointmentDetailsModal após retorno da página de edição de charges
+    // Reabre AppointmentDetailsModal após retorno da página de registro/edição de charges
     // e exibe mensagem de sessão expirada quando redirecionado de outra página
     useEffect(() => {
         const loginMsg = sessionStorage.getItem('loginRequiredMsg');

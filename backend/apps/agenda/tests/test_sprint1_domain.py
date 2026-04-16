@@ -3,7 +3,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.agenda.models import Charge, ClinicalRecord, Encounter
+from apps.agenda.models import Appointment, Charge, ClinicalRecord, Encounter, FinalizeAudit
 from apps.clients.models import Client
 from apps.inventory.models import Product, Service
 from apps.register.models import Professional
@@ -36,6 +36,26 @@ def other_professional():
 def auth_client(professional):
     client = APIClient()
     client.force_authenticate(user=professional)
+    return client
+
+
+@pytest.fixture
+def staff_professional():
+    professional = Professional.objects.create_user(
+        email="staff-sprint1@example.com",
+        password="secret123",
+        first_name="Staff",
+        last_name="Reviewer",
+    )
+    professional.is_staff = True
+    professional.save(update_fields=["is_staff"])
+    return professional
+
+
+@pytest.fixture
+def staff_client(staff_professional):
+    client = APIClient()
+    client.force_authenticate(user=staff_professional)
     return client
 
 
@@ -75,6 +95,22 @@ def product(professional):
         name="Palmilha",
         price="80.00",
         cost="35.00",
+    )
+
+
+def make_future_appointment(professional, client_obj, hours_ahead: int = 2):
+    start_at = (timezone.now() + timezone.timedelta(hours=hours_ahead)).replace(
+        second=0,
+        microsecond=0,
+    )
+    return Appointment.objects.create(
+        professional=professional,
+        client=client_obj,
+        title="Consulta",
+        visit_type=Appointment.VisitType.CONSULTA,
+        start_at=start_at,
+        end_at=start_at + timezone.timedelta(minutes=30),
+        status=Appointment.Status.SCHEDULED,
     )
 
 
@@ -271,6 +307,104 @@ def test_mark_sent_does_not_downgrade_paid_charge(auth_client, client_obj):
     assert data["status"] == "paid"
     assert data["paid_at"] is not None
     assert data["shared_at"] is not None
+
+
+def test_charge_cancel_marks_canceled(auth_client, client_obj):
+    charge = Charge.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        charge_type=Charge.ChargeType.CHARGE,
+        status=Charge.Status.DRAFT,
+        title="Cobrança em aberto",
+    )
+
+    response = auth_client.post(f"/agenda/charges/{charge.id}/cancel/", format="json")
+
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert data["status"] == "canceled"
+    assert data["paid_at"] is None
+
+
+def test_charge_cancel_blocks_paid_charge(auth_client, client_obj):
+    charge = Charge.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        charge_type=Charge.ChargeType.CHARGE,
+        status=Charge.Status.PAID,
+        title="Cobrança quitada",
+    )
+
+    response = auth_client.post(f"/agenda/charges/{charge.id}/cancel/", format="json")
+
+    assert response.status_code == 400, response.content
+    assert "não pode ser cancelada" in str(response.json()).lower()
+
+
+def test_encounter_close_sets_ended_at(auth_client, client_obj):
+    encounter = Encounter.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        chief_complaint="Dor",
+        status=Encounter.Status.OPEN,
+    )
+
+    response = auth_client.post(f"/agenda/encounters/{encounter.id}/close/", format="json")
+
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert data["status"] == "closed"
+    assert data["ended_at"] is not None
+
+
+def test_encounter_cancel_sets_canceled(auth_client, client_obj):
+    encounter = Encounter.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        chief_complaint="Retorno",
+        status=Encounter.Status.OPEN,
+    )
+
+    response = auth_client.post(f"/agenda/encounters/{encounter.id}/cancel/", format="json")
+
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert data["status"] == "canceled"
+    assert data["ended_at"] is not None
+
+
+def test_finalize_audit_list_filters_for_staff(staff_client, professional, client_obj):
+    appointment_a = make_future_appointment(professional, client_obj, hours_ahead=3)
+    appointment_b = make_future_appointment(professional, client_obj, hours_ahead=5)
+
+    audit_a = FinalizeAudit.objects.create(
+        appointment=appointment_a,
+        professional=professional,
+        client=client_obj,
+        device_id="device-a",
+        device_info="ios",
+        server_now=timezone.now(),
+        reason="in_window",
+    )
+    FinalizeAudit.objects.create(
+        appointment=appointment_b,
+        professional=professional,
+        client=client_obj,
+        device_id="device-b",
+        device_info="android",
+        server_now=timezone.now(),
+        reason="finished",
+    )
+
+    response = staff_client.get(
+        f"/agenda/finalize-audits/?appointment={appointment_a.id}&device_id=device-a"
+    )
+
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == audit_a.id
+    assert data[0]["appointment_id"] == appointment_a.id
 
 
 def test_clinical_record_delete_is_blocked(auth_client, client_obj):

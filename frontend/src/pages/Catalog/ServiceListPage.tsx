@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../../config/api';
 import { apiFetch, ApiError } from '../../utils/apiFetch';
 import FormPage from '../../components/FormKit/FormPage';
 import FormSection from '../../components/FormKit/FormSection';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 type Service = {
     id: number;
@@ -26,6 +26,33 @@ export default function ServiceListPage() {
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const navigate = useNavigate();
+    const location = useLocation();
+    const returnTo =
+        (location.state as { returnTo?: string } | null)?.returnTo ??
+        '/catalog/services';
+    const cameFromConsulta = returnTo === '/consulta';
+
+    const handleClose = useMemo(
+        () => () => {
+            if (cameFromConsulta) {
+                navigate(-1);
+                return;
+            }
+            navigate('/');
+        },
+        [cameFromConsulta, navigate],
+    );
+
+    const openServiceForm = useMemo(
+        () =>
+            (serviceId?: number) => {
+                const path = serviceId
+                    ? `/catalog/services/${serviceId}`
+                    : '/catalog/services/new';
+                navigate(path, { state: { returnTo } });
+            },
+        [navigate, returnTo],
+    );
 
     useEffect(() => {
         let mounted = true;
@@ -74,7 +101,7 @@ export default function ServiceListPage() {
         <FormPage title='Procedimentos' onSubmit={e => e.preventDefault()}>
             <FormSection
                 title='Lista'
-                onClose={() => navigate('/')}
+                onClose={handleClose}
                 closeTitle='Fechar'
             >
                 {successMsg && (
@@ -103,7 +130,7 @@ export default function ServiceListPage() {
                 >
                     <button
                         className='btn'
-                        onClick={() => navigate(-1)}
+                        onClick={handleClose}
                         style={{
                             background: 'transparent',
                             color: 'var(--color-text)',
@@ -129,7 +156,7 @@ export default function ServiceListPage() {
                             cursor: 'pointer',
                         }}
                         title='Novo procedimento'
-                        onClick={() => navigate('/catalog/services/new')}
+                        onClick={() => openServiceForm()}
                     >
                         + Novo
                     </button>
@@ -214,11 +241,7 @@ export default function ServiceListPage() {
                                             <button
                                                 aria-label='Editar'
                                                 title='Editar'
-                                                onClick={() =>
-                                                    navigate(
-                                                        `/catalog/services/${s.id}`,
-                                                    )
-                                                }
+                                                onClick={() => openServiceForm(s.id)}
                                                 style={{
                                                     background: 'transparent',
                                                     border: 'none',

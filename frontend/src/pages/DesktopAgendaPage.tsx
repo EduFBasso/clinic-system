@@ -87,7 +87,7 @@ export default function DesktopAgendaPage() {
         null,
     );
 
-    // Reabre AppointmentDetailsModal após retorno da página de edição de charges
+    // Reabre AppointmentDetailsModal após retorno da página de registro/edição de charges
     React.useEffect(() => {
         const raw = sessionStorage.getItem('reopenAppointmentDetails');
         if (!raw) return;

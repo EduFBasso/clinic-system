@@ -157,6 +157,49 @@ export default function AppointmentDetailsModal({
               : undefined;
     }, [appt]);
 
+    const openConsultaNotebook = React.useCallback(() => {
+        const chargeItems = charges.flatMap(c =>
+            c.items.map(item => ({
+                key:
+                    item.item_type === 'service' && item.service
+                        ? `service-${item.service}`
+                        : item.item_type === 'product' && item.product
+                          ? `product-${item.product}`
+                          : `custom-${item.id}`,
+                kind: (item.item_type === 'product' ? 'product' : 'service') as
+                    | 'service'
+                    | 'product',
+                id:
+                    item.item_type === 'service'
+                        ? (item.service ?? item.id)
+                        : (item.product ?? item.id),
+                name: item.description,
+                unit_price: parseFloat(item.unit_price),
+                quantity: parseFloat(item.quantity),
+                paid: item.paid,
+                paidAt: item.paid
+                    ? item.paid_at
+                        ? item.paid_at.slice(0, 10)
+                        : new Date().toISOString().slice(0, 10)
+                    : undefined,
+            })),
+        );
+
+        onClose();
+        navigate('/consulta', {
+            state: {
+                appointmentId: appt.id,
+                clientName,
+                clientId,
+                startAt: appt.start_at,
+                endAt: appt.end_at,
+                chargeId: charges[0]?.id,
+                chargeItems,
+                chargeNotes: charges[0]?.notes ?? '',
+            },
+        });
+    }, [appt, charges, clientId, clientName, navigate, onClose]);
+
     if (!appt) return null;
 
     return (
@@ -236,6 +279,7 @@ export default function AppointmentDetailsModal({
                             style={{
                                 fontWeight: 800,
                                 color: 'var(--color-heading)',
+                                fontSize: 17,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
@@ -243,7 +287,7 @@ export default function AppointmentDetailsModal({
                         >
                             {clientName}
                         </div>
-                        <div style={{ color: '#6b7280', fontSize: 12 }}>
+                        <div style={{ color: '#6b7280', fontSize: 16 }}>
                             {fmtDateTimeRange(appt.start_at, appt.end_at)}
                         </div>
                     </div>
@@ -276,7 +320,7 @@ export default function AppointmentDetailsModal({
                                     fontWeight: 700,
                                     color: '#374151',
                                     marginBottom: 6,
-                                    fontSize: 13,
+                                    fontSize: 18,
                                 }}
                             >
                                 Procedimentos e produtos
@@ -285,7 +329,7 @@ export default function AppointmentDetailsModal({
                                 style={{
                                     width: '100%',
                                     borderCollapse: 'collapse',
-                                    fontSize: 13,
+                                    fontSize: 16,
                                 }}
                             >
                                 <thead>
@@ -298,9 +342,10 @@ export default function AppointmentDetailsModal({
                                         <th
                                             style={{
                                                 textAlign: 'left',
-                                                padding: '4px 6px',
-                                                fontWeight: 600,
-                                                color: 'var(--color-text-muted)',
+                                                padding: '6px 8px',
+                                                fontWeight: 700,
+                                                color: '#4b5563',
+                                                fontSize: 16,
                                             }}
                                         >
                                             Item
@@ -308,10 +353,11 @@ export default function AppointmentDetailsModal({
                                         <th
                                             style={{
                                                 textAlign: 'center',
-                                                padding: '4px 6px',
-                                                fontWeight: 600,
-                                                color: 'var(--color-text-muted)',
+                                                padding: '6px 8px',
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                                 whiteSpace: 'nowrap',
+                                                fontSize: 16,
                                             }}
                                         >
                                             Qtd
@@ -319,10 +365,11 @@ export default function AppointmentDetailsModal({
                                         <th
                                             style={{
                                                 textAlign: 'right',
-                                                padding: '4px 6px',
-                                                fontWeight: 600,
-                                                color: 'var(--color-text-muted)',
+                                                padding: '6px 8px',
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                                 whiteSpace: 'nowrap',
+                                                fontSize: 16,
                                             }}
                                         >
                                             Unit.
@@ -330,21 +377,23 @@ export default function AppointmentDetailsModal({
                                         <th
                                             style={{
                                                 textAlign: 'right',
-                                                padding: '4px 6px',
-                                                fontWeight: 600,
-                                                color: 'var(--color-text-muted)',
+                                                padding: '6px 8px',
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                                 whiteSpace: 'nowrap',
+                                                fontSize: 16,
                                             }}
                                         >
-                                            Total
+                                            Valor
                                         </th>
                                         <th
                                             style={{
                                                 textAlign: 'center',
-                                                padding: '4px 6px',
-                                                fontWeight: 600,
-                                                color: 'var(--color-text-muted)',
+                                                padding: '6px 8px',
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                                 whiteSpace: 'nowrap',
+                                                fontSize: 16,
                                             }}
                                         >
                                             Status
@@ -375,17 +424,19 @@ export default function AppointmentDetailsModal({
                                                 >
                                                     <td
                                                         style={{
-                                                            padding: '5px 6px',
+                                                            padding: '7px 8px',
                                                             color: '#111827',
+                                                            fontSize: 16,
                                                         }}
                                                     >
                                                         {item.description}
                                                     </td>
                                                     <td
                                                         style={{
-                                                            padding: '5px 6px',
+                                                            padding: '7px 8px',
                                                             textAlign: 'center',
                                                             color: '#374151',
+                                                            fontSize: 16,
                                                         }}
                                                     >
                                                         {qty % 1 === 0
@@ -394,22 +445,24 @@ export default function AppointmentDetailsModal({
                                                     </td>
                                                     <td
                                                         style={{
-                                                            padding: '5px 6px',
+                                                            padding: '7px 8px',
                                                             textAlign: 'right',
                                                             color: '#374151',
                                                             whiteSpace:
                                                                 'nowrap',
+                                                            fontSize: 16,
                                                         }}
                                                     >
                                                         R$ {formatBRL(unit)}
                                                     </td>
                                                     <td
                                                         style={{
-                                                            padding: '5px 6px',
+                                                            padding: '7px 8px',
                                                             textAlign: 'right',
                                                             fontWeight: 600,
                                                             whiteSpace:
                                                                 'nowrap',
+                                                            fontSize: 16,
                                                         }}
                                                     >
                                                         R${' '}
@@ -417,7 +470,7 @@ export default function AppointmentDetailsModal({
                                                     </td>
                                                     <td
                                                         style={{
-                                                            padding: '5px 6px',
+                                                            padding: '7px 8px',
                                                             textAlign: 'center',
                                                             whiteSpace:
                                                                 'nowrap',
@@ -428,9 +481,9 @@ export default function AppointmentDetailsModal({
                                                                 display:
                                                                     'inline-block',
                                                                 padding:
-                                                                    '2px 8px',
+                                                                    '3px 10px',
                                                                 borderRadius: 20,
-                                                                fontSize: 11,
+                                                                fontSize: 13,
                                                                 fontWeight: 700,
                                                                 background:
                                                                     item.paid
@@ -456,28 +509,17 @@ export default function AppointmentDetailsModal({
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <td
-                                            colSpan={4}
-                                            style={{
-                                                padding: '6px 6px 2px',
-                                                textAlign: 'right',
-                                                fontWeight: 700,
-                                                color: '#374151',
-                                                fontSize: 13,
-                                            }}
-                                        >
-                                            Total
-                                        </td>
+                                        <td colSpan={3} />
                                         <td
                                             style={{
-                                                padding: '6px 6px 2px',
+                                                padding: '9px 8px 3px',
                                                 textAlign: 'right',
                                                 fontWeight: 800,
-                                                fontSize: 14,
+                                                fontSize: 20,
                                                 whiteSpace: 'nowrap',
                                             }}
                                         >
-                                            R${' '}
+                                            Total: R${' '}
                                             {formatBRL(
                                                 charges
                                                     .flatMap(c => c.items)
@@ -494,6 +536,7 @@ export default function AppointmentDetailsModal({
                                                     ),
                                             )}
                                         </td>
+                                        <td />
                                     </tr>
                                 </tfoot>
                             </table>
@@ -507,70 +550,20 @@ export default function AppointmentDetailsModal({
                         gap: 8,
                     }}
                 >
-                    {charges.length > 0 && (
-                        <button
-                            onClick={() => {
-                                onClose();
-                                // Mapeia os items de todas as charges para o formato SelectedItem
-                                const chargeItems = charges.flatMap(c =>
-                                    c.items.map(item => ({
-                                        key:
-                                            item.item_type === 'service' &&
-                                            item.service
-                                                ? `service-${item.service}`
-                                                : item.item_type ===
-                                                        'product' &&
-                                                    item.product
-                                                  ? `product-${item.product}`
-                                                  : `custom-${item.id}`,
-                                        kind: (item.item_type === 'product'
-                                            ? 'product'
-                                            : 'service') as
-                                            | 'service'
-                                            | 'product',
-                                        id:
-                                            item.item_type === 'service'
-                                                ? (item.service ?? item.id)
-                                                : (item.product ?? item.id),
-                                        name: item.description,
-                                        unit_price: parseFloat(item.unit_price),
-                                        quantity: parseFloat(item.quantity),
-                                        paid: item.paid,
-                                        paidAt: item.paid
-                                            ? item.paid_at
-                                                ? item.paid_at.slice(0, 10)
-                                                : new Date()
-                                                      .toISOString()
-                                                      .slice(0, 10)
-                                            : undefined,
-                                    })),
-                                );
-                                navigate('/consulta', {
-                                    state: {
-                                        appointmentId: appt.id,
-                                        clientName: clientName,
-                                        clientId,
-                                        startAt: appt.start_at,
-                                        endAt: appt.end_at,
-                                        chargeId: charges[0]?.id,
-                                        chargeItems,
-                                        chargeNotes: charges[0]?.notes ?? '',
-                                    },
-                                });
-                            }}
-                            style={{
-                                padding: '8px 16px',
-                                background: 'var(--color-primary)',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: 6,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Editar
-                        </button>
-                    )}
+                    <button
+                        onClick={openConsultaNotebook}
+                        style={{
+                            padding: '8px 16px',
+                            background: 'var(--color-primary)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 6,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {charges.length > 0 ? 'Editar' : 'Anotar cobrança'}
+                    </button>
                     <button
                         onClick={onClose}
                         style={{ padding: '8px 12px', background: '#e5e7eb' }}

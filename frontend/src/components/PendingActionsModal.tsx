@@ -7,6 +7,8 @@ import { dispatchers } from '../events/dispatchers';
 import { cancelFlow } from '../services/flows/cancelFlow';
 import { finalizeFlow } from '../services/flows/finalizeFlow';
 import { formatTime } from '../utils/timeFormat';
+import { API_BASE } from '../config/api';
+import { apiFetch } from '../utils/apiFetch';
 import {
     setAppointmentOverride,
     getAppointmentOverride,
@@ -31,6 +33,16 @@ const valueStyle: React.CSSProperties = {
     color: 'var(--color-heading)',
 };
 
+type AppointmentCharge = {
+    id: number;
+    status: string;
+    paid_at?: string | null;
+    items?: Array<{
+        paid?: boolean;
+        paid_at?: string | null;
+    }>;
+};
+
 export default function PendingActionsModal({
     open,
     onClose,
@@ -39,7 +51,42 @@ export default function PendingActionsModal({
     const [busy, setBusy] = React.useState<'cancel' | 'finalize' | null>(null);
     const [closing, setClosing] = React.useState(false);
     const [errorText, setErrorText] = React.useState<string | null>(null);
+    const [hasPaidCharge, setHasPaidCharge] = React.useState(false);
     const [, forceRender] = React.useState(0);
+    React.useEffect(() => {
+        if (!open || !appt) {
+            setHasPaidCharge(false);
+            return;
+        }
+        let mounted = true;
+        apiFetch(`${API_BASE}/agenda/charges/?appointment=${appt.id}`)
+            .then(data => {
+                if (!mounted) return;
+                const raw = data as
+                    | { results?: AppointmentCharge[] }
+                    | AppointmentCharge[];
+                const charges = Array.isArray(raw)
+                    ? raw
+                    : ((raw as { results?: AppointmentCharge[] }).results ??
+                      []);
+                const paidDetected = charges.some(charge => {
+                    if (charge.status === 'paid' || !!charge.paid_at) {
+                        return true;
+                    }
+                    return (charge.items ?? []).some(
+                        item => item.paid || !!item.paid_at,
+                    );
+                });
+                setHasPaidCharge(paidDetected);
+            })
+            .catch(() => {
+                if (mounted) setHasPaidCharge(false);
+            });
+        return () => {
+            mounted = false;
+        };
+    }, [open, appt]);
+
     React.useEffect(() => {
         if (!appt) return undefined;
         const unsub = subscribeOverrides(ids => {
@@ -694,6 +741,24 @@ export default function PendingActionsModal({
                             {timeStatus.detail ? ` — ${timeStatus.detail}` : ''}
                         </span>
                     </div>
+                    {hasPaidCharge && (
+                        <div
+                            style={{
+                                marginTop: 4,
+                                padding: '10px 12px',
+                                borderRadius: 10,
+                                background: '#fff7ed',
+                                border: '1px solid #fdba74',
+                                color: '#9a3412',
+                                fontSize: 13,
+                                lineHeight: 1.35,
+                                fontWeight: 600,
+                            }}
+                            role='status'
+                        >
+                            Aviso: esta consulta ja possui cobranca ou anotacao marcada como paga. Se desmarcar o compromisso, revise depois a cobranca para manter o registro consistente.
+                        </div>
+                    )}
                 </div>
                 {/* Campo de motivo removido por ora. Backend ainda não coleta. */}
                 <div
@@ -773,7 +838,11 @@ export default function PendingActionsModal({
                             color: 'var(--color-bg-section)',
                             fontWeight: 700,
                         }}
-                        title='Cancelar compromisso'
+                        title={
+                            hasPaidCharge
+                                ? 'Cancelar compromisso com cobrança paga associada'
+                                : 'Cancelar compromisso'
+                        }
                     >
                         {busy === 'cancel' ? 'Cancelando…' : 'Cancelar'}
                     </button>
