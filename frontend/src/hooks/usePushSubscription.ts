@@ -44,15 +44,17 @@ export function usePushSubscription() {
     }, []);
 
     const subscribe = useCallback(async (): Promise<boolean> => {
-        if (!VAPID_PUBLIC_KEY) {
-            console.error('[push] VITE_VAPID_PUBLIC_KEY is not set');
-            return false;
-        }
         try {
             setState('loading');
+            // iOS WebKit: requestPermission must be the first await closest to the user gesture
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
                 setState('denied');
+                return false;
+            }
+            if (!VAPID_PUBLIC_KEY) {
+                console.error('[push] VITE_VAPID_PUBLIC_KEY is not set');
+                setState('unsubscribed');
                 return false;
             }
             const reg = await navigator.serviceWorker.ready;

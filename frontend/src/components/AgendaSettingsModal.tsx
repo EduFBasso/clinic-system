@@ -507,6 +507,11 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                                                     setPushJustActivated(false),
                                                 5000,
                                             );
+                                        } else if (Notification.permission !== 'denied') {
+                                            setSavedMsg(
+                                                'Não foi possível ativar as notificações. No iPhone: Ajustes → Notificações → habilite para este app.',
+                                            );
+                                            setMsgType('error');
                                         }
                                     }
                                 }}
