@@ -94,7 +94,6 @@ export default function Home() {
                 const isNew = url.searchParams.get('new') === '1';
                 const editId = url.searchParams.get('edit');
                 const mode = url.searchParams.get('mode');
-                const reminderId = url.searchParams.get('reminder');
 
                 if (cid) setSelectedClientId(Number(cid));
 
@@ -109,87 +108,6 @@ export default function Home() {
 
                 if (mode === 'week') {
                     setWeeklyOpen(true);
-                }
-
-                // Push notification reminder: focus ClientCard (or save pending for post-login)
-                if (reminderId) {
-                    const token = localStorage.getItem('accessToken');
-                    const isWa = url.searchParams.get('wa') === '1';
-                    const waPhone = url.searchParams.get('wp') ?? '';
-                    const waText = url.searchParams.get('wt') ?? '';
-                    if (token) {
-                        try {
-                            const res = await fetch(
-                                `${API_BASE}/agenda/appointments/${reminderId}/`,
-                                {
-                                    headers: {
-                                        Authorization: `Bearer ${token}`,
-                                    },
-                                },
-                            );
-                            if (res.ok) {
-                                const appt = (await res.json()) as {
-                                    client_id?: number;
-                                    // API returns FK as integer ("client": 5), not nested object
-                                    client?: number | { id?: number };
-                                };
-                                const rawClient = appt.client;
-                                const clientId =
-                                    appt.client_id ??
-                                    (typeof rawClient === 'number'
-                                        ? rawClient
-                                        : (
-                                              rawClient as
-                                                  | { id?: number }
-                                                  | undefined
-                                          )?.id) ??
-                                    null;
-                                if (clientId) {
-                                    setSelectedClientId(clientId);
-                                    focusClientCard(clientId, { delayMs: 300 });
-                                }
-                                if (isWa) {
-                                    fetch(
-                                        `${API_BASE}/agenda/appointments/${reminderId}/confirm-whatsapp/`,
-                                        {
-                                            method: 'POST',
-                                            headers: {
-                                                Authorization: `Bearer ${token}`,
-                                                'Content-Type':
-                                                    'application/json',
-                                            },
-                                        },
-                                    ).catch(() => {
-                                        /* silencioso */
-                                    });
-                                    if (waPhone && waText) {
-                                        window.open(
-                                            `https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`,
-                                            '_blank',
-                                        );
-                                    }
-                                }
-                            }
-                        } catch {
-                            /* silencioso */
-                        }
-                    } else {
-                        sessionStorage.setItem(
-                            'pushPending',
-                            JSON.stringify({
-                                appointmentId: Number(reminderId),
-                                wa: isWa,
-                                waPhone,
-                                waText,
-                            }),
-                        );
-                    }
-                    const clean = new URL(window.location.href);
-                    clean.searchParams.delete('reminder');
-                    clean.searchParams.delete('wa');
-                    clean.searchParams.delete('wp');
-                    clean.searchParams.delete('wt');
-                    window.history.replaceState({}, '', clean.toString());
                 }
 
                 if (editId && cid) {
@@ -234,82 +152,6 @@ export default function Home() {
                 /* ignore */
             }
         })();
-    }, []);
-
-    // Pós-login: se houver um pushPending salvo (clique em notificação sem estar logado),
-    // busca o appointment, seleciona e foca o ClientCard.
-    useEffect(() => {
-        const handlePostLoginFocus = () => {
-            const raw = sessionStorage.getItem('pushPending');
-            if (!raw) return;
-            const token = localStorage.getItem('accessToken');
-            if (!token) return;
-            let pending: {
-                appointmentId: number;
-                wa?: boolean;
-                waPhone: string;
-                waText: string;
-            };
-            try {
-                pending = JSON.parse(raw);
-            } catch {
-                sessionStorage.removeItem('pushPending');
-                return;
-            }
-            sessionStorage.removeItem('pushPending');
-            fetch(`${API_BASE}/agenda/appointments/${pending.appointmentId}/`, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
-                .then(r => (r.ok ? r.json() : null))
-                .then(
-                    (
-                        appt: {
-                            client_id?: number;
-                            // API returns FK as integer ("client": 5), not nested object
-                            client?: number | { id?: number };
-                        } | null,
-                    ) => {
-                        const rawClient = appt?.client;
-                        const clientId =
-                            appt?.client_id ??
-                            (typeof rawClient === 'number'
-                                ? rawClient
-                                : (rawClient as { id?: number } | undefined)
-                                      ?.id) ??
-                            null;
-                        if (clientId) {
-                            setSelectedClientId(clientId);
-                            focusClientCard(clientId, { delayMs: 400 });
-                        }
-                        if (pending.wa) {
-                            fetch(
-                                `${API_BASE}/agenda/appointments/${pending.appointmentId}/confirm-whatsapp/`,
-                                {
-                                    method: 'POST',
-                                    headers: {
-                                        Authorization: `Bearer ${token}`,
-                                        'Content-Type': 'application/json',
-                                    },
-                                },
-                            ).catch(() => {
-                                /* silencioso */
-                            });
-                            if (pending.waPhone && pending.waText) {
-                                window.open(
-                                    `https://wa.me/${pending.waPhone}?text=${encodeURIComponent(pending.waText)}`,
-                                    '_blank',
-                                );
-                            }
-                        }
-                    },
-                )
-                .catch(() => {
-                    /* silencioso */
-                });
-        };
-        window.addEventListener('updateClients', handlePostLoginFocus);
-        return () =>
-            window.removeEventListener('updateClients', handlePostLoginFocus);
     }, []);
 
     // Listener global para mensagens do sistema

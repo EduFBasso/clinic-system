@@ -5,7 +5,7 @@ from .serializers_professionals import (
 )
 from .serializers_auth import CustomTokenObtainPairSerializer
 from rest_framework import serializers
-from .models import ProfessionalSettings, PushSubscription
+from .models import ProfessionalSettings
 from typing import Any, Dict
 
 
@@ -96,12 +96,3 @@ class ProfessionalSettingsSerializer(serializers.ModelSerializer):
             "reminder_enabled",
             "reminder_minutes_before",
         ]
-
-
-class PushSubscriptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PushSubscription
-        fields = ["endpoint", "p256dh", "auth", "user_agent"]
-        extra_kwargs = {
-            "user_agent": {"required": False},
-        }

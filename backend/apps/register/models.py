@@ -186,11 +186,11 @@ class ProfessionalSettings(models.Model):
     )
     pix_key_value = models.CharField(max_length=128, blank=True, default="")
 
-    # Push notification reminder (same-day)
+    # Professional reminder settings (Telegram)
     reminder_enabled = models.BooleanField(default=False)
     reminder_minutes_before = models.PositiveSmallIntegerField(
         default=90,
-        help_text="Quantos minutos antes do compromisso enviar o lembrete push.",
+        help_text="Quantos minutos antes do compromisso enviar o lembrete Telegram.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -207,34 +207,6 @@ class ProfessionalSettings(models.Model):
             f"Config {self.professional.email} "
             f"({start}-{end}/{self.slot_minutes}m/{self.default_duration_minutes}m)"
         )
-
-
-class PushSubscription(models.Model):
-    """Assinatura Web Push de um profissional.
-
-    Uma por dispositivo/navegador. O endpoint é único e identifica a assinatura.
-    Deletada automaticamente quando o push retorna 404/410 (expirada).
-    """
-
-    professional = models.ForeignKey(
-        Professional,
-        on_delete=models.CASCADE,
-        related_name="push_subscriptions",
-        verbose_name="Profissional",
-    )
-    endpoint = models.TextField(unique=True)
-    p256dh = models.TextField()
-    auth = models.TextField()
-    user_agent = models.CharField(max_length=256, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Assinatura Push"
-        verbose_name_plural = "Assinaturas Push"
-
-    def __str__(self):
-        return f"{self.professional.email} — {self.endpoint[:60]}"
 
 
 class WebAuthnCredential(models.Model):

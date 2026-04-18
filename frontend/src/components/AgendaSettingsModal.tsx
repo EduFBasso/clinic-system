@@ -1,7 +1,6 @@
 import React from 'react';
 import AppModal from './Modal';
 import modalStyles from '../styles/components/AgendaSettingsModal.module.css';
-import { usePushSubscription } from '../hooks/usePushSubscription';
 import {
     DEFAULT_AGENDA_SETTINGS,
     type DefaultDuration,
@@ -61,24 +60,16 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     const firstFieldRef = React.useRef<HTMLInputElement | null>(null);
     const openRef = React.useRef(false);
 
-    // Notification settings (backend-stored)
+    // Reminder settings (backend-stored)
     const [reminderEnabled, setReminderEnabled] = React.useState(false);
     const [reminderMinutesBefore, setReminderMinutesBefore] =
         React.useState(90);
-    const { state: pushState, subscribe, unsubscribe } = usePushSubscription();
-    const [pushJustActivated, setPushJustActivated] = React.useState(false);
 
     React.useEffect(() => {
         if (!open) return;
         let active = true;
         setSavedMsg(null);
         setMsgType(null);
-        // Check if subscription was just completed (survives iOS modal close)
-        if (sessionStorage.getItem('pushJustActivated')) {
-            sessionStorage.removeItem('pushJustActivated');
-            setPushJustActivated(true);
-            setTimeout(() => setPushJustActivated(false), 5000);
-        }
 
         const current = getAgendaSettingsSnapshot();
         setWorkStart(clampHM(current.workStart, DEFAULTS.workStart));
@@ -325,7 +316,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                     </div>
                 </div>
 
-                {/* ── Notificações Push ─────────────────────────────── */}
+                {/* ── Lembretes Telegram ─────────────────────────────── */}
                 <div
                     style={{
                         borderTop: '1px solid #e5e7eb',
@@ -340,7 +331,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                             color: '#374151',
                         }}
                     >
-                        Notificações Push
+                        Lembretes Telegram
                     </p>
 
                     {/* Reminder toggle */}
@@ -399,92 +390,17 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                         />
                     </div>
 
-                    {/* Push subscription status */}
-                    {pushJustActivated && (
-                        <div
-                            style={{
-                                background: 'var(--color-success-bg)',
-                                color: 'var(--color-success)',
-                                border: '1px solid #6ee7b7',
-                                borderRadius: '0.5rem',
-                                padding: '0.5rem 0.75rem',
-                                fontSize: '0.85rem',
-                                fontWeight: 600,
-                                marginBottom: '0.5rem',
-                            }}
-                        >
-                            ✔ Notificações ativadas neste dispositivo!
-                        </div>
-                    )}
                     <div
                         style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            flexWrap: 'wrap',
+                            fontSize: '0.85rem',
+                            color: '#6b7280',
+                            lineHeight: 1.5,
                         }}
                     >
-                        <span
-                            style={{
-                                fontSize: '0.85rem',
-                                color:
-                                    pushState === 'subscribed'
-                                        ? '#065f46'
-                                        : '#6b7280',
-                                fontWeight:
-                                    pushState === 'subscribed' ? 600 : 400,
-                            }}
-                        >
-                            {pushState === 'unsupported' &&
-                                'Este navegador não suporta notificações push.'}
-                            {pushState === 'denied' &&
-                                'Notificações bloqueadas pelo navegador.'}
-                            {pushState === 'subscribed' &&
-                                '✔ Este dispositivo receberá lembretes.'}
-                            {pushState === 'unsubscribed' &&
-                                'Este dispositivo não está inscrito.'}
-                            {pushState === 'loading' && 'Verificando…'}
-                        </span>
-                        {(pushState === 'subscribed' ||
-                            pushState === 'unsubscribed') && (
-                            <button
-                                type='button'
-                                className={`${modalStyles.buttonBase} ${modalStyles.secondary}`}
-                                style={{
-                                    padding: '0.35rem 0.8rem',
-                                    fontSize: '0.85rem',
-                                }}
-                                onClick={async () => {
-                                    if (pushState === 'subscribed') {
-                                        await unsubscribe();
-                                        setPushJustActivated(false);
-                                    } else {
-                                        const ok = await subscribe();
-                                        if (ok) {
-                                            sessionStorage.setItem(
-                                                'pushJustActivated',
-                                                '1',
-                                            );
-                                            setPushJustActivated(true);
-                                            setTimeout(
-                                                () =>
-                                                    setPushJustActivated(false),
-                                                5000,
-                                            );
-                                        } else if (Notification.permission !== 'denied') {
-                                            setSavedMsg(
-                                                'Não foi possível ativar as notificações. No iPhone: Ajustes → Notificações → habilite para este app.',
-                                            );
-                                            setMsgType('error');
-                                        }
-                                    }
-                                }}
-                            >
-                                {pushState === 'subscribed'
-                                    ? 'Remover inscrição'
-                                    : 'Ativar neste dispositivo'}
-                            </button>
-                        )}
+                        Os lembretes do sistema agora são enviados apenas para
+                        o Telegram vinculado da profissional. Não há mais
+                        dependência de PWA, navegador ou ativação por
+                        dispositivo.
                     </div>
                 </div>
 

@@ -16,14 +16,6 @@ vi.mock('../Modal', () => ({
     }) => (open ? <div data-testid='modal-root'>{children}</div> : null),
 }));
 
-vi.mock('../../hooks/usePushSubscription', () => ({
-    usePushSubscription: () => ({
-        state: { supported: true, permission: 'granted', subscribed: false },
-        subscribe: vi.fn(),
-        unsubscribe: vi.fn(),
-    }),
-}));
-
 describe('AgendaSettingsModal', () => {
     const LS_KEYS = {
         defaultDuration: 'agenda.defaultDuration',

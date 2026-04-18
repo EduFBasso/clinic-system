@@ -13,12 +13,13 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 DEBUG = config("DEBUG", default=False, cast=bool)
 APP_VERSION = config("APP_VERSION", default="dev")
 
-# Web Push (VAPID)
-# VAPID_PRIVATE_KEY: base64url dos 32 bytes brutos da chave EC privada (sem padding).
-# VAPID_PUBLIC_KEY: base64url da chave pública uncompressed (65 bytes, sem padding).
-VAPID_PRIVATE_KEY = config("VAPID_PRIVATE_KEY", default="")
-VAPID_PUBLIC_KEY = config("VAPID_PUBLIC_KEY", default="")
-VAPID_ADMIN_EMAIL = config("VAPID_ADMIN_EMAIL", default="admin@example.com")
+TELEGRAM_BOT_TOKEN = config("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_BOT_API_BASE = config(
+    "TELEGRAM_BOT_API_BASE", default="https://api.telegram.org"
+)
+TELEGRAM_BOT_TIMEOUT_SECONDS = config(
+    "TELEGRAM_BOT_TIMEOUT_SECONDS", default=10, cast=int
+)
 
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
     'apps.agenda',
     'apps.anamnesis',
     'apps.clients',
+    'apps.reminders',
     'apps.register',
     'apps.inventory',
     'django.contrib.admin',
@@ -237,6 +239,16 @@ LOGGING = {
         'django.db.backends': {
             'handlers': ['console'],
             'level': 'INFO',
+            'propagate': False,
+        },
+        'urllib3': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'requests': {
+            'handlers': ['console'],
+            'level': 'WARNING',
             'propagate': False,
         },
         'performance': {

@@ -158,6 +158,8 @@ export default function AppointmentDetailsModal({
     }, [appt]);
 
     const openConsultaNotebook = React.useCallback(() => {
+        if (!appt) return;
+
         const chargeItems = charges.flatMap(c =>
             c.items.map(item => ({
                 key:

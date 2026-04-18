@@ -1,0 +1,129 @@
+from datetime import timedelta
+from unittest.mock import patch
+
+import pytest
+from django.core.management import call_command
+from django.utils import timezone
+
+from apps.agenda.models import Appointment
+from apps.clients.models import Client
+from apps.register.models import Professional, ProfessionalSettings
+from apps.reminders.models import ReminderDelivery, TelegramProfessionalLink
+from apps.reminders.services.reminders import dispatch_appointment_reminder
+
+
+pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture
+def professional():
+    return Professional.objects.create_user(
+        email="telegram@example.com",
+        password="secret123",
+        first_name="Ana",
+        last_name="Silva",
+    )
+
+
+@pytest.fixture
+def client(professional):
+    return Client.objects.create(
+        professional=professional,
+        first_name="Maria",
+        last_name="Souza",
+        email="maria@example.com",
+        phone="11999998888",
+    )
+
+
+@pytest.fixture
+def appointment(professional, client):
+    start_at = timezone.now() + timedelta(minutes=10)
+    end_at = start_at + timedelta(minutes=60)
+    return Appointment.objects.create(
+        professional=professional,
+        client=client,
+        title="Consulta",
+        visit_type=Appointment.VisitType.CONSULTA,
+        start_at=start_at,
+        end_at=end_at,
+        status=Appointment.Status.SCHEDULED,
+    )
+
+
+@pytest.fixture
+def reminder_settings(professional):
+    return ProfessionalSettings.objects.create(
+        professional=professional,
+        reminder_enabled=True,
+        reminder_minutes_before=10,
+    )
+
+
+def test_dispatch_appointment_reminder_sends_telegram(
+    appointment,
+    reminder_settings,
+    professional,
+    settings,
+):
+    settings.TELEGRAM_BOT_TOKEN = "test-token"
+    TelegramProfessionalLink.objects.create(
+        professional=professional,
+        chat_id="123456",
+        telegram_username="ana_silva",
+    )
+
+    with patch("apps.reminders.services.telegram.requests.post") as mocked_post:
+        mocked_post.return_value.status_code = 200
+        mocked_post.return_value.json.return_value = {
+            "ok": True,
+            "result": {"message_id": 77},
+        }
+
+        delivery = dispatch_appointment_reminder(appointment)
+
+    appointment.refresh_from_db()
+    assert appointment.reminder_sent is True
+    assert delivery is not None
+    assert delivery.status == ReminderDelivery.Status.SENT
+    assert delivery.external_message_id == "77"
+    assert "Abrir WhatsApp da cliente" in str(delivery.payload)
+    assert mocked_post.called
+
+
+def test_dispatch_appointment_reminder_skips_without_telegram_link(appointment, reminder_settings):
+    delivery = dispatch_appointment_reminder(appointment)
+
+    appointment.refresh_from_db()
+    assert appointment.reminder_sent is False
+    assert delivery is not None
+    assert delivery.status == ReminderDelivery.Status.SKIPPED
+    assert delivery.payload["reason"] == "telegram_not_linked"
+
+
+def test_send_reminders_command_can_force_specific_appointment(
+    appointment,
+    professional,
+    settings,
+):
+    settings.TELEGRAM_BOT_TOKEN = "test-token"
+    TelegramProfessionalLink.objects.create(
+        professional=professional,
+        chat_id="123456",
+    )
+
+    with patch("apps.reminders.services.telegram.requests.post") as mocked_post:
+        mocked_post.return_value.status_code = 200
+        mocked_post.return_value.json.return_value = {
+            "ok": True,
+            "result": {"message_id": 88},
+        }
+
+        call_command("send_reminders", "--appointment-id", str(appointment.pk))
+
+    appointment.refresh_from_db()
+    assert appointment.reminder_sent is True
+    assert ReminderDelivery.objects.filter(
+        appointment=appointment,
+        status=ReminderDelivery.Status.SENT,
+    ).exists()
