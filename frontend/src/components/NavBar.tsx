@@ -496,7 +496,7 @@ const NavBar: React.FC<NavBarProps> = ({
                         aria-haspopup='true'
                         aria-expanded={consultaDropdownOpen}
                     >
-                        🩺 Consulta <span className={styles.caret}>▼</span>
+                        🩺 Catálogo <span className={styles.caret}>▼</span>
                     </button>
                     {consultaDropdownOpen && (
                         <div className={styles.dropdownMenu}>

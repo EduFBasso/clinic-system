@@ -1,8 +1,11 @@
 from rest_framework import filters
 from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
+from rest_framework import status
+from django.db import transaction
 from django.db import IntegrityError
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from apps.clients.models import Client
 from apps.clients.serializers import ClientSerializer, ClientBasicSerializer
 
@@ -40,12 +43,18 @@ class ClientViewSet(ModelViewSet):
                 raise ValidationError({'phone': ['Este telefone já cadastrado']})
             raise
 
+    def destroy(self, request, *args, **kwargs):
+        client = self.get_object()
+        with transaction.atomic():
+            client.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 from django.db.models import Q, OuterRef, Subquery, DateTimeField, CharField
 from django.utils import timezone
 from apps.agenda.models import Appointment
 
-class ClientBasicViewSet(ModelViewSet):
+class ClientBasicViewSet(ReadOnlyModelViewSet):
     serializer_class = ClientBasicSerializer
     permission_classes = [IsAuthenticated]
 

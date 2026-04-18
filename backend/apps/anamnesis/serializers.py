@@ -6,8 +6,9 @@ class AnamnesisFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnamnesisField
         fields = [
-            'id', 'sector', 'sector_order', 'label',
-            'field_type', 'options', 'order', 'is_active',
+            'id', 'code', 'sector', 'sector_order', 'label',
+            'field_type', 'options', 'placeholder', 'depends_on',
+            'show_when_value', 'order', 'is_active',
         ]
         read_only_fields = ['id']
 
@@ -42,6 +43,15 @@ class AnamnesisResponseBulkItemSerializer(serializers.Serializer):
     """Single item in a bulk upsert payload."""
     field = serializers.PrimaryKeyRelatedField(queryset=AnamnesisField.objects.all())
     value = serializers.CharField(allow_blank=True, default='')
+
+    def validate_field(self, value):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user and value.professional_id != user.id:
+            raise serializers.ValidationError(
+                'Campo de anamnese não pertence ao profissional autenticado.',
+            )
+        return value
 
 
 class AnamnesisResponseBulkSerializer(serializers.Serializer):
