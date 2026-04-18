@@ -6,6 +6,7 @@ import { formatTime } from '../utils/timeFormat';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type ChargeItem = {
     id: number;
@@ -60,6 +61,7 @@ export default function AppointmentDetailsModal({
     onClose,
     appt,
 }: AppointmentDetailsModalProps) {
+    const isCompactViewport = useIsMobile(640);
     const clientName = React.useMemo(() => {
         if (!appt) return 'Cliente';
         return (
@@ -157,6 +159,25 @@ export default function AppointmentDetailsModal({
               : undefined;
     }, [appt]);
 
+    const chargeRows = React.useMemo(
+        () =>
+            charges.flatMap(charge =>
+                charge.items.map(item => ({
+                    chargeStatus: charge.status,
+                    item,
+                    qty: parseFloat(item.quantity),
+                    unit: parseFloat(item.unit_price),
+                })),
+            ),
+        [charges],
+    );
+
+    const chargeTotal = React.useMemo(
+        () =>
+            chargeRows.reduce((sum, row) => sum + row.qty * row.unit, 0),
+        [chargeRows],
+    );
+
     const openConsultaNotebook = React.useCallback(() => {
         if (!appt) return;
 
@@ -217,7 +238,16 @@ export default function AppointmentDetailsModal({
                 boxShadow: 'none',
             }}
         >
-            <div style={{ display: 'grid', gap: 10, minWidth: 320 }}>
+            <div
+                style={{
+                    display: 'grid',
+                    gap: 10,
+                    width: '100%',
+                    minWidth: 0,
+                    maxWidth: '100%',
+                    overflowX: 'hidden',
+                }}
+            >
                 <StickyModalHeader
                     title='Detalhes do atendimento'
                     onClose={onClose}
@@ -325,100 +355,252 @@ export default function AppointmentDetailsModal({
                                     fontSize: 18,
                                 }}
                             >
-                                Procedimentos e produtos
+                                Serviços prestados e produtos
                             </div>
-                            <table
-                                style={{
-                                    width: '100%',
-                                    borderCollapse: 'collapse',
-                                    fontSize: 16,
-                                }}
-                            >
-                                <thead>
-                                    <tr
+                            {isCompactViewport ? (
+                                <div
+                                    style={{
+                                        display: 'grid',
+                                        gap: 10,
+                                        width: '100%',
+                                    }}
+                                >
+                                    {chargeRows.map(({ chargeStatus, item, qty, unit }) => (
+                                        <div
+                                            key={item.id}
+                                            style={{
+                                                border: '1px solid var(--color-border)',
+                                                borderRadius: 12,
+                                                padding: '10px 12px',
+                                                background:
+                                                    chargeStatus === 'paid'
+                                                        ? 'var(--color-success-bg, #f0faf4)'
+                                                        : 'var(--color-bg)',
+                                                display: 'grid',
+                                                gap: 8,
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'flex-start',
+                                                    gap: 8,
+                                                }}
+                                            >
+                                                <div
+                                                    style={{
+                                                        fontSize: 17,
+                                                        fontWeight: 700,
+                                                        color: '#111827',
+                                                        lineHeight: 1.25,
+                                                        minWidth: 0,
+                                                    }}
+                                                >
+                                                    {item.description}
+                                                </div>
+                                                <span
+                                                    style={{
+                                                        display: 'inline-block',
+                                                        padding: '3px 10px',
+                                                        borderRadius: 20,
+                                                        fontSize: 13,
+                                                        fontWeight: 700,
+                                                        background: item.paid
+                                                            ? 'var(--color-success, #22c55e)'
+                                                            : '#f3f4f6',
+                                                        color: item.paid
+                                                            ? '#fff'
+                                                            : '#6b7280',
+                                                        border: item.paid
+                                                            ? 'none'
+                                                            : '1px solid #d1d5db',
+                                                        whiteSpace: 'nowrap',
+                                                        flexShrink: 0,
+                                                    }}
+                                                >
+                                                    {item.paid ? 'Pago' : 'Pendente'}
+                                                </span>
+                                            </div>
+                                            <div
+                                                style={{
+                                                    display: 'grid',
+                                                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                                    gap: 8,
+                                                }}
+                                            >
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            fontSize: 12,
+                                                            fontWeight: 700,
+                                                            color: '#6b7280',
+                                                            textTransform: 'uppercase',
+                                                        }}
+                                                    >
+                                                        Qtd
+                                                    </div>
+                                                    <div style={{ fontSize: 16, fontWeight: 600 }}>
+                                                        {qty % 1 === 0 ? qty : qty.toFixed(2)}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            fontSize: 12,
+                                                            fontWeight: 700,
+                                                            color: '#6b7280',
+                                                            textTransform: 'uppercase',
+                                                        }}
+                                                    >
+                                                        Unit.
+                                                    </div>
+                                                    <div style={{ fontSize: 16, fontWeight: 600 }}>
+                                                        R$ {formatBRL(unit)}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            fontSize: 12,
+                                                            fontWeight: 700,
+                                                            color: '#6b7280',
+                                                            textTransform: 'uppercase',
+                                                        }}
+                                                    >
+                                                        Valor
+                                                    </div>
+                                                    <div style={{ fontSize: 16, fontWeight: 700 }}>
+                                                        R$ {formatBRL(qty * unit)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div
                                         style={{
-                                            borderBottom:
-                                                '1px solid var(--color-border)',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: 8,
+                                            paddingTop: 2,
                                         }}
                                     >
-                                        <th
+                                        <span
                                             style={{
-                                                textAlign: 'left',
-                                                padding: '6px 8px',
+                                                fontSize: 14,
                                                 fontWeight: 700,
-                                                color: '#4b5563',
-                                                fontSize: 16,
+                                                color: '#6b7280',
+                                                textTransform: 'uppercase',
                                             }}
                                         >
-                                            Item
-                                        </th>
-                                        <th
+                                            Total
+                                        </span>
+                                        <span
                                             style={{
-                                                textAlign: 'center',
-                                                padding: '6px 8px',
-                                                fontWeight: 700,
-                                                color: '#4b5563',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: 16,
+                                                fontSize: 24,
+                                                fontWeight: 800,
+                                                color: '#111827',
                                             }}
                                         >
-                                            Qtd
-                                        </th>
-                                        <th
-                                            style={{
-                                                textAlign: 'right',
-                                                padding: '6px 8px',
-                                                fontWeight: 700,
-                                                color: '#4b5563',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: 16,
-                                            }}
-                                        >
-                                            Unit.
-                                        </th>
-                                        <th
-                                            style={{
-                                                textAlign: 'right',
-                                                padding: '6px 8px',
-                                                fontWeight: 700,
-                                                color: '#4b5563',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: 16,
-                                            }}
-                                        >
-                                            Valor
-                                        </th>
-                                        <th
-                                            style={{
-                                                textAlign: 'center',
-                                                padding: '6px 8px',
-                                                fontWeight: 700,
-                                                color: '#4b5563',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: 16,
-                                            }}
-                                        >
-                                            Status
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {charges.flatMap(charge =>
-                                        charge.items.map(item => {
-                                            const qty = parseFloat(
-                                                item.quantity,
-                                            );
-                                            const unit = parseFloat(
-                                                item.unit_price,
-                                            );
-                                            return (
+                                            R$ {formatBRL(chargeTotal)}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: '100%',
+                                        overflowX: 'auto',
+                                        WebkitOverflowScrolling: 'touch',
+                                    }}
+                                >
+                                    <table
+                                        style={{
+                                            width: '100%',
+                                            minWidth: 0,
+                                            borderCollapse: 'collapse',
+                                            fontSize: 16,
+                                        }}
+                                    >
+                                        <thead>
+                                            <tr
+                                                style={{
+                                                    borderBottom:
+                                                        '1px solid var(--color-border)',
+                                                }}
+                                            >
+                                                <th
+                                                    style={{
+                                                        textAlign: 'left',
+                                                        padding: '6px 8px',
+                                                        fontWeight: 700,
+                                                        color: '#4b5563',
+                                                        fontSize: 16,
+                                                    }}
+                                                >
+                                                    Item
+                                                </th>
+                                                <th
+                                                    style={{
+                                                        textAlign: 'center',
+                                                        padding: '6px 8px',
+                                                        fontWeight: 700,
+                                                        color: '#4b5563',
+                                                        whiteSpace: 'nowrap',
+                                                        fontSize: 16,
+                                                    }}
+                                                >
+                                                    Qtd
+                                                </th>
+                                                <th
+                                                    style={{
+                                                        textAlign: 'right',
+                                                        padding: '6px 8px',
+                                                        fontWeight: 700,
+                                                        color: '#4b5563',
+                                                        whiteSpace: 'nowrap',
+                                                        fontSize: 16,
+                                                    }}
+                                                >
+                                                    Unit.
+                                                </th>
+                                                <th
+                                                    style={{
+                                                        textAlign: 'right',
+                                                        padding: '6px 8px',
+                                                        fontWeight: 700,
+                                                        color: '#4b5563',
+                                                        whiteSpace: 'nowrap',
+                                                        fontSize: 16,
+                                                    }}
+                                                >
+                                                    Valor
+                                                </th>
+                                                <th
+                                                    style={{
+                                                        textAlign: 'center',
+                                                        padding: '6px 8px',
+                                                        fontWeight: 700,
+                                                        color: '#4b5563',
+                                                        whiteSpace: 'nowrap',
+                                                        fontSize: 16,
+                                                    }}
+                                                >
+                                                    Status
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {chargeRows.map(({ chargeStatus, item, qty, unit }) => (
                                                 <tr
                                                     key={item.id}
                                                     style={{
                                                         borderBottom:
                                                             '1px solid var(--color-border)',
                                                         background:
-                                                            charge.status ===
+                                                            chargeStatus ===
                                                             'paid'
                                                                 ? 'var(--color-success-bg, #f0faf4)'
                                                                 : undefined,
@@ -441,17 +623,14 @@ export default function AppointmentDetailsModal({
                                                             fontSize: 16,
                                                         }}
                                                     >
-                                                        {qty % 1 === 0
-                                                            ? qty
-                                                            : qty.toFixed(2)}
+                                                        {qty % 1 === 0 ? qty : qty.toFixed(2)}
                                                     </td>
                                                     <td
                                                         style={{
                                                             padding: '7px 8px',
                                                             textAlign: 'right',
                                                             color: '#374151',
-                                                            whiteSpace:
-                                                                'nowrap',
+                                                            whiteSpace: 'nowrap',
                                                             fontSize: 16,
                                                         }}
                                                     >
@@ -462,35 +641,29 @@ export default function AppointmentDetailsModal({
                                                             padding: '7px 8px',
                                                             textAlign: 'right',
                                                             fontWeight: 600,
-                                                            whiteSpace:
-                                                                'nowrap',
+                                                            whiteSpace: 'nowrap',
                                                             fontSize: 16,
                                                         }}
                                                     >
-                                                        R${' '}
-                                                        {formatBRL(qty * unit)}
+                                                        R$ {formatBRL(qty * unit)}
                                                     </td>
                                                     <td
                                                         style={{
                                                             padding: '7px 8px',
                                                             textAlign: 'center',
-                                                            whiteSpace:
-                                                                'nowrap',
+                                                            whiteSpace: 'nowrap',
                                                         }}
                                                     >
                                                         <span
                                                             style={{
-                                                                display:
-                                                                    'inline-block',
-                                                                padding:
-                                                                    '3px 10px',
+                                                                display: 'inline-block',
+                                                                padding: '3px 10px',
                                                                 borderRadius: 20,
                                                                 fontSize: 13,
                                                                 fontWeight: 700,
-                                                                background:
-                                                                    item.paid
-                                                                        ? 'var(--color-success, #22c55e)'
-                                                                        : '#f3f4f6',
+                                                                background: item.paid
+                                                                    ? 'var(--color-success, #22c55e)'
+                                                                    : '#f3f4f6',
                                                                 color: item.paid
                                                                     ? '#fff'
                                                                     : '#6b7280',
@@ -499,49 +672,32 @@ export default function AppointmentDetailsModal({
                                                                     : '1px solid #d1d5db',
                                                             }}
                                                         >
-                                                            {item.paid
-                                                                ? 'Pago'
-                                                                : 'Pendente'}
+                                                            {item.paid ? 'Pago' : 'Pendente'}
                                                         </span>
                                                     </td>
                                                 </tr>
-                                            );
-                                        }),
-                                    )}
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <td colSpan={3} />
-                                        <td
-                                            style={{
-                                                padding: '9px 8px 3px',
-                                                textAlign: 'right',
-                                                fontWeight: 800,
-                                                fontSize: 20,
-                                                whiteSpace: 'nowrap',
-                                            }}
-                                        >
-                                            Total: R${' '}
-                                            {formatBRL(
-                                                charges
-                                                    .flatMap(c => c.items)
-                                                    .reduce(
-                                                        (sum, it) =>
-                                                            sum +
-                                                            parseFloat(
-                                                                it.quantity,
-                                                            ) *
-                                                                parseFloat(
-                                                                    it.unit_price,
-                                                                ),
-                                                        0,
-                                                    ),
-                                            )}
-                                        </td>
-                                        <td />
-                                    </tr>
-                                </tfoot>
-                            </table>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colSpan={3} />
+                                                <td
+                                                    style={{
+                                                        padding: '9px 8px 3px',
+                                                        textAlign: 'right',
+                                                        fontWeight: 800,
+                                                        fontSize: 20,
+                                                        whiteSpace: 'nowrap',
+                                                    }}
+                                                >
+                                                    Total: R$ {formatBRL(chargeTotal)}
+                                                </td>
+                                                <td />
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

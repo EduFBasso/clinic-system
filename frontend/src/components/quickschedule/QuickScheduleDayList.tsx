@@ -17,6 +17,7 @@ export interface QuickScheduleDayListProps {
     onUseTime: (a: Appointment) => void;
     onEdit: (a: Appointment) => void;
     onCancel: (a: Appointment) => Promise<void>;
+    onFinalize?: (a: Appointment) => Promise<void> | void;
     onDetails?: (a: Appointment) => void;
     minimal?: boolean; // when true, hide header/select and section title; show only minicards
 }
@@ -34,6 +35,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
     onUseTime,
     onEdit,
     onCancel,
+    onFinalize,
     onDetails,
     minimal = false,
 }) => {
@@ -240,6 +242,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                     onUseTime={onUseTime}
                     onEdit={onEdit}
                     onCancel={onCancel}
+                    onFinalize={onFinalize}
                     onDetails={onDetails}
                     emptyPlaceholder={
                         !loading ? (

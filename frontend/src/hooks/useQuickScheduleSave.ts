@@ -92,7 +92,7 @@ export function useQuickScheduleSave({
             consulta: 'Consulta',
             avaliacao: 'Avaliação',
             retorno: 'Retorno',
-            procedimento: 'Procedimento',
+            procedimento: 'Serviço',
             outro: 'Outro',
         };
         const title = visitTitles[String(visitType)] || 'Consulta';

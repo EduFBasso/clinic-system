@@ -589,7 +589,7 @@ export default function ScheduleEditorCore({
                         <option value='consulta'>Consulta</option>
                         <option value='avaliacao'>Avaliação</option>
                         <option value='retorno'>Retorno</option>
-                        <option value='procedimento'>Procedimento</option>
+                        <option value='procedimento'>Serviço</option>
                         <option value='outro'>Outro</option>
                     </select>
                 </label>

@@ -377,7 +377,7 @@ export default function BudgetModal({
                     linha ao orçamento.
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                    {/* Procedimentos (Serviços) — limitar dropdown (50vw) para não empurrar o botão + */}
+                    {/* Serviços — limitar dropdown (50vw) para não empurrar o botão + */}
                     <div
                         style={{
                             display: 'grid',
@@ -396,7 +396,7 @@ export default function BudgetModal({
                                 minWidth: 0,
                             }}
                         >
-                            <option value=''>Procedimento</option>
+                            <option value=''>Serviço</option>
                             {services.map(s => (
                                 <option key={s.id} value={String(s.id)}>
                                     {s.name} —{' '}
@@ -408,7 +408,7 @@ export default function BudgetModal({
                             title={
                                 selServiceId
                                     ? 'Adicionar linha'
-                                    : 'Selecione um procedimento'
+                                    : 'Selecione um serviço'
                             }
                             aria-label='Adicionar linha'
                             disabled={!selServiceId}

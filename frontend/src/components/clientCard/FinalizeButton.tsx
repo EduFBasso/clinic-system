@@ -1,5 +1,6 @@
 import React from 'react';
 import styles from '../../styles/components/ClientCard.module.css';
+import { requestFinalizeAppointment } from '../../utils/appointments/requestFinalizeAppointment';
 
 type Props = {
     finishing: boolean;
@@ -30,30 +31,12 @@ export default function FinalizeButton({
             disabled={!!disabled || finishing}
             onClick={e => {
                 e.stopPropagation();
-                let prevented = false;
-                try {
-                    const ev = new CustomEvent('confirmFinalizeAppointment', {
-                        detail: {
-                            clientId,
-                            appointmentId,
-                            isEarly,
-                            proceed: () => onFinalize(),
-                        },
-                        cancelable: true,
-                    });
-                    prevented = !window.dispatchEvent(ev);
-                } catch {
-                    /* noop */
-                }
-                if (!prevented) {
-                    if (isEarly) {
-                        const ok = window.confirm(
-                            'Finalizar a consulta antes do horário previsto?',
-                        );
-                        if (!ok) return;
-                    }
-                    void onFinalize();
-                }
+                requestFinalizeAppointment({
+                    clientId,
+                    appointmentId,
+                    isEarly,
+                    proceed: () => onFinalize(),
+                });
             }}
             style={{ fontWeight: 700 }}
         >

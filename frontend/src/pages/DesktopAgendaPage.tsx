@@ -22,6 +22,9 @@ import {
 import { useNowTick } from '../hooks/useNowTick';
 import { API_BASE } from '../config/api';
 import { useLocation } from 'react-router-dom';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -123,6 +126,32 @@ export default function DesktopAgendaPage() {
         undefined,
         reloadKey,
     );
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
+    const handleCancel = React.useCallback(async (appt: Appointment) => {
+        const res = await cancelAppointment(appt.id);
+        if (!res.ok) {
+            const msg = res.text || 'Erro ao cancelar';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'warning' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setReloadKey(x => x + 1);
+        try {
+            dispatchers.updateClients();
+            dispatchers.appointmentsChanged();
+        } catch {
+            /* noop */
+        }
+    }, []);
     const [statusFilter, setStatusFilter] = React.useState<
         'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing'
     >('active');
@@ -477,7 +506,7 @@ export default function DesktopAgendaPage() {
                                             }}
                                             style={{ padding: '6px 8px' }}
                                             showEditAction={false}
-                                            onClick={
+                                            onEdit={
                                                 isActive
                                                     ? () => {
                                                           const client =
@@ -582,6 +611,16 @@ export default function DesktopAgendaPage() {
                                                           );
                                                           setDetailsOpen(true);
                                                       }
+                                                    : undefined
+                                            }
+                                            onCancel={
+                                                a.status === 'scheduled'
+                                                    ? handleCancel
+                                                    : undefined
+                                            }
+                                            onFinalize={
+                                                a.status === 'ongoing'
+                                                    ? handleFinalize
                                                     : undefined
                                             }
                                         />

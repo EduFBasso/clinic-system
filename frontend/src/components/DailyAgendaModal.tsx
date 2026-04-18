@@ -21,6 +21,9 @@ import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import { focusClientCard } from '../utils/focusClientCard';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 
 interface DailyAgendaModalProps {
     open: boolean;
@@ -100,6 +103,32 @@ export default function DailyAgendaModal({
         undefined,
         reloadKey,
     );
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
+    const handleCancel = React.useCallback(async (appt: Appointment) => {
+        const res = await cancelAppointment(appt.id);
+        if (!res.ok) {
+            const msg = res.text || 'Erro ao cancelar';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'warning' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setReloadKey(x => x + 1);
+        try {
+            dispatchers.updateClients();
+            dispatchers.appointmentsChanged();
+        } catch {
+            /* noop */
+        }
+    }, []);
 
     // Forçar um refetch imediato ao abrir (caso evento appointments:changed tenha sido perdido antes de abrir)
     const prevOpenRef = React.useRef(open);
@@ -442,7 +471,7 @@ export default function DailyAgendaModal({
                                         maxWidth: 'min(704px, 94%)',
                                     }}
                                     showEditAction={false}
-                                    onClick={() => {
+                                    onEdit={() => {
                                         const client = makeClientBasic(a);
                                         setQsClient(client);
                                         setQsEdit(a);
@@ -528,6 +557,16 @@ export default function DailyAgendaModal({
                                                   );
                                                   setDetailsOpen(true);
                                               }
+                                            : undefined
+                                    }
+                                    onCancel={
+                                        a.status === 'scheduled'
+                                            ? handleCancel
+                                            : undefined
+                                    }
+                                    onFinalize={
+                                        a.status === 'ongoing'
+                                            ? handleFinalize
                                             : undefined
                                     }
                                     highlight={focusAppointmentId === a.id}

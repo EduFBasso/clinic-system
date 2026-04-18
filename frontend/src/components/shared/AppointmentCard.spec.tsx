@@ -94,12 +94,9 @@ describe('AppointmentCard', () => {
         expect(editBtn).not.toHaveAttribute('disabled');
         fireEvent.click(editBtn);
         expect(onEdit).toHaveBeenCalledTimes(1);
-        // Cancel asks for confirm; mock confirm = true
-        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const cancelBtn = screen.getByTitle(/Cancel appointment/i);
         fireEvent.click(cancelBtn);
         expect(onCancel).toHaveBeenCalledTimes(1);
-        confirmSpy.mockRestore();
 
         // Rerender as past. Two acceptable behaviors depending on deployed version:
         // 1. Legacy: buttons still render but with disabled attribute
@@ -119,6 +116,30 @@ describe('AppointmentCard', () => {
         } else {
             expect(pastCancel).not.toBeInTheDocument();
         }
+    });
+
+    it('hides inline active actions when showEditAction is false', () => {
+        const future = makeAppt({
+            start_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+            end_at: new Date(Date.now() + 20 * 60_000).toISOString(),
+        });
+
+        render(
+            <AppointmentCard
+                appt={future}
+                onEdit={vi.fn()}
+                onCancel={vi.fn()}
+                showEditAction={false}
+                now={new Date()}
+            />,
+        );
+
+        expect(
+            screen.queryByTitle(/Edit appointment/i),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByTitle(/Cancel appointment/i),
+        ).not.toBeInTheDocument();
     });
 
     it('pending (past scheduled) prioritizes onResolvePending over other handlers', () => {
@@ -160,7 +181,7 @@ describe('AppointmentCard', () => {
         expect(onEdit).toHaveBeenCalledTimes(1);
     });
 
-    it('ongoing blocks all interactions (no handlers called)', () => {
+    it('ongoing without finalize handler stays non-interactive', () => {
         const s = new Date(Date.now() - 60_000).toISOString();
         const e = new Date(Date.now() + 60_000).toISOString();
         const appt = makeAppt({ start_at: s, end_at: e });
@@ -185,17 +206,19 @@ describe('AppointmentCard', () => {
         expect(onClick).not.toHaveBeenCalled();
     });
 
-    it('scheduled: prioritizes onEdit over onUseTime and onClick', () => {
+    it('scheduled: opens the action chooser and can edit without canceling', () => {
         const appt = makeAppt({
             start_at: new Date(Date.now() + 10 * 60_000).toISOString(),
             end_at: new Date(Date.now() + 20 * 60_000).toISOString(),
         });
+        const onCancel = vi.fn();
         const onEdit = vi.fn();
         const onUseTime = vi.fn();
         const onClick = vi.fn();
         render(
             <AppointmentCard
                 appt={appt}
+                onCancel={onCancel}
                 onEdit={onEdit}
                 onUseTime={onUseTime}
                 onClick={onClick}
@@ -203,9 +226,52 @@ describe('AppointmentCard', () => {
             />,
         );
         fireEvent.click(screen.getByText('Fulano'));
-        expect(onEdit).toHaveBeenCalledTimes(1);
+        expect(screen.getByText('Compromisso ativo')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+        expect(onCancel).not.toHaveBeenCalled();
         expect(onUseTime).not.toHaveBeenCalled();
+        expect(onEdit).toHaveBeenCalledTimes(1);
         expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('scheduled: chooser can confirm cancellation', () => {
+        const appt = makeAppt({
+            start_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+            end_at: new Date(Date.now() + 20 * 60_000).toISOString(),
+        });
+        const onCancel = vi.fn();
+        render(<AppointmentCard appt={appt} onCancel={onCancel} now={new Date()} />);
+
+        fireEvent.click(screen.getByText('Fulano'));
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Cancelar compromisso' }),
+        );
+
+        expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('ongoing: opens finalize prompt and confirms finalization', () => {
+        const s = new Date(Date.now() - 60_000).toISOString();
+        const e = new Date(Date.now() + 60_000).toISOString();
+        const appt = makeAppt({ start_at: s, end_at: e });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const onFinalize = vi.fn();
+        render(
+            <AppointmentCard
+                appt={appt}
+                onFinalize={onFinalize}
+                now={new Date()}
+            />,
+        );
+
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(screen.getByText('Atendimento em andamento')).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Finalizar atendimento' }),
+        );
+
+        expect(onFinalize).toHaveBeenCalledTimes(1);
+        confirmSpy.mockRestore();
     });
 
     it('scheduled: prioritizes onUseTime over onClick when onEdit is absent', () => {

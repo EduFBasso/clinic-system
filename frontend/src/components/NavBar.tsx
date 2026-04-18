@@ -51,6 +51,10 @@ const NavBar: React.FC<NavBarProps> = ({
     selectedClientId,
     agendaOpeners,
 }) => {
+    const biometricStorageKey = React.useCallback((email: string) => {
+        return `hasWebAuthn_${email.trim().toLowerCase()}`;
+    }, []);
+
     // Viewport listener removido (usado apenas pelo relógio)
     const [loginEmail, setLoginEmail] = useState<string>(
         () => localStorage.getItem('lastLoginEmail') ?? '',
@@ -91,6 +95,7 @@ const NavBar: React.FC<NavBarProps> = ({
     const [biometricLoading, setBiometricLoading] = useState(false);
     const [platformAuthenticatorAvailable, setPlatformAuthenticatorAvailable] =
         useState(false);
+    const [biometricConfigured, setBiometricConfigured] = useState(false);
     const hasWebAuthn = !!loginEmail && platformAuthenticatorAvailable;
     // Trigger summary fetch when dropdown toggles open
     const { summary } = useSessionsSummary(dropdownOpen);
@@ -134,6 +139,17 @@ const NavBar: React.FC<NavBarProps> = ({
             if (stored) setLoggedProfessional(JSON.parse(stored));
         }
     }, []);
+
+    useEffect(() => {
+        const email = (loggedProfessional?.email || loginEmail || '').trim();
+        if (!email) {
+            setBiometricConfigured(false);
+            return;
+        }
+        setBiometricConfigured(
+            !!localStorage.getItem(biometricStorageKey(email)),
+        );
+    }, [biometricStorageKey, loggedProfessional, loginEmail]);
 
     useEffect(() => {
         let active = true;
@@ -213,6 +229,10 @@ const NavBar: React.FC<NavBarProps> = ({
         setBiometricLoading(true);
         try {
             const token = localStorage.getItem('accessToken');
+            const email = (loggedProfessional?.email || loginEmail || '').trim();
+            if (!token || !email) {
+                throw new Error('Entre na conta antes de ativar a biometria.');
+            }
             const beginRes = await fetch(
                 `${API_BASE}/register/auth/webauthn/register-begin/`,
                 {
@@ -253,9 +273,10 @@ const NavBar: React.FC<NavBarProps> = ({
             );
             if (!completeRes.ok) throw new Error('Erro ao concluir registro.');
             localStorage.setItem(
-                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                biometricStorageKey(email),
                 '1',
             );
+            setBiometricConfigured(true);
             setOfferBiometricOpen(false);
             setModalMessage('Face ID ativado para futuros logins!');
             setModalOpen(true);
@@ -318,9 +339,10 @@ const NavBar: React.FC<NavBarProps> = ({
                 localStorage.setItem('accessToken', data.access);
                 localStorage.setItem('lastLoginEmail', loginEmail);
                 localStorage.setItem(
-                    `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                    biometricStorageKey(loginEmail),
                     '1',
                 );
+                setBiometricConfigured(true);
                 localStorage.setItem(
                     'loggedProfessional',
                     JSON.stringify(data.professional),
@@ -512,9 +534,9 @@ const NavBar: React.FC<NavBarProps> = ({
                                     }
                                     window.location.href = '/catalog/services';
                                 }}
-                                title='Procedimentos'
+                                title='Serviços'
                             >
-                                📋 Procedimentos
+                                📋 Serviços
                             </button>
                             <button
                                 className={styles.dropdownItem}
@@ -711,7 +733,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                         // Offer biometric registration if not already set
                                         if (
                                             !localStorage.getItem(
-                                                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                                                biometricStorageKey(loginEmail),
                                             ) &&
                                             typeof PublicKeyCredential !==
                                                 'undefined' &&
@@ -790,6 +812,21 @@ const NavBar: React.FC<NavBarProps> = ({
                 buildTime={
                     import.meta.env?.VITE_BUILD_TIME as string | undefined
                 }
+                biometricAvailable={platformAuthenticatorAvailable}
+                biometricConfigured={biometricConfigured}
+                biometricLoading={biometricLoading}
+                biometricOrigin={window.location.host}
+                onManageBiometric={() => {
+                    void handleRegisterBiometric();
+                }}
+                onClearBiometricState={() => {
+                    const email = (loggedProfessional?.email || loginEmail || '').trim();
+                    if (!email) return;
+                    localStorage.removeItem(biometricStorageKey(email));
+                    setBiometricConfigured(false);
+                    setModalMessage('Estado local da biometria removido deste navegador.');
+                    setModalOpen(true);
+                }}
             />
             <ProfessionalCreateModal
                 open={createProfOpen}

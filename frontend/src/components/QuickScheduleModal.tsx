@@ -24,6 +24,7 @@ import { focusClientCard } from '../utils/focusClientCard';
 import { useQuickScheduleSave } from '../hooks/useQuickScheduleSave';
 import { useAgendaSettings } from '../hooks/useAgendaSettings';
 import { pad2, toMinutes, fromMinutes, weekdayLabel } from '../utils/hmTime';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 
 type VisitType = Appointment['visit_type'];
 type ClientMaybeNext = ClientBasic & { next_appointment_id?: number };
@@ -125,6 +126,9 @@ export default function QuickScheduleModal({
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(k => k + 1);
+    });
 
     // Title helpers
     // removed: separate subtitle; DateControlsHeader label covers the date context
@@ -534,7 +538,7 @@ export default function QuickScheduleModal({
                                 <option value='avaliacao'>Avaliação</option>
                                 <option value='retorno'>Retorno</option>
                                 <option value='procedimento'>
-                                    Procedimento
+                                    Serviço
                                 </option>
                                 <option value='outro'>Outro</option>
                             </select>
@@ -732,6 +736,7 @@ export default function QuickScheduleModal({
                                 }
                             }
                         }}
+                        onFinalize={handleFinalize}
                     />
 
                     {!isEdit && isSelectedPast && (

@@ -12,6 +12,9 @@ import ClientCardRow from './shared/ClientCardRow';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import FloatingDatePicker from './FloatingDatePicker';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -113,6 +116,10 @@ export default function MonthlyAgendaModal({
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+    const [cancelError, setCancelError] = React.useState<string | null>(null);
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
 
     const filteredItems = React.useMemo(() => {
         const now = effectiveNowRef;
@@ -409,6 +416,7 @@ export default function MonthlyAgendaModal({
                                             >
                                                 <ClientCardRow
                                                     appt={a as Appointment}
+                                                    showEditAction={false}
                                                     timeSize='md'
                                                     timeOrder='start-top'
                                                     style={{
@@ -517,6 +525,66 @@ export default function MonthlyAgendaModal({
                                                               }
                                                             : undefined
                                                     }
+                                                    onCancel={
+                                                        a.status ===
+                                                            'scheduled' &&
+                                                        !isPending
+                                                            ? async appt => {
+                                                                  try {
+                                                                      setCancelError(
+                                                                          null,
+                                                                      );
+                                                                      const res =
+                                                                          await cancelAppointment(
+                                                                              appt.id,
+                                                                          );
+                                                                      if (
+                                                                          !res.ok
+                                                                      ) {
+                                                                          throw new Error(
+                                                                              res.text ||
+                                                                                  'Erro ao cancelar',
+                                                                          );
+                                                                      }
+                                                                      setReloadKey(
+                                                                          x =>
+                                                                              x +
+                                                                              1,
+                                                                      );
+                                                                      try {
+                                                                          dispatchers.updateClients();
+                                                                          dispatchers.appointmentsChanged();
+                                                                      } catch {
+                                                                          /* noop */
+                                                                      }
+                                                                  } catch (
+                                                                      err
+                                                                  ) {
+                                                                      const msg =
+                                                                          err &&
+                                                                          typeof err ===
+                                                                              'object' &&
+                                                                          'message' in
+                                                                              err
+                                                                              ? String(
+                                                                                    (
+                                                                                        err as Error
+                                                                                    )
+                                                                                        .message,
+                                                                                )
+                                                                              : 'Erro ao cancelar';
+                                                                      setCancelError(
+                                                                          msg,
+                                                                      );
+                                                                  }
+                                                              }
+                                                            : undefined
+                                                    }
+                                                    onFinalize={
+                                                        a.status === 'ongoing'
+                                                            ? handleFinalize
+                                                            : undefined
+                                                    }
                                                     cardContainerStyle={{
                                                         // Evita que o stripe + conteúdo comprimam o closed pill
                                                         minWidth: 0,
@@ -546,6 +614,17 @@ export default function MonthlyAgendaModal({
                                 >
                                     Mostrar mais dias
                                 </button>
+                            </div>
+                        )}
+                        {cancelError && (
+                            <div
+                                style={{
+                                    color: '#b91c1c',
+                                    fontSize: 14,
+                                    paddingTop: 4,
+                                }}
+                            >
+                                {cancelError}
                             </div>
                         )}
                     </div>

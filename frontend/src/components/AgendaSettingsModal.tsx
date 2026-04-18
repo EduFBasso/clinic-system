@@ -22,7 +22,7 @@ const visitTypes = [
     { value: 'consulta', label: 'Consulta' },
     { value: 'avaliacao', label: 'Avaliação' },
     { value: 'retorno', label: 'Retorno' },
-    { value: 'procedimento', label: 'Procedimento' },
+    { value: 'procedimento', label: 'Serviço' },
     { value: 'outro', label: 'Outro' },
 ];
 

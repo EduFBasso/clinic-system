@@ -98,7 +98,7 @@ export default function ServiceListPage() {
     }, []);
 
     return (
-        <FormPage title='Procedimentos' onSubmit={e => e.preventDefault()}>
+        <FormPage title='Serviços' onSubmit={e => e.preventDefault()}>
             <FormSection
                 title='Lista'
                 onClose={handleClose}
@@ -155,7 +155,7 @@ export default function ServiceListPage() {
                             fontWeight: 600,
                             cursor: 'pointer',
                         }}
-                        title='Novo procedimento'
+                        title='Novo serviço'
                         onClick={() => openServiceForm()}
                     >
                         + Novo
@@ -292,7 +292,7 @@ export default function ServiceListPage() {
                         </table>
                         {!loading && items.length === 0 && (
                             <div style={{ padding: 12, color: '#666' }}>
-                                Nenhum procedimento cadastrado.
+                                Nenhum serviço cadastrado.
                             </div>
                         )}
                     </div>

@@ -14,6 +14,12 @@ interface AboutModalProps {
     buildCommit?: string;
     buildTime?: string;
     backendVersion?: string; // placeholder if provided externally later
+    biometricAvailable?: boolean;
+    biometricConfigured?: boolean;
+    biometricLoading?: boolean;
+    biometricOrigin?: string;
+    onManageBiometric?: () => void;
+    onClearBiometricState?: () => void;
 }
 
 // Small helper for formatting
@@ -32,6 +38,12 @@ export const AboutModal: React.FC<AboutModalProps> = ({
     buildCommit,
     buildTime,
     backendVersion,
+    biometricAvailable = false,
+    biometricConfigured = false,
+    biometricLoading = false,
+    biometricOrigin,
+    onManageBiometric,
+    onClearBiometricState,
 }) => {
     const {
         sessions,
@@ -117,6 +129,72 @@ export const AboutModal: React.FC<AboutModalProps> = ({
                     <div style={{ fontSize: 13 }}>ID: {deviceId}</div>
                     <div style={{ fontSize: 13 }}>Timezone: {tz}</div>
                 </section>
+                {(onManageBiometric || onClearBiometricState) && (
+                    <section style={{ marginBottom: 12 }}>
+                        <strong>Biometria neste dispositivo</strong>
+                        <div style={{ fontSize: 13, marginTop: 4 }}>
+                            {biometricConfigured
+                                ? 'A biometria ja foi marcada neste navegador para esta conta.'
+                                : 'A biometria ainda nao foi ativada neste navegador para esta conta.'}
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                            O navegador guarda esse estado localmente. Se trocar host, navegador ou limpar dados, o comportamento pode mudar.
+                        </div>
+                        {biometricOrigin && (
+                            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                                Origem atual: {biometricOrigin}
+                            </div>
+                        )}
+                        {!biometricAvailable && (
+                            <div
+                                style={{
+                                    fontSize: 12,
+                                    color: '#b45309',
+                                    marginTop: 6,
+                                }}
+                            >
+                                A biometria nao esta disponivel nesta combinacao de navegador/origem.
+                            </div>
+                        )}
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 8,
+                                marginTop: 8,
+                                flexWrap: 'wrap',
+                            }}
+                        >
+                            {onManageBiometric && (
+                                <button
+                                    onClick={onManageBiometric}
+                                    disabled={biometricLoading || !biometricAvailable}
+                                    style={{ fontSize: 12 }}
+                                    title={
+                                        biometricAvailable
+                                            ? 'Ativar ou reconfigurar a biometria neste dispositivo'
+                                            : 'Biometria indisponivel nesta origem ou navegador'
+                                    }
+                                >
+                                    {biometricLoading
+                                        ? 'Aguarde...'
+                                        : biometricConfigured
+                                          ? 'Reconfigurar biometria'
+                                          : 'Ativar biometria'}
+                                </button>
+                            )}
+                            {onClearBiometricState && (
+                                <button
+                                    onClick={onClearBiometricState}
+                                    disabled={biometricLoading || !biometricConfigured}
+                                    style={{ fontSize: 12 }}
+                                    title='Limpar a memoria local de biometria deste navegador'
+                                >
+                                    Limpar estado local
+                                </button>
+                            )}
+                        </div>
+                    </section>
+                )}
                 <section style={{ marginBottom: 12 }}>
                     <strong>Sessões Ativas</strong>
                     {loadingSessions && (

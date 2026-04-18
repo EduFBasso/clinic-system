@@ -10,6 +10,9 @@ import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -89,6 +92,32 @@ export default function WeeklyPreviewModal({
         undefined,
         reloadKey,
     );
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
+    const handleCancel = React.useCallback(async (appt: Appointment) => {
+        const res = await cancelAppointment(appt.id);
+        if (!res.ok) {
+            const msg = res.text || 'Erro ao cancelar';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'warning' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setReloadKey(x => x + 1);
+        try {
+            dispatchers.updateClients();
+            dispatchers.appointmentsChanged();
+        } catch {
+            /* noop */
+        }
+    }, []);
     // Forçar refetch ao abrir (pode ter perdido evento de mudança antes de abrir)
     const prevOpenRef = React.useRef(open);
     React.useEffect(() => {
@@ -633,6 +662,16 @@ export default function WeeklyPreviewModal({
                                                                   true,
                                                               );
                                                           }
+                                                        : undefined
+                                                }
+                                                onCancel={
+                                                    a.status === 'scheduled'
+                                                        ? handleCancel
+                                                        : undefined
+                                                }
+                                                onFinalize={
+                                                    a.status === 'ongoing'
+                                                        ? handleFinalize
                                                         : undefined
                                                 }
                                             />

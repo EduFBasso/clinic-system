@@ -25,6 +25,7 @@ export interface ClientDayListProps<T extends SharedAppointmentLike> {
     onResolvePending?: (a: T) => void;
     onEdit?: (a: T) => void;
     onCancel?: (a: T) => void;
+    onFinalize?: (a: T) => Promise<void> | void;
     onDetails?: (a: T) => void;
 
     // Styling
@@ -52,6 +53,7 @@ export default function ClientDayList<T extends SharedAppointmentLike>(
         onResolvePending,
         onEdit,
         onCancel,
+        onFinalize,
         onDetails,
         containerStyle,
         rowContainerStyle,
@@ -95,6 +97,7 @@ export default function ClientDayList<T extends SharedAppointmentLike>(
                         onResolvePending={onResolvePending}
                         onEdit={onEdit}
                         onCancel={onCancel}
+                        onFinalize={onFinalize}
                         onDetails={onDetails}
                         size={cardSize}
                         {...(extra as Partial<AppointmentCardProps<T>>)}

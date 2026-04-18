@@ -9,7 +9,10 @@ from apps.agenda.models import Appointment
 from apps.clients.models import Client
 from apps.register.models import Professional, ProfessionalSettings
 from apps.reminders.models import ReminderDelivery, TelegramProfessionalLink
-from apps.reminders.services.reminders import dispatch_appointment_reminder
+from apps.reminders.services.reminders import (
+    dispatch_appointment_reminder,
+    get_due_appointments,
+)
 
 
 pytestmark = pytest.mark.django_db
@@ -127,3 +130,36 @@ def test_send_reminders_command_can_force_specific_appointment(
         appointment=appointment,
         status=ReminderDelivery.Status.SENT,
     ).exists()
+
+
+def test_get_due_appointments_does_not_send_before_threshold(
+    appointment,
+    reminder_settings,
+):
+    now = appointment.start_at - timedelta(minutes=10, seconds=10)
+
+    due_ids = [item.id for item in get_due_appointments(now=now)]
+
+    assert appointment.id not in due_ids
+
+
+def test_get_due_appointments_sends_once_threshold_is_reached(
+    appointment,
+    reminder_settings,
+):
+    now = appointment.start_at - timedelta(minutes=10) + timedelta(seconds=10)
+
+    due_ids = [item.id for item in get_due_appointments(now=now)]
+
+    assert appointment.id in due_ids
+
+
+def test_get_due_appointments_tolerates_scheduler_drift_after_threshold(
+    appointment,
+    reminder_settings,
+):
+    now = appointment.start_at - timedelta(minutes=10) + timedelta(minutes=1, seconds=5)
+
+    due_ids = [item.id for item in get_due_appointments(now=now)]
+
+    assert appointment.id in due_ids

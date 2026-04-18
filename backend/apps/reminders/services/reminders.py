@@ -17,6 +17,11 @@ from apps.reminders.services.telegram import TelegramBotClient, TelegramDelivery
 logger = logging.getLogger(__name__)
 
 
+# Allow slight scheduler drift so a once-per-minute loop does not miss
+# reminders that become due a few seconds before the next execution.
+REMINDER_DISPATCH_TOLERANCE = timedelta(minutes=2)
+
+
 @dataclass
 class DispatchSummary:
     processed: int = 0
@@ -99,19 +104,17 @@ def get_due_appointments(*, now=None, professional_email: str | None = None):
         )
 
     for prof_settings in prof_settings_qs:
-        window_start = now + timedelta(
+        trigger_window_end = now + timedelta(
             minutes=prof_settings.reminder_minutes_before
-        ) - timedelta(minutes=1)
-        window_end = now + timedelta(
-            minutes=prof_settings.reminder_minutes_before
-        ) + timedelta(minutes=1)
+        )
+        trigger_window_start = trigger_window_end - REMINDER_DISPATCH_TOLERANCE
 
         appointments = (
             Appointment.objects.filter(
                 professional=prof_settings.professional,
                 status=Appointment.Status.SCHEDULED,
-                start_at__gte=window_start,
-                start_at__lte=window_end,
+                start_at__gte=trigger_window_start,
+                start_at__lte=trigger_window_end,
                 reminder_sent=False,
             )
             .select_related("client", "professional")

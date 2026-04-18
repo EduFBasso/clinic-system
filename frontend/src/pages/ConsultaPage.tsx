@@ -583,9 +583,9 @@ export default function ConsultaPage() {
                     </div>
                 </div>
             )}
-            {/* ── Procedimentos ── */}
+            {/* ── Serviços prestados ── */}
             <FormSection
-                title='Procedimentos'
+                title='Serviços Prestados'
                 onClose={() => navigate(-1)}
                 closeTitle='Fechar sem salvar'
             >
@@ -625,7 +625,7 @@ export default function ConsultaPage() {
                                     `/catalog/services/${item.id}`,
                                 )
                             }
-                            emptyMsg='Nenhum procedimento cadastrado'
+                            emptyMsg='Nenhum serviço cadastrado'
                         />
                         <button
                             type='button'
@@ -634,7 +634,7 @@ export default function ConsultaPage() {
                             }
                             style={linkBtnStyle}
                         >
-                            + Novo procedimento
+                            + Novo serviço
                         </button>
                     </>
                 )}
