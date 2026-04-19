@@ -22,7 +22,10 @@ import { useAppointmentsLivePing } from '../hooks/useAppointmentsLivePing';
 import { dispatchers } from '../events/dispatchers';
 import { focusClientCard } from '../utils/focusClientCard';
 import { useAgendaModals, ensureClientBasic } from '../hooks/useAgendaModals';
-import type { QuickScheduleInitialDraft } from '../types/agendaFlow';
+import type {
+    PendingReturnContext,
+    QuickScheduleInitialDraft,
+} from '../types/agendaFlow';
 import { API_BASE } from '../config/api';
 import { usePendingActionsListeners } from '../hooks/usePendingActionsListeners';
 import { useLocation } from 'react-router-dom';
@@ -57,6 +60,7 @@ export default function Home() {
         setRouteInitialMonth,
         weeklyOpen,
         setWeeklyOpen,
+        weeklyInitialDate,
         quickOpen,
         setQuickOpen,
         routeEditAppt,
@@ -221,6 +225,7 @@ export default function Home() {
 
         const raw = sessionStorage.getItem('reopenAppointmentDetails');
         const resumeQuickRaw = sessionStorage.getItem('resumeQuickSchedule');
+        const resumeAgendaRaw = sessionStorage.getItem('resumeAgendaModal');
         if (resumeQuickRaw) {
             sessionStorage.removeItem('resumeQuickSchedule');
             try {
@@ -236,6 +241,41 @@ export default function Home() {
                         .catch(() => {
                             /* noop */
                         });
+                }
+            } catch {
+                /* noop */
+            }
+        }
+        if (resumeAgendaRaw) {
+            sessionStorage.removeItem('resumeAgendaModal');
+            try {
+                const parsed = JSON.parse(resumeAgendaRaw) as PendingReturnContext;
+                if (parsed?.kind === 'daily-agenda') {
+                    const d = new Date(`${parsed.dateISO}T00:00:00`);
+                    if (!Number.isNaN(d.getTime())) {
+                        openDaily(d, parsed.focusAppointmentId);
+                        return;
+                    }
+                }
+                if (parsed?.kind === 'weekly-agenda') {
+                    const d = new Date(`${parsed.dateISO}T00:00:00`);
+                    openWeekly(Number.isNaN(d.getTime()) ? undefined : d);
+                    return;
+                }
+                if (parsed?.kind === 'monthly-agenda' && parsed.clientId) {
+                    const d = new Date(`${parsed.monthISO}T00:00:00`);
+                    void ensureClientBasic(parsed.clientId)
+                        .then(clientBasic => {
+                            setRouteClient(clientBasic);
+                            setRouteInitialMonth(
+                                Number.isNaN(d.getTime()) ? undefined : d,
+                            );
+                            setMonthlyOpen(true);
+                        })
+                        .catch(() => {
+                            /* noop */
+                        });
+                    return;
                 }
             } catch {
                 /* noop */
@@ -402,6 +442,7 @@ export default function Home() {
                 )}
                 <WeeklyAgendaModal
                     open={weeklyOpen}
+                    initialDate={weeklyInitialDate}
                     onClose={() => {
                         setWeeklyOpen(false);
                         clearAgendaRouteFlags();

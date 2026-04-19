@@ -113,6 +113,9 @@ export default function QuickScheduleModal({
         const mins = toMinutes(startHM) + agendaSettings.defaultDuration;
         return fromMinutes(mins);
     });
+    const [endManuallyEdited, setEndManuallyEdited] = React.useState(() =>
+        Boolean(isInitialEdit || initialDraft?.endHM),
+    );
     const [visitType, setVisitType] = React.useState<VisitType>(
         (isInitialEdit && editAppointment
             ? editAppointment.visit_type
@@ -216,6 +219,20 @@ export default function QuickScheduleModal({
         }
     }, [currentEdit]);
 
+    const getAutoEndHM = React.useCallback(
+        (startValue: string) => {
+            const startMinutes = toMinutes(startValue);
+            if (!Number.isFinite(startMinutes)) return endHM;
+            const maxMinutes = workTimes.endHour * 60 + workTimes.endMin;
+            const nextEndMinutes = Math.min(
+                maxMinutes,
+                startMinutes + agendaSettings.defaultDuration,
+            );
+            return fromMinutes(nextEndMinutes);
+        },
+        [agendaSettings.defaultDuration, endHM, workTimes.endHour, workTimes.endMin],
+    );
+
     React.useEffect(() => {
         setCurrentEdit(editAppointment || null);
     }, [editAppointment]);
@@ -230,10 +247,29 @@ export default function QuickScheduleModal({
         setSelectedDate(startDate);
         setStartHM(`${pad2(startDate.getHours())}:${pad2(startDate.getMinutes())}`);
         setEndHM(`${pad2(endDate.getHours())}:${pad2(endDate.getMinutes())}`);
+        setEndManuallyEdited(true);
         setVisitType((currentEdit.visit_type || 'consulta') as VisitType);
         setNotes(currentEdit.notes || '');
         setEditingHighlightId(currentEdit.id);
     }, [currentEdit]);
+
+    React.useEffect(() => {
+        if (!open || currentEdit) return;
+        if (initialDraft?.endHM) return;
+        if (endManuallyEdited) return;
+        const autoEndHM = getAutoEndHM(startHM);
+        if (autoEndHM !== endHM) {
+            setEndHM(autoEndHM);
+        }
+    }, [
+        currentEdit,
+        endHM,
+        endManuallyEdited,
+        getAutoEndHM,
+        initialDraft?.endHM,
+        open,
+        startHM,
+    ]);
 
     // Title helpers
     // removed: separate subtitle; DateControlsHeader label covers the date context
@@ -333,6 +369,7 @@ export default function QuickScheduleModal({
                 }
                 setStartHM(conflictReturnDraft.startHM);
                 setEndHM(conflictReturnDraft.endHM);
+                setEndManuallyEdited(true);
                 setVisitType(conflictReturnDraft.visitType);
                 setNotes(conflictReturnDraft.notes || '');
                 setCurrentEdit(null);
@@ -354,6 +391,7 @@ export default function QuickScheduleModal({
         setSelectedDate(new Date(draftDate));
         setStartHM(initialDraft.startHM);
         setEndHM(initialDraft.endHM);
+        setEndManuallyEdited(true);
         setVisitType(initialDraft.visitType);
         setNotes(initialDraft.notes || '');
         setConflictReturnDraft(null);
@@ -691,13 +729,8 @@ export default function QuickScheduleModal({
                                 clearError();
                                 clearPendingConflictSelection();
                                 setStartHM(val);
-                                const sMin = toMinutes(val);
-                                    let newEnd =
-                                        sMin + agendaSettings.defaultDuration;
-                                const max =
-                                    workTimes.endHour * 60 + workTimes.endMin;
-                                if (newEnd > max) newEnd = max;
-                                setEndHM(fromMinutes(newEnd));
+                                setEndManuallyEdited(false);
+                                setEndHM(getAutoEndHM(val));
                             }}
                             minHour={workTimes.startHour}
                             maxHour={workTimes.endHour}
@@ -715,6 +748,7 @@ export default function QuickScheduleModal({
                             onChange={val => {
                                 clearError();
                                 clearPendingConflictSelection();
+                                setEndManuallyEdited(true);
                                 setEndHM(val);
                             }}
                             minHour={workTimes.startHour}
@@ -864,18 +898,13 @@ export default function QuickScheduleModal({
                         minimal={true}
                         onUseTime={a => {
                             const sd = new Date(a.start_at);
-                            const ed = new Date(a.end_at);
+                            const nextStartHM = `${pad2(sd.getHours())}:${pad2(
+                                sd.getMinutes(),
+                            )}`;
                             setSelectedDate(sd);
-                            setStartHM(
-                                `${pad2(sd.getHours())}:${pad2(
-                                    sd.getMinutes(),
-                                )}`,
-                            );
-                            setEndHM(
-                                `${pad2(ed.getHours())}:${pad2(
-                                    ed.getMinutes(),
-                                )}`,
-                            );
+                            setStartHM(nextStartHM);
+                            setEndManuallyEdited(false);
+                            setEndHM(getAutoEndHM(nextStartHM));
                             setCurrentEdit(null);
                             setEditingHighlightId(null);
                             resetConflictFlow();

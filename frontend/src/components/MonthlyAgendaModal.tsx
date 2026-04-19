@@ -17,6 +17,7 @@ import FloatingDatePicker from './FloatingDatePicker';
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../types/agendaFlow';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -76,6 +77,14 @@ export default function MonthlyAgendaModal({
     const [visibleDaysCount, setVisibleDaysCount] = React.useState<number>(14);
 
     const monthStart = React.useMemo(() => startOfMonth(month), [month]);
+    const buildReturnContext = React.useCallback(
+        (): PendingReturnContext => ({
+            kind: 'monthly-agenda',
+            clientId: client.id,
+            monthISO: toISODate(monthStart),
+        }),
+        [client.id, monthStart],
+    );
     const monthEnd = React.useMemo(() => endOfMonth(month), [month]);
     const { items, loading } = useAppointmentsRange(
         monthStart,
@@ -407,6 +416,7 @@ export default function MonthlyAgendaModal({
                                                             ? () =>
                                                                   openPendingActionsForAppointment(
                                                                       a,
+                                                                      buildReturnContext(),
                                                                   )
                                                             : undefined
                                                     }
@@ -485,6 +495,7 @@ export default function MonthlyAgendaModal({
                                                             ? handleFinalize
                                                             : undefined
                                                     }
+                                                    finalizeRequestContext={buildReturnContext()}
                                                     cardContainerStyle={{
                                                         // Evita que o stripe + conteúdo comprimam o closed pill
                                                         minWidth: 0,

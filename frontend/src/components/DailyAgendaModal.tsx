@@ -8,7 +8,6 @@ import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
-    isClientLike,
     makeClientBasic,
     matchesStatusFilter,
     type ClientLike,
@@ -25,6 +24,7 @@ import { focusClientCard } from '../utils/focusClientCard';
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../types/agendaFlow';
 
 interface DailyAgendaModalProps {
     open: boolean;
@@ -42,6 +42,12 @@ function addDays(d: Date, n: number) {
     const x = new Date(d);
     x.setDate(x.getDate() + n);
     return x;
+}
+function toISODate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
@@ -97,6 +103,14 @@ export default function DailyAgendaModal({
     const dayStart = React.useMemo(
         () => startOfDay(selectedDay),
         [selectedDay],
+    );
+    const buildReturnContext = React.useCallback(
+        (appointmentId?: number): PendingReturnContext => ({
+            kind: 'daily-agenda',
+            dateISO: toISODate(dayStart),
+            focusAppointmentId: appointmentId,
+        }),
+        [dayStart],
     );
     const dayEnd = React.useMemo(() => addDays(dayStart, 1), [dayStart]);
     const { items, loading, error } = useAppointmentsRange(
@@ -267,6 +281,11 @@ export default function DailyAgendaModal({
     const [qsOpen, setQsOpen] = React.useState(false);
     const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
     const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
+    const closeQuickSchedule = React.useCallback(() => {
+        setQsOpen(false);
+        setQsEdit(null);
+        setQsClient(null);
+    }, []);
 
     return (
         <AppModal
@@ -492,8 +511,14 @@ export default function DailyAgendaModal({
                                         setQsOpen(true);
                                     }}
                                     onResolvePending={appt => {
-                                        openPendingActionsForAppointment(appt);
+                                        openPendingActionsForAppointment(
+                                            appt,
+                                            buildReturnContext(appt.id),
+                                        );
                                     }}
+                                    finalizeRequestContext={buildReturnContext(
+                                        a.id,
+                                    )}
                                     onDetails={
                                         a.status === 'done'
                                             ? appt => {
@@ -538,12 +563,12 @@ export default function DailyAgendaModal({
             {qsOpen && qsClient && (
                 <QuickScheduleModal
                     open={qsOpen}
-                    onClose={() => setQsOpen(false)}
+                    onClose={closeQuickSchedule}
                     client={qsClient}
                     editAppointment={qsEdit}
                     afterPersist={(_, action) => {
-                        if (action === 'created' || (action === 'updated' && !!qsEdit)) {
-                            setQsOpen(false);
+                        if (action === 'updated') {
+                            closeQuickSchedule();
                         }
                         setReloadKey(x => x + 1); // força recarregar agenda diária
                     }}

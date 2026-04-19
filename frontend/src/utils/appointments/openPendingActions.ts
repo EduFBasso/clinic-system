@@ -2,6 +2,7 @@ import type {
     PendingActionsOpenDetail,
     PendingReturnContext,
 } from '../../types/agendaFlow';
+import { emit } from '../../events/bus';
 
 type AppointmentRef = { id: number } | number;
 
@@ -12,14 +13,10 @@ export function openPendingActions(params: {
     const { appointmentId, returnContext } = params;
     if (!appointmentId) return false;
     try {
-        window.dispatchEvent(
-            new CustomEvent<PendingActionsOpenDetail>('pendingActions:open', {
-                detail: {
-                    appointmentId,
-                    returnContext,
-                },
-            }),
-        );
+        emit('pendingActions:open', {
+            appointmentId,
+            returnContext,
+        } satisfies PendingActionsOpenDetail);
         return true;
     } catch {
         return false;

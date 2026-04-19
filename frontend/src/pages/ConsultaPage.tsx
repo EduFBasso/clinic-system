@@ -515,6 +515,10 @@ export default function ConsultaPage() {
             const shouldResumeQuickSchedule =
                 apptState.returnContext?.kind === 'quick-schedule' &&
                 apptState.returnContext.draft;
+            const shouldResumeAgenda =
+                apptState.returnContext?.kind === 'daily-agenda' ||
+                apptState.returnContext?.kind === 'weekly-agenda' ||
+                apptState.returnContext?.kind === 'monthly-agenda';
             const payload: Record<string, unknown> = {
                 client: apptState.clientId,
                 appointment: apptState.appointmentId ?? null,
@@ -533,7 +537,11 @@ export default function ConsultaPage() {
                         i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
                 })),
             };
-            if (apptState.appointmentId && !shouldResumeQuickSchedule) {
+            if (
+                apptState.appointmentId &&
+                !shouldResumeQuickSchedule &&
+                !shouldResumeAgenda
+            ) {
                 try {
                     sessionStorage.setItem(
                         'reopenAppointmentDetails',
@@ -560,6 +568,18 @@ export default function ConsultaPage() {
                     sessionStorage.setItem(
                         'resumeQuickSchedule',
                         JSON.stringify(apptState.returnContext?.draft),
+                    );
+                } catch {
+                    /* noop */
+                }
+                navigate('/');
+                return;
+            }
+            if (shouldResumeAgenda) {
+                try {
+                    sessionStorage.setItem(
+                        'resumeAgendaModal',
+                        JSON.stringify(apptState.returnContext),
                     );
                 } catch {
                     /* noop */

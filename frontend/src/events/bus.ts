@@ -6,6 +6,7 @@
 // const dispose = on('openAppointmentDetails', detail => { ... });
 
 import type { Appointment } from '../hooks/useAppointments';
+import type { PendingActionsOpenDetail } from '../types/agendaFlow';
 
 export type SystemMessagePayload = {
     text: string;
@@ -23,6 +24,24 @@ export type OpenDailyAgendaPayload =
     | undefined; // ISO date optional
 export type AgendaSettingsUpdatedPayload = undefined;
 export type AppointmentsChangedPayload = undefined;
+export type PendingActionsForceClosePayload = undefined;
+export type EnsureScrollUnlockedPayload = undefined;
+export type PendingResolvedPayload = {
+    clientId: number;
+    status: 'done' | 'canceled';
+};
+export type ClientClearOngoingPayload = { clientId: number };
+export type AppointmentStatusChangedPayload = {
+    id?: number;
+    status?: string;
+    start_at?: string;
+    end_at?: string;
+    locallyShortened?: boolean;
+};
+export type ModalClosedPayload = {
+    type: string;
+    id?: number;
+};
 
 // Extend here as needed
 export interface EventMap {
@@ -32,6 +51,13 @@ export interface EventMap {
     openDailyAgenda: OpenDailyAgendaPayload;
     agendaSettingsUpdated: AgendaSettingsUpdatedPayload;
     'appointments:changed': AppointmentsChangedPayload;
+    'pendingActions:open': PendingActionsOpenDetail;
+    'pendingActions:forceClose': PendingActionsForceClosePayload;
+    'pending:resolved': PendingResolvedPayload;
+    'client:clearOngoing': ClientClearOngoingPayload;
+    'appointment:statusChanged': AppointmentStatusChangedPayload;
+    'modal:closed': ModalClosedPayload;
+    ensureScrollUnlocked: EnsureScrollUnlockedPayload;
 }
 
 export const events: (keyof EventMap)[] = [
@@ -41,6 +67,13 @@ export const events: (keyof EventMap)[] = [
     'openDailyAgenda',
     'agendaSettingsUpdated',
     'appointments:changed',
+    'pendingActions:open',
+    'pendingActions:forceClose',
+    'pending:resolved',
+    'client:clearOngoing',
+    'appointment:statusChanged',
+    'modal:closed',
+    'ensureScrollUnlocked',
 ];
 
 // Emit helper

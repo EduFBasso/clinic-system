@@ -3,10 +3,10 @@ import type { SharedAppointmentLike } from '../components/shared/AppointmentCard
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import { API_BASE } from '../config/api';
 import type {
-    ConfirmFinalizeAppointmentDetail,
     PendingActionsOpenDetail,
     PendingReturnContext,
 } from '../types/agendaFlow';
+import { on } from '../events/bus';
 
 export interface UsePendingActionsListenersReturn {
     pendingActionsOpen: boolean;
@@ -38,131 +38,17 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         return () => clearTimeout(t);
     }, [pendingActionsOpen]);
 
-    // Listener: confirmFinalizeAppointment → open PendingActionsModal
-    React.useEffect(() => {
-        async function onConfirmFinalize(e: Event) {
-            const ce = e as CustomEvent;
-            const det =
-                (ce && (ce as CustomEvent<ConfirmFinalizeAppointmentDetail>).detail) ||
-                ({} as Partial<ConfirmFinalizeAppointmentDetail>);
-            try {
-                (e as Event).preventDefault?.();
-            } catch {
-                /* noop */
-            }
-
-            const apptId = det.appointmentId;
-            if (!apptId) {
-                try {
-                    window.dispatchEvent(
-                        new CustomEvent('systemMessage', {
-                            detail: {
-                                text: 'Não foi possível identificar o agendamento para concluir.',
-                                type: 'error',
-                            },
-                        }),
-                    );
-                } catch {
-                    /* noop */
-                }
-                return;
-            }
-
-            const nowTs = Date.now();
-            if (nowTs - lastPendingCloseRef.current < 1500) {
-                try {
-                    window.dispatchEvent(
-                        new CustomEvent('debug:log', {
-                            detail: {
-                                label: 'Home: suppressed confirmFinalize due to recent forceClose',
-                                data: {
-                                    deltaMs:
-                                        nowTs - lastPendingCloseRef.current,
-                                },
-                                ts: nowTs,
-                            },
-                        }),
-                    );
-                } catch {
-                    /* noop */
-                }
-                return;
-            }
-
-            try {
-                const token = localStorage.getItem('accessToken') || '';
-                const headers: Record<string, string> = {};
-                if (token) headers['Authorization'] = `Bearer ${token}`;
-                const r = await fetch(
-                    `${API_BASE}/agenda/appointments/${apptId}/`,
-                    {
-                        headers,
-                        cache: 'no-store',
-                    },
-                );
-                if (!r.ok) throw new Error('Falha ao carregar agendamento');
-                const data = await r.json();
-                const appt: SharedAppointmentLike = {
-                    id: data.id,
-                    start_at: data.start_at,
-                    end_at: data.end_at,
-                    status: data.status,
-                    notes: data.notes,
-                    client_name: data.client_name,
-                    client: data.client,
-                    title: data.title,
-                };
-                setPendingAppt(appt);
-                setPendingReturnContext(det.returnContext ?? null);
-                setPendingActionsOpen(true);
-            } catch (err) {
-                const msg =
-                    err instanceof Error
-                        ? err.message
-                        : 'Erro ao abrir ações pendentes';
-                try {
-                    window.dispatchEvent(
-                        new CustomEvent('systemMessage', {
-                            detail: { text: msg, type: 'error' },
-                        }),
-                    );
-                } catch {
-                    /* noop */
-                }
-            }
-        }
-        window.addEventListener(
-            'confirmFinalizeAppointment',
-            onConfirmFinalize as EventListener,
-        );
-        return () =>
-            window.removeEventListener(
-                'confirmFinalizeAppointment',
-                onConfirmFinalize as EventListener,
-            );
-    }, []);
-
     // Listener: pendingActions:open → open PendingActionsModal (with cancel suppression)
     React.useEffect(() => {
         const recentCanceled = new Map<number, number>(); // apptId → timestamp
 
-        function onCancelFinalizeFlag(ev: Event) {
-            const ce = ev as CustomEvent;
-            const det = (ce?.detail || {}) as { id?: number; status?: string };
+        function onCancelFinalizeFlag(det: { id?: number; status?: string }) {
             if (det?.id && det.status === 'canceled') {
                 recentCanceled.set(det.id, Date.now());
             }
         }
-        window.addEventListener(
-            'appointment:statusChanged',
-            onCancelFinalizeFlag,
-        );
 
-        async function onOpenPending(e: Event) {
-            const ce = e as CustomEvent;
-            const det =
-                (ce && (ce as CustomEvent<PendingActionsOpenDetail>).detail) ||
-                ({} as PendingActionsOpenDetail);
+        async function onOpenPending(det: PendingActionsOpenDetail) {
 
             try {
                 const stack = new Error().stack;
@@ -181,11 +67,6 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
                         },
                     }),
                 );
-            } catch {
-                /* noop */
-            }
-            try {
-                (e as Event).preventDefault?.();
             } catch {
                 /* noop */
             }
@@ -320,19 +201,14 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
             }
         }
 
-        window.addEventListener(
-            'pendingActions:open',
-            onOpenPending as EventListener,
+        const disposeStatusChanged = on(
+            'appointment:statusChanged',
+            onCancelFinalizeFlag,
         );
+        const disposePendingOpen = on('pendingActions:open', onOpenPending);
         return () => {
-            window.removeEventListener(
-                'pendingActions:open',
-                onOpenPending as EventListener,
-            );
-            window.removeEventListener(
-                'appointment:statusChanged',
-                onCancelFinalizeFlag as EventListener,
-            );
+            disposePendingOpen();
+            disposeStatusChanged();
         };
     }, []);
 
@@ -343,12 +219,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
             setPendingReturnContext(null);
             lastPendingCloseRef.current = Date.now();
         };
-        window.addEventListener('pendingActions:forceClose', onForceClose);
-        return () =>
-            window.removeEventListener(
-                'pendingActions:forceClose',
-                onForceClose,
-            );
+        return on('pendingActions:forceClose', onForceClose);
     }, []);
 
     // Auto-close when override shows terminal status for the open appointment

@@ -87,6 +87,8 @@ export interface UseAgendaModalsReturn {
     // Weekly
     weeklyOpen: boolean;
     setWeeklyOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    weeklyInitialDate: Date | undefined;
+    setWeeklyInitialDate: React.Dispatch<React.SetStateAction<Date | undefined>>;
     // Quick
     quickOpen: boolean;
     setQuickOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -112,6 +114,9 @@ export interface UseAgendaModalsReturn {
 export function useAgendaModals(): UseAgendaModalsReturn {
     const [monthlyOpen, setMonthlyOpen] = React.useState(false);
     const [weeklyOpen, setWeeklyOpen] = React.useState(false);
+    const [weeklyInitialDate, setWeeklyInitialDate] = React.useState<
+        Date | undefined
+    >(undefined);
     const [quickOpen, setQuickOpen] = React.useState(false);
     const [routeClient, setRouteClient] = React.useState<
         ClientBasic | undefined
@@ -163,7 +168,7 @@ export function useAgendaModals(): UseAgendaModalsReturn {
     );
 
     const openWeekly = React.useCallback((_date?: Date) => {
-        void _date;
+        setWeeklyInitialDate(_date);
         setRouteEditAppt(null);
         try {
             console.debug('[Home] Opening WeeklyAgendaModal');
@@ -258,6 +263,8 @@ export function useAgendaModals(): UseAgendaModalsReturn {
         setRouteInitialMonth,
         weeklyOpen,
         setWeeklyOpen,
+        weeklyInitialDate,
+        setWeeklyInitialDate,
         quickOpen,
         setQuickOpen,
         routeEditAppt,

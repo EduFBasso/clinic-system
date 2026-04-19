@@ -15,18 +15,32 @@ export interface QuickScheduleReturnContext {
     draft: QuickScheduleInitialDraft;
 }
 
-export type PendingReturnContext = QuickScheduleReturnContext | null;
+export interface DailyAgendaReturnContext {
+    kind: 'daily-agenda';
+    dateISO: string;
+    focusAppointmentId?: number;
+}
+
+export interface WeeklyAgendaReturnContext {
+    kind: 'weekly-agenda';
+    dateISO: string;
+}
+
+export interface MonthlyAgendaReturnContext {
+    kind: 'monthly-agenda';
+    clientId: number;
+    monthISO: string;
+}
+
+export type PendingReturnContext =
+    | QuickScheduleReturnContext
+    | DailyAgendaReturnContext
+    | WeeklyAgendaReturnContext
+    | MonthlyAgendaReturnContext
+    | null;
 
 export interface PendingActionsOpenDetail {
     appt?: SharedAppointmentLike;
     appointmentId?: number | null;
     returnContext?: PendingReturnContext;
-}
-
-export interface ConfirmFinalizeAppointmentDetail {
-    clientId?: number;
-    appointmentId?: number | null;
-    isEarly: boolean;
-    returnContext?: PendingReturnContext;
-    proceed?: () => Promise<void> | void;
 }

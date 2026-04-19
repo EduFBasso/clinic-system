@@ -50,6 +50,24 @@ export function useQuickScheduleSave({
 
     const clearError = React.useCallback(() => setError(null), []);
 
+    const emitSystemMessage = React.useCallback(
+        (
+            text: string,
+            type: 'success' | 'error' | 'info' | 'warning',
+        ) => {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text, type },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        },
+        [],
+    );
+
     const handleSave = React.useCallback(async () => {
         setError(null);
         setSaving(true);
@@ -108,6 +126,9 @@ export function useQuickScheduleSave({
         try {
             let updatedId: number | undefined;
             const wasEdit = !!currentEdit;
+            const successMessage = wasEdit
+                ? 'Compromisso atualizado'
+                : 'Compromisso criado';
 
             if (currentEdit) {
                 const resp = await fetch(
@@ -307,21 +328,6 @@ export function useQuickScheduleSave({
             }
 
             try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: {
-                            text: wasEdit
-                                ? 'Compromisso atualizado'
-                                : 'Compromisso criado',
-                            type: 'success',
-                        },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-
-            try {
                 dispatchers.updateClients();
                 dispatchers.appointmentsChanged();
                 try {
@@ -365,14 +371,22 @@ export function useQuickScheduleSave({
                 } catch {
                     /* noop */
                 }
+                onImmediateClose();
                 setTimeout(() => {
                     try {
                         window.dispatchEvent(new Event('clients:forceRefresh'));
                     } catch {
                         /* noop */
                     }
-                    onImmediateClose();
-                }, 160);
+                    emitSystemMessage(successMessage, 'success');
+                    try {
+                        window.dispatchEvent(new Event('ensureScrollUnlocked'));
+                    } catch {
+                        /* noop */
+                    }
+                }, 220);
+            } else {
+                emitSystemMessage(successMessage, 'success');
             }
         } catch (e) {
             const msg =
@@ -416,6 +430,7 @@ export function useQuickScheduleSave({
         onSuccess,
         onImmediateClose,
         emitGlobalErrorMessage,
+        emitSystemMessage,
         agendaSettings.defaultDuration,
         agendaSettings.slotInterval,
     ]);

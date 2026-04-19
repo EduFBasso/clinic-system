@@ -18,6 +18,7 @@ import { openPendingActionsForAppointment } from '../utils/appointments/openPend
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../types/agendaFlow';
  
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -91,6 +92,13 @@ function WeeklyAgendaContent({
     );
     const weekStart = React.useMemo(
         () => startOfWeekMonday(anchorDate),
+        [anchorDate],
+    );
+    const buildReturnContext = React.useCallback(
+        (): PendingReturnContext => ({
+            kind: 'weekly-agenda',
+            dateISO: toISODate(anchorDate),
+        }),
         [anchorDate],
     );
     const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
@@ -544,8 +552,10 @@ function WeeklyAgendaContent({
                                                 onResolvePending={appt => {
                                                     openPendingActionsForAppointment(
                                                         appt,
+                                                        buildReturnContext(),
                                                     );
                                                 }}
+                                                finalizeRequestContext={buildReturnContext()}
                                                 onDetails={
                                                     a.status === 'done'
                                                         ? appt => {

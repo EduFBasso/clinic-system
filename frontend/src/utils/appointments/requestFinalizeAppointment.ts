@@ -1,7 +1,7 @@
 import type {
-    ConfirmFinalizeAppointmentDetail,
     PendingReturnContext,
 } from '../../types/agendaFlow';
+import { openPendingActions } from './openPendingActions';
 
 type RequestFinalizeAppointmentArgs = {
     clientId?: number;
@@ -12,36 +12,22 @@ type RequestFinalizeAppointmentArgs = {
 };
 
 export function requestFinalizeAppointment({
-    clientId,
     appointmentId,
     isEarly,
     returnContext,
     proceed,
 }: RequestFinalizeAppointmentArgs) {
-    let prevented = false;
-    try {
-        const ev = new CustomEvent('confirmFinalizeAppointment', {
-            detail: {
-                clientId,
-                appointmentId,
-                isEarly,
-                returnContext,
-                proceed,
-            } satisfies ConfirmFinalizeAppointmentDetail,
-            cancelable: true,
-        });
-        prevented = !window.dispatchEvent(ev);
-    } catch {
-        /* noop */
-    }
+    const openedPending = openPendingActions({
+        appointmentId,
+        returnContext,
+    });
+    if (openedPending) return;
 
-    if (!prevented) {
-        if (isEarly) {
-            const ok = window.confirm(
-                'Finalizar a consulta antes do horário previsto?',
-            );
-            if (!ok) return;
-        }
-        void proceed?.();
+    if (isEarly) {
+        const ok = window.confirm(
+            'Finalizar a consulta antes do horário previsto?',
+        );
+        if (!ok) return;
     }
+    void proceed?.();
 }

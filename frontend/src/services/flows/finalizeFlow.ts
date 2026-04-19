@@ -3,6 +3,7 @@ import ensureDeviceSession from '../sessions';
 import { buildDeviceHeaders } from '../device';
 import { getServerNowOnce } from '../time';
 import { setAppointmentOverride } from '../../utils/appointments/overrides';
+import { emit } from '../../events/bus';
 
 export interface FinalizeFlowResult {
     ok: boolean;
@@ -161,7 +162,7 @@ export async function finalizeFlow(
             ...(originalEnd ? { original_end_at: originalEnd } : null),
         });
         try {
-            window.dispatchEvent(new Event('pendingActions:forceClose'));
+            emit('pendingActions:forceClose', undefined);
         } catch {
             /* noop */
         }
@@ -186,9 +187,7 @@ export async function finalizeFlow(
                             : null),
                     });
                     try {
-                        window.dispatchEvent(
-                            new Event('pendingActions:forceClose'),
-                        );
+                        emit('pendingActions:forceClose', undefined);
                     } catch {
                         /* noop */
                     }
@@ -220,7 +219,7 @@ export async function finalizeFlow(
                 ...(originalEnd ? { original_end_at: originalEnd } : null),
             });
             try {
-                window.dispatchEvent(new Event('pendingActions:forceClose'));
+                emit('pendingActions:forceClose', undefined);
             } catch {
                 /* noop */
             }
@@ -242,7 +241,7 @@ export async function finalizeFlow(
             ...(originalEnd ? { original_end_at: originalEnd } : null),
         });
         try {
-            window.dispatchEvent(new Event('pendingActions:forceClose'));
+            emit('pendingActions:forceClose', undefined);
         } catch {
             /* noop */
         }
