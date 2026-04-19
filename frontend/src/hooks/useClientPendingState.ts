@@ -4,8 +4,8 @@ import {
     getAppointmentOverride,
     subscribeOverrides,
 } from '../utils/appointments/overrides';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import type { ClientBasic } from '../types/ClientBasic';
-import type { SharedAppointmentLike } from '../components/shared/AppointmentCard';
 
 interface UseClientPendingParams {
     client: ClientBasic;
@@ -249,23 +249,7 @@ export function useClientPendingState({
             return;
         }
 
-        const appt: SharedAppointmentLike = {
-            id,
-            title: client.next_appointment_title ?? undefined,
-            start_at: sISO,
-            end_at: eISO,
-            status: 'scheduled',
-            notes: client.next_appointment_notes ?? undefined,
-            client_name: `${client.first_name} ${client.last_name}`.trim(),
-            client: client.id,
-        };
-        try {
-            window.dispatchEvent(
-                new CustomEvent('pendingActions:open', { detail: { appt } }),
-            );
-        } catch {
-            /* noop */
-        }
+        openPendingActionsForAppointment(id);
     }, [client, now, effectivePending]);
 
     const tryOpenPendingElseQuick = React.useCallback(
@@ -276,15 +260,7 @@ export function useClientPendingState({
             }
             const appt = await findFirstPendingForClient(client.id, now);
             if (appt) {
-                try {
-                    window.dispatchEvent(
-                        new CustomEvent('pendingActions:open', {
-                            detail: { appt },
-                        }),
-                    );
-                } catch {
-                    /* noop */
-                }
+                openPendingActionsForAppointment(appt);
                 return;
             }
             onNoPending();

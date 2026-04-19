@@ -8,6 +8,7 @@ import { track } from '../utils/telemetry';
 import { buildDeviceHeaders } from '../services/device';
 import ensureDeviceSession from '../services/sessions';
 import { pad2, toMinutes, fromMinutes } from '../utils/hmTime';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 
 export interface UseQuickScheduleSaveParams {
     selectedDate: Date;
@@ -252,22 +253,7 @@ export function useQuickScheduleSave({
                                                 return c;
                                             return undefined;
                                         })();
-                                        const payload = {
-                                            id: a.id,
-                                            start_at: a.start_at,
-                                            end_at: a.end_at,
-                                            status: a.status,
-                                            notes: a.notes,
-                                            client_name: clientName,
-                                            client: clientField,
-                                            title: a.title,
-                                        } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                        window.dispatchEvent(
-                                            new CustomEvent(
-                                                'pendingActions:open',
-                                                { detail: { appt: payload } },
-                                            ),
-                                        );
+                                        openPendingActionsForAppointment(a);
                                     } catch {
                                         /* noop */
                                     }

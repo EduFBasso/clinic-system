@@ -219,11 +219,11 @@ describe('QuickScheduleModal', () => {
 
         await waitFor(() => expect(listener).toHaveBeenCalled());
         interface PendingDetail {
-            appt?: { id?: number };
+            appointmentId?: number;
         }
         const evt = listener.mock.calls[0][0] as CustomEvent<PendingDetail>;
         expect(evt).toBeTruthy();
-        expect(evt.detail?.appt?.id).toBe(555);
+        expect(evt.detail?.appointmentId).toBe(555);
         window.removeEventListener('pendingActions:open', listener);
     });
 

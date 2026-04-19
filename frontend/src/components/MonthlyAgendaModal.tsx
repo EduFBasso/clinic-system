@@ -7,6 +7,7 @@ import {
 } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import { deriveStatus } from '../utils/appointments/status';
 import ClientCardRow from './shared/ClientCardRow';
 // PendingActionsModal é global (Home)
@@ -144,92 +145,7 @@ export default function MonthlyAgendaModal({
                 case 'canceled':
                     return status === 'canceled';
                 default:
-                    return true;
-            }
-        });
-    }, [items, statusFilter, effectiveNowRef]);
-
-    const groupedFiltered = React.useMemo(
-        () => groupByDay(filteredItems),
-        [filteredItems],
-    );
-
-    React.useEffect(() => {
-        let t: number | undefined;
-        const onChanged = () => {
-            if (t) window.clearTimeout(t);
-            t = window.setTimeout(() => setReloadKey(x => x + 1), 180);
-        };
-        window.addEventListener('appointments:changed', onChanged);
-        return () => {
-            if (t) window.clearTimeout(t);
-            window.removeEventListener('appointments:changed', onChanged);
-        };
-    }, []);
-
-    const y = month.getFullYear();
-
-    const MONTH_ABBR = [
-        'Jan',
-        'Fev',
-        'Mar',
-        'Abr',
-        'Mai',
-        'Jun',
-        'Jul',
-        'Ago',
-        'Set',
-        'Out',
-        'Nov',
-        'Dez',
-    ];
-
-    const sortedDays = React.useMemo(
-        () => Object.keys(groupedFiltered).sort(),
-        [groupedFiltered],
-    );
-
-    React.useEffect(() => {
-        if (!open) return;
-        const total = items.length;
-        if (total > 400) setVisibleDaysCount(5);
-        else if (total > 250) setVisibleDaysCount(8);
-        else setVisibleDaysCount(14);
-    }, [open, items.length]);
-
-    return (
-        <AppModal
-            open={open}
-            onClose={onClose}
-            actionsBarStyle={{
-                background: 'transparent',
-                boxShadow: 'none',
-                borderBottom: 'none',
-            }}
-            showCloseButton={false}
-            fullScreen
-            disableTopSafePadding
-        >
-            <StickyModalHeader
-                title={
-                    <>
-                        {'Compromissos: '}
-                        {client.first_name}
-                        <span className='monthly-title-lastname'>
-                            {' '}
-                            {client.last_name}
-                        </span>
-                    </>
-                }
-                onClose={onClose}
-            >
-                {/* Linha 1: Hoje + ano com setas */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <button
-                        onClick={() => {
-                            const now = new Date();
-                            setMonth(startOfMonth(now));
-                            requestAnimationFrame(() => {
+                                                                openPendingActionsForAppointment(appt);
                                 const id = toISODate(now);
                                 const el = document.querySelector(
                                     `[data-day="${id}"]`,
@@ -489,29 +405,7 @@ export default function MonthlyAgendaModal({
                                                                                   return c;
                                                                               return undefined;
                                                                           })();
-                                                                      const payload =
-                                                                          {
-                                                                              id: x.id,
-                                                                              start_at:
-                                                                                  x.start_at,
-                                                                              end_at: x.end_at,
-                                                                              status: x.status,
-                                                                              notes: x.notes,
-                                                                              client_name:
-                                                                                  clientName,
-                                                                              client: clientField,
-                                                                              title: x.title,
-                                                                          } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                                                      window.dispatchEvent(
-                                                                          new CustomEvent(
-                                                                              'pendingActions:open',
-                                                                              {
-                                                                                  detail: {
-                                                                                      appt: payload,
-                                                                                  },
-                                                                              },
-                                                                          ),
-                                                                      );
+                                                                      openPendingActionsForAppointment(x);
                                                                   } catch {
                                                                       /* noop */
                                                                   }

@@ -25,6 +25,7 @@ import { API_BASE } from '../config/api';
 import { track } from '../utils/telemetry';
 import { usePendingGuard } from '../hooks/usePendingGuard';
 import { focusClientCard } from '../utils/focusClientCard';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import { useQuickScheduleSave } from '../hooks/useQuickScheduleSave';
 import { useAgendaSettings } from '../hooks/useAgendaSettings';
 import { pad2, toMinutes, fromMinutes, weekdayLabel } from '../utils/hmTime';
@@ -622,76 +623,7 @@ export default function QuickScheduleModal({
                                                 (await resp.json()) as Appointment;
                                             try {
                                                 const a = appt as Appointment;
-                                                const anyAppt =
-                                                    a as unknown as Record<
-                                                        string,
-                                                        unknown
-                                                    >;
-                                                const clientName = (():
-                                                    | string
-                                                    | undefined => {
-                                                    if (
-                                                        typeof anyAppt.client_name ===
-                                                        'string'
-                                                    )
-                                                        return anyAppt.client_name as string;
-                                                    const c =
-                                                        anyAppt.client as unknown;
-                                                    if (
-                                                        c &&
-                                                        typeof c === 'object' &&
-                                                        'name' in
-                                                            (c as Record<
-                                                                string,
-                                                                unknown
-                                                            >)
-                                                    ) {
-                                                        const n = (
-                                                            c as {
-                                                                name?: unknown;
-                                                            }
-                                                        ).name;
-                                                        if (
-                                                            typeof n ===
-                                                            'string'
-                                                        )
-                                                            return n;
-                                                    }
-                                                    return undefined;
-                                                })();
-                                                const clientField =
-                                                    ((): unknown => {
-                                                        const c =
-                                                            anyAppt.client as unknown;
-                                                        if (
-                                                            typeof c ===
-                                                                'number' ||
-                                                            typeof c ===
-                                                                'object'
-                                                        )
-                                                            return c;
-                                                        return undefined;
-                                                    })();
-                                                const payload = {
-                                                    id: a.id,
-                                                    start_at: a.start_at,
-                                                    end_at: a.end_at,
-                                                    status: a.status,
-                                                    notes: a.notes,
-                                                    client_name: clientName,
-                                                    client: clientField,
-                                                    title: a.title,
-                                                } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'pendingActions:open',
-                                                        {
-                                                            detail: {
-                                                                appt: payload,
-                                                            },
-                                                        },
-                                                    ),
-                                                );
+                                                openPendingActionsForAppointment(a);
                                             } catch {
                                                 /* noop */
                                             }

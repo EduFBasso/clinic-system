@@ -14,6 +14,7 @@ import {
     type ClientLike,
 } from '../utils/appointments/agendaHelpers';
 import { useNowTick } from '../hooks/useNowTick';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import QuickScheduleModal from './QuickScheduleModal';
 // PendingActionsModal é global (Home)
 import AppointmentDetailsModal from './AppointmentDetailsModal';
@@ -491,76 +492,7 @@ export default function DailyAgendaModal({
                                         setQsOpen(true);
                                     }}
                                     onResolvePending={appt => {
-                                        try {
-                                            const a = appt as Appointment;
-                                            const anyAppt =
-                                                a as unknown as Record<
-                                                    string,
-                                                    unknown
-                                                >;
-                                            const clientName = (():
-                                                | string
-                                                | undefined => {
-                                                if (
-                                                    typeof anyAppt.client_name ===
-                                                    'string'
-                                                )
-                                                    return anyAppt.client_name as string;
-                                                const c =
-                                                    anyAppt.client as unknown;
-                                                if (
-                                                    c &&
-                                                    typeof c === 'object' &&
-                                                    'name' in
-                                                        (c as Record<
-                                                            string,
-                                                            unknown
-                                                        >)
-                                                ) {
-                                                    const n = (
-                                                        c as {
-                                                            name?: unknown;
-                                                        }
-                                                    ).name;
-                                                    if (typeof n === 'string')
-                                                        return n;
-                                                }
-                                                return undefined;
-                                            })();
-                                            const clientField =
-                                                ((): unknown => {
-                                                    const c =
-                                                        anyAppt.client as unknown;
-                                                    if (
-                                                        typeof c === 'number' ||
-                                                        typeof c === 'object'
-                                                    )
-                                                        return c;
-                                                    return undefined;
-                                                })();
-                                            const payload = {
-                                                id: a.id,
-                                                start_at: a.start_at,
-                                                end_at: a.end_at,
-                                                status: a.status,
-                                                notes: a.notes,
-                                                client_name: clientName,
-                                                client: clientField,
-                                                title: a.title,
-                                            } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                            window.dispatchEvent(
-                                                new CustomEvent(
-                                                    'pendingActions:open',
-                                                    {
-                                                        detail: {
-                                                            appt: payload,
-                                                        },
-                                                    },
-                                                ),
-                                            );
-                                        } catch {
-                                            /* noop */
-                                        }
+                                        openPendingActionsForAppointment(appt);
                                     }}
                                     onDetails={
                                         a.status === 'done'

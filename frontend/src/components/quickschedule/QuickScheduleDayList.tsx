@@ -2,6 +2,7 @@ import React from 'react';
 import ClientDayList from '../shared/ClientDayList';
 import type { Appointment } from '../../hooks/useAppointments';
 import type { PendingReturnContext } from '../../types/agendaFlow';
+import { openPendingActionsForAppointment } from '../../utils/appointments/openPendingActions';
 
 export type DayFilter = 'todos' | 'ativos' | 'cancelados';
 
@@ -237,15 +238,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                             currentEditId === appt.id,
                     })}
                     onResolvePending={appt => {
-                        try {
-                            window.dispatchEvent(
-                                new CustomEvent('pendingActions:open', {
-                                    detail: { appt },
-                                }),
-                            );
-                        } catch {
-                            /* noop */
-                        }
+                        openPendingActionsForAppointment(appt);
                     }}
                     onUseTime={onUseTime}
                     onEdit={onEdit}

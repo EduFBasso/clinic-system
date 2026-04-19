@@ -79,10 +79,10 @@ describe('useClientPendingState future mismatch', () => {
         await result.current.openPendingActions();
         expect(listener).toHaveBeenCalled();
         const detail = (
-            listener.mock.calls[0][0] as CustomEvent<{ appt: { id: number } }>
+            listener.mock.calls[0][0] as CustomEvent<{ appointmentId: number }>
         ).detail;
         // Deve ser o compromisso passado mockado (id 777) e não o futuro (id 999)
-        expect(detail.appt.id).toBe(777);
+        expect(detail.appointmentId).toBe(777);
         vi.useRealTimers();
     });
 });
