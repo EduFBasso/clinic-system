@@ -1,6 +1,9 @@
 import React from 'react';
 import { on } from '../events/bus';
-import type { OpenDailyAgendaPayload } from '../events/bus';
+import type {
+    OpenAppointmentDetailsPayload,
+    OpenDailyAgendaPayload,
+} from '../events/bus';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
 import { API_BASE } from '../config/api';
@@ -217,11 +220,9 @@ export function useAgendaModals(): UseAgendaModalsReturn {
         );
 
         const disposeDaily = on('openDailyAgenda', det => {
-            const ext = det as OpenDailyAgendaPayload & {
-                focusAppointmentId?: number;
-            };
-            const dateIso = ext && ext.date;
-            const focusAppointmentId = ext.focusAppointmentId;
+            const ext: OpenDailyAgendaPayload = det;
+            const dateIso = ext?.date;
+            const focusAppointmentId = ext?.focusAppointmentId;
             if (dateIso) {
                 const d = new Date(dateIso);
                 if (!isNaN(d.getTime())) openDaily(d, focusAppointmentId);
@@ -231,9 +232,7 @@ export function useAgendaModals(): UseAgendaModalsReturn {
         });
 
         const disposeDetails = on('openAppointmentDetails', det => {
-            const appt: Appointment | undefined = (
-                det as { appointment?: Appointment }
-            ).appointment;
+            const appt = (det as OpenAppointmentDetailsPayload).appointment;
             if (appt) {
                 setDetailsAppt(appt);
                 setDetailsOpen(true);

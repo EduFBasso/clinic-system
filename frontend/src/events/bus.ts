@@ -5,13 +5,22 @@
 // emit('systemMessage', { text: 'Hello', type: 'success' });
 // const dispose = on('openAppointmentDetails', detail => { ... });
 
+import type { Appointment } from '../hooks/useAppointments';
+
 export type SystemMessagePayload = {
     text: string;
-    type: 'success' | 'error' | 'info';
+    type: 'success' | 'error' | 'info' | 'warning';
 };
-export type OpenAppointmentDetailsPayload = { id: number };
+export type OpenAppointmentDetailsPayload = {
+    appointment: Appointment;
+};
 export type ScrollToClientCardPayload = { clientId: number };
-export type OpenDailyAgendaPayload = { date?: string } | undefined; // ISO date optional
+export type OpenDailyAgendaPayload =
+    | {
+          date?: string;
+          focusAppointmentId?: number;
+      }
+    | undefined; // ISO date optional
 export type AgendaSettingsUpdatedPayload = undefined;
 export type AppointmentsChangedPayload = undefined;
 

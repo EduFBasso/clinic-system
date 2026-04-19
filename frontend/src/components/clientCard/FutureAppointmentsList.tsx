@@ -1,4 +1,5 @@
 import React from 'react';
+import { emit } from '../../events/bus';
 import { formatTime } from '../../utils/timeFormat';
 import styles from '../../styles/components/ClientCard.module.css';
 import type { Appointment } from '../../hooks/useAppointments';
@@ -114,33 +115,14 @@ export default function FutureAppointmentsList({
                                         .then(data => {
                                             const appt = (data ||
                                                 f) as Appointment;
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'openAppointmentDetails',
-                                                        {
-                                                            detail: {
-                                                                appointment:
-                                                                    appt,
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
+                                            emit('openAppointmentDetails', {
+                                                appointment: appt,
+                                            });
                                         })
                                         .catch(() => {
-                                            window.dispatchEvent(
-                                                new CustomEvent(
-                                                    'openAppointmentDetails',
-                                                    {
-                                                        detail: {
-                                                            appointment: f,
-                                                        },
-                                                    },
-                                                ),
-                                            );
+                                            emit('openAppointmentDetails', {
+                                                appointment: f,
+                                            });
                                         });
                                 }}
                             >
