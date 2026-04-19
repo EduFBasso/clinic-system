@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 from django.db import transaction
 from django.utils import timezone
@@ -39,6 +39,32 @@ def _format_professional_name(appointment: Appointment) -> str:
     return professional.display_name or professional.first_name or str(professional)
 
 
+def _build_visit_reminder_phrase(appointment: Appointment) -> str:
+    visit_type = appointment.visit_type
+    if visit_type == Appointment.VisitType.CONSULTA:
+        return "da sua consulta"
+    if visit_type == Appointment.VisitType.AVALIACAO:
+        return "da sua avaliação"
+    if visit_type == Appointment.VisitType.RETORNO:
+        return "do seu retorno"
+    if visit_type == Appointment.VisitType.PROCEDIMENTO:
+        return "do seu procedimento"
+    return "do seu atendimento"
+
+
+def build_whatsapp_prefilled_text(appointment: Appointment) -> str:
+    visit_reminder_phrase = _build_visit_reminder_phrase(appointment)
+    professional_name = _format_professional_name(appointment).strip()
+    local_start = timezone.localtime(appointment.start_at)
+    date_label = local_start.strftime("%d/%m/%Y")
+    time_label = local_start.strftime("%H:%M")
+    return (
+        f"Olá! Passando para lembrar {visit_reminder_phrase} agendado(a) "
+        f"para {date_label} às {time_label}, com {professional_name}. "
+        "Posso contar com sua presença?"
+    )
+
+
 def build_whatsapp_url(appointment: Appointment) -> str | None:
     raw_phone = getattr(appointment.client, "phone", "") or ""
     digits = "".join(char for char in str(raw_phone) if char.isdigit())
@@ -47,15 +73,8 @@ def build_whatsapp_url(appointment: Appointment) -> str | None:
     if not digits.startswith("55"):
         digits = "55" + digits
 
-    visit_type_label = appointment.get_visit_type_display()
-    local_time = timezone.localtime(appointment.start_at).strftime("%H:%M")
-    wa_text = (
-        f"Olá {_format_client_name(appointment)}, "
-        f"{visit_type_label} agendada para as {local_time} "
-        f"com {_format_professional_name(appointment)}, "
-        "confirma sua presença?"
-    )
-    return f"https://wa.me/{digits}?text={quote(wa_text)}"
+    query = urlencode({"text": build_whatsapp_prefilled_text(appointment)})
+    return f"https://wa.me/{digits}?{query}"
 
 
 def build_telegram_text(appointment: Appointment) -> str:
@@ -72,7 +91,7 @@ def build_telegram_text(appointment: Appointment) -> str:
         lines.append(f"Local: {appointment.location}")
     if appointment.notes:
         lines.extend(["", f"Obs.: {appointment.notes.strip()}"])
-    lines.extend(["", "Abra o WhatsApp da cliente pelo botão abaixo."])
+    lines.extend(["", "Abra a conversa no WhatsApp pelo botão abaixo."])
     return "\n".join(lines)
 
 
@@ -84,7 +103,7 @@ def build_reply_markup(appointment: Appointment) -> dict | None:
         "inline_keyboard": [
             [
                 {
-                    "text": "Abrir WhatsApp da cliente",
+                    "text": "Abrir conversa no WhatsApp",
                     "url": whatsapp_url,
                 }
             ]

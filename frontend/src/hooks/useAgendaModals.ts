@@ -174,6 +174,8 @@ export function useAgendaModals(): UseAgendaModalsReturn {
     const openDaily = React.useCallback((date: Date, focusId?: number) => {
         setDailyDate(date);
         setDailyFocusId(focusId);
+        setMonthlyOpen(false);
+        setWeeklyOpen(false);
         setDailyOpen(true);
     }, []);
 

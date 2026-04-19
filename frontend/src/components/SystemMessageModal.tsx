@@ -4,7 +4,7 @@ import AppModal from './Modal';
 interface SystemMessageModalProps {
     open: boolean;
     message: string | null;
-    type?: 'success' | 'error' | 'info';
+    type?: 'success' | 'error' | 'info' | 'warning';
     onClose: () => void;
     autoCloseMs?: number;
 }
@@ -19,6 +19,11 @@ const palette: Record<string, { bg: string; color: string; border: string }> = {
         bg: 'var(--color-danger-bg)',
         color: 'var(--color-danger)',
         border: 'color-mix(in oklab, var(--color-danger) 55%, white)',
+    },
+    warning: {
+        bg: '#fffbeb',
+        color: '#b45309',
+        border: '#f59e0b',
     },
     info: { bg: '#eff6ff', color: '#1d4ed8', border: '#60a5fa' },
 };

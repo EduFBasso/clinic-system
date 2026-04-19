@@ -11,6 +11,7 @@ export interface QuickScheduleDayListProps {
     onChangeFilter: (f: DayFilter) => void;
     sectionDateTitle: string;
     highlightId: number | null;
+    conflictHighlightIds?: number[];
     editingHighlightId: number | null;
     currentEditId: number | null;
     listRef?: React.RefObject<HTMLDivElement | null>;
@@ -18,6 +19,7 @@ export interface QuickScheduleDayListProps {
     onEdit: (a: Appointment) => void;
     onCancel: (a: Appointment) => Promise<void>;
     onFinalize?: (a: Appointment) => Promise<void> | void;
+    finalizeRequestContext?: unknown;
     onDetails?: (a: Appointment) => void;
     minimal?: boolean; // when true, hide header/select and section title; show only minicards
 }
@@ -29,6 +31,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
     onChangeFilter,
     sectionDateTitle,
     highlightId,
+    conflictHighlightIds = [],
     editingHighlightId,
     currentEditId,
     listRef,
@@ -36,6 +39,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
     onEdit,
     onCancel,
     onFinalize,
+    finalizeRequestContext,
     onDetails,
     minimal = false,
 }) => {
@@ -222,7 +226,10 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                     getCardProps={appt => ({
                         showEditAction: false,
                         style: { padding: '6px 8px' },
-                        highlight: highlightId === appt.id,
+                        highlight:
+                            highlightId === appt.id ||
+                            conflictHighlightIds.includes(appt.id),
+                        selected: currentEditId === appt.id,
                         editingActive: editingHighlightId === appt.id,
                         pulse:
                             editingHighlightId === appt.id &&
@@ -243,6 +250,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                     onEdit={onEdit}
                     onCancel={onCancel}
                     onFinalize={onFinalize}
+                    finalizeRequestContext={finalizeRequestContext}
                     onDetails={onDetails}
                     emptyPlaceholder={
                         !loading ? (

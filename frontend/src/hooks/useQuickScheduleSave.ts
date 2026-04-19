@@ -22,6 +22,7 @@ export interface UseQuickScheduleSaveParams {
     onSuccess: (updatedId: number | undefined, wasEdit: boolean) => void;
     /** Called to close the modal immediately (e.g. after auto-close on create). */
     onImmediateClose: () => void;
+    emitGlobalErrorMessage?: boolean;
 }
 
 export function useQuickScheduleSave({
@@ -35,6 +36,7 @@ export function useQuickScheduleSave({
     afterPersist,
     onSuccess,
     onImmediateClose,
+    emitGlobalErrorMessage = true,
 }: UseQuickScheduleSaveParams): {
     saving: boolean;
     error: string | null;
@@ -295,7 +297,7 @@ export function useQuickScheduleSave({
                             if (parsed?.non_field_errors?.length) {
                                 const msg: string = parsed.non_field_errors[0];
                                 if (/conflito/i.test(msg))
-                                    return 'Conflito de horário: já existe um compromisso neste período. Escolha outro horário.';
+                                    return 'Existe um compromisso neste período. Toque no cartão destacado para remover o conflito ajustando data/hora ou cancelando o compromisso.';
                                 return msg;
                             }
                             const firstField = Object.values(parsed).find(
@@ -392,14 +394,16 @@ export function useQuickScheduleSave({
                     ? String((e as Error).message)
                     : 'Erro ao salvar';
             setError(msg);
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: { text: msg, type: 'error' },
-                    }),
-                );
-            } catch {
-                /* noop */
+            if (emitGlobalErrorMessage) {
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('systemMessage', {
+                            detail: { text: msg, type: 'error' },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
             }
         } finally {
             setSaving(false);
@@ -425,6 +429,7 @@ export function useQuickScheduleSave({
         afterPersist,
         onSuccess,
         onImmediateClose,
+        emitGlobalErrorMessage,
         agendaSettings.defaultDuration,
         agendaSettings.slotInterval,
     ]);

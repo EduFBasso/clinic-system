@@ -50,6 +50,7 @@ export default function DailyAgendaModal({
     onClose,
     focusAppointmentId,
 }: DailyAgendaModalProps) {
+    const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
     // Floating picker state/position (consistent with QuickScheduleModal)
     const [showPicker, setShowPicker] = React.useState(false);
     const [pickerPos, setPickerPos] = React.useState<
@@ -241,6 +242,17 @@ export default function DailyAgendaModal({
     });
 
     React.useEffect(() => {
+        if (!open) return;
+        const resetScroll = () => {
+            const el = scrollContainerRef.current;
+            if (el) el.scrollTop = 0;
+        };
+        resetScroll();
+        const frameId = window.requestAnimationFrame(resetScroll);
+        return () => window.cancelAnimationFrame(frameId);
+    }, [open, selectedDay]);
+
+    React.useEffect(() => {
         if (!open || !focusAppointmentId) return;
         const id = focusAppointmentId;
         const to = setTimeout(() => {
@@ -430,6 +442,7 @@ export default function DailyAgendaModal({
             </StickyModalHeader>
             {/* Wrapper scrollável interno (AppModal com disableOuterScroll) */}
             <div
+                ref={scrollContainerRef}
                 style={{
                     flex: 1,
                     minHeight: 0,
@@ -560,12 +573,15 @@ export default function DailyAgendaModal({
                                             : undefined
                                     }
                                     onCancel={
-                                        a.status === 'scheduled'
+                                        (a.status === 'scheduled' ||
+                                            a.status === 'ongoing' ||
+                                            a._isOngoing) &&
+                                        !(a.status === 'scheduled' && !a._isOngoing && a._end < effectiveNowRef)
                                             ? handleCancel
                                             : undefined
                                     }
                                     onFinalize={
-                                        a.status === 'ongoing'
+                                        a.status === 'ongoing' || a._isOngoing
                                             ? handleFinalize
                                             : undefined
                                     }
@@ -593,8 +609,10 @@ export default function DailyAgendaModal({
                     onClose={() => setQsOpen(false)}
                     client={qsClient}
                     editAppointment={qsEdit}
-                    afterPersist={() => {
-                        setQsOpen(false);
+                    afterPersist={(_, action) => {
+                        if (action === 'created' || (action === 'updated' && !!qsEdit)) {
+                            setQsOpen(false);
+                        }
                         setReloadKey(x => x + 1); // força recarregar agenda diária
                     }}
                 />

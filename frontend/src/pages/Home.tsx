@@ -9,7 +9,9 @@ import Footer from '../components/Footer';
 import UpdateBanner from '../components/UpdateBanner';
 import styles from '../styles/pages/Home.module.css';
 // ScheduleModal removido — usamos apenas QuickScheduleModal
-import QuickScheduleModal from '../components/QuickScheduleModal';
+import QuickScheduleModal, {
+    type QuickScheduleInitialDraft,
+} from '../components/QuickScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
 import WeeklyAgendaModal from '../components/WeeklyAgendaModal';
 import SystemMessageModal from '../components/SystemMessageModal';
@@ -46,6 +48,7 @@ export default function Home() {
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
         null,
     );
+    const [quickInitialDraft, setQuickInitialDraft] = useState<QuickScheduleInitialDraft | null>(null);
     const {
         monthlyOpen,
         setMonthlyOpen,
@@ -74,14 +77,19 @@ export default function Home() {
     } = useAgendaModals();
     const [sysMsg, setSysMsg] = useState<{
         text: string;
-        type: 'success' | 'error' | 'info';
+        type: 'success' | 'error' | 'info' | 'warning';
         autoCloseMs?: number;
     } | null>(null);
     const version = useAppVersionWatcher();
     // Live ping: simple heuristic — enable while the page is open.
     // We can refine to enable only when there may be ongoing appointments by inspecting clients in future.
     useAppointmentsLivePing({ enabled: true, pollIntervalMs: 30000 });
-    const { pendingActionsOpen, pendingAppt, closePendingActions } =
+    const {
+        pendingActionsOpen,
+        pendingAppt,
+        pendingReturnContext,
+        closePendingActions,
+    } =
         usePendingActionsListeners();
 
     // Seleciona o cliente via ?client=ID e abre modais conforme params (?new, ?edit, ?mode)
@@ -213,6 +221,27 @@ export default function Home() {
         }
 
         const raw = sessionStorage.getItem('reopenAppointmentDetails');
+        const resumeQuickRaw = sessionStorage.getItem('resumeQuickSchedule');
+        if (resumeQuickRaw) {
+            sessionStorage.removeItem('resumeQuickSchedule');
+            try {
+                const parsed = JSON.parse(resumeQuickRaw) as QuickScheduleInitialDraft;
+                if (parsed?.clientId) {
+                    ensureClientBasic(parsed.clientId)
+                        .then(clientBasic => {
+                            setRouteClient(clientBasic);
+                            setRouteEditAppt(null);
+                            setQuickInitialDraft(parsed);
+                            setQuickOpen(true);
+                        })
+                        .catch(() => {
+                            /* noop */
+                        });
+                }
+            } catch {
+                /* noop */
+            }
+        }
         if (!raw) return;
         sessionStorage.removeItem('reopenAppointmentDetails');
         const apptId = parseInt(raw, 10);
@@ -353,10 +382,12 @@ export default function Home() {
                         open={quickOpen}
                         onClose={() => {
                             setQuickOpen(false);
+                            setQuickInitialDraft(null);
                             clearAgendaRouteFlags();
                         }}
                         client={routeClient}
                         editAppointment={routeEditAppt}
+                        initialDraft={quickInitialDraft}
                     />
                 )}
                 {routeClient && (
@@ -416,6 +447,7 @@ export default function Home() {
                     <PendingActionsModal
                         open
                         appt={pendingAppt}
+                        returnContext={pendingReturnContext}
                         onClose={closePendingActions}
                     />
                 )}

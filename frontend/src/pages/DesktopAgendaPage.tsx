@@ -614,12 +614,18 @@ export default function DesktopAgendaPage() {
                                                     : undefined
                                             }
                                             onCancel={
-                                                a.status === 'scheduled'
+                                                (a.status === 'scheduled' ||
+                                                    a.status === 'ongoing' ||
+                                                    a._isOngoing) &&
+                                                !(a.status === 'scheduled' &&
+                                                    !a._isOngoing &&
+                                                    a._end < effectiveNowRef)
                                                     ? handleCancel
                                                     : undefined
                                             }
                                             onFinalize={
-                                                a.status === 'ongoing'
+                                                a.status === 'ongoing' ||
+                                                a._isOngoing
                                                     ? handleFinalize
                                                     : undefined
                                             }
@@ -671,8 +677,10 @@ export default function DesktopAgendaPage() {
                     onClose={() => setQsOpen(false)}
                     client={qsClient}
                     editAppointment={qsEdit}
-                    afterPersist={() => {
-                        setQsOpen(false);
+                    afterPersist={(_, action) => {
+                        if (action === 'created' || (action === 'updated' && !!qsEdit)) {
+                            setQsOpen(false);
+                        }
                         setReloadKey(x => x + 1);
                     }}
                 />

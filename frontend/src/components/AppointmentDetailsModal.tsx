@@ -6,7 +6,6 @@ import { formatTime } from '../utils/timeFormat';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
-import { useIsMobile } from '../hooks/useIsMobile';
 
 type ChargeItem = {
     id: number;
@@ -61,7 +60,32 @@ export default function AppointmentDetailsModal({
     onClose,
     appt,
 }: AppointmentDetailsModalProps) {
-    const isCompactViewport = useIsMobile(640);
+    const [viewportWidth, setViewportWidth] = React.useState(() => {
+        if (typeof window === 'undefined') return 1024;
+        const visualWidth = window.visualViewport?.width ?? window.innerWidth;
+        return Math.min(window.innerWidth, visualWidth);
+    });
+
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const syncViewportWidth = () => {
+            const visualWidth =
+                window.visualViewport?.width ?? window.innerWidth;
+            setViewportWidth(Math.min(window.innerWidth, visualWidth));
+        };
+        syncViewportWidth();
+        window.addEventListener('resize', syncViewportWidth);
+        window.visualViewport?.addEventListener('resize', syncViewportWidth);
+        return () => {
+            window.removeEventListener('resize', syncViewportWidth);
+            window.visualViewport?.removeEventListener(
+                'resize',
+                syncViewportWidth,
+            );
+        };
+    }, []);
+
+    const isCompactViewport = viewportWidth <= 900;
     const clientName = React.useMemo(() => {
         if (!appt) return 'Cliente';
         return (
@@ -232,6 +256,8 @@ export default function AppointmentDetailsModal({
             unmountOnClose
             closeOnEnter={false}
             showCloseButton={false}
+            fullScreen={isCompactViewport}
+            maxHeightVh={96}
             actionsBarStyle={{
                 background: 'transparent',
                 borderBottom: 'none',
@@ -245,7 +271,7 @@ export default function AppointmentDetailsModal({
                     width: '100%',
                     minWidth: 0,
                     maxWidth: '100%',
-                    overflowX: 'hidden',
+                    overflowX: 'clip',
                 }}
             >
                 <StickyModalHeader
@@ -704,7 +730,10 @@ export default function AppointmentDetailsModal({
                 <div
                     style={{
                         display: 'flex',
-                        justifyContent: 'flex-end',
+                        justifyContent: isCompactViewport
+                            ? 'stretch'
+                            : 'flex-end',
+                        flexWrap: 'wrap',
                         gap: 8,
                     }}
                 >
@@ -718,13 +747,18 @@ export default function AppointmentDetailsModal({
                             borderRadius: 6,
                             fontWeight: 600,
                             cursor: 'pointer',
+                            flex: isCompactViewport ? '1 1 180px' : undefined,
                         }}
                     >
                         {charges.length > 0 ? 'Editar' : 'Anotar cobrança'}
                     </button>
                     <button
                         onClick={onClose}
-                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
+                        style={{
+                            padding: '8px 12px',
+                            background: '#e5e7eb',
+                            flex: isCompactViewport ? '1 1 140px' : undefined,
+                        }}
                     >
                         Fechar
                     </button>

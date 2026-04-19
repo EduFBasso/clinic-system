@@ -946,10 +946,13 @@ export default function ClientCard({
                     editAppointment={editingAppt}
                     futureAppointments={futureAppointments}
                     maxFutureAppointments={getMaxScheduledPerClient()}
-                    afterPersist={() => {
+                    afterPersist={(_, action) => {
                         // Atualizar clientes para refletir dados do próximo compromisso
                         window.dispatchEvent(new Event('updateClients'));
-                        // Agora FECHA também em edição conforme solicitado (uniformizar experiência)
+                        const shouldClose =
+                            action === 'created' ||
+                            (action === 'updated' && !!editingAppt);
+                        if (!shouldClose) return;
                         setShowQuick(false);
                         try {
                             document.body.dataset.keepScroll = '1';

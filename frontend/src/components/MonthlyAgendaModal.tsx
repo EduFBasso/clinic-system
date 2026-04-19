@@ -7,6 +7,7 @@ import {
 } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
+import { deriveStatus } from '../utils/appointments/status';
 import ClientCardRow from './shared/ClientCardRow';
 // PendingActionsModal é global (Home)
 import StickyModalHeader from './shared/StickyModalHeader';
@@ -397,6 +398,10 @@ export default function MonthlyAgendaModal({
                                     {(groupedFiltered[dayISO] || []).map(a => {
                                         const end = new Date(a.end_at);
                                         const now = effectiveNowRef;
+                                        const derivedStatus = deriveStatus(
+                                            a,
+                                            now,
+                                        );
                                         const isPending =
                                             a.status === 'scheduled' &&
                                             end < now;
@@ -526,8 +531,10 @@ export default function MonthlyAgendaModal({
                                                             : undefined
                                                     }
                                                     onCancel={
-                                                        a.status ===
-                                                            'scheduled' &&
+                                                        (derivedStatus ===
+                                                            'scheduled' ||
+                                                            derivedStatus ===
+                                                                'ongoing') &&
                                                         !isPending
                                                             ? async appt => {
                                                                   try {
@@ -581,7 +588,8 @@ export default function MonthlyAgendaModal({
                                                             : undefined
                                                     }
                                                     onFinalize={
-                                                        a.status === 'ongoing'
+                                                        derivedStatus ===
+                                                        'ongoing'
                                                             ? handleFinalize
                                                             : undefined
                                                     }

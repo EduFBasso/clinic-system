@@ -10,6 +10,7 @@ from apps.clients.models import Client
 from apps.register.models import Professional, ProfessionalSettings
 from apps.reminders.models import ReminderDelivery, TelegramProfessionalLink
 from apps.reminders.services.reminders import (
+    build_whatsapp_prefilled_text,
     dispatch_appointment_reminder,
     get_due_appointments,
 )
@@ -90,8 +91,31 @@ def test_dispatch_appointment_reminder_sends_telegram(
     assert delivery is not None
     assert delivery.status == ReminderDelivery.Status.SENT
     assert delivery.external_message_id == "77"
-    assert "Abrir WhatsApp da cliente" in str(delivery.payload)
+    assert "Abrir conversa no WhatsApp" in str(delivery.payload)
+    assert "?text=" in str(delivery.payload)
+    assert "Posso+contar+com+sua+presen%C3%A7a%3F" in str(delivery.payload)
     assert mocked_post.called
+
+
+def test_build_whatsapp_prefilled_text_uses_human_friendly_confirmation_copy(
+    appointment,
+):
+    text = build_whatsapp_prefilled_text(appointment)
+
+    assert text.startswith("Olá! Passando para lembrar da sua consulta")
+    assert text.endswith("Posso contar com sua presença?")
+    assert "/" in text
+    assert ":" in text
+
+
+def test_build_whatsapp_prefilled_text_mentions_return_visit_type_explicitly(
+    appointment,
+):
+    appointment.visit_type = Appointment.VisitType.RETORNO
+
+    text = build_whatsapp_prefilled_text(appointment)
+
+    assert "do seu retorno" in text
 
 
 def test_dispatch_appointment_reminder_skips_without_telegram_link(appointment, reminder_settings):

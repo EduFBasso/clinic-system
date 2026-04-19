@@ -44,6 +44,7 @@ export interface AppointmentCardProps<
     onEdit?: (appt: T) => void;
     onCancel?: (appt: T) => void;
     onFinalize?: (appt: T) => Promise<void> | void;
+    finalizeRequestContext?: unknown;
     onDetails?: (appt: T) => void;
     highlight?: boolean;
     editingActive?: boolean;
@@ -78,6 +79,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     onEdit,
     onCancel,
     onFinalize,
+    finalizeRequestContext,
     onDetails,
     highlight,
     editingActive,
@@ -134,6 +136,8 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     const [actionPrompt, setActionPrompt] = React.useState<
         'scheduled' | 'ongoing' | null
     >(null);
+    const deferredActionFrameRef = React.useRef<number | null>(null);
+    const deferredActionTimeoutRef = React.useRef<number | null>(null);
     // Se houve encurtamento de end_at após finalize/cancel, preservar faixa original para exibição
     let displayEndForRange = appt.end_at; // original props (não override)
     try {
@@ -214,6 +218,23 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         onCancel(appt);
         return true;
     }, [appt, canCancel, onCancel]);
+    const runAfterPromptClose = React.useCallback((callback: () => void) => {
+        if (typeof window === 'undefined') {
+            callback();
+            return;
+        }
+        if (typeof window.requestAnimationFrame === 'function') {
+            deferredActionFrameRef.current = window.requestAnimationFrame(() => {
+                deferredActionFrameRef.current = null;
+                callback();
+            });
+            return;
+        }
+        deferredActionTimeoutRef.current = window.setTimeout(() => {
+            deferredActionTimeoutRef.current = null;
+            callback();
+        }, 0);
+    }, []);
     const timeLabel = `${String(start.getHours()).padStart(2, '0')}:${String(
         start.getMinutes(),
     ).padStart(2, '0')} - ${String(end.getHours()).padStart(2, '0')}:${String(
@@ -232,9 +253,27 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
             clientId,
             appointmentId: appt.id,
             isEarly: true,
+            returnContext: finalizeRequestContext,
             proceed: () => onFinalize?.(appt),
         });
-    }, [appt, onFinalize]);
+    }, [appt, finalizeRequestContext, onFinalize]);
+    React.useEffect(() => {
+        return () => {
+            if (
+                deferredActionFrameRef.current !== null &&
+                typeof window !== 'undefined' &&
+                typeof window.cancelAnimationFrame === 'function'
+            ) {
+                window.cancelAnimationFrame(deferredActionFrameRef.current);
+            }
+            if (
+                deferredActionTimeoutRef.current !== null &&
+                typeof window !== 'undefined'
+            ) {
+                window.clearTimeout(deferredActionTimeoutRef.current);
+            }
+        };
+    }, []);
     // Overrides de tamanho via variáveis CSS locais
     const sizeVars: React.CSSProperties | undefined =
         size === 'sm'
@@ -255,14 +294,15 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         ((!!onCancel || !!scheduledEditAction) &&
             status === 'scheduled' &&
             (canCancel || canEdit)) ||
-        (!!onFinalize && status === 'ongoing') ||
+        ((!!onFinalize || !!onCancel) && status === 'ongoing') ||
         !!onEdit ||
         !!onUseTime ||
         !!onClick;
 
+    const emphasisActive = selected || editingActive;
     const base: React.CSSProperties = {
-        border: selected
-            ? '3px solid var(--color-success)'
+        border: emphasisActive
+            ? '1px solid rgba(37,99,235,0.58)'
             : '1px solid var(--color-border)',
         borderRadius: 'var(--card-radius)',
         padding: compact
@@ -283,14 +323,13 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         position: 'relative',
         maxWidth: '100%',
         // Avoid forcing GPU compositing to keep text rendering crisp on Windows
-        boxShadow: editingActive
+        boxShadow: emphasisActive
             ? pulse
-                ? '0 0 0 1px var(--color-primary), 0 1px 3px rgba(0,0,0,0.08)'
-                : '0 0 0 1px var(--color-primary), 0 1px 2px rgba(0,0,0,0.06)'
-            : 'none',
-        ...(highlight
-            ? { outline: '2px solid var(--color-primary)', outlineOffset: 2 }
-            : null),
+                ? '0 0 0 1px rgba(37,99,235,0.62), 0 0 0 5px rgba(96,165,250,0.22), 0 0 20px rgba(96,165,250,0.34), 0 8px 18px rgba(15,23,42,0.08)'
+                : '0 0 0 1px rgba(37,99,235,0.5), 0 0 0 4px rgba(96,165,250,0.16), 0 0 14px rgba(96,165,250,0.28), 0 6px 14px rgba(15,23,42,0.06)'
+            : highlight
+              ? '0 0 0 1px rgba(37,99,235,0.24), 0 0 10px rgba(96,165,250,0.18), 0 4px 10px rgba(15,23,42,0.05)'
+              : 'none',
         ...(sizeVars || {}),
         ...style,
     };
@@ -301,6 +340,9 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
             <div
             id={`appt-card-${appt.id}`}
             data-appt-id={appt.id}
+            data-highlighted={highlight ? 'true' : 'false'}
+            data-selected={selected ? 'true' : 'false'}
+            data-editing-active={editingActive ? 'true' : 'false'}
             data-original-start-at={appt.start_at}
             data-original-end-at={appt.end_at}
             className={className}
@@ -312,7 +354,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                     return;
                 }
                 if (status === 'ongoing') {
-                    if (onFinalize) setActionPrompt('ongoing');
+                    if (onFinalize || onCancel) setActionPrompt('ongoing');
                     return;
                 }
                 // Novo: para concluídos, o clique do cartão abre detalhes (ícone removido)
@@ -725,7 +767,9 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                   label: 'Editar',
                                   onClick: () => {
                                       setActionPrompt(null);
-                                      scheduledEditAction(appt);
+                                      runAfterPromptClose(() => {
+                                          scheduledEditAction(appt);
+                                      });
                                   },
                                   variant: 'primary' as const,
                               },
@@ -749,7 +793,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                 open={actionPrompt === 'ongoing'}
                 onClose={() => setActionPrompt(null)}
                 title='Atendimento em andamento'
-                message='Deseja finalizar o atendimento agora?'
+                message='Deseja finalizar ou cancelar o atendimento agora?'
                 actions={[
                     {
                         label: 'Finalizar atendimento',
@@ -764,6 +808,18 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                         onClick: () => setActionPrompt(null),
                         variant: 'neutral',
                     },
+                    ...(onCancel && canCancel
+                        ? [
+                              {
+                                  label: 'Cancelar compromisso',
+                                  onClick: () => {
+                                      setActionPrompt(null);
+                                      handleCancel();
+                                  },
+                                  variant: 'danger' as const,
+                              },
+                          ]
+                        : []),
                 ]}
             />
         </>
@@ -806,6 +862,7 @@ function areEqualShallow(
         prev.onEdit !== next.onEdit ||
         prev.onCancel !== next.onCancel ||
         prev.onFinalize !== next.onFinalize ||
+        prev.finalizeRequestContext !== next.finalizeRequestContext ||
         prev.onDetails !== next.onDetails
     )
         return false;

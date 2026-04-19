@@ -6,6 +6,7 @@ import { API_BASE } from '../config/api';
 export interface UsePendingActionsListenersReturn {
     pendingActionsOpen: boolean;
     pendingAppt: SharedAppointmentLike | null;
+    pendingReturnContext: unknown;
     closePendingActions: () => void;
 }
 
@@ -13,10 +14,13 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
     const [pendingActionsOpen, setPendingActionsOpen] = React.useState(false);
     const [pendingAppt, setPendingAppt] =
         React.useState<SharedAppointmentLike | null>(null);
+    const [pendingReturnContext, setPendingReturnContext] =
+        React.useState<unknown>(null);
     const lastPendingCloseRef = React.useRef<number>(0);
 
     const closePendingActions = React.useCallback(() => {
         setPendingActionsOpen(false);
+        setPendingReturnContext(null);
     }, []);
 
     // After close: clear pending appt object a bit later to avoid stale prop refs
@@ -24,6 +28,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         if (pendingActionsOpen) return;
         const t = setTimeout(() => {
             setPendingAppt(pa => (pendingActionsOpen ? pa : null));
+            setPendingReturnContext(ctx => (pendingActionsOpen ? ctx : null));
         }, 80);
         return () => clearTimeout(t);
     }, [pendingActionsOpen]);
@@ -38,6 +43,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
                     isEarly?: boolean;
                     clientId?: number;
                     appointmentId?: number | null;
+                    returnContext?: unknown;
                     proceed?: () => void;
                 });
             try {
@@ -108,6 +114,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
                     title: data.title,
                 };
                 setPendingAppt(appt);
+                setPendingReturnContext(det.returnContext ?? null);
                 setPendingActionsOpen(true);
             } catch (err) {
                 const msg =
@@ -209,6 +216,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
             }
 
             if (det.appt) {
+                setPendingReturnContext(null);
                 const rcTs = det.appt.id
                     ? recentCanceled.get(det.appt.id)
                     : undefined;
@@ -296,6 +304,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
                     title: data.title,
                 };
                 setPendingAppt(appt);
+                setPendingReturnContext(null);
                 setPendingActionsOpen(true);
             } catch (err) {
                 const msg =
@@ -334,6 +343,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
     React.useEffect(() => {
         const onForceClose = () => {
             setPendingActionsOpen(false);
+            setPendingReturnContext(null);
             lastPendingCloseRef.current = Date.now();
         };
         window.addEventListener('pendingActions:forceClose', onForceClose);
@@ -404,5 +414,10 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         };
     }, [pendingActionsOpen, pendingAppt]);
 
-    return { pendingActionsOpen, pendingAppt, closePendingActions };
+    return {
+        pendingActionsOpen,
+        pendingAppt,
+        pendingReturnContext,
+        closePendingActions,
+    };
 }

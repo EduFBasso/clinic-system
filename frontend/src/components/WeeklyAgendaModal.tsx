@@ -7,11 +7,13 @@ import FloatingDatePicker from './FloatingDatePicker';
 import DateControlsHeader from './shared/DateControlsHeader';
 // AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
 import ClientCardRow from './shared/ClientCardRow';
+import { deriveStatus } from '../utils/appointments/status';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
+import { useNowTick } from '../hooks/useNowTick';
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
@@ -104,6 +106,7 @@ function WeeklyAgendaContent({
         undefined,
         reloadKey,
     );
+    const effectiveNowRef = useNowTick(30_000);
     const { handleFinalize } = useAgendaFinalizeAction(() => {
         setReloadKey(x => x + 1);
     });
@@ -518,7 +521,12 @@ function WeeklyAgendaContent({
                                 </div>
                             ) : (
                                 <div style={{ display: 'grid', gap: 8 }}>
-                                    {list.map(a => (
+                                    {list.map(a => {
+                                        const derivedStatus = deriveStatus(
+                                            a,
+                                            effectiveNowRef,
+                                        );
+                                        return (
                                         <div key={a.id}>
                                             <ClientCardRow<Appointment>
                                                 appt={a as Appointment}
@@ -626,18 +634,19 @@ function WeeklyAgendaContent({
                                                         : undefined
                                                 }
                                                 onCancel={
-                                                    a.status === 'scheduled'
+                                                        derivedStatus === 'scheduled' ||
+                                                        derivedStatus === 'ongoing'
                                                         ? handleCancel
                                                         : undefined
                                                 }
                                                 onFinalize={
-                                                    a.status === 'ongoing'
+                                                        derivedStatus === 'ongoing'
                                                         ? handleFinalize
                                                         : undefined
                                                 }
                                             />
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
                             )}
                         </div>

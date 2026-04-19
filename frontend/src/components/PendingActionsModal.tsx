@@ -20,6 +20,7 @@ interface PendingActionsModalProps {
     open: boolean;
     onClose: () => void;
     appt: SharedAppointmentLike | null;
+    returnContext?: unknown;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -47,6 +48,7 @@ export default function PendingActionsModal({
     open,
     onClose,
     appt,
+    returnContext,
 }: PendingActionsModalProps) {
     const [busy, setBusy] = React.useState<'cancel' | 'finalize' | null>(null);
     const [closing, setClosing] = React.useState(false);
@@ -642,6 +644,7 @@ export default function PendingActionsModal({
                                     : undefined,
                             startAt: capturedStartAt,
                             endAt: capturedEndAt,
+                            returnContext,
                         },
                     });
                 } catch {

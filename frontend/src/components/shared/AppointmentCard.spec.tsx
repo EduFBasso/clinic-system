@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AppointmentCard, { type SharedAppointmentLike } from './AppointmentCard';
 
 function makeAppt(
@@ -206,7 +206,7 @@ describe('AppointmentCard', () => {
         expect(onClick).not.toHaveBeenCalled();
     });
 
-    it('scheduled: opens the action chooser and can edit without canceling', () => {
+    it('scheduled: opens the action chooser and can edit without canceling', async () => {
         const appt = makeAppt({
             start_at: new Date(Date.now() + 10 * 60_000).toISOString(),
             end_at: new Date(Date.now() + 20 * 60_000).toISOString(),
@@ -230,7 +230,7 @@ describe('AppointmentCard', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
         expect(onCancel).not.toHaveBeenCalled();
         expect(onUseTime).not.toHaveBeenCalled();
-        expect(onEdit).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(onEdit).toHaveBeenCalledTimes(1));
         expect(onClick).not.toHaveBeenCalled();
     });
 
@@ -272,6 +272,29 @@ describe('AppointmentCard', () => {
 
         expect(onFinalize).toHaveBeenCalledTimes(1);
         confirmSpy.mockRestore();
+    });
+
+    it('ongoing: allows cancellation from the shared action prompt', () => {
+        const s = new Date(Date.now() - 60_000).toISOString();
+        const e = new Date(Date.now() + 60_000).toISOString();
+        const appt = makeAppt({ start_at: s, end_at: e });
+        const onCancel = vi.fn();
+
+        render(
+            <AppointmentCard
+                appt={appt}
+                onCancel={onCancel}
+                now={new Date()}
+            />,
+        );
+
+        fireEvent.click(screen.getByText('Fulano'));
+        expect(screen.getByText('Atendimento em andamento')).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Cancelar compromisso' }),
+        );
+
+        expect(onCancel).toHaveBeenCalledTimes(1);
     });
 
     it('scheduled: prioritizes onUseTime over onClick when onEdit is absent', () => {

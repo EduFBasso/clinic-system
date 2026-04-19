@@ -25,7 +25,8 @@ export function useAppointmentCardState(
     const isOngoing = status === 'ongoing';
     // Edição permanece restrita a agendados futuros (antes do início)
     const canEdit = status === 'scheduled' && end > now;
-    // Cancelamento é reservado a compromissos ativos antes do atendimento iniciar.
-    const canCancel = status === 'scheduled' && end > now;
+    // Cancelamento é permitido tanto antes do início quanto durante um atendimento em andamento.
+    const canCancel =
+        (status === 'scheduled' || status === 'ongoing') && end > now;
     return { status, isOngoing, canEdit, canCancel, start, end };
 }

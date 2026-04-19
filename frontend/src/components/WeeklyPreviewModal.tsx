@@ -5,6 +5,7 @@ import AppModal from './Modal';
 import { track } from '../utils/telemetry';
 import FloatingDatePicker from './FloatingDatePicker';
 import AppointmentCard from './shared/AppointmentCard';
+import { deriveStatus } from '../utils/appointments/status';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import {
     useAppointmentsRange,
@@ -665,12 +666,22 @@ export default function WeeklyPreviewModal({
                                                         : undefined
                                                 }
                                                 onCancel={
-                                                    a.status === 'scheduled'
+                                                    deriveStatus(
+                                                        a,
+                                                        new Date(),
+                                                    ) === 'scheduled' ||
+                                                    deriveStatus(
+                                                        a,
+                                                        new Date(),
+                                                    ) === 'ongoing'
                                                         ? handleCancel
                                                         : undefined
                                                 }
                                                 onFinalize={
-                                                    a.status === 'ongoing'
+                                                    deriveStatus(
+                                                        a,
+                                                        new Date(),
+                                                    ) === 'ongoing'
                                                         ? handleFinalize
                                                         : undefined
                                                 }

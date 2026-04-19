@@ -82,6 +82,9 @@ const addBtnStyle: React.CSSProperties = {
     cursor: 'pointer',
     margin: '0 auto',
     padding: 0,
+    transition:
+        'transform 120ms ease, background-color 120ms ease, box-shadow 160ms ease, opacity 120ms ease',
+    WebkitTapHighlightColor: 'transparent',
 };
 
 const editBtnStyle: React.CSSProperties = {
@@ -111,6 +114,10 @@ const linkBtnStyle: React.CSSProperties = {
     cursor: 'pointer',
     fontSize: 15,
     marginTop: 8,
+    boxShadow: '0 1px 4px rgba(37,99,235,0.08)',
+    transition:
+        'transform 120ms ease, filter 120ms ease, box-shadow 160ms ease, background-color 140ms ease, color 140ms ease',
+    WebkitTapHighlightColor: 'transparent',
 };
 
 // ─── ItemsTable ──────────────────────────────────────────────────────────────
@@ -121,6 +128,70 @@ interface ItemsTableProps {
     onAdd: (kind: 'service' | 'product', item: Service | Product) => void;
     onEdit: (kind: 'service' | 'product', item: Service | Product) => void;
     emptyMsg: string;
+}
+
+interface AddItemButtonProps {
+    title: string;
+    onClick: () => void;
+}
+
+function AddItemButton({ title, onClick }: AddItemButtonProps) {
+    const [pressed, setPressed] = React.useState(false);
+    const [confirmed, setConfirmed] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!confirmed) return;
+        const timeoutId = window.setTimeout(() => setConfirmed(false), 240);
+        return () => window.clearTimeout(timeoutId);
+    }, [confirmed]);
+
+    return (
+        <button
+            onClick={() => {
+                setConfirmed(true);
+                onClick();
+            }}
+            onMouseDown={() => setPressed(true)}
+            onMouseUp={() => setPressed(false)}
+            onMouseLeave={() => setPressed(false)}
+            onTouchStart={() => setPressed(true)}
+            onTouchEnd={() => setPressed(false)}
+            onTouchCancel={() => setPressed(false)}
+            onBlur={() => setPressed(false)}
+            style={{
+                ...addBtnStyle,
+                background: confirmed
+                    ? 'var(--color-success-dark)'
+                    : pressed
+                      ? '#1d4ed8'
+                      : 'var(--color-primary)',
+                transform: confirmed
+                    ? 'scale(1.08)'
+                    : pressed
+                      ? 'scale(0.94)'
+                      : 'scale(1)',
+                boxShadow: confirmed
+                    ? '0 0 0 4px rgba(16,185,129,0.16), 0 8px 18px rgba(5,150,105,0.24)'
+                    : pressed
+                      ? '0 2px 8px rgba(29,78,216,0.28) inset'
+                      : '0 2px 6px rgba(37,99,235,0.18)',
+                opacity: pressed ? 0.96 : 1,
+            }}
+            title={title}
+            aria-label={title}
+            type='button'
+        >
+            <span
+                aria-hidden='true'
+                style={{
+                    transform: confirmed ? 'scale(1.04)' : 'none',
+                    transition: 'transform 120ms ease',
+                }}
+            >
+                +
+            </span>
+        </button>
+    );
 }
 
 function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
@@ -214,14 +285,10 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
                                         >
                                             ✏️
                                         </button>
-                                        <button
+                                        <AddItemButton
                                             onClick={() => onAdd(kind, item)}
-                                            style={addBtnStyle}
                                             title={`Adicionar ${item.name}`}
-                                            type='button'
-                                        >
-                                            +
-                                        </button>
+                                        />
                                     </div>
                                 </td>
                             </tr>
@@ -250,6 +317,10 @@ export default function ConsultaPage() {
         chargeId?: number;
         chargeItems?: SelectedItem[];
         chargeNotes?: string;
+        returnContext?: {
+            kind?: string;
+            draft?: unknown;
+        };
     }>(() => {
         const fromRouter = (location.state ?? {}) as {
             appointmentId?: number;
@@ -260,6 +331,10 @@ export default function ConsultaPage() {
             chargeId?: number;
             chargeItems?: SelectedItem[];
             chargeNotes?: string;
+            returnContext?: {
+                kind?: string;
+                draft?: unknown;
+            };
         };
         if (fromRouter.appointmentId) return fromRouter;
         try {
@@ -292,6 +367,7 @@ export default function ConsultaPage() {
                     chargeId: apptState.chargeId,
                     chargeItems: selectedItems,
                     chargeNotes: notes,
+                    returnContext: apptState.returnContext,
                 }),
             );
         } catch {
@@ -441,6 +517,9 @@ export default function ConsultaPage() {
         setSaving(true);
         setError(null);
         try {
+            const shouldResumeQuickSchedule =
+                apptState.returnContext?.kind === 'quick-schedule' &&
+                apptState.returnContext.draft;
             const payload: Record<string, unknown> = {
                 client: apptState.clientId,
                 appointment: apptState.appointmentId ?? null,
@@ -459,7 +538,7 @@ export default function ConsultaPage() {
                         i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
                 })),
             };
-            if (apptState.appointmentId) {
+            if (apptState.appointmentId && !shouldResumeQuickSchedule) {
                 try {
                     sessionStorage.setItem(
                         'reopenAppointmentDetails',
@@ -480,6 +559,18 @@ export default function ConsultaPage() {
                     method: 'POST',
                     body: payload,
                 });
+            }
+            if (shouldResumeQuickSchedule) {
+                try {
+                    sessionStorage.setItem(
+                        'resumeQuickSchedule',
+                        JSON.stringify(apptState.returnContext?.draft),
+                    );
+                } catch {
+                    /* noop */
+                }
+                navigate('/');
+                return;
             }
             navigate(-1);
         } catch (err) {

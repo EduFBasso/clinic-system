@@ -2,6 +2,7 @@ type RequestFinalizeAppointmentArgs = {
     clientId?: number;
     appointmentId?: number | null;
     isEarly: boolean;
+    returnContext?: unknown;
     proceed?: () => Promise<void> | void;
 };
 
@@ -9,6 +10,7 @@ export function requestFinalizeAppointment({
     clientId,
     appointmentId,
     isEarly,
+    returnContext,
     proceed,
 }: RequestFinalizeAppointmentArgs) {
     let prevented = false;
@@ -18,6 +20,7 @@ export function requestFinalizeAppointment({
                 clientId,
                 appointmentId,
                 isEarly,
+                returnContext,
                 proceed,
             },
             cancelable: true,
