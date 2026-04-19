@@ -24,6 +24,24 @@ export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
     const parts = clientFullName.trim().split(' ');
     const firstName = parts[0] ?? clientFullName;
     const lastName = parts.slice(1).join(' ');
+    const stopCloseEvent = React.useCallback(
+        (
+            e:
+                | React.MouseEvent<HTMLButtonElement>
+                | React.PointerEvent<HTMLButtonElement>,
+        ) => {
+            e.preventDefault();
+            e.stopPropagation();
+        },
+        [],
+    );
+    const handleCloseClick = React.useCallback(
+        (e: React.MouseEvent<HTMLButtonElement>) => {
+            stopCloseEvent(e);
+            onClose?.();
+        },
+        [onClose, stopCloseEvent],
+    );
 
     return (
         <div
@@ -143,7 +161,9 @@ export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
                 <button
                     type='button'
                     aria-label='Fechar'
-                    onClick={onClose}
+                    onMouseDown={stopCloseEvent}
+                    onPointerDown={stopCloseEvent}
+                    onClick={handleCloseClick}
                     style={{
                         flexShrink: 0,
                         width: 36,

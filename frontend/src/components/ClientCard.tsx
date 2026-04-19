@@ -922,6 +922,7 @@ export default function ClientCard({
                     open={showQuick}
                     onClose={() => {
                         setShowQuick(false);
+                        setEditingAppt(null);
                         try {
                             document.body.dataset.keepScroll = '1';
                             setTimeout(() => {
@@ -941,6 +942,7 @@ export default function ClientCard({
                         } catch {
                             /* noop */
                         }
+                        setTimeout(() => focusClientCard(client.id), 60);
                     }}
                     client={client}
                     editAppointment={editingAppt}
@@ -954,6 +956,7 @@ export default function ClientCard({
                             (action === 'updated' && !!editingAppt);
                         if (!shouldClose) return;
                         setShowQuick(false);
+                        setEditingAppt(null);
                         try {
                             document.body.dataset.keepScroll = '1';
                             setTimeout(() => {
@@ -973,6 +976,7 @@ export default function ClientCard({
                         } catch {
                             /* noop */
                         }
+                        setTimeout(() => focusClientCard(client.id), 60);
                     }}
                 />
             )}
