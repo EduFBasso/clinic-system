@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { apiFetch, ApiError } from '../utils/apiFetch';
+import type { PendingReturnContext } from '../types/agendaFlow';
 import FormPage from '../components/FormKit/FormPage';
 import FormSection from '../components/FormKit/FormSection';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -317,10 +318,7 @@ export default function ConsultaPage() {
         chargeId?: number;
         chargeItems?: SelectedItem[];
         chargeNotes?: string;
-        returnContext?: {
-            kind?: string;
-            draft?: unknown;
-        };
+        returnContext?: PendingReturnContext;
     }>(() => {
         const fromRouter = (location.state ?? {}) as {
             appointmentId?: number;
@@ -331,10 +329,7 @@ export default function ConsultaPage() {
             chargeId?: number;
             chargeItems?: SelectedItem[];
             chargeNotes?: string;
-            returnContext?: {
-                kind?: string;
-                draft?: unknown;
-            };
+            returnContext?: PendingReturnContext;
         };
         if (fromRouter.appointmentId) return fromRouter;
         try {

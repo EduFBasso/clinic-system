@@ -6,6 +6,7 @@ import TimeRangeLabel from './TimeRangeLabel';
 import { formatTime } from '../../utils/timeFormat';
 import { FaEdit, FaBan, FaWhatsapp } from 'react-icons/fa';
 import { useAppointmentCardState } from '../../hooks/useAppointmentCardState.ts';
+import type { PendingReturnContext } from '../../types/agendaFlow';
 import {
     getAppointmentOverride,
     subscribeOverrides,
@@ -44,7 +45,7 @@ export interface AppointmentCardProps<
     onEdit?: (appt: T) => void;
     onCancel?: (appt: T) => void;
     onFinalize?: (appt: T) => Promise<void> | void;
-    finalizeRequestContext?: unknown;
+    finalizeRequestContext?: PendingReturnContext;
     onDetails?: (appt: T) => void;
     highlight?: boolean;
     editingActive?: boolean;

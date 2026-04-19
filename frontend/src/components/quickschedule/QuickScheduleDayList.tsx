@@ -1,6 +1,7 @@
 import React from 'react';
 import ClientDayList from '../shared/ClientDayList';
 import type { Appointment } from '../../hooks/useAppointments';
+import type { PendingReturnContext } from '../../types/agendaFlow';
 
 export type DayFilter = 'todos' | 'ativos' | 'cancelados';
 
@@ -19,7 +20,7 @@ export interface QuickScheduleDayListProps {
     onEdit: (a: Appointment) => void;
     onCancel: (a: Appointment) => Promise<void>;
     onFinalize?: (a: Appointment) => Promise<void> | void;
-    finalizeRequestContext?: unknown;
+    finalizeRequestContext?: PendingReturnContext;
     onDetails?: (a: Appointment) => void;
     minimal?: boolean; // when true, hide header/select and section title; show only minicards
 }

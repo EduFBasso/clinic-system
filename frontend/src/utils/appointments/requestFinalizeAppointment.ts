@@ -1,8 +1,13 @@
+import type {
+    ConfirmFinalizeAppointmentDetail,
+    PendingReturnContext,
+} from '../../types/agendaFlow';
+
 type RequestFinalizeAppointmentArgs = {
     clientId?: number;
     appointmentId?: number | null;
     isEarly: boolean;
-    returnContext?: unknown;
+    returnContext?: PendingReturnContext;
     proceed?: () => Promise<void> | void;
 };
 
@@ -22,7 +27,7 @@ export function requestFinalizeAppointment({
                 isEarly,
                 returnContext,
                 proceed,
-            },
+            } satisfies ConfirmFinalizeAppointmentDetail,
             cancelable: true,
         });
         prevented = !window.dispatchEvent(ev);

@@ -9,9 +9,7 @@ import Footer from '../components/Footer';
 import UpdateBanner from '../components/UpdateBanner';
 import styles from '../styles/pages/Home.module.css';
 // ScheduleModal removido — usamos apenas QuickScheduleModal
-import QuickScheduleModal, {
-    type QuickScheduleInitialDraft,
-} from '../components/QuickScheduleModal';
+import QuickScheduleModal from '../components/QuickScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
 import WeeklyAgendaModal from '../components/WeeklyAgendaModal';
 import SystemMessageModal from '../components/SystemMessageModal';
@@ -24,6 +22,7 @@ import { useAppointmentsLivePing } from '../hooks/useAppointmentsLivePing';
 import { dispatchers } from '../events/dispatchers';
 import { focusClientCard } from '../utils/focusClientCard';
 import { useAgendaModals, ensureClientBasic } from '../hooks/useAgendaModals';
+import type { QuickScheduleInitialDraft } from '../types/agendaFlow';
 import { API_BASE } from '../config/api';
 import { usePendingActionsListeners } from '../hooks/usePendingActionsListeners';
 import { useLocation } from 'react-router-dom';

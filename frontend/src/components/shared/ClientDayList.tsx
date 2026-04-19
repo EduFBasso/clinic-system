@@ -1,4 +1,5 @@
 import React from 'react';
+import type { PendingReturnContext } from '../../types/agendaFlow';
 import ClientCardRow from './ClientCardRow';
 import type {
     AppointmentCardProps,
@@ -26,7 +27,7 @@ export interface ClientDayListProps<T extends SharedAppointmentLike> {
     onEdit?: (a: T) => void;
     onCancel?: (a: T) => void;
     onFinalize?: (a: T) => Promise<void> | void;
-    finalizeRequestContext?: unknown;
+    finalizeRequestContext?: PendingReturnContext;
     onDetails?: (a: T) => void;
 
     // Styling

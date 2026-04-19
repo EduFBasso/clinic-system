@@ -12,6 +12,10 @@ import QuickScheduleDayList, {
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
+import type {
+    QuickScheduleInitialDraft,
+    QuickScheduleReturnContext,
+} from '../types/agendaFlow';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import { getNow } from '../utils/now';
 import {
@@ -49,15 +53,6 @@ function getAppointmentClientFullName(
         }
     }
     return null;
-}
-
-export interface QuickScheduleInitialDraft {
-    clientId: number;
-    selectedDateISO: string;
-    startHM: string;
-    endHM: string;
-    visitType: VisitType;
-    notes: string;
 }
 
 interface QuickScheduleModalProps {
@@ -458,7 +453,7 @@ export default function QuickScheduleModal({
         };
     }, [client.first_name, isConflictEditing]);
 
-    const finalizeReturnContext = React.useMemo(() => {
+    const finalizeReturnContext = React.useMemo<QuickScheduleReturnContext | null>(() => {
         if (!open || currentEdit || client.id <= 0) return null;
         return {
             kind: 'quick-schedule',

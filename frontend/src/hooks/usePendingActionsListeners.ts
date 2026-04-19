@@ -2,11 +2,16 @@ import React from 'react';
 import type { SharedAppointmentLike } from '../components/shared/AppointmentCard';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import { API_BASE } from '../config/api';
+import type {
+    ConfirmFinalizeAppointmentDetail,
+    PendingActionsOpenDetail,
+    PendingReturnContext,
+} from '../types/agendaFlow';
 
 export interface UsePendingActionsListenersReturn {
     pendingActionsOpen: boolean;
     pendingAppt: SharedAppointmentLike | null;
-    pendingReturnContext: unknown;
+    pendingReturnContext: PendingReturnContext;
     closePendingActions: () => void;
 }
 
@@ -15,7 +20,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
     const [pendingAppt, setPendingAppt] =
         React.useState<SharedAppointmentLike | null>(null);
     const [pendingReturnContext, setPendingReturnContext] =
-        React.useState<unknown>(null);
+        React.useState<PendingReturnContext>(null);
     const lastPendingCloseRef = React.useRef<number>(0);
 
     const closePendingActions = React.useCallback(() => {
@@ -38,14 +43,8 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         async function onConfirmFinalize(e: Event) {
             const ce = e as CustomEvent;
             const det =
-                (ce && (ce as CustomEvent).detail) ||
-                ({} as {
-                    isEarly?: boolean;
-                    clientId?: number;
-                    appointmentId?: number | null;
-                    returnContext?: unknown;
-                    proceed?: () => void;
-                });
+                (ce && (ce as CustomEvent<ConfirmFinalizeAppointmentDetail>).detail) ||
+                ({} as Partial<ConfirmFinalizeAppointmentDetail>);
             try {
                 (e as Event).preventDefault?.();
             } catch {
@@ -162,11 +161,8 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         async function onOpenPending(e: Event) {
             const ce = e as CustomEvent;
             const det =
-                (ce && (ce as CustomEvent).detail) ||
-                ({} as {
-                    appt?: SharedAppointmentLike;
-                    appointmentId?: number | null;
-                });
+                (ce && (ce as CustomEvent<PendingActionsOpenDetail>).detail) ||
+                ({} as PendingActionsOpenDetail);
 
             try {
                 const stack = new Error().stack;
@@ -240,6 +236,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
                     return;
                 }
                 setPendingAppt(det.appt);
+                setPendingReturnContext(det.returnContext ?? null);
                 setPendingActionsOpen(true);
                 return;
             }

@@ -14,13 +14,14 @@ import {
     getAppointmentOverride,
     subscribeOverrides,
 } from '../utils/appointments/overrides';
+import type { PendingReturnContext } from '../types/agendaFlow';
 import { step, debugLog, isStepEnabled } from '../debug/stepper';
 
 interface PendingActionsModalProps {
     open: boolean;
     onClose: () => void;
     appt: SharedAppointmentLike | null;
-    returnContext?: unknown;
+    returnContext?: PendingReturnContext;
 }
 
 const labelStyle: React.CSSProperties = {
