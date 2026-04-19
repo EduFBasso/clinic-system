@@ -67,33 +67,6 @@ export default function MonthlyAgendaModal({
     const effectiveNowRef = React.useMemo(() => new Date(), []);
     // Floating date picker state — consistent with DailyAgendaModal / WeeklyAgendaModal
     const [showPicker, setShowPicker] = React.useState(false);
-    const [pickerPos, setPickerPos] = React.useState<
-        { x: number; y: number } | undefined
-    >(undefined);
-    const openDatePicker = React.useCallback(
-        (ev?: React.MouseEvent | React.PointerEvent | React.TouchEvent) => {
-            let px = 24;
-            let py = 120;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const native = (ev as any)?.nativeEvent ?? ev;
-                if (native) {
-                    if (typeof native.clientX === 'number') {
-                        px = native.clientX;
-                        py = native.clientY;
-                    } else if (native.touches && native.touches[0]) {
-                        px = native.touches[0].clientX;
-                        py = native.touches[0].clientY;
-                    }
-                }
-            } catch {
-                /* noop */
-            }
-            setPickerPos({ x: px, y: py });
-            setShowPicker(true);
-        },
-        [],
-    );
 
     const [month, setMonth] = React.useState<Date>(() =>
         startOfMonth(initialMonth ? new Date(initialMonth) : new Date()),
@@ -145,7 +118,91 @@ export default function MonthlyAgendaModal({
                 case 'canceled':
                     return status === 'canceled';
                 default:
-                                                                openPendingActionsForAppointment(appt);
+                    return false;
+            }
+        });
+    }, [items, statusFilter, effectiveNowRef]);
+
+    const groupedFiltered = React.useMemo(
+        () => groupByDay(filteredItems),
+        [filteredItems],
+    );
+
+    React.useEffect(() => {
+        let t: number | undefined;
+        const onChanged = () => {
+            if (t) window.clearTimeout(t);
+            t = window.setTimeout(() => setReloadKey(x => x + 1), 180);
+        };
+        window.addEventListener('appointments:changed', onChanged);
+        return () => {
+            if (t) window.clearTimeout(t);
+            window.removeEventListener('appointments:changed', onChanged);
+        };
+    }, []);
+
+    const y = month.getFullYear();
+
+    const MONTH_ABBR = [
+        'Jan',
+        'Fev',
+        'Mar',
+        'Abr',
+        'Mai',
+        'Jun',
+        'Jul',
+        'Ago',
+        'Set',
+        'Out',
+        'Nov',
+        'Dez',
+    ];
+
+    const sortedDays = React.useMemo(
+        () => Object.keys(groupedFiltered).sort(),
+        [groupedFiltered],
+    );
+
+    React.useEffect(() => {
+        if (!open) return;
+        const total = items.length;
+        if (total > 400) setVisibleDaysCount(5);
+        else if (total > 250) setVisibleDaysCount(8);
+        else setVisibleDaysCount(14);
+    }, [open, items.length]);
+
+    return (
+        <AppModal
+            open={open}
+            onClose={onClose}
+            actionsBarStyle={{
+                background: 'transparent',
+                boxShadow: 'none',
+                borderBottom: 'none',
+            }}
+            showCloseButton={false}
+            fullScreen
+            disableTopSafePadding
+        >
+            <StickyModalHeader
+                title={
+                    <>
+                        {'Compromissos: '}
+                        {client.first_name}
+                        <span className='monthly-title-lastname'>
+                            {' '}
+                            {client.last_name}
+                        </span>
+                    </>
+                }
+                onClose={onClose}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button
+                        onClick={() => {
+                            const now = new Date();
+                            setMonth(startOfMonth(now));
+                            requestAnimationFrame(() => {
                                 const id = toISODate(now);
                                 const el = document.querySelector(
                                     `[data-day="${id}"]`,
@@ -347,69 +404,10 @@ export default function MonthlyAgendaModal({
                                                     }}
                                                     onClick={
                                                         isPending
-                                                            ? () => {
-                                                                  try {
-                                                                      const x =
-                                                                          a as Appointment;
-                                                                      const anyAppt =
-                                                                          x as unknown as Record<
-                                                                              string,
-                                                                              unknown
-                                                                          >;
-                                                                      const clientName =
-                                                                          (():
-                                                                              | string
-                                                                              | undefined => {
-                                                                              if (
-                                                                                  typeof anyAppt.client_name ===
-                                                                                  'string'
-                                                                              )
-                                                                                  return anyAppt.client_name as string;
-                                                                              const c =
-                                                                                  anyAppt.client as unknown;
-                                                                              if (
-                                                                                  c &&
-                                                                                  typeof c ===
-                                                                                      'object' &&
-                                                                                  'name' in
-                                                                                      (c as Record<
-                                                                                          string,
-                                                                                          unknown
-                                                                                      >)
-                                                                              ) {
-                                                                                  const n =
-                                                                                      (
-                                                                                          c as {
-                                                                                              name?: unknown;
-                                                                                          }
-                                                                                      )
-                                                                                          .name;
-                                                                                  if (
-                                                                                      typeof n ===
-                                                                                      'string'
-                                                                                  )
-                                                                                      return n;
-                                                                              }
-                                                                              return undefined;
-                                                                          })();
-                                                                      const clientField =
-                                                                          ((): unknown => {
-                                                                              const c =
-                                                                                  anyAppt.client as unknown;
-                                                                              if (
-                                                                                  typeof c ===
-                                                                                      'number' ||
-                                                                                  typeof c ===
-                                                                                      'object'
-                                                                              )
-                                                                                  return c;
-                                                                              return undefined;
-                                                                          })();
-                                                                      openPendingActionsForAppointment(x);
-                                                                  } catch {
-                                                                      /* noop */
-                                                                  }
-                                                              }
+                                                            ? () =>
+                                                                  openPendingActionsForAppointment(
+                                                                      a,
+                                                                  )
                                                             : undefined
                                                     }
                                                     onDetails={
@@ -561,7 +559,7 @@ export default function MonthlyAgendaModal({
                         if (el) el.scrollIntoView({ block: 'start' });
                     });
                 }}
-                initialPosition={pickerPos}
+                initialPosition={undefined}
             />
         </AppModal>
     );

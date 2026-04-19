@@ -18,8 +18,86 @@ import { openPendingActionsForAppointment } from '../utils/appointments/openPend
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+ 
+function startOfDay(d: Date) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+function addDays(d: Date, n: number) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+}
+function startOfWeekMonday(d: Date) {
+    // Normalize to local Monday as week start
+    const x = startOfDay(d);
+    const day = x.getDay(); // 0..6 (Sun..Sat)
+    const diff = (day + 6) % 7; // days since Monday
+    x.setDate(x.getDate() - diff);
+    return x;
+}
 
-                                                    openPendingActionsForAppointment(appt);
+function toISODate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+}
+
+function groupByDay(items: Appointment[]) {
+    const map: Record<string, Appointment[]> = {};
+    items.forEach(a => {
+        const k = toISODate(new Date(a.start_at));
+        if (!map[k]) map[k] = [];
+        map[k].push(a);
+    });
+    Object.values(map).forEach(list =>
+        list.sort(
+            (a, b) =>
+                new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
+        ),
+    );
+    return map;
+}
+
+// Internal component — only mounted in the mobile branch, so all hooks only run on mobile
+function WeeklyAgendaContent({
+    open,
+    onClose,
+    initialDate,
+}: {
+    open: boolean;
+    onClose: () => void;
+    initialDate?: Date;
+}) {
+    // Helper: find the nearest vertical scrollable parent (modal content Box)
+    function getScrollParent(node: HTMLElement | null): HTMLElement | null {
+        if (!node) return null;
+        let el: HTMLElement | null = node?.parentElement ?? null;
+        while (el) {
+            try {
+                const style = window.getComputedStyle(el);
+                if (/auto|scroll/i.test(style.overflowY)) return el;
+            } catch {
+                /* noop */
+            }
+            el = el.parentElement;
+        }
+        return null;
+    }
+    const [anchorDate, setAnchorDate] = React.useState<Date>(() =>
+        initialDate ? startOfDay(initialDate) : startOfDay(new Date()),
+    );
+    const weekStart = React.useMemo(
+        () => startOfWeekMonday(anchorDate),
+        [anchorDate],
+    );
+    const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
+    const [reloadKey, setReloadKey] = React.useState(0);
+    React.useEffect(() => {
+        const onChanged = () => setReloadKey(x => x + 1);
+        window.addEventListener('appointments:changed', onChanged);
         return () =>
             window.removeEventListener('appointments:changed', onChanged);
     }, []);
@@ -464,43 +542,9 @@ import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
                                                     setSelected(iso, 'user')
                                                 }
                                                 onResolvePending={appt => {
-                                                    try {
-                                                        openPendingActionsForAppointment(a);
-                                                                    (c as Record<
-                                                                        string,
-                                                                        unknown
-                                                                    >)
-                                                            ) {
-                                                                const n = (
-                                                                    c as {
-                                                                        name?: unknown;
-                                                                    }
-                                                                ).name;
-                                                                if (
-                                                                    typeof n ===
-                                                                    'string'
-                                                                )
-                                                                    return n;
-                                                            }
-                                                            return undefined;
-                                                        })();
-                                                        const clientField =
-                                                            ((): unknown => {
-                                                                const c =
-                                                                    anyAppt.client as unknown;
-                                                                if (
-                                                                    typeof c ===
-                                                                        'number' ||
-                                                                    typeof c ===
-                                                                        'object'
-                                                                )
-                                                                    return c;
-                                                                return undefined;
-                                                            })();
-                                                        openPendingActionsForAppointment(a);
-                                                    } catch {
-                                                        /* noop */
-                                                    }
+                                                    openPendingActionsForAppointment(
+                                                        appt,
+                                                    );
                                                 }}
                                                 onDetails={
                                                     a.status === 'done'

@@ -15,8 +15,86 @@ import { openPendingActionsForAppointment } from '../utils/appointments/openPend
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+ 
+function startOfDay(d: Date) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+function addDays(d: Date, n: number) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+}
+function startOfWeekMonday(d: Date) {
+    const x = startOfDay(d);
+    const day = x.getDay();
+    const diff = (day + 6) % 7; // Mon-based offset
+    x.setDate(x.getDate() - diff);
+    return x;
+}
+function toISODate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+}
+function groupByDay(items: Appointment[]) {
+    const map: Record<string, Appointment[]> = {};
+    items.forEach(a => {
+        const k = toISODate(new Date(a.start_at));
+        if (!map[k]) map[k] = [];
+        map[k].push(a);
+    });
+    Object.values(map).forEach(list =>
+        list.sort(
+            (a, b) =>
+                new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
+        ),
+    );
+    return map;
+}
 
-                                                    openPendingActionsForAppointment(appt);
+export default function WeeklyPreviewModal({
+    open,
+    onClose,
+    initialDate,
+}: {
+    open: boolean;
+    onClose: () => void;
+    initialDate?: Date;
+}) {
+    // Find the nearest vertical scroll container (the modal content Box)
+    function getScrollParent(node: HTMLElement | null): HTMLElement | null {
+        if (!node) return null;
+        let el: HTMLElement | null = node.parentElement;
+        while (el) {
+            try {
+                const style = window.getComputedStyle(el);
+                if (/auto|scroll/i.test(style.overflowY)) return el;
+            } catch {
+                /* noop */
+            }
+            el = el.parentElement;
+        }
+        return null;
+    }
+    const [anchorDate, setAnchorDate] = React.useState<Date>(() =>
+        initialDate ? startOfDay(initialDate) : startOfDay(new Date()),
+    );
+    const weekStart = React.useMemo(
+        () => startOfWeekMonday(anchorDate),
+        [anchorDate],
+    );
+    const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
+    const [reloadKey, setReloadKey] = React.useState(0);
+    const { items, loading } = useAppointmentsRange(
+        weekStart,
+        weekEnd,
+        undefined,
+        reloadKey,
+    );
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
         setReloadKey(x => x + 1);
     });
     const handleCancel = React.useCallback(async (appt: Appointment) => {
@@ -42,7 +120,7 @@ import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
             /* noop */
         }
     }, []);
-    // Forçar refetch ao abrir (pode ter perdido evento de mudança antes de abrir)
+    // Forcar refetch ao abrir (pode ter perdido evento de mudança antes de abrir)
     const prevOpenRef = React.useRef(open);
     React.useEffect(() => {
         if (!prevOpenRef.current && open) {
