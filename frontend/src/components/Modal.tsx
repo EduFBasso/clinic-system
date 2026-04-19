@@ -6,6 +6,7 @@ import { emitModalViewportMetric } from '../utils/telemetry/modalViewport';
 declare global {
     interface Window {
         __ensureScrollUnlockInstalled?: boolean;
+        __appModalLatestRestore?: ((source?: string) => void) | null;
     }
 }
 import Modal from '@mui/material/Modal';
@@ -601,6 +602,8 @@ export default function AppModal(props: AppModalProps) {
             }
         };
 
+        window.__appModalLatestRestore = restore;
+
         // Dispara diversas tentativas para contornar race conditions (Safari/iOS e possíveis delays do MUI)
         const timeouts = [0, 30, 60, 120, 250, 400].map(ms =>
             setTimeout(() => restore('close-timeout-' + ms), ms),
@@ -652,7 +655,9 @@ export default function AppModal(props: AppModalProps) {
                     body.style.overflow === 'hidden'
                 ) {
                     // Tentativa adicional (não depende do estado local de 'open').
-                    restore(ev?.type ? 'global-' + ev.type : 'global-manual');
+                    window.__appModalLatestRestore?.(
+                        ev?.type ? 'global-' + ev.type : 'global-manual',
+                    );
                 }
             };
             [
@@ -668,6 +673,9 @@ export default function AppModal(props: AppModalProps) {
             );
         }
         return () => {
+            if (window.__appModalLatestRestore === restore) {
+                window.__appModalLatestRestore = null;
+            }
             timeouts.forEach(t => clearTimeout(t));
             fgTimeouts.forEach(t => clearTimeout(t));
         };
