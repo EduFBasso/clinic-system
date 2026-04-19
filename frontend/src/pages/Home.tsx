@@ -28,9 +28,10 @@ import type {
 } from '../types/agendaFlow';
 import { API_BASE } from '../config/api';
 import { usePendingActionsListeners } from '../hooks/usePendingActionsListeners';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export default function Home() {
+    const navigate = useNavigate();
     // Superusers go straight to /admin — they are not practitioners
     useEffect(() => {
         try {
@@ -38,13 +39,13 @@ export default function Home() {
             if (stored) {
                 const prof = JSON.parse(stored);
                 if (prof?.is_superuser) {
-                    window.location.replace('/admin');
+                    navigate('/admin', { replace: true });
                 }
             }
         } catch {
             /* noop */
         }
-    }, []);
+    }, [navigate]);
 
     const location = useLocation();
     const [selectedClientId, setSelectedClientId] = useState<number | null>(

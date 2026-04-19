@@ -37,6 +37,7 @@ import {
     startRegistration,
     startAuthentication,
 } from '@simplewebauthn/browser';
+import { useNavigate } from 'react-router-dom';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
@@ -51,6 +52,7 @@ const NavBar: React.FC<NavBarProps> = ({
     selectedClientId,
     agendaOpeners,
 }) => {
+    const navigate = useNavigate();
     const biometricStorageKey = React.useCallback((email: string) => {
         return `hasWebAuthn_${email.trim().toLowerCase()}`;
     }, []);
@@ -352,7 +354,7 @@ const NavBar: React.FC<NavBarProps> = ({
                 }
                 setLoggedProfessional(data.professional || null);
                 if (data.professional?.is_superuser) {
-                    window.location.href = '/admin';
+                    navigate('/admin', { replace: true });
                     return;
                 }
                 window.dispatchEvent(new Event('auth:login'));
@@ -532,7 +534,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                         setSessionExpiredOpen(true);
                                         return;
                                     }
-                                    window.location.href = '/catalog/services';
+                                    navigate('/catalog/services');
                                 }}
                                 title='Serviços'
                             >
@@ -548,7 +550,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                         setSessionExpiredOpen(true);
                                         return;
                                     }
-                                    window.location.href = '/catalog/products';
+                                    navigate('/catalog/products');
                                 }}
                                 title='Produtos'
                             >
@@ -714,7 +716,9 @@ const NavBar: React.FC<NavBarProps> = ({
                                             );
                                         }
                                         if (data.professional?.is_superuser) {
-                                            window.location.href = '/admin';
+                                            navigate('/admin', {
+                                                replace: true,
+                                            });
                                             return;
                                         }
                                         window.dispatchEvent(
