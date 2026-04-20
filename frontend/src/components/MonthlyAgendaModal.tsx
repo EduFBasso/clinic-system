@@ -1,10 +1,10 @@
 import React from 'react';
 import AppModal from './Modal';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
 import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
@@ -96,10 +96,8 @@ export default function MonthlyAgendaModal({
     // PendingActions é global — sem estado local
 
     // Removido listener local — Home coordena
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
     const [cancelError, setCancelError] = React.useState<string | null>(null);
     const { handleFinalize } = useAgendaFinalizeAction(() => {
         setReloadKey(x => x + 1);
@@ -422,14 +420,10 @@ export default function MonthlyAgendaModal({
                                                     }
                                                     onDetails={
                                                         a.status === 'done'
-                                                            ? appt => {
-                                                                  setDetailsAppt(
+                                                            ? appt =>
+                                                                  openDetails(
                                                                       appt as Appointment,
-                                                                  );
-                                                                  setDetailsOpen(
-                                                                      true,
-                                                                  );
-                                                              }
+                                                                  )
                                                             : undefined
                                                     }
                                                     onCancel={
@@ -542,16 +536,7 @@ export default function MonthlyAgendaModal({
                 )}
 
                 {/* PendingActionsModal é global (Home) */}
-                {detailsOpen && detailsAppt && (
-                    <AppointmentDetailsModal
-                        open={detailsOpen}
-                        onClose={() => {
-                            setDetailsOpen(false);
-                            setDetailsAppt(null);
-                        }}
-                        appt={detailsAppt}
-                    />
-                )}
+                {detailsModal}
             </div>
             {/* FloatingDatePicker consistente com DailyAgendaModal */}
             <FloatingDatePicker

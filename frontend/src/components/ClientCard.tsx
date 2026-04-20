@@ -21,6 +21,8 @@ import { useClientPendingState } from '../hooks/useClientPendingState';
 import FinalizeButton from './clientCard/FinalizeButton';
 // SolveButton lives in clientCard folder along with FinalizeButton
 import SolveButton from './clientCard/SolveButton';
+import { reanchorClientCard } from './clientCard/reanchorClientCard';
+import { useClientCardFocusScroll } from './clientCard/useClientCardFocusScroll';
 import {
     FutureAppointmentsList,
     useClientFutureAppointments,
@@ -217,90 +219,14 @@ export default function ClientCard({
     // Borda e fundo já definidos no hook (containerStyle)
     // title display moved into the agenda section below when scheduled
     // Flash visual ao focar/entrar em andamento removido — mantemos apenas seleção + scroll
-    React.useEffect(() => {
-        let cancelled = false;
-        const cleanupTimers: number[] = [];
-        // Cancela auto-scroll se usuário interagir manualmente após o trigger
-        function cancelByUser() {
-            cancelled = true;
-        }
-        window.addEventListener('touchstart', cancelByUser, { passive: true });
-        window.addEventListener('wheel', cancelByUser, { passive: true });
-
-        function ensureVisible(attempt: number) {
-            if (cancelled) return;
-            const el = cardRef.current;
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
-            const vh =
-                window.innerHeight || document.documentElement.clientHeight;
-            const overlapTop = Math.max(
-                0,
-                Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
-            );
-            const ratio = overlapTop / rect.height;
-            const needsScroll =
-                ratio < 0.7 || rect.top < 8 || rect.bottom > vh - 8;
-            if (needsScroll) {
-                try {
-                    // Calcula scroll target centralizado mas com leve offset para deixar título visível
-                    const currentY = window.scrollY || window.pageYOffset;
-                    const offset = 110; // maior offset para manter cabeçalho/label totalmente visível
-                    const targetTop = Math.max(0, rect.top + currentY - offset);
-                    window.scrollTo({ top: targetTop, behavior: 'smooth' });
-                } catch {
-                    try {
-                        el.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'start',
-                        });
-                    } catch {
-                        /* noop */
-                    }
-                }
-            }
-            // Re-tenta se ainda houver mudanças de layout (ex: futuros compromissos carregando)
-            if (attempt < 4) {
-                const t = window.setTimeout(
-                    () => ensureVisible(attempt + 1),
-                    [0, 150, 350, 700, 1200][attempt],
-                );
-                cleanupTimers.push(t as unknown as number);
-            }
-        }
-
-        function onScrollEv(e: Event) {
-            const det = (e as CustomEvent).detail;
-            if (det && det.clientId === client.id) {
-                // Garante seleção do cartão ao receber evento de foco/scroll
-                try {
-                    onSelect?.();
-                } catch {
-                    /* noop */
-                }
-                // agenda verificação assíncrona depois do repaint para pegar altura final inicial
-                requestAnimationFrame(() => ensureVisible(0));
-            }
-        }
-        window.addEventListener(
-            'scrollToClientCard',
-            onScrollEv as EventListener,
-        );
-        return () => {
-            window.removeEventListener(
-                'scrollToClientCard',
-                onScrollEv as EventListener,
-            );
-            window.removeEventListener('touchstart', cancelByUser);
-            window.removeEventListener('wheel', cancelByUser);
-        };
-    }, [
-        client.id,
+    useClientCardFocusScroll({
+        clientId: client.id,
+        cardRef,
         onSelect,
-        futureAppointments.length,
+        futureAppointmentsCount: futureAppointments.length,
         isOngoing,
         isScheduled,
-    ]);
+    });
 
     // Inline effect de futuros removido (substituído pelo hook)
 
@@ -884,29 +810,7 @@ export default function ClientCard({
                     open={showMonthly}
                     onClose={() => {
                         setShowMonthly(false);
-                        try {
-                            document.body.dataset.keepScroll = '1';
-                            setTimeout(() => {
-                                try {
-                                    delete document.body.dataset.keepScroll;
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 800);
-                        } catch {
-                            /* noop */
-                        }
-                        try {
-                            window.dispatchEvent(
-                                new Event('ensureScrollUnlocked'),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                        // Reancora a lista no cartão do cliente, reutilizando o mesmo mecanismo do filtro dinâmico
-                        // e do latch de "em andamento". Fazemos após o ciclo de fechamento para garantir layout estável.
-                        // Pequeno atraso para deixar o MUI desmontar e a lista assentar
-                        setTimeout(() => focusClientCard(client.id), 60);
+                        reanchorClientCard(client.id);
                     }}
                     client={client}
                 />
@@ -923,26 +827,7 @@ export default function ClientCard({
                     onClose={() => {
                         setShowQuick(false);
                         setEditingAppt(null);
-                        try {
-                            document.body.dataset.keepScroll = '1';
-                            setTimeout(() => {
-                                try {
-                                    delete document.body.dataset.keepScroll;
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 800);
-                        } catch {
-                            /* noop */
-                        }
-                        try {
-                            window.dispatchEvent(
-                                new Event('ensureScrollUnlocked'),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                        setTimeout(() => focusClientCard(client.id), 60);
+                        reanchorClientCard(client.id);
                     }}
                     client={client}
                     editAppointment={editingAppt}
@@ -957,26 +842,7 @@ export default function ClientCard({
                         if (!shouldClose) return;
                         setShowQuick(false);
                         setEditingAppt(null);
-                        try {
-                            document.body.dataset.keepScroll = '1';
-                            setTimeout(() => {
-                                try {
-                                    delete document.body.dataset.keepScroll;
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 800);
-                        } catch {
-                            /* noop */
-                        }
-                        try {
-                            window.dispatchEvent(
-                                new Event('ensureScrollUnlocked'),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                        setTimeout(() => focusClientCard(client.id), 60);
+                        reanchorClientCard(client.id);
                     }}
                 />
             )}

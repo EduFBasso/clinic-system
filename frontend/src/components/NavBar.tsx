@@ -30,6 +30,11 @@ import AppModal from './Modal';
 import '../styles/modal-message.css';
 import { isTokenExpired } from '../utils/jwt';
 import { emit, on } from '../events/bus';
+import {
+    clearStoredAuth,
+    dispatchLogout,
+    hasActiveSession,
+} from '../utils/auth/session';
 import ProfessionalCreateModal from './ProfessionalCreateModal';
 import TotpAdminResetModal from './TotpAdminResetModal';
 import {
@@ -132,8 +137,7 @@ const NavBar: React.FC<NavBarProps> = ({
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         if (isTokenExpired(token)) {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('loggedProfessional');
+            clearStoredAuth({ clearNewClientId: false });
             setLoggedProfessional(null);
         } else {
             const stored = localStorage.getItem('loggedProfessional');
@@ -228,16 +232,14 @@ const NavBar: React.FC<NavBarProps> = ({
             reason: 'session_expired' | 'device_session_invalid' =
                 'session_expired',
         ) => {
-            emit('auth:logout', { reason });
-            window.dispatchEvent(new Event('clearClients'));
+            dispatchLogout(reason);
         },
         [],
     );
 
     const toggleProtectedDropdown = React.useCallback(
         (toggle: React.Dispatch<React.SetStateAction<boolean>>) => {
-            const token = localStorage.getItem('accessToken');
-            if (!token) {
+            if (!hasActiveSession()) {
                 openSessionExpiredState();
                 return;
             }
@@ -252,8 +254,7 @@ const NavBar: React.FC<NavBarProps> = ({
 
     function handleNewClient() {
         setDropdownOpen(false);
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
+        if (!hasActiveSession()) {
             openSessionExpiredState();
             return;
         }
@@ -392,11 +393,7 @@ const NavBar: React.FC<NavBarProps> = ({
                 data = { message: 'Falha ao interpretar resposta do servidor' };
             }
             if (completeRes.ok && data.access) {
-                let successMsg = 'Login realizado!';
-                if (typeof data.active_sessions_count === 'number') {
-                    successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
-                }
-                setModalMessage(successMsg);
+                setModalMessage('Login realizado!');
                 setModalOpen(true);
                 localStorage.setItem('accessToken', data.access);
                 localStorage.setItem('lastLoginEmail', loginEmail);
@@ -451,8 +448,7 @@ const NavBar: React.FC<NavBarProps> = ({
                     <button
                         className={styles.menuButton}
                         onClick={() => {
-                            const token = localStorage.getItem('accessToken');
-                            if (!token) {
+                            if (!hasActiveSession()) {
                                 openSessionExpiredState();
                                 return;
                             }
@@ -509,9 +505,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setAgendaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
+                                    if (!hasActiveSession()) {
                                         openSessionExpiredState();
                                         return;
                                     }
@@ -525,9 +519,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setAgendaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
+                                    if (!hasActiveSession()) {
                                         openSessionExpiredState();
                                         return;
                                     }
@@ -573,9 +565,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setConsultaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
+                                    if (!hasActiveSession()) {
                                         openSessionExpiredState();
                                         return;
                                     }
@@ -589,9 +579,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setConsultaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
+                                    if (!hasActiveSession()) {
                                         openSessionExpiredState();
                                         return;
                                     }
@@ -635,14 +623,10 @@ const NavBar: React.FC<NavBarProps> = ({
                                 styles.loginButton + ' ' + styles.logoutButton
                             }
                             onClick={() => {
-                                localStorage.removeItem('accessToken');
-                                localStorage.removeItem('loggedProfessional');
-                                localStorage.removeItem('newClientId');
                                 setLoggedProfessional(null);
                                 setLoginEmail('');
                                 setTotpCode('');
-                                emit('auth:logout', { reason: 'manual' });
-                                window.dispatchEvent(new Event('clearClients'));
+                                dispatchLogout('manual');
                             }}
                         >
                             Sair
@@ -732,15 +716,9 @@ const NavBar: React.FC<NavBarProps> = ({
                                         };
                                     }
                                     if (res.ok && data.access) {
-                                        let successMsg =
-                                            'Login realizado! Dados dos clientes liberados.';
-                                        if (
-                                            typeof data.active_sessions_count ===
-                                            'number'
-                                        ) {
-                                            successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
-                                        }
-                                        setModalMessage(successMsg);
+                                        setModalMessage(
+                                            'Login realizado! Dados dos clientes liberados.',
+                                        );
                                         setModalOpen(true);
                                         localStorage.setItem(
                                             'accessToken',
@@ -843,11 +821,7 @@ const NavBar: React.FC<NavBarProps> = ({
                 open={sessionExpiredOpen}
                 onClose={() => {
                     setSessionExpiredOpen(false);
-                    // Opcional: Limpar token e recarregar página
-                    localStorage.removeItem('accessToken');
-                    localStorage.removeItem('loggedProfessional');
-                    emit('auth:logout', { reason: 'manual' });
-                    setSessionExpiredOpen(false);
+                    dispatchLogout('manual');
                 }}
                 message={sessionExpiredMessage}
             />

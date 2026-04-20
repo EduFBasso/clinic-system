@@ -16,9 +16,9 @@ import { useNowTick } from '../hooks/useNowTick';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import QuickScheduleModal from './QuickScheduleModal';
 // PendingActionsModal é global (Home)
-import AppointmentDetailsModal from './AppointmentDetailsModal';
 import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { focusClientCard } from '../utils/focusClientCard';
 import { cancelAppointment } from '../services/appointments';
@@ -96,10 +96,8 @@ export default function DailyAgendaModal({
     // PendingActions é global — nenhum estado local
 
     // Removido listener local de forceClose — Home coordena
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
     const dayStart = React.useMemo(
         () => startOfDay(selectedDay),
         [selectedDay],
@@ -521,12 +519,10 @@ export default function DailyAgendaModal({
                                     )}
                                     onDetails={
                                         a.status === 'done'
-                                            ? appt => {
-                                                  setDetailsAppt(
+                                            ? appt =>
+                                                  openDetails(
                                                       appt as Appointment,
-                                                  );
-                                                  setDetailsOpen(true);
-                                              }
+                                                  )
                                             : undefined
                                     }
                                     onCancel={
@@ -575,16 +571,7 @@ export default function DailyAgendaModal({
                 />
             )}
             {/* PendingActionsModal é global (Home) */}
-            {detailsOpen && detailsAppt && (
-                <AppointmentDetailsModal
-                    open={detailsOpen}
-                    onClose={() => {
-                        setDetailsOpen(false);
-                        setDetailsAppt(null);
-                    }}
-                    appt={detailsAppt}
-                />
-            )}
+            {detailsModal}
         </AppModal>
     );
 }

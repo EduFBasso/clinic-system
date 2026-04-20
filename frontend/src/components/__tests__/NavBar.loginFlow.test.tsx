@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import NavBar from '../../components/NavBar';
 // Mock clock hook to avoid alignment timers & network drift during test
 vi.mock('../../hooks/useUtcClock', () => ({
@@ -18,6 +19,14 @@ vi.mock('@simplewebauthn/browser', () => ({
 }));
 
 describe('NavBar login code flow', () => {
+    function renderNavBar() {
+        return render(
+            <MemoryRouter>
+                <NavBar />
+            </MemoryRouter>,
+        );
+    }
+
     beforeEach(() => {
         vi.restoreAllMocks();
         const store: Record<string, string> = {};
@@ -46,7 +55,7 @@ describe('NavBar login code flow', () => {
     });
 
     it('exibe o botao Face ID quando o email esta preenchido mesmo sem marcador local', async () => {
-        render(<NavBar />);
+        renderNavBar();
 
         fireEvent.change(screen.getByPlaceholderText('E-mail'), {
             target: { value: 'brunadentista@mail.com' },
@@ -100,7 +109,7 @@ describe('NavBar login code flow', () => {
             },
         );
 
-        render(<NavBar />);
+        renderNavBar();
 
         // Preenche email
         const emailInput = screen.getByPlaceholderText('E-mail');

@@ -9,8 +9,7 @@ import AppModal from './Modal';
 import ClientView from './ClientView';
 import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
-import { emit } from '../events/bus';
-import { isTokenExpired } from '../utils/jwt';
+import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -50,21 +49,17 @@ const MainContent: React.FC<MainContentProps> = ({
     const lastNotifiedFilterRef = React.useRef<string>('');
 
     const requireActiveSession = React.useCallback(() => {
-        const token = localStorage.getItem('accessToken');
-        if (!isTokenExpired(token)) {
+        if (hasActiveSession()) {
             return true;
         }
 
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('loggedProfessional');
         setSelectedClientId(null);
         setSelectedClient(null);
         setModalOpen(false);
         setError(
             'Sessão expirada ou usuário não autenticado. Faça login novamente.',
         );
-        emit('auth:logout', { reason: 'session_expired' });
-        window.dispatchEvent(new Event('clearClients'));
+        dispatchLogout('session_expired');
         return false;
     }, [setError, setSelectedClientId]);
 
@@ -581,12 +576,7 @@ const MainContent: React.FC<MainContentProps> = ({
                     open={true}
                     onClose={() => {
                         setError(null);
-                        localStorage.removeItem('accessToken');
-                        localStorage.removeItem('loggedProfessional');
-                        emit('auth:logout', {
-                            reason: 'session_expired',
-                        });
-                        window.dispatchEvent(new Event('clearClients'));
+                        dispatchLogout('session_expired');
                     }}
                     message='Sua sessão expirou ou você não está autenticado. Por favor, faça login para acessar os clientes.'
                     color='var(--color-error-light)'

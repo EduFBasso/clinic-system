@@ -8,11 +8,11 @@ import DateControlsHeader from './shared/DateControlsHeader';
 // AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
 import ClientCardRow from './shared/ClientCardRow';
 import { deriveStatus } from '../utils/appointments/status';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
 import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import { useNowTick } from '../hooks/useNowTick';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import { cancelAppointment } from '../services/appointments';
@@ -324,11 +324,8 @@ function WeeklyAgendaContent({
         }
     }, [open]);
 
-    // Details modal (only for done)
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
     // PendingActions é global — nenhum estado local necessário
 
     const headerTitle = 'Agenda';
@@ -558,14 +555,10 @@ function WeeklyAgendaContent({
                                                 finalizeRequestContext={buildReturnContext()}
                                                 onDetails={
                                                     a.status === 'done'
-                                                        ? appt => {
-                                                              setDetailsAppt(
+                                                        ? appt =>
+                                                              openDetails(
                                                                   appt as Appointment,
-                                                              );
-                                                              setDetailsOpen(
-                                                                  true,
-                                                              );
-                                                          }
+                                                              )
                                                         : undefined
                                                 }
                                                 onCancel={
@@ -602,16 +595,7 @@ function WeeklyAgendaContent({
                 initialPosition={pickerPos}
             />
 
-            {detailsOpen && detailsAppt && (
-                <AppointmentDetailsModal
-                    open={detailsOpen}
-                    onClose={() => {
-                        setDetailsOpen(false);
-                        setDetailsAppt(null);
-                    }}
-                    appt={detailsAppt}
-                />
-            )}
+            {detailsModal}
             {/* PendingActionsModal é global (Home) */}
         </div>
     );

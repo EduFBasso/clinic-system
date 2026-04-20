@@ -6,11 +6,11 @@ import { track } from '../utils/telemetry';
 import FloatingDatePicker from './FloatingDatePicker';
 import AppointmentCard from './shared/AppointmentCard';
 import { deriveStatus } from '../utils/appointments/status';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
 import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
@@ -251,10 +251,8 @@ export default function WeeklyPreviewModal({
         }
     }, [selectedDayISO, headerRef]);
 
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
     // Pending actions modal state
     // PendingActions é global — nenhum estado local necessário
 
@@ -584,14 +582,10 @@ export default function WeeklyPreviewModal({
                                                 }}
                                                 onDetails={
                                                     a.status === 'done'
-                                                        ? appt => {
-                                                              setDetailsAppt(
+                                                        ? appt =>
+                                                              openDetails(
                                                                   appt as Appointment,
-                                                              );
-                                                              setDetailsOpen(
-                                                                  true,
-                                                              );
-                                                          }
+                                                              )
                                                         : undefined
                                                 }
                                                 onCancel={
@@ -638,16 +632,7 @@ export default function WeeklyPreviewModal({
                 />
                 {/* PendingActionsModal é global (Home) */}
 
-                {detailsOpen && detailsAppt && (
-                    <AppointmentDetailsModal
-                        open={detailsOpen}
-                        onClose={() => {
-                            setDetailsOpen(false);
-                            setDetailsAppt(null);
-                        }}
-                        appt={detailsAppt}
-                    />
-                )}
+                {detailsModal}
             </div>
         </AppModal>
     );
