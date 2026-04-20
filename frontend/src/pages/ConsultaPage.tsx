@@ -5,10 +5,10 @@
 import React, { useEffect, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { apiFetch, ApiError } from '../utils/apiFetch';
-import type { PendingReturnContext } from '../types/agendaFlow';
 import FormPage from '../components/FormKit/FormPage';
 import FormSection from '../components/FormKit/FormSection';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useConsultaPageContext } from '../hooks/useConsultaPageContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -305,71 +305,24 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
 
 export default function ConsultaPage() {
     const navigate = useNavigate();
-    const location = useLocation();
+    const [services, setServices] = useState<Service[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
+    const [notes, setNotes] = useState('');
+    const [saving, setSaving] = useState(false);
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const { apptState, saveAndNavigateToCatalog, handleSuccessfulRegister } =
+        useConsultaPageContext<SelectedItem>({
+            selectedItems,
+            notes,
+        });
 
-    // Dados opcionais vindos do PendingActionsModal (via router state)
-    // Fallback: sessionStorage quando voltamos de ServiceFormPage/ProductFormPage (navigate(-1) perde state)
-    const [apptState] = useState<{
-        appointmentId?: number;
-        clientName?: string;
-        clientId?: number;
-        startAt?: string;
-        endAt?: string;
-        chargeId?: number;
-        chargeItems?: SelectedItem[];
-        chargeNotes?: string;
-        returnContext?: PendingReturnContext;
-    }>(() => {
-        const fromRouter = (location.state ?? {}) as {
-            appointmentId?: number;
-            clientName?: string;
-            clientId?: number;
-            startAt?: string;
-            endAt?: string;
-            chargeId?: number;
-            chargeItems?: SelectedItem[];
-            chargeNotes?: string;
-            returnContext?: PendingReturnContext;
-        };
-        if (fromRouter.appointmentId) return fromRouter;
-        try {
-            const saved = sessionStorage.getItem('consultaPageContext');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (parsed.appointmentId) {
-                    sessionStorage.removeItem('consultaPageContext');
-                    return parsed;
-                }
-            }
-        } catch {
-            /* noop */
-        }
-        return fromRouter;
-    });
-
-    // Salva contexto no sessionStorage e navega para edição de serviço/produto.
-    // Ao voltar (navigate(-1)), ConsultaPage restaura o contexto do sessionStorage.
-    function saveAndNavigateToCatalog(path: string) {
-        try {
-            sessionStorage.setItem(
-                'consultaPageContext',
-                JSON.stringify({
-                    appointmentId: apptState.appointmentId,
-                    clientId: apptState.clientId,
-                    clientName: apptState.clientName,
-                    startAt: apptState.startAt,
-                    endAt: apptState.endAt,
-                    chargeId: apptState.chargeId,
-                    chargeItems: selectedItems,
-                    chargeNotes: notes,
-                    returnContext: apptState.returnContext,
-                }),
-            );
-        } catch {
-            /* noop */
-        }
-        navigate(path, { state: { returnTo: '/consulta' } });
-    }
+    useEffect(() => {
+        setSelectedItems(apptState.chargeItems ?? []);
+        setNotes(apptState.chargeNotes ?? '');
+    }, [apptState.chargeItems, apptState.chargeNotes]);
 
     // Formata data/hora no mesmo estilo do AppointmentDetailsModal
     const apptSubtitle = React.useMemo(() => {
@@ -387,17 +340,6 @@ export default function ConsultaPage() {
         const eh = `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`;
         return `${day}, ${sh} - ${eh}`;
     }, [apptState.clientName, apptState.startAt, apptState.endAt]);
-
-    const [services, setServices] = useState<Service[]>([]);
-    const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [selectedItems, setSelectedItems] = useState<SelectedItem[]>(
-        () => (apptState.chargeItems as SelectedItem[] | undefined) ?? [],
-    );
-    const [notes, setNotes] = useState(() => apptState.chargeNotes ?? '');
-    const [saving, setSaving] = useState(false);
-    const todayISO = new Date().toISOString().slice(0, 10);
 
     // Fetch services and products in parallel
     useEffect(() => {
@@ -512,13 +454,6 @@ export default function ConsultaPage() {
         setSaving(true);
         setError(null);
         try {
-            const shouldResumeQuickSchedule =
-                apptState.returnContext?.kind === 'quick-schedule' &&
-                apptState.returnContext.draft;
-            const shouldResumeAgenda =
-                apptState.returnContext?.kind === 'daily-agenda' ||
-                apptState.returnContext?.kind === 'weekly-agenda' ||
-                apptState.returnContext?.kind === 'monthly-agenda';
             const payload: Record<string, unknown> = {
                 client: apptState.clientId,
                 appointment: apptState.appointmentId ?? null,
@@ -537,20 +472,6 @@ export default function ConsultaPage() {
                         i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
                 })),
             };
-            if (
-                apptState.appointmentId &&
-                !shouldResumeQuickSchedule &&
-                !shouldResumeAgenda
-            ) {
-                try {
-                    sessionStorage.setItem(
-                        'reopenAppointmentDetails',
-                        String(apptState.appointmentId),
-                    );
-                } catch {
-                    /* noop */
-                }
-            }
             // Item-level paid flags remain consultation annotations; charge status is controlled separately.
             if (apptState.chargeId) {
                 await apiFetch(
@@ -563,35 +484,7 @@ export default function ConsultaPage() {
                     body: payload,
                 });
             }
-            if (shouldResumeQuickSchedule) {
-                try {
-                    const quickScheduleContext =
-                        apptState.returnContext?.kind === 'quick-schedule'
-                            ? apptState.returnContext
-                            : null;
-                    sessionStorage.setItem(
-                        'resumeQuickSchedule',
-                        JSON.stringify(quickScheduleContext?.draft ?? null),
-                    );
-                } catch {
-                    /* noop */
-                }
-                navigate('/');
-                return;
-            }
-            if (shouldResumeAgenda) {
-                try {
-                    sessionStorage.setItem(
-                        'resumeAgendaModal',
-                        JSON.stringify(apptState.returnContext),
-                    );
-                } catch {
-                    /* noop */
-                }
-                navigate('/');
-                return;
-            }
-            navigate(-1);
+            handleSuccessfulRegister();
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 sessionStorage.setItem(
