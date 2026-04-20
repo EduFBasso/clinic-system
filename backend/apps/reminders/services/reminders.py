@@ -5,6 +5,7 @@ from datetime import timedelta
 import logging
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -112,6 +113,9 @@ def build_reply_markup(appointment: Appointment) -> dict | None:
 
 
 def get_due_appointments(*, now=None, professional_email: str | None = None):
+    if not settings.APPOINTMENT_REMINDERS_ENABLED:
+        return
+
     now = now or timezone.now()
     prof_settings_qs = ProfessionalSettings.objects.filter(
         reminder_enabled=True,
@@ -150,6 +154,16 @@ def dispatch_appointment_reminder(
     dry_run: bool = False,
     force: bool = False,
 ) -> ReminderDelivery | None:
+    if not settings.APPOINTMENT_REMINDERS_ENABLED:
+        return ReminderDelivery.objects.create(
+            appointment=appointment,
+            professional=appointment.professional,
+            channel=ReminderDelivery.Channel.TELEGRAM,
+            status=ReminderDelivery.Status.SKIPPED,
+            error_message="Lembretes desativados globalmente.",
+            payload={"reason": "feature_disabled"},
+        )
+
     client = client or TelegramBotClient()
     appointment = Appointment.objects.select_related("professional", "client").get(
         pk=appointment.pk
@@ -244,6 +258,9 @@ def dispatch_due_reminders(
     dry_run: bool = False,
 ) -> DispatchSummary:
     summary = DispatchSummary()
+    if not settings.APPOINTMENT_REMINDERS_ENABLED:
+        return summary
+
     client = TelegramBotClient()
 
     if appointment_id is not None:

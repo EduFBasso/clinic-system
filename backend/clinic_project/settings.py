@@ -12,6 +12,9 @@ SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 
 DEBUG = config("DEBUG", default=False, cast=bool)
 APP_VERSION = config("APP_VERSION", default="dev")
+APPOINTMENT_REMINDERS_ENABLED = config(
+    "APPOINTMENT_REMINDERS_ENABLED", default=True, cast=bool
+)
 
 TELEGRAM_BOT_TOKEN = config("TELEGRAM_BOT_TOKEN", default="")
 TELEGRAM_BOT_API_BASE = config(

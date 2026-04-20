@@ -60,11 +60,6 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     const firstFieldRef = React.useRef<HTMLInputElement | null>(null);
     const openRef = React.useRef(false);
 
-    // Reminder settings (backend-stored)
-    const [reminderEnabled, setReminderEnabled] = React.useState(false);
-    const [reminderMinutesBefore, setReminderMinutesBefore] =
-        React.useState(90);
-
     React.useEffect(() => {
         if (!open) return;
         let active = true;
@@ -77,8 +72,6 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
         setSlotInterval(current.slotInterval);
         setDefaultDuration(current.defaultDuration);
         setDefaultVisitType(current.defaultVisitType);
-        setReminderEnabled(current.reminderEnabled);
-        setReminderMinutesBefore(current.reminderMinutesBefore);
 
         void hydrateAgendaSettings()
             .then(settings => {
@@ -88,8 +81,6 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 setSlotInterval(settings.slotInterval);
                 setDefaultDuration(settings.defaultDuration);
                 setDefaultVisitType(settings.defaultVisitType);
-                setReminderEnabled(settings.reminderEnabled);
-                setReminderMinutesBefore(settings.reminderMinutesBefore);
             })
             .catch(() => {
                 /* silencioso */
@@ -120,8 +111,8 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 slotInterval,
                 defaultDuration,
                 defaultVisitType,
-                reminderEnabled,
-                reminderMinutesBefore,
+                reminderEnabled: false,
+                reminderMinutesBefore: DEFAULTS.reminderMinutesBefore,
             });
         } catch (error) {
             setSavedMsg(
@@ -334,62 +325,6 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                         Lembretes Telegram
                     </p>
 
-                    {/* Reminder toggle */}
-                    <div
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.625rem',
-                            marginBottom: '0.75rem',
-                        }}
-                    >
-                        <input
-                            id='agenda-reminderEnabled'
-                            type='checkbox'
-                            checked={reminderEnabled}
-                            onChange={e => setReminderEnabled(e.target.checked)}
-                            style={{
-                                width: '1rem',
-                                height: '1rem',
-                                cursor: 'pointer',
-                            }}
-                        />
-                        <label
-                            htmlFor='agenda-reminderEnabled'
-                            className={modalStyles.label}
-                            style={{ cursor: 'pointer' }}
-                        >
-                            Ativar lembrete antes do compromisso
-                        </label>
-                    </div>
-
-                    {/* Minutes before */}
-                    <div
-                        className={modalStyles.fieldGroup}
-                        style={{ maxWidth: 220, marginBottom: '0.75rem' }}
-                    >
-                        <label
-                            htmlFor='agenda-reminderMinutes'
-                            className={modalStyles.label}
-                        >
-                            Minutos de antecedência
-                        </label>
-                        <input
-                            id='agenda-reminderMinutes'
-                            type='number'
-                            min={1}
-                            max={1440}
-                            className={modalStyles.input}
-                            value={reminderMinutesBefore}
-                            disabled={!reminderEnabled}
-                            onChange={e => {
-                                const v = parseInt(e.target.value, 10);
-                                if (!isNaN(v) && v >= 1 && v <= 1440)
-                                    setReminderMinutesBefore(v);
-                            }}
-                        />
-                    </div>
-
                     <div
                         style={{
                             fontSize: '0.85rem',
@@ -397,10 +332,10 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                             lineHeight: 1.5,
                         }}
                     >
-                        Os lembretes do sistema agora são enviados apenas para
-                        o Telegram vinculado da profissional. Não há mais
-                        dependência de PWA, navegador ou ativação por
-                        dispositivo.
+                        Os lembretes automáticos estão temporariamente
+                        desativados neste release. A agenda continua operando
+                        normalmente, mas o sistema não enviará notificações até
+                        o próximo update.
                     </div>
                 </div>
 

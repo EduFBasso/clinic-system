@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Home from '../src/pages/Home';
 // DesktopAgendaPage carregado de forma lazy; se falhar import (arquivo ausente na branch remota), renderiza Home.
 import React from 'react';
+import { on } from './events/bus';
 const LazyDesktopAgenda: React.ComponentType = React.lazy(async () => {
     try {
         return (await import('./pages/DesktopAgendaPage')) as unknown as {
@@ -49,12 +50,12 @@ function App() {
             resetAgendaSettings();
         };
 
-        window.addEventListener('auth:login', handleLogin);
-        window.addEventListener('auth:logout', handleLogout);
+        const disposeLogin = on('auth:login', handleLogin);
+        const disposeLogout = on('auth:logout', handleLogout);
 
         return () => {
-            window.removeEventListener('auth:login', handleLogin);
-            window.removeEventListener('auth:logout', handleLogout);
+            disposeLogin();
+            disposeLogout();
         };
     }, []);
     return (

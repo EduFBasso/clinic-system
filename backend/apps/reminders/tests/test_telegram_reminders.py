@@ -19,6 +19,11 @@ from apps.reminders.services.reminders import (
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def enable_reminders(settings):
+    settings.APPOINTMENT_REMINDERS_ENABLED = True
+
+
 @pytest.fixture
 def professional():
     return Professional.objects.create_user(
@@ -187,3 +192,15 @@ def test_get_due_appointments_tolerates_scheduler_drift_after_threshold(
     due_ids = [item.id for item in get_due_appointments(now=now)]
 
     assert appointment.id in due_ids
+
+
+def test_dispatch_due_reminders_is_disabled_by_global_flag(
+    appointment,
+    reminder_settings,
+    settings,
+):
+    settings.APPOINTMENT_REMINDERS_ENABLED = False
+
+    due_ids = [item.id for item in get_due_appointments(now=timezone.now())]
+
+    assert due_ids == []

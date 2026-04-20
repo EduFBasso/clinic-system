@@ -2,6 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
 
+export type ServerVersionInfo = {
+    header?: string;
+    body?: string;
+};
+
 type VersionState = {
     hasUpdate: boolean;
     currentAccepted: string | null; // version tied to current SPA session
@@ -13,10 +18,7 @@ type VersionState = {
 const LS_ACCEPTED_KEY = 'app.version.accepted';
 const LS_LAST_SEEN_KEY = 'app.version.lastSeen';
 
-async function fetchServerVersion(): Promise<{
-    header?: string;
-    body?: string;
-} | null> {
+export async function fetchServerVersion(): Promise<ServerVersionInfo | null> {
     try {
         // Prefer /health/full which returns a body with version too
         const res = await fetch(`${API_BASE}/health/full`, {
@@ -44,9 +46,7 @@ async function fetchServerVersion(): Promise<{
     }
 }
 
-function coalesceVersion(
-    v: { header?: string; body?: string } | null,
-): string | null {
+export function coalesceVersion(v: ServerVersionInfo | null): string | null {
     if (!v) return null;
     const c = v.header && v.header.trim();
     if (c) return c;

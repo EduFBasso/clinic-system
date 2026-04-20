@@ -6,6 +6,7 @@ Run this every minute via cron:
 This command is kept under agenda only as a stable entrypoint. Delivery logic
 now lives in apps.reminders.
 """
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.reminders.services.reminders import dispatch_due_reminders
@@ -33,6 +34,12 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.APPOINTMENT_REMINDERS_ENABLED:
+            self.stdout.write(
+                "send_reminders (desativado) -> reminders globais desligados por APPOINTMENT_REMINDERS_ENABLED=false"
+            )
+            return
+
         summary = dispatch_due_reminders(
             professional_email=options["professional_email"],
             appointment_id=options["appointment_id"],

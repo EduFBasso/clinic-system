@@ -565,9 +565,13 @@ export default function ConsultaPage() {
             }
             if (shouldResumeQuickSchedule) {
                 try {
+                    const quickScheduleContext =
+                        apptState.returnContext?.kind === 'quick-schedule'
+                            ? apptState.returnContext
+                            : null;
                     sessionStorage.setItem(
                         'resumeQuickSchedule',
-                        JSON.stringify(apptState.returnContext?.draft),
+                        JSON.stringify(quickScheduleContext?.draft ?? null),
                     );
                 } catch {
                     /* noop */

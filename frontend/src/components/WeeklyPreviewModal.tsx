@@ -575,39 +575,9 @@ export default function WeeklyPreviewModal({
                                                 }
                                                 onResolvePending={appt => {
                                                     try {
-                                                        openPendingActionsForAppointment(a);
-                                                                    (c as Record<
-                                                                        string,
-                                                                        unknown
-                                                                    >)
-                                                            ) {
-                                                                const n = (
-                                                                    c as {
-                                                                        name?: unknown;
-                                                                    }
-                                                                ).name;
-                                                                if (
-                                                                    typeof n ===
-                                                                    'string'
-                                                                )
-                                                                    return n;
-                                                            }
-                                                            return undefined;
-                                                        })();
-                                                        const clientField =
-                                                            ((): unknown => {
-                                                                const c =
-                                                                    anyAppt.client as unknown;
-                                                                if (
-                                                                    typeof c ===
-                                                                        'number' ||
-                                                                    typeof c ===
-                                                                        'object'
-                                                                )
-                                                                    return c;
-                                                                return undefined;
-                                                            })();
-                                                        openPendingActionsForAppointment(a);
+                                                        openPendingActionsForAppointment(
+                                                            appt,
+                                                        );
                                                     } catch {
                                                         /* noop */
                                                     }

@@ -1,9 +1,37 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { execSync } from 'node:child_process';
+
+function resolveGitCommit() {
+    const envCommit =
+        process.env.VITE_APP_COMMIT ||
+        process.env.VERCEL_GIT_COMMIT_SHA ||
+        process.env.GIT_COMMIT_SHA;
+    if (envCommit && envCommit.trim()) {
+        return envCommit.trim().slice(0, 12);
+    }
+
+    try {
+        return execSync('git rev-parse --short=12 HEAD', {
+            stdio: ['ignore', 'pipe', 'ignore'],
+        })
+            .toString()
+            .trim();
+    } catch {
+        return 'N/D';
+    }
+}
+
+const buildCommit = resolveGitCommit();
+const buildTime = process.env.VITE_BUILD_TIME || new Date().toISOString();
 
 // https://vite.dev/config/
 export default defineConfig({
     plugins: [react()],
+    define: {
+        'import.meta.env.VITE_APP_COMMIT': JSON.stringify(buildCommit),
+        'import.meta.env.VITE_BUILD_TIME': JSON.stringify(buildTime),
+    },
     build: {
         chunkSizeWarningLimit: 1000, // KB — aviso só acima de 1MB
         cssMinify: 'esbuild', // avoid lightningcss linux native binary issue on Vercel/CI

@@ -26,6 +26,10 @@ export type AgendaSettingsUpdatedPayload = undefined;
 export type AppointmentsChangedPayload = undefined;
 export type PendingActionsForceClosePayload = undefined;
 export type EnsureScrollUnlockedPayload = undefined;
+export type AuthLoginPayload = undefined;
+export type AuthLogoutPayload = {
+    reason?: 'manual' | 'session_expired' | 'device_session_invalid';
+};
 export type PendingResolvedPayload = {
     clientId: number;
     status: 'done' | 'canceled';
@@ -51,6 +55,8 @@ export interface EventMap {
     openDailyAgenda: OpenDailyAgendaPayload;
     agendaSettingsUpdated: AgendaSettingsUpdatedPayload;
     'appointments:changed': AppointmentsChangedPayload;
+    'auth:login': AuthLoginPayload;
+    'auth:logout': AuthLogoutPayload;
     'pendingActions:open': PendingActionsOpenDetail;
     'pendingActions:forceClose': PendingActionsForceClosePayload;
     'pending:resolved': PendingResolvedPayload;
@@ -67,6 +73,8 @@ export const events: (keyof EventMap)[] = [
     'openDailyAgenda',
     'agendaSettingsUpdated',
     'appointments:changed',
+    'auth:login',
+    'auth:logout',
     'pendingActions:open',
     'pendingActions:forceClose',
     'pending:resolved',

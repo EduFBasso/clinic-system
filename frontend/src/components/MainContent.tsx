@@ -9,6 +9,8 @@ import AppModal from './Modal';
 import ClientView from './ClientView';
 import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
+import { emit } from '../events/bus';
+import { isTokenExpired } from '../utils/jwt';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -46,6 +48,26 @@ const MainContent: React.FC<MainContentProps> = ({
         null,
     );
     const lastNotifiedFilterRef = React.useRef<string>('');
+
+    const requireActiveSession = React.useCallback(() => {
+        const token = localStorage.getItem('accessToken');
+        if (!isTokenExpired(token)) {
+            return true;
+        }
+
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('loggedProfessional');
+        setSelectedClientId(null);
+        setSelectedClient(null);
+        setModalOpen(false);
+        setError(
+            'Sessão expirada ou usuário não autenticado. Faça login novamente.',
+        );
+        emit('auth:logout', { reason: 'session_expired' });
+        window.dispatchEvent(new Event('clearClients'));
+        return false;
+    }, [setError, setSelectedClientId]);
+
     // Limpa UI imediatamente ao receber evento de logout/clearClients
     React.useEffect(() => {
         const handleClear = () => {
@@ -448,6 +470,9 @@ const MainContent: React.FC<MainContentProps> = ({
     }, [filter, filteredClients, selectedClientId, setSelectedClientId]);
 
     function handleView(cliente: ClientBasic) {
+        if (!requireActiveSession()) {
+            return;
+        }
         // Solta qualquer foco ativo antes de abrir a visualização, evitando foco "grudado" caso o item seja removido depois
         try {
             (document.activeElement as HTMLElement | null)?.blur?.();
@@ -558,9 +583,10 @@ const MainContent: React.FC<MainContentProps> = ({
                         setError(null);
                         localStorage.removeItem('accessToken');
                         localStorage.removeItem('loggedProfessional');
-                        window.dispatchEvent(new Event('auth:logout'));
+                        emit('auth:logout', {
+                            reason: 'session_expired',
+                        });
                         window.dispatchEvent(new Event('clearClients'));
-                        window.location.reload();
                     }}
                     message='Sua sessão expirou ou você não está autenticado. Por favor, faça login para acessar os clientes.'
                     color='var(--color-error-light)'
@@ -597,6 +623,9 @@ const MainContent: React.FC<MainContentProps> = ({
                             client={client}
                             selected={selectedClientId === client.id}
                             onSelect={() => {
+                                if (!requireActiveSession()) {
+                                    return;
+                                }
                                 setSelectedClientId(client.id);
                                 // Se estamos em modo seleção para agenda, abre modal de confirmação customizado
                                 try {
