@@ -15,6 +15,7 @@ from .serializers import (
     EncounterSerializer,
     FinalizeAuditSerializer,
 )
+from .state_utils import promote_overdue_scheduled_to_pending
 
 
 class TypedRequestMixin:
@@ -75,6 +76,8 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
         # restringe a agenda ao profissional logado
         if user and getattr(user, "id", None):
             qs = qs.filter(professional_id=user.id)
+        # Promoção temporal oportunista: compromissos vencidos passam a pending.
+        promote_overdue_scheduled_to_pending(qs)
         # filtros opcionais ?start=2025-09-01T00:00:00&end=2025-09-02T00:00:00&client=<id>
         start = self.query_param("start")
         end = self.query_param("end")

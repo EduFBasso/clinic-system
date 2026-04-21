@@ -13,6 +13,7 @@ from .models import (
     Encounter,
     FinalizeAudit,
 )
+from .state_utils import promote_overdue_scheduled_to_pending
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -152,6 +153,10 @@ class AppointmentSerializer(serializers.ModelSerializer):
         # Nesta fase aceitamos tanto o novo status persistido `pending` quanto o legado
         # `scheduled` já vencido, para evitar regressão antes da promoção temporal automática.
         if self.instance is None and client is not None:
+            # Promoção oportunista para manter o estado persistido consistente no momento da criação.
+            promote_overdue_scheduled_to_pending(
+                Appointment.objects.filter(client=client)
+            )
             pending_qs = Appointment.objects.filter(client=client).filter(
                 Q(status=Appointment.Status.PENDING)
                 | Q(
