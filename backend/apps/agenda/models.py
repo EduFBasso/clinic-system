@@ -122,12 +122,18 @@ class Appointment(models.Model):
 
     def overlaps(self):
         """Verifica se conflita com outro agendamento do mesmo profissional.
-        Critério: [start, end) com mesmo profissional e status diferente de canceled.
+        Critério: [start, end) com mesmo profissional e status ainda programável.
         """
         qs = (
             Appointment.objects.filter(professional=self.professional)
             .exclude(pk=self.pk)
-            .exclude(status__in=[Appointment.Status.CANCELED, Appointment.Status.DONE])
+            .exclude(
+                status__in=[
+                    Appointment.Status.PENDING,
+                    Appointment.Status.CANCELED,
+                    Appointment.Status.DONE,
+                ]
+            )
             .filter(start_at__lt=self.end_at, end_at__gt=self.start_at)
         )
         return qs.exists()

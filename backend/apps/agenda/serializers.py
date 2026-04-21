@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.inventory.models import Product, Service
@@ -147,12 +148,16 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 professional = user
         client = attrs.get("client", getattr(self.instance, "client", None))
 
-        # Regra de negócio: bloquear novo agendamento se o cliente possui compromisso pendente (status scheduled no passado)
-        # "Pendente" aqui significa agendamento que já terminou (end_at < now) mas não foi concluído (done) nem cancelado.
+        # Regra de transição: bloquear novo agendamento se o cliente possui compromisso pendente.
+        # Nesta fase aceitamos tanto o novo status persistido `pending` quanto o legado
+        # `scheduled` já vencido, para evitar regressão antes da promoção temporal automática.
         if self.instance is None and client is not None:
-            pending_qs = (
-                Appointment.objects.filter(client=client, status=Appointment.Status.SCHEDULED)
-                .filter(end_at__lt=now)
+            pending_qs = Appointment.objects.filter(client=client).filter(
+                Q(status=Appointment.Status.PENDING)
+                | Q(
+                    status=Appointment.Status.SCHEDULED,
+                    end_at__lt=now,
+                )
             )
             if pending_qs.exists():
                 raise serializers.ValidationError({
@@ -161,11 +166,15 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if professional and start and end:
             # conflito simples
             inst = self.instance if getattr(self, "instance", None) else None
-            from django.db.models import Q
-
             conflict = (
                 Appointment.objects.filter(professional=professional)
-                .exclude(status__in=[Appointment.Status.CANCELED, Appointment.Status.DONE])
+                .exclude(
+                    status__in=[
+                        Appointment.Status.PENDING,
+                        Appointment.Status.CANCELED,
+                        Appointment.Status.DONE,
+                    ]
+                )
                 .filter(Q(start_at__lt=end) & Q(end_at__gt=start))
             )
             if inst is not None:

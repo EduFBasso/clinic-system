@@ -162,6 +162,46 @@ def test_block_new_when_client_has_pending_past(auth_client, client_obj):
 
 
 @pytest.mark.django_db
+def test_block_new_when_client_has_persisted_pending(auth_client, client_obj):
+    from apps.agenda.models import Appointment
+
+    base = (timezone.now() - timezone.timedelta(hours=1)).replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    Appointment.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        title='Pendente Persistido',
+        visit_type=Appointment.VisitType.AVALIACAO,
+        start_at=base,
+        end_at=base + timezone.timedelta(minutes=30),
+        status=Appointment.Status.PENDING,
+    )
+
+    future_base = (timezone.now() + timezone.timedelta(hours=2)).replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    payload = {
+        'client': client_obj.id,
+        'title': 'Nova Consulta',
+        'visit_type': 'avaliacao',
+        'start_at': future_base.isoformat(),
+        'end_at': (future_base + timezone.timedelta(minutes=30)).isoformat(),
+    }
+
+    r = auth_client.post('/agenda/appointments/', payload, format='json')
+
+    assert r.status_code in (400, 422), r.content
+    body = r.json()
+    text = ' '.join(str(v) for v in body.values())
+    assert 'pendente' in text.lower()
+
+
+@pytest.mark.django_db
 def test_ongoing_does_not_block_new(auth_client, client_obj):
     # Cria um agendamento em andamento (start <= now < end) diretamente no ORM
     from apps.agenda.models import Appointment
@@ -189,4 +229,43 @@ def test_ongoing_does_not_block_new(auth_client, client_obj):
         'end_at': (future_base + timezone.timedelta(minutes=30)).isoformat(),
     }
     r = auth_client.post('/agenda/appointments/', new_payload, format='json')
+    assert r.status_code == 201, r.content
+
+
+@pytest.mark.django_db
+def test_pending_does_not_create_temporal_conflict(auth_client, client_obj):
+    from apps.agenda.models import Appointment
+    from apps.clients.models import Client
+
+    base = (timezone.now() + timezone.timedelta(hours=2)).replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    Appointment.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        title='Pendente sobreposto',
+        visit_type=Appointment.VisitType.AVALIACAO,
+        start_at=base,
+        end_at=base + timezone.timedelta(minutes=30),
+        status=Appointment.Status.PENDING,
+    )
+
+    other_client = Client.objects.create(
+        professional=client_obj.professional,
+        first_name='Outro',
+        last_name='Cliente',
+        phone='11988887766',
+    )
+
+    payload = {
+        'client': other_client.id,
+        'title': 'Novo agendamento válido',
+        'visit_type': 'avaliacao',
+        'start_at': (base + timezone.timedelta(minutes=10)).isoformat(),
+        'end_at': (base + timezone.timedelta(minutes=40)).isoformat(),
+    }
+
+    r = auth_client.post('/agenda/appointments/', payload, format='json')
     assert r.status_code == 201, r.content
