@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '../../utils/apiFetch';
 import FormPage from '../../components/FormKit/FormPage';
 import FormSection from '../../components/FormKit/FormSection';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { consumeFlashMessage } from '../../utils/flashMessage';
 
 type Service = {
     id: number;
@@ -78,23 +79,14 @@ export default function ServiceListPage() {
 
     // Exibe imediatamente a mensagem de sucesso ao retornar do formulário
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem('pendingSystemMessage');
-            if (raw) {
-                const obj = JSON.parse(raw);
-                if (obj && obj.text) {
-                    setSuccessMsg(String(obj.text));
-                    const ms =
-                        typeof obj.autoCloseMs === 'number'
-                            ? obj.autoCloseMs
-                            : 6000;
-                    setTimeout(() => setSuccessMsg(null), ms);
-                }
-                localStorage.removeItem('pendingSystemMessage');
-            }
-        } catch {
-            /* noop */
-        }
+        const message = consumeFlashMessage('catalog-services');
+        if (!message?.text) return;
+        setSuccessMsg(String(message.text));
+        const ms =
+            typeof message.autoCloseMs === 'number'
+                ? message.autoCloseMs
+                : 6000;
+        setTimeout(() => setSuccessMsg(null), ms);
     }, []);
 
     return (

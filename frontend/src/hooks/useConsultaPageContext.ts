@@ -1,10 +1,14 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { PendingReturnContext } from '../types/agendaFlow';
+import type {
+    PendingReturnContext,
+    ReopenAppointmentDetailsContext,
+} from '../types/agendaFlow';
 
 const CONSULTA_PAGE_CONTEXT_KEY = 'consultaPageContext';
 const RESUME_QUICK_SCHEDULE_KEY = 'resumeQuickSchedule';
 const RESUME_AGENDA_MODAL_KEY = 'resumeAgendaModal';
+const RESUME_DESKTOP_AGENDA_KEY = 'resumeDesktopAgenda';
 const REOPEN_APPOINTMENT_DETAILS_KEY = 'reopenAppointmentDetails';
 
 export interface ConsultaPageState<TItem = unknown> {
@@ -85,13 +89,30 @@ function persistResumeAgendaModal(returnContext?: PendingReturnContext) {
     return true;
 }
 
-function persistReopenAppointmentDetails(appointmentId?: number) {
-    if (!appointmentId) return;
+function persistResumeDesktopAgenda(returnContext?: PendingReturnContext) {
+    if (returnContext?.kind !== 'desktop-agenda') return false;
+
+    try {
+        sessionStorage.setItem(
+            RESUME_DESKTOP_AGENDA_KEY,
+            JSON.stringify(returnContext),
+        );
+    } catch {
+        /* noop */
+    }
+
+    return true;
+}
+
+function persistReopenAppointmentDetails(
+    payload?: ReopenAppointmentDetailsContext,
+) {
+    if (!payload?.appointmentId) return;
 
     try {
         sessionStorage.setItem(
             REOPEN_APPOINTMENT_DETAILS_KEY,
-            String(appointmentId),
+            JSON.stringify(payload),
         );
     } catch {
         /* noop */
@@ -140,6 +161,11 @@ export function useConsultaPageContext<TItem>(params: {
     );
 
     const handleSuccessfulRegister = React.useCallback(() => {
+        persistReopenAppointmentDetails({
+            appointmentId: apptState.appointmentId ?? 0,
+            returnContext: apptState.returnContext,
+        });
+
         if (persistResumeQuickSchedule(apptState.returnContext)) {
             navigate('/');
             return;
@@ -150,13 +176,22 @@ export function useConsultaPageContext<TItem>(params: {
             return;
         }
 
-        persistReopenAppointmentDetails(apptState.appointmentId);
+        if (persistResumeDesktopAgenda(apptState.returnContext)) {
+            navigate('/desktop');
+            return;
+        }
+
         navigate(-1);
     }, [apptState.appointmentId, apptState.returnContext, navigate]);
+
+    const returnToOrigin = React.useCallback(() => {
+        handleSuccessfulRegister();
+    }, [handleSuccessfulRegister]);
 
     return {
         apptState,
         saveAndNavigateToCatalog,
         handleSuccessfulRegister,
+        returnToOrigin,
     };
 }

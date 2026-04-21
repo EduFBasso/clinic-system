@@ -558,6 +558,7 @@ function WeeklyAgendaContent({
                                                         ? appt =>
                                                               openDetails(
                                                                   appt as Appointment,
+                                                                  buildReturnContext(),
                                                               )
                                                         : undefined
                                                 }
@@ -624,6 +625,7 @@ export default function WeeklyAgendaModal({
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             fullScreen
             actionsBarStyle={{
                 background: 'transparent',

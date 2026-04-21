@@ -6,6 +6,7 @@ import { formatTime } from '../utils/timeFormat';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
+import type { PendingReturnContext } from '../types/agendaFlow';
 
 type ChargeItem = {
     id: number;
@@ -39,6 +40,7 @@ export interface AppointmentDetailsModalProps {
     open: boolean;
     onClose: () => void;
     appt: SharedAppointmentLike | null;
+    returnContext?: PendingReturnContext;
 }
 
 function fmtDateTimeRange(startISO: string, endISO: string) {
@@ -59,6 +61,7 @@ export default function AppointmentDetailsModal({
     open,
     onClose,
     appt,
+    returnContext,
 }: AppointmentDetailsModalProps) {
     const [viewportWidth, setViewportWidth] = React.useState(() => {
         if (typeof window === 'undefined') return 1024;
@@ -119,6 +122,7 @@ export default function AppointmentDetailsModal({
                 /* silently ignore — charges are optional */
             });
     }, [open, appt]);
+
     React.useEffect(() => {
         // Prefer existing photo if present in payload
         try {
@@ -243,9 +247,10 @@ export default function AppointmentDetailsModal({
                 chargeId: charges[0]?.id,
                 chargeItems,
                 chargeNotes: charges[0]?.notes ?? '',
+                returnContext,
             },
         });
-    }, [appt, charges, clientId, clientName, navigate, onClose]);
+    }, [appt, charges, clientId, clientName, navigate, onClose, returnContext]);
 
     if (!appt) return null;
 
@@ -278,278 +283,320 @@ export default function AppointmentDetailsModal({
                     title='Detalhes do atendimento'
                     onClose={onClose}
                 />
-                {/* Client avatar + name summary */}
                 <div
                     style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        padding: '2px 0 6px',
+                        display: 'grid',
+                        gap: 10,
+                        paddingTop: isCompactViewport ? 8 : 0,
+                        paddingBottom: isCompactViewport ? 4 : 0,
                     }}
                 >
-                    {photoUrl ? (
-                        <img
-                            src={photoUrl}
-                            alt={`Foto de ${clientName}`}
-                            style={{
-                                width: 56,
-                                height: 56,
-                                borderRadius: '999px',
-                                objectFit: 'cover',
-                                border: '1px solid var(--color-border)',
-                            }}
-                            loading='lazy'
-                            decoding='async'
-                            onError={ev => {
-                                try {
-                                    (
-                                        ev.currentTarget as HTMLImageElement
-                                    ).style.display = 'none';
-                                } catch {
-                                    /* noop */
-                                }
-                            }}
-                        />
-                    ) : (
-                        <div
-                            aria-hidden
-                            style={{
-                                width: 56,
-                                height: 56,
-                                borderRadius: '999px',
-                                background: 'var(--color-success-dark)',
-                                color: '#fff',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontWeight: 900,
-                                letterSpacing: 1,
-                                userSelect: 'none',
-                                border: '1px solid var(--color-border)',
-                            }}
-                            title={clientName}
-                        >
-                            {initials}
-                        </div>
-                    )}
-                    <div style={{ minWidth: 0 }}>
-                        <div
-                            style={{
-                                fontWeight: 800,
-                                color: 'var(--color-heading)',
-                                fontSize: 17,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            {clientName}
-                        </div>
-                        <div style={{ color: '#6b7280', fontSize: 16 }}>
-                            {fmtDateTimeRange(appt.start_at, appt.end_at)}
-                        </div>
-                    </div>
-                </div>
-
-                <div style={{ display: 'grid', gap: 6 }}>
-                    <div>
-                        <span style={{ fontWeight: 700, color: '#374151' }}>
-                            Tipo:{' '}
-                        </span>
-                        <span style={{ color: '#111827' }}>
-                            {appt.title || 'Atendimento'}
-                        </span>
-                    </div>
-                    {appt.notes && (
-                        <div>
-                            <span style={{ fontWeight: 700, color: '#374151' }}>
-                                Observações:{' '}
-                            </span>
-                            <span style={{ color: '#111827' }}>
-                                {appt.notes}
-                            </span>
-                        </div>
-                    )}
-                    {/* Charges registrados no atendimento */}
-                    {charges.length > 0 && (
-                        <div style={{ marginTop: 8 }}>
+                    {/* Client avatar + name summary */}
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            padding: '2px 0 6px',
+                        }}
+                    >
+                        {photoUrl ? (
+                            <img
+                                src={photoUrl}
+                                alt={`Foto de ${clientName}`}
+                                style={{
+                                    width: 56,
+                                    height: 56,
+                                    borderRadius: '999px',
+                                    objectFit: 'cover',
+                                    border: '1px solid var(--color-border)',
+                                }}
+                                loading='lazy'
+                                decoding='async'
+                                onError={ev => {
+                                    try {
+                                        (
+                                            ev.currentTarget as HTMLImageElement
+                                        ).style.display = 'none';
+                                    } catch {
+                                        /* noop */
+                                    }
+                                }}
+                            />
+                        ) : (
+                            <div
+                                aria-hidden
+                                style={{
+                                    width: 56,
+                                    height: 56,
+                                    borderRadius: '999px',
+                                    background: 'var(--color-success-dark)',
+                                    color: '#fff',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontWeight: 900,
+                                    letterSpacing: 1,
+                                    userSelect: 'none',
+                                    border: '1px solid var(--color-border)',
+                                }}
+                                title={clientName}
+                            >
+                                {initials}
+                            </div>
+                        )}
+                        <div style={{ minWidth: 0 }}>
                             <div
                                 style={{
-                                    fontWeight: 700,
-                                    color: '#374151',
-                                    marginBottom: 6,
-                                    fontSize: 18,
+                                    fontWeight: 800,
+                                    color: 'var(--color-heading)',
+                                    fontSize: 17,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
                                 }}
                             >
-                                Serviços prestados e produtos
+                                {clientName}
                             </div>
-                            {isCompactViewport ? (
-                                <div
+                            <div style={{ color: '#6b7280', fontSize: 16 }}>
+                                {fmtDateTimeRange(appt.start_at, appt.end_at)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: 6 }}>
+                        <div>
+                            <span
+                                style={{ fontWeight: 700, color: '#374151' }}
+                            >
+                                Tipo:{' '}
+                            </span>
+                            <span style={{ color: '#111827' }}>
+                                {appt.title || 'Atendimento'}
+                            </span>
+                        </div>
+                        {appt.notes && (
+                            <div>
+                                <span
                                     style={{
-                                        display: 'grid',
-                                        gap: 10,
-                                        width: '100%',
+                                        fontWeight: 700,
+                                        color: '#374151',
                                     }}
                                 >
-                                    {chargeRows.map(({ chargeStatus, item, qty, unit }) => (
-                                        <div
-                                            key={item.id}
-                                            style={{
-                                                border: '1px solid var(--color-border)',
-                                                borderRadius: 12,
-                                                padding: '10px 12px',
-                                                background:
-                                                    chargeStatus === 'paid'
-                                                        ? 'var(--color-success-bg, #f0faf4)'
-                                                        : 'var(--color-bg)',
-                                                display: 'grid',
-                                                gap: 8,
-                                            }}
-                                        >
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'flex-start',
-                                                    gap: 8,
-                                                }}
-                                            >
-                                                <div
-                                                    style={{
-                                                        fontSize: 17,
-                                                        fontWeight: 700,
-                                                        color: '#111827',
-                                                        lineHeight: 1.25,
-                                                        minWidth: 0,
-                                                    }}
-                                                >
-                                                    {item.description}
-                                                </div>
-                                                <span
-                                                    style={{
-                                                        display: 'inline-block',
-                                                        padding: '3px 10px',
-                                                        borderRadius: 20,
-                                                        fontSize: 13,
-                                                        fontWeight: 700,
-                                                        background: item.paid
-                                                            ? 'var(--color-success, #22c55e)'
-                                                            : '#f3f4f6',
-                                                        color: item.paid
-                                                            ? '#fff'
-                                                            : '#6b7280',
-                                                        border: item.paid
-                                                            ? 'none'
-                                                            : '1px solid #d1d5db',
-                                                        whiteSpace: 'nowrap',
-                                                        flexShrink: 0,
-                                                    }}
-                                                >
-                                                    {item.paid ? 'Pago' : 'Pendente'}
-                                                </span>
-                                            </div>
-                                            <div
-                                                style={{
-                                                    display: 'grid',
-                                                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                                                    gap: 8,
-                                                }}
-                                            >
-                                                <div>
-                                                    <div
-                                                        style={{
-                                                            fontSize: 12,
-                                                            fontWeight: 700,
-                                                            color: '#6b7280',
-                                                            textTransform: 'uppercase',
-                                                        }}
-                                                    >
-                                                        Qtd
-                                                    </div>
-                                                    <div style={{ fontSize: 16, fontWeight: 600 }}>
-                                                        {qty % 1 === 0 ? qty : qty.toFixed(2)}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div
-                                                        style={{
-                                                            fontSize: 12,
-                                                            fontWeight: 700,
-                                                            color: '#6b7280',
-                                                            textTransform: 'uppercase',
-                                                        }}
-                                                    >
-                                                        Unit.
-                                                    </div>
-                                                    <div style={{ fontSize: 16, fontWeight: 600 }}>
-                                                        R$ {formatBRL(unit)}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div
-                                                        style={{
-                                                            fontSize: 12,
-                                                            fontWeight: 700,
-                                                            color: '#6b7280',
-                                                            textTransform: 'uppercase',
-                                                        }}
-                                                    >
-                                                        Valor
-                                                    </div>
-                                                    <div style={{ fontSize: 16, fontWeight: 700 }}>
-                                                        R$ {formatBRL(qty * unit)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
+                                    Observações:{' '}
+                                </span>
+                                <span style={{ color: '#111827' }}>
+                                    {appt.notes}
+                                </span>
+                            </div>
+                        )}
+                        {/* Charges registrados no atendimento */}
+                        {charges.length > 0 && (
+                            <div style={{ marginTop: 8 }}>
+                                <div
+                                    style={{
+                                        fontWeight: 700,
+                                        color: '#374151',
+                                        marginBottom: 6,
+                                        fontSize: 18,
+                                    }}
+                                >
+                                    Serviços prestados e produtos
+                                </div>
+                                {isCompactViewport ? (
                                     <div
                                         style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            paddingTop: 2,
+                                            display: 'grid',
+                                            gap: 10,
+                                            width: '100%',
                                         }}
                                     >
-                                        <span
+                                        {chargeRows.map(
+                                            ({ chargeStatus, item, qty, unit }) => (
+                                                <div
+                                                    key={item.id}
+                                                    style={{
+                                                        border: '1px solid var(--color-border)',
+                                                        borderRadius: 12,
+                                                        padding: '10px 12px',
+                                                        background:
+                                                            chargeStatus === 'paid'
+                                                                ? 'var(--color-success-bg, #f0faf4)'
+                                                                : 'var(--color-bg)',
+                                                        display: 'grid',
+                                                        gap: 8,
+                                                    }}
+                                                >
+                                                    <div
+                                                        style={{
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'flex-start',
+                                                            gap: 8,
+                                                        }}
+                                                    >
+                                                        <div
+                                                            style={{
+                                                                fontSize: 17,
+                                                                fontWeight: 700,
+                                                                color: '#111827',
+                                                                lineHeight: 1.25,
+                                                                minWidth: 0,
+                                                            }}
+                                                        >
+                                                            {item.description}
+                                                        </div>
+                                                        <span
+                                                            style={{
+                                                                display: 'inline-block',
+                                                                padding: '3px 10px',
+                                                                borderRadius: 20,
+                                                                fontSize: 13,
+                                                                fontWeight: 700,
+                                                                background: item.paid
+                                                                    ? 'var(--color-success, #22c55e)'
+                                                                    : '#f3f4f6',
+                                                                color: item.paid
+                                                                    ? '#fff'
+                                                                    : '#6b7280',
+                                                                border: item.paid
+                                                                    ? 'none'
+                                                                    : '1px solid #d1d5db',
+                                                                whiteSpace: 'nowrap',
+                                                                flexShrink: 0,
+                                                            }}
+                                                        >
+                                                            {item.paid
+                                                                ? 'Pago'
+                                                                : 'Pendente'}
+                                                        </span>
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            display: 'grid',
+                                                            gridTemplateColumns:
+                                                                'repeat(3, minmax(0, 1fr))',
+                                                            gap: 8,
+                                                        }}
+                                                    >
+                                                        <div>
+                                                            <div
+                                                                style={{
+                                                                    fontSize: 12,
+                                                                    fontWeight: 700,
+                                                                    color: '#6b7280',
+                                                                    textTransform:
+                                                                        'uppercase',
+                                                                }}
+                                                            >
+                                                                Qtd
+                                                            </div>
+                                                            <div
+                                                                style={{
+                                                                    fontSize: 16,
+                                                                    fontWeight: 600,
+                                                                }}
+                                                            >
+                                                                {qty % 1 === 0
+                                                                    ? qty
+                                                                    : qty.toFixed(
+                                                                          2,
+                                                                      )}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div
+                                                                style={{
+                                                                    fontSize: 12,
+                                                                    fontWeight: 700,
+                                                                    color: '#6b7280',
+                                                                    textTransform:
+                                                                        'uppercase',
+                                                                }}
+                                                            >
+                                                                Unit.
+                                                            </div>
+                                                            <div
+                                                                style={{
+                                                                    fontSize: 16,
+                                                                    fontWeight: 600,
+                                                                }}
+                                                            >
+                                                                R$ {formatBRL(unit)}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div
+                                                                style={{
+                                                                    fontSize: 12,
+                                                                    fontWeight: 700,
+                                                                    color: '#6b7280',
+                                                                    textTransform:
+                                                                        'uppercase',
+                                                                }}
+                                                            >
+                                                                Valor
+                                                            </div>
+                                                            <div
+                                                                style={{
+                                                                    fontSize: 16,
+                                                                    fontWeight: 700,
+                                                                }}
+                                                            >
+                                                                R$ {formatBRL(qty * unit)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ),
+                                        )}
+                                        <div
                                             style={{
-                                                fontSize: 14,
-                                                fontWeight: 700,
-                                                color: '#6b7280',
-                                                textTransform: 'uppercase',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: 8,
+                                                paddingTop: 2,
                                             }}
                                         >
-                                            Total
-                                        </span>
-                                        <span
-                                            style={{
-                                                fontSize: 24,
-                                                fontWeight: 800,
-                                                color: '#111827',
-                                            }}
-                                        >
-                                            R$ {formatBRL(chargeTotal)}
-                                        </span>
+                                            <span
+                                                style={{
+                                                    fontSize: 14,
+                                                    fontWeight: 700,
+                                                    color: '#6b7280',
+                                                    textTransform: 'uppercase',
+                                                }}
+                                            >
+                                                Total
+                                            </span>
+                                            <span
+                                                style={{
+                                                    fontSize: 24,
+                                                    fontWeight: 800,
+                                                    color: '#111827',
+                                                }}
+                                            >
+                                                R$ {formatBRL(chargeTotal)}
+                                            </span>
+                                        </div>
                                     </div>
-                                </div>
-                            ) : (
-                                <div
-                                    style={{
-                                        width: '100%',
-                                        maxWidth: '100%',
-                                        overflowX: 'auto',
-                                        WebkitOverflowScrolling: 'touch',
-                                    }}
-                                >
-                                    <table
+                                ) : (
+                                    <div
                                         style={{
                                             width: '100%',
-                                            minWidth: 0,
-                                            borderCollapse: 'collapse',
-                                            fontSize: 16,
+                                            maxWidth: '100%',
+                                            overflowX: 'auto',
+                                            WebkitOverflowScrolling: 'touch',
                                         }}
                                     >
+                                        <table
+                                            style={{
+                                                width: '100%',
+                                                minWidth: 0,
+                                                borderCollapse: 'collapse',
+                                                fontSize: 16,
+                                            }}
+                                        >
                                         <thead>
                                             <tr
                                                 style={{
@@ -721,11 +768,12 @@ export default function AppointmentDetailsModal({
                                                 <td />
                                             </tr>
                                         </tfoot>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div
                     style={{

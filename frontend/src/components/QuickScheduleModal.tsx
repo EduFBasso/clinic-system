@@ -493,7 +493,17 @@ export default function QuickScheduleModal({
     }, [client.first_name, isConflictEditing]);
 
     const finalizeReturnContext = React.useMemo<QuickScheduleReturnContext | null>(() => {
-        if (!open || currentEdit || client.id <= 0) return null;
+        if (!open || client.id <= 0) return null;
+
+        if (conflictReturnDraft) {
+            return {
+                kind: 'quick-schedule',
+                draft: conflictReturnDraft,
+            };
+        }
+
+        if (currentEdit) return null;
+
         return {
             kind: 'quick-schedule',
             draft: {
@@ -507,6 +517,7 @@ export default function QuickScheduleModal({
         };
     }, [
         client.id,
+        conflictReturnDraft,
         currentEdit,
         endHM,
         notes,

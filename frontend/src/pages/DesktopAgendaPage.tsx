@@ -22,6 +22,10 @@ import {
 import { useNowTick } from '../hooks/useNowTick';
 import { API_BASE } from '../config/api';
 import { useLocation } from 'react-router-dom';
+import type {
+    PendingReturnContext,
+    ReopenAppointmentDetailsContext,
+} from '../types/agendaFlow';
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
@@ -37,6 +41,12 @@ function addDays(d: Date, n: number) {
     x.setDate(x.getDate() + n);
     return x;
 }
+function toISODate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
 
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 type RawClientField = ClientLike | number | undefined | null;
@@ -50,6 +60,7 @@ type EnrichedAppt = Appointment & {
 };
 
 export default function DesktopAgendaPage() {
+    const RESUME_DESKTOP_AGENDA_KEY = 'resumeDesktopAgenda';
     // Floating picker state/position
     const [showPicker, setShowPicker] = React.useState(false);
     const [pickerPos, setPickerPos] = React.useState<
@@ -90,22 +101,56 @@ export default function DesktopAgendaPage() {
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+    const [detailsReturnContext, setDetailsReturnContext] = React.useState<PendingReturnContext>(
+        null,
+    );
+    const buildReturnContext = React.useCallback(
+        (appointmentId?: number): PendingReturnContext => ({
+            kind: 'desktop-agenda',
+            dateISO: toISODate(selectedDay),
+            focusAppointmentId: appointmentId,
+        }),
+        [selectedDay],
+    );
+
+    React.useEffect(() => {
+        const raw = sessionStorage.getItem(RESUME_DESKTOP_AGENDA_KEY);
+        if (!raw) return;
+        sessionStorage.removeItem(RESUME_DESKTOP_AGENDA_KEY);
+        try {
+            const parsed = JSON.parse(raw) as PendingReturnContext;
+            if (parsed?.kind !== 'desktop-agenda') return;
+            const date = new Date(`${parsed.dateISO}T00:00:00`);
+            if (!Number.isNaN(date.getTime())) {
+                setSelectedDay(startOfDay(date));
+            }
+        } catch {
+            /* noop */
+        }
+    }, [RESUME_DESKTOP_AGENDA_KEY]);
 
     // Reabre AppointmentDetailsModal após retorno da página de registro/edição de charges
     React.useEffect(() => {
         const raw = sessionStorage.getItem('reopenAppointmentDetails');
         if (!raw) return;
         sessionStorage.removeItem('reopenAppointmentDetails');
-        const apptId = parseInt(raw, 10);
-        if (!apptId) return;
+        let payload: ReopenAppointmentDetailsContext | null = null;
+        try {
+            payload = JSON.parse(raw) as ReopenAppointmentDetailsContext;
+        } catch {
+            const apptId = parseInt(raw, 10);
+            if (apptId) payload = { appointmentId: apptId };
+        }
+        if (!payload?.appointmentId) return;
         const token = localStorage.getItem('accessToken');
         if (!token) return;
-        fetch(`${API_BASE}/agenda/appointments/${apptId}/`, {
+        fetch(`${API_BASE}/agenda/appointments/${payload.appointmentId}/`, {
             headers: { Authorization: `Bearer ${token}` },
         })
             .then(r => (r.ok ? r.json() : null))
             .then(appt => {
                 if (appt) {
+                    setDetailsReturnContext(payload?.returnContext ?? null);
                     setDetailsAppt(appt as Appointment);
                     setDetailsOpen(true);
                 }
@@ -526,6 +571,11 @@ export default function DesktopAgendaPage() {
                                             onDetails={
                                                 a.status === 'done'
                                                     ? appt => {
+                                                          setDetailsReturnContext(
+                                                              buildReturnContext(
+                                                                  appt.id,
+                                                              ),
+                                                          );
                                                           setDetailsAppt(
                                                               appt as Appointment,
                                                           );
@@ -612,7 +662,9 @@ export default function DesktopAgendaPage() {
                     onClose={() => {
                         setDetailsOpen(false);
                         setDetailsAppt(null);
+                        setDetailsReturnContext(null);
                     }}
+                    returnContext={detailsReturnContext}
                     appt={detailsAppt}
                 />
             )}

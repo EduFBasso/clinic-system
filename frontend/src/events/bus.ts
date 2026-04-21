@@ -6,7 +6,10 @@
 // const dispose = on('openAppointmentDetails', detail => { ... });
 
 import type { Appointment } from '../hooks/useAppointments';
-import type { PendingActionsOpenDetail } from '../types/agendaFlow';
+import type {
+    PendingActionsOpenDetail,
+    PendingReturnContext,
+} from '../types/agendaFlow';
 
 export type SystemMessagePayload = {
     text: string;
@@ -14,6 +17,7 @@ export type SystemMessagePayload = {
 };
 export type OpenAppointmentDetailsPayload = {
     appointment: Appointment;
+    returnContext?: PendingReturnContext;
 };
 export type ScrollToClientCardPayload = { clientId: number };
 export type OpenDailyAgendaPayload =

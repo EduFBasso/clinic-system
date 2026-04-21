@@ -313,7 +313,12 @@ export default function ConsultaPage() {
     const [notes, setNotes] = useState('');
     const [saving, setSaving] = useState(false);
     const todayISO = new Date().toISOString().slice(0, 10);
-    const { apptState, saveAndNavigateToCatalog, handleSuccessfulRegister } =
+    const {
+        apptState,
+        saveAndNavigateToCatalog,
+        handleSuccessfulRegister,
+        returnToOrigin,
+    } =
         useConsultaPageContext<SelectedItem>({
             selectedItems,
             notes,
@@ -589,7 +594,7 @@ export default function ConsultaPage() {
             {/* ── Serviços prestados ── */}
             <FormSection
                 title='Serviços Prestados'
-                onClose={() => navigate(-1)}
+                onClose={returnToOrigin}
                 closeTitle='Fechar sem salvar'
             >
                 {error && (
@@ -1039,7 +1044,7 @@ export default function ConsultaPage() {
                 >
                     <button
                         type='button'
-                        onClick={() => navigate(-1)}
+                        onClick={returnToOrigin}
                         style={{
                             background: 'transparent',
                             color: 'var(--color-text-muted)',

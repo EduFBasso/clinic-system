@@ -238,7 +238,10 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                             currentEditId === appt.id,
                     })}
                     onResolvePending={appt => {
-                        openPendingActionsForAppointment(appt);
+                        openPendingActionsForAppointment(
+                            appt,
+                            finalizeRequestContext,
+                        );
                     }}
                     onUseTime={onUseTime}
                     onEdit={onEdit}

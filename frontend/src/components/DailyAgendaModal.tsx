@@ -289,6 +289,7 @@ export default function DailyAgendaModal({
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             fullScreen
             actionsBarStyle={{
                 background: 'transparent',
@@ -522,6 +523,9 @@ export default function DailyAgendaModal({
                                             ? appt =>
                                                   openDetails(
                                                       appt as Appointment,
+                                                      buildReturnContext(
+                                                          appt.id,
+                                                      ),
                                                   )
                                             : undefined
                                     }

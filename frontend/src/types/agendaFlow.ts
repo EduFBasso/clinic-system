@@ -32,15 +32,27 @@ export interface MonthlyAgendaReturnContext {
     monthISO: string;
 }
 
+export interface DesktopAgendaReturnContext {
+    kind: 'desktop-agenda';
+    dateISO: string;
+    focusAppointmentId?: number;
+}
+
 export type PendingReturnContext =
     | QuickScheduleReturnContext
     | DailyAgendaReturnContext
     | WeeklyAgendaReturnContext
     | MonthlyAgendaReturnContext
+    | DesktopAgendaReturnContext
     | null;
 
 export interface PendingActionsOpenDetail {
     appt?: SharedAppointmentLike;
     appointmentId?: number | null;
+    returnContext?: PendingReturnContext;
+}
+
+export interface ReopenAppointmentDetailsContext {
+    appointmentId: number;
     returnContext?: PendingReturnContext;
 }

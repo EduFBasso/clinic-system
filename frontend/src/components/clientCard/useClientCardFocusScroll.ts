@@ -29,19 +29,26 @@ export function useClientCardFocusScroll({
             if (!el) return;
             const rect = el.getBoundingClientRect();
             const vh = window.innerHeight || document.documentElement.clientHeight;
+            const filterEl = document.querySelector(
+                '[class*="filterContainer"]',
+            ) as HTMLElement | null;
+            const filterBottom = filterEl?.getBoundingClientRect().bottom ?? 0;
+            const desiredTop = filterBottom > 0 ? filterBottom + 24 : 110;
             const overlapTop = Math.max(
                 0,
                 Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
             );
             const ratio = overlapTop / rect.height;
             const needsScroll =
-                ratio < 0.7 || rect.top < 8 || rect.bottom > vh - 8;
+                ratio < 0.7 || rect.top < desiredTop || rect.bottom > vh - 8;
 
             if (needsScroll) {
                 try {
                     const currentY = window.scrollY || window.pageYOffset;
-                    const offset = 110;
-                    const targetTop = Math.max(0, rect.top + currentY - offset);
+                    const targetTop = Math.max(
+                        0,
+                        rect.top + currentY - desiredTop,
+                    );
                     window.scrollTo({ top: targetTop, behavior: 'smooth' });
                 } catch {
                     try {

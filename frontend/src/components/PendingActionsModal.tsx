@@ -688,6 +688,7 @@ export default function PendingActionsModal({
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             closeOnEnter={false}
             disableBackdropClose={true}
             disableEscapeKeyDown={true}

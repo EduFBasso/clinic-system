@@ -9,6 +9,7 @@ import { buildDeviceHeaders } from '../services/device';
 import ensureDeviceSession from '../services/sessions';
 import { pad2, toMinutes, fromMinutes } from '../utils/hmTime';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
+import { unlockPageScroll } from '../utils/unlockPageScroll';
 
 export interface UseQuickScheduleSaveParams {
     selectedDate: Date;
@@ -59,6 +60,25 @@ export function useQuickScheduleSave({
                 window.dispatchEvent(
                     new CustomEvent('systemMessage', {
                         detail: { text, type },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        },
+        [],
+    );
+
+    const emitPageFlashMessage = React.useCallback(
+        (
+            text: string,
+            type: 'success' | 'error' | 'info' | 'warning',
+            autoCloseMs = 3200,
+        ) => {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('pageFlashMessage', {
+                        detail: { text, type, autoCloseMs },
                     }),
                 );
             } catch {
@@ -366,24 +386,16 @@ export function useQuickScheduleSave({
             }
 
             if (!wasEdit && AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE) {
-                try {
-                    window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                } catch {
-                    /* noop */
-                }
+                unlockPageScroll();
                 onImmediateClose();
                 setTimeout(() => {
+                    unlockPageScroll();
                     try {
                         window.dispatchEvent(new Event('clients:forceRefresh'));
                     } catch {
                         /* noop */
                     }
-                    emitSystemMessage(successMessage, 'success');
-                    try {
-                        window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                    } catch {
-                        /* noop */
-                    }
+                    emitPageFlashMessage(successMessage, 'success');
                 }, 220);
             } else {
                 emitSystemMessage(successMessage, 'success');
@@ -407,6 +419,7 @@ export function useQuickScheduleSave({
             }
         } finally {
             setSaving(false);
+            unlockPageScroll();
             const t1 = performance.now();
             console.debug(
                 '[QuickSchedule] handleSave latency ms',
@@ -430,6 +443,7 @@ export function useQuickScheduleSave({
         onSuccess,
         onImmediateClose,
         emitGlobalErrorMessage,
+        emitPageFlashMessage,
         emitSystemMessage,
         agendaSettings.defaultDuration,
         agendaSettings.slotInterval,

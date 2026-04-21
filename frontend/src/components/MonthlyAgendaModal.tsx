@@ -182,6 +182,7 @@ export default function MonthlyAgendaModal({
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             actionsBarStyle={{
                 background: 'transparent',
                 boxShadow: 'none',
@@ -423,6 +424,7 @@ export default function MonthlyAgendaModal({
                                                             ? appt =>
                                                                   openDetails(
                                                                       appt as Appointment,
+                                                                      buildReturnContext(),
                                                                   )
                                                             : undefined
                                                     }

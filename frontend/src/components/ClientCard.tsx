@@ -4,10 +4,8 @@ import { focusClientCard } from '../utils/focusClientCard';
 import styles from '../styles/components/ClientCard.module.css';
 import { FaEye, FaWhatsapp, FaCalendarAlt, FaPlus } from 'react-icons/fa';
 import { useClientCreateAction } from '../hooks/useClientCreateAction';
-import { getMaxScheduledPerClient } from '../config/limits';
 import { API_BASE } from '../config/api';
 import type { Appointment } from '../hooks/useAppointments';
-import QuickScheduleModal from './QuickScheduleModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { formatPhone } from '../utils/formatPhone';
 import { FaEdit } from 'react-icons/fa';
@@ -54,11 +52,6 @@ export default function ClientCard({
         (import.meta as ImportMeta).env.VITE_ENABLE_ONGOING_PROBE === 'true';
     const [showMonthly, setShowMonthly] = React.useState(false);
     const [showWeekly, setShowWeekly] = React.useState(false);
-    const [showQuick, setShowQuick] = React.useState(false);
-    // Removido: PendingActions local — usar evento global
-    const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
-        null,
-    );
     const isScheduled = client.next_appointment_status === 'scheduled';
     // Futuros agora gerenciados por hook dedicado
     const { futureAppointments, loadingFuture, dynLimit } =
@@ -154,8 +147,10 @@ export default function ClientCard({
         dynLimit,
         openPendingActions,
         tryOpenPendingElseQuick,
-        setEditing: setEditingAppt,
-        openQuick: () => setShowQuick(true),
+        setEditing: () => {
+            /* noop: scheduling flow is hosted globally in Home */
+        },
+        openQuick: () => openGlobalQuickSchedule(),
         baseTitle: 'Novo agendamento',
     });
     const createActionFallback = useClientCreateAction({
@@ -166,8 +161,10 @@ export default function ClientCard({
         dynLimit,
         openPendingActions,
         tryOpenPendingElseQuick,
-        setEditing: setEditingAppt,
-        openQuick: () => setShowQuick(true),
+        setEditing: () => {
+            /* noop: scheduling flow is hosted globally in Home */
+        },
+        openQuick: () => openGlobalQuickSchedule(),
         baseTitle: 'Agendar',
     });
     // Estilos centralizados via hook: mantém regra de cartão branco durante atendimento
@@ -185,6 +182,23 @@ export default function ClientCard({
         isScheduled,
         isPending,
     });
+    const openGlobalQuickSchedule = React.useCallback(
+        (appointment?: Appointment | null) => {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('openScheduleEdit', {
+                        detail: {
+                            client,
+                            appointment: appointment ?? undefined,
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        },
+        [client],
+    );
     const cardRef = React.useRef<HTMLDivElement | null>(null);
     const [budgetOpen, setBudgetOpen] = React.useState(false);
 
@@ -573,12 +587,10 @@ export default function ClientCard({
                                     )
                                         .then(r => (r.ok ? r.json() : null))
                                         .then(data => {
-                                            setEditingAppt(data);
-                                            setShowQuick(true);
+                                            openGlobalQuickSchedule(data);
                                         })
                                         .catch(() => {
-                                            setEditingAppt(null);
-                                            setShowQuick(true);
+                                            openGlobalQuickSchedule();
                                         });
                                 }}
                             >
@@ -821,31 +833,6 @@ export default function ClientCard({
                     onClose={() => setShowWeekly(false)}
                 />
             )}
-            {showQuick && (
-                <QuickScheduleModal
-                    open={showQuick}
-                    onClose={() => {
-                        setShowQuick(false);
-                        setEditingAppt(null);
-                        reanchorClientCard(client.id);
-                    }}
-                    client={client}
-                    editAppointment={editingAppt}
-                    futureAppointments={futureAppointments}
-                    maxFutureAppointments={getMaxScheduledPerClient()}
-                    afterPersist={(_, action) => {
-                        // Atualizar clientes para refletir dados do próximo compromisso
-                        window.dispatchEvent(new Event('updateClients'));
-                        const shouldClose =
-                            action === 'created' ||
-                            (action === 'updated' && !!editingAppt);
-                        if (!shouldClose) return;
-                        setShowQuick(false);
-                        setEditingAppt(null);
-                        reanchorClientCard(client.id);
-                    }}
-                />
-            )}
             {/* PendingActionsModal é global (Home) */}
             {/* QuickScheduleModal é agora o único fluxo de agendamento (ScheduleModal legacy removido) */}
             {futureAppointments.length > 0 && (
@@ -871,8 +858,7 @@ export default function ClientCard({
                             labelColor={labelColor}
                             clientId={client.id}
                             onEdit={(appt: Appointment) => {
-                                setEditingAppt(appt);
-                                setShowQuick(true);
+                                openGlobalQuickSchedule(appt);
                             }}
                         />
                         {loadingFuture && (
