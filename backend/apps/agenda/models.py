@@ -16,7 +16,7 @@ class Appointment(models.Model):
     - start_at / end_at: Janela do agendamento (timezone-aware)
     - location: Texto opcional (endereço, sala)
     - notes: Observações do profissional
-    - status: scheduled, done, canceled
+    - status: scheduled, pending, done, canceled
     - created_at/updated_at
     """
 
@@ -29,6 +29,7 @@ class Appointment(models.Model):
 
     class Status(models.TextChoices):
         SCHEDULED = "scheduled", "Agendado"
+        PENDING = "pending", "Pendente"
         DONE = "done", "Realizado"
         CANCELED = "canceled", "Cancelado"
 
