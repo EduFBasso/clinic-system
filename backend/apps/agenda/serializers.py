@@ -98,17 +98,21 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "detail": "Somente compromissos ativos podem ser editados."
                 })
+            # Status deve ser resolvido apenas via endpoints dedicados
+            # (/finalize, /cancel, /done), nunca por PATCH generico.
+            if "status" in attrs:
+                new_status = attrs.get("status")
+                if new_status is not None and new_status != inst_status:
+                    raise serializers.ValidationError({
+                        "status": "Use os endpoints dedicados para transição de status (finalize, cancel, done)."
+                    })
             # Se o compromisso já está no passado, bloquear edições genéricas
             # Exceções permitidas:
-            #  - status -> 'done' (finalização)
             #  - encurtar end_at (sem mover início)
             inst_start = getattr(self.instance, 'start_at', None)
             inst_end = getattr(self.instance, 'end_at', None)
             if inst_start and inst_start < now:
                 allowed = False
-                # permitir marcar como done
-                if 'status' in attrs and attrs.get('status') == Appointment.Status.DONE:
-                    allowed = True
                 # permitir apenas encurtar o fim (novo end <= atual end) e não mover início
                 if 'end_at' in attrs and 'start_at' not in attrs:
                     try:
