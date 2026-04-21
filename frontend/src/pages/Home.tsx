@@ -6,6 +6,8 @@ import Faixa from '../components/Faixa';
 import NavBar from '../components/NavBar';
 import MainContent from '../components/MainContent';
 import Footer from '../components/Footer';
+import AppModal from '../components/Modal';
+import ClientView from '../components/ClientView';
 import UpdateBanner from '../components/UpdateBanner';
 import styles from '../styles/pages/Home.module.css';
 // ScheduleModal removido — usamos apenas QuickScheduleModal
@@ -18,6 +20,7 @@ import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import PendingActionsModal from '../components/PendingActionsModal';
 import PageFlashMessage from '../components/PageFlashMessage';
 import type { Appointment } from '../hooks/useAppointments';
+import type { ClientData } from '../types/ClientData';
 import { useAppVersionWatcher, acceptAndReload } from '../hooks/useAppVersion';
 import { useAppointmentsLivePing } from '../hooks/useAppointmentsLivePing';
 import { dispatchers } from '../events/dispatchers';
@@ -52,6 +55,8 @@ export default function Home() {
         null,
     );
     const [quickInitialDraft, setQuickInitialDraft] = useState<QuickScheduleInitialDraft | null>(null);
+    const [clientViewOpen, setClientViewOpen] = useState(false);
+    const [clientViewData, setClientViewData] = useState<ClientData | null>(null);
     const {
         monthlyOpen,
         setMonthlyOpen,
@@ -271,6 +276,42 @@ export default function Home() {
         return () => window.removeEventListener('storage', onStorage);
     }, []);
 
+    const openClientView = React.useCallback((data: ClientData) => {
+        setClientViewData(data);
+        setClientViewOpen(true);
+        try {
+            window.history.pushState({ modal: 'clientView' }, '');
+        } catch {
+            /* noop */
+        }
+    }, []);
+
+    const closeClientView = React.useCallback(() => {
+        setClientViewOpen(false);
+        setClientViewData(null);
+        try {
+            if (
+                window.history.state &&
+                window.history.state.modal === 'clientView'
+            ) {
+                window.history.back();
+            }
+        } catch {
+            /* noop */
+        }
+    }, []);
+
+    useEffect(() => {
+        function onPopState() {
+            if (clientViewOpen) {
+                setClientViewOpen(false);
+                setClientViewData(null);
+            }
+        }
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, [clientViewOpen]);
+
     // Função para abrir o cadastro em nova janela
     const handleAddClient = () => {
         window.open(
@@ -325,6 +366,7 @@ export default function Home() {
                 <MainContent
                     setSelectedClientId={setSelectedClientId}
                     selectedClientId={selectedClientId}
+                    onClientViewData={openClientView}
                 />
                 {/* Route-driven Agenda modals (ScheduleModal removido) */}
                 {routeClient && (
@@ -414,6 +456,14 @@ export default function Home() {
                         onClose={closePendingActions}
                     />
                 )}
+                <AppModal
+                    open={clientViewOpen}
+                    onClose={closeClientView}
+                    showCloseButton
+                    fullScreen
+                >
+                    {clientViewData && <ClientView client={clientViewData} />}
+                </AppModal>
                 {/* Reminder: push notification click focuses the ClientCard directly (no modal) */}
             </div>
         </>

@@ -3,6 +3,7 @@ import { on } from '../events/bus';
 import type {
     OpenAppointmentDetailsPayload,
     OpenDailyAgendaPayload,
+    OpenMonthlyAgendaPayload,
 } from '../events/bus';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
@@ -244,6 +245,18 @@ export function useAgendaModals(): UseAgendaModalsReturn {
             }
         });
 
+        const disposeMonthly = on('openMonthlyAgenda', det => {
+            const ext: OpenMonthlyAgendaPayload = det;
+            if (!ext?.clientId) return;
+            const rawDate = ext.date;
+            if (rawDate) {
+                const d = new Date(rawDate);
+                openMonthly(ext.clientId, isNaN(d.getTime()) ? undefined : d);
+                return;
+            }
+            openMonthly(ext.clientId);
+        });
+
         const disposeDetails = on('openAppointmentDetails', det => {
             const payload = det as OpenAppointmentDetailsPayload;
             const appt = payload.appointment;
@@ -267,10 +280,11 @@ export function useAgendaModals(): UseAgendaModalsReturn {
                 onOpenScheduleEdit as EventListener,
             );
             disposeDaily();
+            disposeMonthly();
             disposeDetails();
             disposeCloseAll();
         };
-    }, [openDaily]);
+    }, [openDaily, openMonthly]);
 
     return {
         monthlyOpen,

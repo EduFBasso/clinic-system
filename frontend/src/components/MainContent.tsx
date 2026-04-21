@@ -23,12 +23,14 @@ function normalizeText(s: string) {
 interface MainContentProps {
     selectedClientId: number | null;
     setSelectedClientId: (id: number | null) => void;
+    onClientViewData?: (client: ClientData) => void;
     // ...outros props se necessário...
 }
 
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
     setSelectedClientId,
+    onClientViewData,
     // ...outros props...
 }) => {
     const { clients, loading, error, setError } = useClients();
@@ -481,6 +483,10 @@ const MainContent: React.FC<MainContentProps> = ({
         })
             .then(res => res.json())
             .then((data: ClientData) => {
+                if (onClientViewData) {
+                    onClientViewData(data);
+                    return;
+                }
                 setSelectedClient(data);
                 setModalOpen(true);
                 // Integração com botão voltar do navegador (especialmente no mobile)

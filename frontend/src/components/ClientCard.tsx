@@ -11,15 +11,12 @@ import { formatPhone } from '../utils/formatPhone';
 import { FaEdit } from 'react-icons/fa';
 import '../styles/palette.css';
 import { parseDOB, calcAge } from '../utils/dateOfBirth';
-import MonthlyAgendaModal from './MonthlyAgendaModal';
-import WeeklyAgendaModal from './WeeklyAgendaModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
 // PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
 import { useClientPendingState } from '../hooks/useClientPendingState';
 import FinalizeButton from './clientCard/FinalizeButton';
 // SolveButton lives in clientCard folder along with FinalizeButton
 import SolveButton from './clientCard/SolveButton';
-import { reanchorClientCard } from './clientCard/reanchorClientCard';
 import { useClientCardFocusScroll } from './clientCard/useClientCardFocusScroll';
 import {
     FutureAppointmentsList,
@@ -33,6 +30,7 @@ import { formatTime } from '../utils/timeFormat';
 import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
 import { useNowTick } from '../hooks/useNowTick';
+import { emit } from '../events/bus';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -50,8 +48,6 @@ export default function ClientCard({
     // Feature flag: disable per-client ongoing probe unless explicitly enabled (reduces debug traffic)
     const ENABLE_ONGOING_PROBE =
         (import.meta as ImportMeta).env.VITE_ENABLE_ONGOING_PROBE === 'true';
-    const [showMonthly, setShowMonthly] = React.useState(false);
-    const [showWeekly, setShowWeekly] = React.useState(false);
     const isScheduled = client.next_appointment_status === 'scheduled';
     // Futuros agora gerenciados por hook dedicado
     const { futureAppointments, loadingFuture, dynLimit } =
@@ -201,6 +197,20 @@ export default function ClientCard({
     );
     const cardRef = React.useRef<HTMLDivElement | null>(null);
     const [budgetOpen, setBudgetOpen] = React.useState(false);
+
+    const openGlobalMonthlyAgenda = React.useCallback(
+        (dateISO?: string | null) => {
+            try {
+                emit('openMonthlyAgenda', {
+                    clientId: client.id,
+                    date: dateISO || undefined,
+                });
+            } catch {
+                /* noop */
+            }
+        },
+        [client.id],
+    );
 
     // Align with global forceClose: ensure any ClientCard modal closes too
     // PendingActions global — sem necessidade de listener local
@@ -517,7 +527,11 @@ export default function ClientCard({
                                         title='Agenda mensal'
                                         onClick={e => {
                                             e.stopPropagation();
-                                            setShowMonthly(true);
+                                            openGlobalMonthlyAgenda(
+                                                displayStartISO ||
+                                                    client.next_appointment_start_at ||
+                                                    null,
+                                            );
                                         }}
                                     >
                                         <FaCalendarAlt color={iconColor} />
@@ -769,7 +783,9 @@ export default function ClientCard({
                         title='Agenda mensal'
                         onClick={e => {
                             e.stopPropagation();
-                            setShowMonthly(true);
+                            openGlobalMonthlyAgenda(
+                                client.next_appointment_start_at || null,
+                            );
                         }}
                     >
                         <FaCalendarAlt color={iconColor} />
@@ -817,22 +833,6 @@ export default function ClientCard({
 
             {/* Linha inferior de atalhos substituída pela seção "Opções da agenda" acima */}
 
-            {showMonthly && (
-                <MonthlyAgendaModal
-                    open={showMonthly}
-                    onClose={() => {
-                        setShowMonthly(false);
-                        reanchorClientCard(client.id);
-                    }}
-                    client={client}
-                />
-            )}
-            {showWeekly && (
-                <WeeklyAgendaModal
-                    open={showWeekly}
-                    onClose={() => setShowWeekly(false)}
-                />
-            )}
             {/* PendingActionsModal é global (Home) */}
             {/* QuickScheduleModal é agora o único fluxo de agendamento (ScheduleModal legacy removido) */}
             {futureAppointments.length > 0 && (

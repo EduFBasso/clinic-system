@@ -26,6 +26,12 @@ export type OpenDailyAgendaPayload =
           focusAppointmentId?: number;
       }
     | undefined; // ISO date optional
+export type OpenMonthlyAgendaPayload =
+    | {
+          clientId: number;
+          date?: string;
+      }
+    | undefined;
 export type AgendaSettingsUpdatedPayload = undefined;
 export type AppointmentsChangedPayload = undefined;
 export type PendingActionsForceClosePayload = undefined;
@@ -58,6 +64,7 @@ export interface EventMap {
     openAppointmentDetails: OpenAppointmentDetailsPayload;
     scrollToClientCard: ScrollToClientCardPayload;
     openDailyAgenda: OpenDailyAgendaPayload;
+    openMonthlyAgenda: OpenMonthlyAgendaPayload;
     agendaSettingsUpdated: AgendaSettingsUpdatedPayload;
     'appointments:changed': AppointmentsChangedPayload;
     'auth:login': AuthLoginPayload;
@@ -77,6 +84,7 @@ export const events: (keyof EventMap)[] = [
     'openAppointmentDetails',
     'scrollToClientCard',
     'openDailyAgenda',
+    'openMonthlyAgenda',
     'agendaSettingsUpdated',
     'appointments:changed',
     'auth:login',
