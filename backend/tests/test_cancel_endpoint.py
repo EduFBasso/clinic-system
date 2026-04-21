@@ -69,8 +69,50 @@ def test_finalize_sets_finalized_at_once(client, django_user_model):
     appt.refresh_from_db()
     first_finalized = appt.finalized_at
     assert first_finalized is not None
+    assert appt.status == Appointment.Status.PENDING
     # Segunda chamada (idempotente) não altera timestamp
     r2 = client.post(f'/agenda/appointments/{appt.id}/finalize/')
     assert r2.status_code == 200
     appt.refresh_from_db()
     assert appt.finalized_at == first_finalized
+
+
+@pytest.mark.django_db
+def test_cancel_pending_sets_canceled_at(client, django_user_model):
+    pro = django_user_model.objects.create_user(email='pc3@example.com', password='x', first_name='PC3', last_name='X3')
+    client.force_login(pro)
+    c = Client.objects.create(professional=pro, first_name='CC3', last_name='LL3')
+    now = timezone.now()
+    appt = Appointment.objects.create(
+        professional=pro,
+        client=c,
+        title='Sessão',
+        start_at=now - timezone.timedelta(minutes=30),
+        end_at=now,
+        status=Appointment.Status.PENDING,
+    )
+    r = client.post(f'/agenda/appointments/{appt.id}/cancel/')
+    assert r.status_code == 200
+    appt.refresh_from_db()
+    assert appt.status == Appointment.Status.CANCELED
+    assert appt.canceled_at is not None
+
+
+@pytest.mark.django_db
+def test_cancel_done_is_rejected(client, django_user_model):
+    pro = django_user_model.objects.create_user(email='pc4@example.com', password='x', first_name='PC4', last_name='X4')
+    client.force_login(pro)
+    c = Client.objects.create(professional=pro, first_name='CC4', last_name='LL4')
+    now = timezone.now()
+    appt = Appointment.objects.create(
+        professional=pro,
+        client=c,
+        title='Sessão',
+        start_at=now - timezone.timedelta(hours=1),
+        end_at=now - timezone.timedelta(minutes=30),
+        status=Appointment.Status.DONE,
+    )
+    r = client.post(f'/agenda/appointments/{appt.id}/cancel/')
+    assert r.status_code == 400
+    appt.refresh_from_db()
+    assert appt.status == Appointment.Status.DONE

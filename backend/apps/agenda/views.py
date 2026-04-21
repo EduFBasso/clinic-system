@@ -132,6 +132,11 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
             return Response({"detail": "forbidden"}, status=403)
         if obj.status == Appointment.Status.CANCELED:
             return Response({"detail": "já cancelado"}, status=200)
+        if obj.status == Appointment.Status.DONE:
+            return Response(
+                {"detail": "compromisso concluído não pode ser cancelado"},
+                status=400,
+            )
         obj.status = Appointment.Status.CANCELED
         from django.utils import timezone as _tz
         if not getattr(obj, "canceled_at", None):
@@ -168,10 +173,10 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="finalize")
     def finalize(self, request, pk=None):
-        """Conclui o compromisso como 'done' sem permitir edição geral.
+        """Encerra a fase programável do compromisso, movendo-o para 'pending'.
 
         Regras:
-        - Apenas o profissional dono pode concluir.
+        - Apenas o profissional dono pode finalizar.
         - Só é permitido se o status atual for 'scheduled'.
         - Permite finalização antecipada durante a janela em andamento (start_at <= now < end_at).
           Não permite antes do início.
@@ -182,6 +187,8 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
         # Permissão explícita
         if getattr(request.user, "id", None) != getattr(obj.professional, "id", None):
             return Response({"detail": "forbidden"}, status=403)
+        if obj.status == obj.Status.PENDING:
+            return Response(self.get_serializer(obj).data, status=200)
         if obj.status == obj.Status.DONE:
             # idempotente
             return Response(self.get_serializer(obj).data, status=200)
@@ -205,8 +212,8 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
             # 422 sinaliza regra de negócio
             return Response({"detail": "compromisso ainda não iniciou", "code": "too_early"}, status=422)
 
-        # Marca como concluído; encurta end_at apenas se em andamento
-        obj.status = obj.Status.DONE
+        # Move para pending; encurta end_at apenas se em andamento
+        obj.status = obj.Status.PENDING
         adjusted = False
         if obj.end_at and now < obj.end_at:
             obj.end_at = now
@@ -266,8 +273,29 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="done")
     def done(self, request, pk=None):
-        """Alias para finalize, por compatibilidade no frontend."""
-        return self.finalize(request, pk)
+        """Resolve explicitamente um compromisso pendente como concluído."""
+        obj = self.get_object()
+        if getattr(request.user, "id", None) != getattr(obj.professional, "id", None):
+            return Response({"detail": "forbidden"}, status=403)
+        if obj.status == obj.Status.DONE:
+            return Response(self.get_serializer(obj).data, status=200)
+        if obj.status == obj.Status.CANCELED:
+            return Response(
+                {"detail": "compromisso cancelado não pode ser concluído"},
+                status=400,
+            )
+        if obj.status != obj.Status.PENDING:
+            return Response(
+                {
+                    "detail": "compromisso deve ser finalizado antes de ser concluído",
+                    "code": "must_finalize_first",
+                },
+                status=409,
+            )
+
+        obj.status = obj.Status.DONE
+        obj.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(obj).data, status=200)
 
 
 class IsStaffOnly(permissions.BasePermission):

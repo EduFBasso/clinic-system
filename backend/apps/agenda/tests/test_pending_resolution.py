@@ -75,7 +75,7 @@ def test_pending_then_cancel_allows_new(auth_client, professional, client_obj):
 
 
 @pytest.mark.django_db
-def test_pending_then_finalize_allows_new(auth_client, professional, client_obj):
+def test_finalize_moves_to_pending_and_done_allows_new(auth_client, professional, client_obj):
     # Cria passado pendente
     base = (timezone.now() - timezone.timedelta(days=1)).replace(minute=0, second=0, microsecond=0)
     past = Appointment.objects.create(
@@ -99,9 +99,19 @@ def test_pending_then_finalize_allows_new(auth_client, professional, client_obj)
     r_block = auth_client.post('/agenda/appointments/', payload, format='json')
     assert r_block.status_code in (400, 422)
 
-    # Finaliza o pendente passado (deve retornar 200 e manter end_at)
+    # Finaliza o compromisso e move para pending
     r_fin = auth_client.post(f'/agenda/appointments/{past.id}/finalize/')
     assert r_fin.status_code == 200, r_fin.content
+    past.refresh_from_db()
+    assert past.status == Appointment.Status.PENDING
+
+    # Enquanto estiver pending ainda deve bloquear novo agendamento
+    r_still_blocked = auth_client.post('/agenda/appointments/', payload, format='json')
+    assert r_still_blocked.status_code in (400, 422)
+
+    # Resolver como done libera criação posterior
+    r_done = auth_client.post(f'/agenda/appointments/{past.id}/done/')
+    assert r_done.status_code == 200, r_done.content
     past.refresh_from_db()
     assert past.status == Appointment.Status.DONE
 
