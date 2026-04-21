@@ -56,7 +56,7 @@ export async function postDone(apptId: number): Promise<boolean> {
 
 export async function patchStatus(
     apptId: number,
-    status: 'done' | 'canceled' | 'scheduled',
+    status: 'pending' | 'done' | 'canceled' | 'scheduled',
 ): Promise<boolean> {
     try {
         const token = localStorage.getItem('accessToken') || '';
@@ -154,7 +154,7 @@ export async function cancelWithAdjust(
                 id: number;
                 start_at: string;
                 end_at: string;
-                status: 'scheduled' | 'done' | 'canceled';
+                status: 'scheduled' | 'pending' | 'done' | 'canceled';
             };
             return d;
         } catch {
@@ -351,8 +351,8 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
             // Build PATCH payload depending on relation between now/start/end
             // Case A: now < start -> move start to now and end to now + 1s
             // Case B: start <= now < end -> set end to now
-            // Case C: now >= end -> just mark done
-            let body: Record<string, unknown> = { status: 'done' };
+            // Case C: now >= end -> just mark pending
+            let body: Record<string, unknown> = { status: 'pending' };
             if (!Number.isNaN(startMs) && nowMs < startMs) {
                 const newStart = new Date(nowMs);
                 const newEnd = new Date(nowMs + 1000); // ensure end > start
@@ -372,7 +372,7 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
                 body = { ...body, end_at: newEnd.toISOString() };
             } else {
                 // now >= end: only status is needed
-                body = { status: 'done' };
+                body = { status: 'pending' };
             }
             const url = `${API_BASE}/agenda/appointments/${apptId}/`;
             const r = await fetch(url, {
@@ -420,17 +420,9 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
         /* ignore */
     }
 
-    // Try alias endpoint
-    try {
-        const ok = await postDone(apptId);
-        if (ok) return true;
-    } catch {
-        /* ignore */
-    }
-
     // Final fallback: force-adjust via PATCH; if that fails, last attempt: status only
     if (await finalizeForceAdjust()) return true;
-    return await patchStatus(apptId, 'done');
+    return await patchStatus(apptId, 'pending');
 }
 
 export async function fetchFutureAppointments(
@@ -443,7 +435,7 @@ export async function fetchFutureAppointments(
         id: number;
         start_at: string;
         end_at: string;
-        status: 'scheduled' | 'done' | 'canceled';
+        status: 'scheduled' | 'pending' | 'done' | 'canceled';
         title?: string;
         notes?: string;
     }>

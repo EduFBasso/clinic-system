@@ -56,9 +56,11 @@ export function useFinalizeAppointment(defaultClientId?: number) {
                 const ok = res.ok;
                 if (!ok) throw new Error('Não foi possível finalizar.');
 
-                // Optimistically mark as done immediately to avoid transient 'ongoing' visuals
+                // Keep the card out of the ongoing state while the consulta flow resolves it.
                 try {
-                    setAppointmentOverride(appointmentId, { status: 'done' });
+                    setAppointmentOverride(appointmentId, {
+                        status: 'pending',
+                    });
                 } catch {
                     /* noop */
                 }
@@ -69,7 +71,7 @@ export function useFinalizeAppointment(defaultClientId?: number) {
                         window.dispatchEvent(
                             new CustomEvent('systemMessage', {
                                 detail: {
-                                    text: 'Atendimento finalizado',
+                                    text: 'Atendimento enviado para pendência.',
                                     type: 'success',
                                 },
                             }),

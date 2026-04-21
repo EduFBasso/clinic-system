@@ -14,7 +14,7 @@ export function useAppointmentCardState(
     appt: {
         start_at: string;
         end_at: string;
-        status: 'scheduled' | 'done' | 'canceled' | 'ongoing';
+        status: 'scheduled' | 'pending' | 'done' | 'canceled' | 'ongoing';
     },
     now: Date,
 ): AppointmentCardState {

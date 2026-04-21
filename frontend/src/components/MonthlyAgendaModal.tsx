@@ -108,7 +108,8 @@ export default function MonthlyAgendaModal({
         return items.filter(a => {
             const ov = getAppointmentOverride(a.id)?.status;
             const status =
-                (ov as 'scheduled' | 'done' | 'canceled') ?? a.status;
+                (ov as 'scheduled' | 'pending' | 'done' | 'canceled') ??
+                a.status;
             const start = new Date(a.start_at);
             const end = new Date(a.end_at);
             switch (statusFilter) {
@@ -119,7 +120,8 @@ export default function MonthlyAgendaModal({
                 case 'ongoing':
                     return status === 'scheduled' && start <= now && end > now;
                 case 'past':
-                    return status === 'scheduled' && end < now;
+                    return status === 'pending' ||
+                        (status === 'scheduled' && end < now);
                 case 'done':
                     return status === 'done';
                 case 'canceled':
@@ -377,15 +379,13 @@ export default function MonthlyAgendaModal({
                                     </div>
 
                                     {(groupedFiltered[dayISO] || []).map(a => {
-                                        const end = new Date(a.end_at);
                                         const now = effectiveNowRef;
                                         const derivedStatus = deriveStatus(
                                             a,
                                             now,
                                         );
                                         const isPending =
-                                            a.status === 'scheduled' &&
-                                            end < now;
+                                            derivedStatus === 'past';
                                         return (
                                             <div
                                                 key={a.id}

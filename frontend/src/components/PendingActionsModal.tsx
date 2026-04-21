@@ -163,14 +163,18 @@ export default function PendingActionsModal({
 
     // Removed global singleton guard; centralized opening is now handled in Home via 'pendingActions:open' events
 
-    // If modal receives a non-scheduled appointment (e.g., canceled/done), auto-close defensively.
+    // If modal receives a terminal appointment (e.g., canceled/done), auto-close defensively.
     React.useEffect(() => {
         if (!open || !appt) return;
         const st = (appt as SharedAppointmentLike).status as string | undefined;
-        if (st && st.toLowerCase() !== 'scheduled') {
+        if (
+            st &&
+            st.toLowerCase() !== 'scheduled' &&
+            st.toLowerCase() !== 'pending'
+        ) {
             try {
                 debugLog(
-                    'PendingActions: auto-close due to non-scheduled status',
+                    'PendingActions: auto-close due to terminal status',
                     {
                         status: st,
                         id: appt.id,
@@ -538,6 +542,7 @@ export default function PendingActionsModal({
     async function doFinalize() {
         if (busy) return;
         setBusy('finalize');
+        setErrorText(null);
         // Captura antes de qualquer operação async (props podem mudar)
         const capturedClientName = clientName;
         const capturedStartAt = appt?.start_at ?? '';
@@ -552,7 +557,10 @@ export default function PendingActionsModal({
                     debugLog('PendingActions: step timeout (auto-continue)');
                 })(),
             ]);
-            const res = await finalizeFlow(id);
+            const res =
+                appt.status === 'pending'
+                    ? { ok: true, status: 200 }
+                    : await finalizeFlow(id);
             debugLog('PendingActions: finalizeFlow response', res);
             if (!res.ok) throw new Error(res.error || 'Falha ao finalizar');
             // Dispara eventos de atualização com pequeno backoff para evitar corrida
@@ -589,18 +597,6 @@ export default function PendingActionsModal({
             } catch {
                 /* noop */
             }
-            // Evento de resolução imediata para limpar pendente no ClientCard
-            try {
-                if (typeof apptClientId === 'number') {
-                    window.dispatchEvent(
-                        new CustomEvent('pending:resolved', {
-                            detail: { clientId: apptClientId, status: 'done' },
-                        }),
-                    );
-                }
-            } catch {
-                /* noop */
-            }
             // Feche primeiro este modal; depois mensagem
             setClosing(true);
             await Promise.race([
@@ -615,21 +611,9 @@ export default function PendingActionsModal({
                 })(),
             ]);
             onClose();
-            // Espera curta para garantir desmontagem antes de abrir SystemMessage
             setTimeout(() => {
                 try {
-                    window.dispatchEvent(
-                        new CustomEvent('systemMessage', {
-                            detail: {
-                                text: 'Atendimento marcado como concluído.',
-                                type: 'success',
-                            },
-                        }),
-                    );
                     window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                    debugLog(
-                        'PendingActions: systemMessage success (finalize)',
-                    );
                 } catch {
                     /* noop */
                 }
@@ -648,6 +632,10 @@ export default function PendingActionsModal({
                             returnContext,
                         },
                     });
+                    debugLog('PendingActions: navigate to consulta', {
+                        id,
+                        status: appt.status,
+                    });
                 } catch {
                     /* noop */
                 }
@@ -663,7 +651,8 @@ export default function PendingActionsModal({
                 }, 120);
             }, 120);
         } catch (e) {
-            const msg = e instanceof Error ? e.message : 'Falha ao concluir';
+            const msg =
+                e instanceof Error ? e.message : 'Falha ao abrir consulta';
             try {
                 window.dispatchEvent(
                     new CustomEvent('systemMessage', {
@@ -824,15 +813,19 @@ export default function PendingActionsModal({
                         }}
                         title={
                             finalizeTimeLock
-                                ? 'Aguardando início para permitir concluir'
-                                : 'Marcar como concluído'
+                                                                ? 'Aguardando início para permitir avançar'
+                                                                : appt.status === 'pending'
+                                                                    ? 'Ir para a consulta'
+                                                                    : 'Encerrar atendimento e seguir para a consulta'
                         }
                     >
                         {busy === 'finalize'
-                            ? 'Concluindo…'
+                                                        ? 'Abrindo…'
                             : finalizeTimeLock
                               ? 'Aguardando início'
-                              : 'Concluir'}
+                                                            : appt.status === 'pending'
+                                                                ? 'Ir para Consulta'
+                                                                : 'Encerrar e Ir'}
                     </button>
                     <button
                         onClick={doCancel}

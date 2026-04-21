@@ -1,9 +1,9 @@
 // Global, ephemeral overrides to smooth out UI after mutations (e.g., finalize)
-// Keeps a minimal in-memory map of appointmentId -> { status?: 'done'|'canceled'|'scheduled' }
+// Keeps a minimal in-memory map of appointmentId -> { status?: 'pending'|'done'|'canceled'|'scheduled' }
 // and a small event bus to notify listeners. This avoids the brief "ongoing" blink
 // right after a finalize until network refetch completes.
 
-type Status = 'scheduled' | 'done' | 'canceled';
+type Status = 'scheduled' | 'pending' | 'done' | 'canceled';
 
 export type Override = {
     status?: Status;

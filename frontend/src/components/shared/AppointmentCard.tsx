@@ -22,7 +22,7 @@ export interface SharedAppointmentLike {
     title?: string;
     start_at: string;
     end_at: string;
-    status: 'scheduled' | 'done' | 'canceled' | 'ongoing';
+    status: 'scheduled' | 'pending' | 'done' | 'canceled' | 'ongoing';
     notes?: string;
     client_name?: string;
     client?: { id: number; name: string } | number;
@@ -119,7 +119,10 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     const apptWithOverride = React.useMemo(() => {
         // Coleta override completo (status + end_at opcional)
         const ov = getAppointmentOverride(appt.id) as
-            | { status?: 'scheduled' | 'done' | 'canceled'; end_at?: string }
+            | {
+                  status?: 'scheduled' | 'pending' | 'done' | 'canceled';
+                  end_at?: string;
+              }
             | undefined;
         if (!ov) return appt;
         return {

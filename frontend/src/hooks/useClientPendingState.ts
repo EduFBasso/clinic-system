@@ -25,8 +25,6 @@ export function useClientPendingState({
     client,
     now,
 }: UseClientPendingParams): UseClientPendingResult {
-    const isScheduled = client.next_appointment_status === 'scheduled';
-
     // Ref keeps the current `now` accessible inside effects without adding it to dep arrays
     // (avoids re-running network effects every 5 s on each clock tick)
     const nowRef = React.useRef(now);
@@ -41,34 +39,15 @@ export function useClientPendingState({
         )
             return true;
 
-        const nowMs = now.getTime();
-
-        // Verifica last_appointment: janela de atendimento que terminou sem resolução.
-        // Cobre o caso "ongoing → pendente" sem precisar de refresh manual:
-        // quando end_at passa, o tick de 5s aciona esta branch automaticamente.
         if (
-            client.last_appointment_status === 'scheduled' &&
-            client.last_appointment_end_at
-        ) {
-            const lastEnd = new Date(client.last_appointment_end_at).getTime();
-            if (!isNaN(lastEnd) && lastEnd <= nowMs) return true;
-        }
-
-        // Caso não esteja em status scheduled mas tenhamos janela encerrada (start/end passados) e um id, tratamos também como pendente heurístico.
-        const eISO = client.next_appointment_end_at;
-        if (!eISO) return false;
-        const e = new Date(eISO).getTime();
-        if (isNaN(e) || e > nowMs) return false;
-        if (isScheduled) return true; // scheduled + fim passado => pendente
-        // Accept status null (sem atualização ainda) como heurístico se fim passou e existe id
-        if (
-            client.next_appointment_status == null &&
-            client.next_appointment_id != null
+            client.next_appointment_status === 'pending' ||
+            client.last_appointment_status === 'pending'
         ) {
             return true;
         }
+
         return false;
-    }, [client, now, isScheduled]);
+    }, [client]);
 
     // Override: busca no servidor se nenhum dos critérios acima detectou, mas pode haver pendência "oculta"
     const [pendingOverride, setPendingOverride] = React.useState(false);
@@ -154,27 +133,18 @@ export function useClientPendingState({
         };
     }, [client.next_appointment_id]);
 
-    // Reset local resolved flag quando dados do cliente mudam para fora de scheduled ou janela deixa de ser pendente
+    // Reset local resolved flag quando dados do cliente confirmam estado terminal
     React.useEffect(() => {
         if (!pendingResolvedLocal) return;
-        // Se status não é mais scheduled ou end_at passa a ser > now (nova janela futura) limpamos flag
-        const endISO = client.next_appointment_end_at;
-        const endMs = endISO ? new Date(endISO).getTime() : NaN;
-        // Limpa apenas quando servidor confirma status terminal (done/canceled)
-        // ou quando chega novo agendamento futuro (end_at > now).
-        // null = servidor não retorna agendamentos passados — não indica resolução.
         const shouldClear =
             client.next_appointment_status === 'done' ||
-            client.next_appointment_status === 'canceled' ||
-            (isFinite(endMs) && endMs > now.getTime());
+            client.next_appointment_status === 'canceled';
         if (shouldClear) {
             setPendingResolvedLocal(false);
         }
     }, [
         pendingResolvedLocal,
         client.next_appointment_status,
-        client.next_appointment_end_at,
-        now,
     ]);
 
     // Histerese de ENTRADA: aguardamos breve atraso antes de confirmar estado pendente para suavizar transições

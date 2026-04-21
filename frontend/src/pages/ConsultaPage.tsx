@@ -9,6 +9,7 @@ import FormPage from '../components/FormKit/FormPage';
 import FormSection from '../components/FormKit/FormSection';
 import { useNavigate } from 'react-router-dom';
 import { useConsultaPageContext } from '../hooks/useConsultaPageContext';
+import { postDone } from '../services/appointments';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -488,6 +489,14 @@ export default function ConsultaPage() {
                     method: 'POST',
                     body: payload,
                 });
+            }
+            if (apptState.appointmentId) {
+                const markedDone = await postDone(apptState.appointmentId);
+                if (!markedDone) {
+                    throw new Error(
+                        'O registro foi salvo, mas não foi possível concluir o atendimento.',
+                    );
+                }
             }
             handleSuccessfulRegister();
         } catch (err) {

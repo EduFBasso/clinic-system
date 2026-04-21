@@ -3,7 +3,6 @@ import ensureDeviceSession from '../sessions';
 import { buildDeviceHeaders } from '../device';
 import { getServerNowOnce } from '../time';
 import { setAppointmentOverride } from '../../utils/appointments/overrides';
-import { emit } from '../../events/bus';
 
 export interface FinalizeFlowResult {
     ok: boolean;
@@ -49,12 +48,12 @@ async function forceAdjust(apptId: number): Promise<boolean> {
     const nowMs = now.getTime();
     const startMs = new Date(appt.start_at).getTime();
     const endMs = new Date(appt.end_at).getTime();
-    let body: Record<string, unknown> = { status: 'done' };
+    let body: Record<string, unknown> = { status: 'pending' };
     if (!Number.isNaN(startMs) && nowMs < startMs) {
         const newStart = new Date(nowMs);
         const newEnd = new Date(nowMs + 1000);
         body = {
-            status: 'done',
+            status: 'pending',
             start_at: newStart.toISOString(),
             end_at: newEnd.toISOString(),
         };
@@ -64,7 +63,7 @@ async function forceAdjust(apptId: number): Promise<boolean> {
         startMs <= nowMs &&
         nowMs < endMs
     ) {
-        body = { status: 'done', end_at: new Date(nowMs).toISOString() };
+        body = { status: 'pending', end_at: new Date(nowMs).toISOString() };
     }
     const token = localStorage.getItem('accessToken') || '';
     const headers: Record<string, string> = {
@@ -153,20 +152,17 @@ export async function finalizeFlow(
         }
     }
     if (r && r.ok) {
+        const data = (await r.json().catch(() => null)) as
+            | { end_at?: string; status?: string }
+            | null;
         const serverNow = await getServerNowOnce();
         const nowIso = (serverNow ?? new Date()).toISOString();
         setAppointmentOverride(apptId, {
-            status: 'done',
-            real_closed_at: nowIso,
-            real_closed_reason: 'done',
+            status: 'pending',
+            end_at: data?.end_at || nowIso,
             ...(originalEnd ? { original_end_at: originalEnd } : null),
         });
-        try {
-            emit('pendingActions:forceClose', undefined);
-        } catch {
-            /* noop */
-        }
-        log('optimistic-done', { apptId, status: r.status });
+        log('optimistic-pending', { apptId, status: r.status, data });
         return { ok: true, status: r.status };
     }
     if (r && r.status === 422) {
@@ -179,74 +175,18 @@ export async function finalizeFlow(
                     const serverNow = await getServerNowOnce();
                     const nowIso = (serverNow ?? new Date()).toISOString();
                     setAppointmentOverride(apptId, {
-                        status: 'done',
-                        real_closed_at: nowIso,
-                        real_closed_reason: 'done',
+                        status: 'pending',
+                        end_at: nowIso,
                         ...(originalEnd
                             ? { original_end_at: originalEnd }
                             : null),
                     });
-                    try {
-                        emit('pendingActions:forceClose', undefined);
-                    } catch {
-                        /* noop */
-                    }
                     return { ok: true, status: 200, adjusted: true };
                 }
             }
         } catch {
             /* ignore parse or forceAdjust error */
         }
-    }
-    // Alias endpoint fallback
-    try {
-        const aliasHeaders: Record<string, string> = {};
-        Object.assign(aliasHeaders, buildDeviceHeaders(), {
-            'X-Client-Now': new Date().toISOString(),
-        });
-        if (token) aliasHeaders['Authorization'] = `Bearer ${token}`;
-        const rAlias = await fetch(
-            `${API_BASE}/agenda/appointments/${apptId}/done/`,
-            { method: 'POST', headers: aliasHeaders },
-        );
-        if (rAlias.ok) {
-            const serverNow = await getServerNowOnce();
-            const nowIso = (serverNow ?? new Date()).toISOString();
-            setAppointmentOverride(apptId, {
-                status: 'done',
-                real_closed_at: nowIso,
-                real_closed_reason: 'done',
-                ...(originalEnd ? { original_end_at: originalEnd } : null),
-            });
-            try {
-                emit('pendingActions:forceClose', undefined);
-            } catch {
-                /* noop */
-            }
-            log('alias-success', { apptId, status: rAlias.status });
-            return { ok: true, status: rAlias.status };
-        }
-    } catch (e) {
-        log('alias-error', { apptId, error: String(e) });
-    }
-
-    // Force adjust final fallback
-    if (await forceAdjust(apptId)) {
-        const serverNow = await getServerNowOnce();
-        const nowIso = (serverNow ?? new Date()).toISOString();
-        setAppointmentOverride(apptId, {
-            status: 'done',
-            real_closed_at: nowIso,
-            real_closed_reason: 'done',
-            ...(originalEnd ? { original_end_at: originalEnd } : null),
-        });
-        try {
-            emit('pendingActions:forceClose', undefined);
-        } catch {
-            /* noop */
-        }
-        log('force-final-fallback', { apptId });
-        return { ok: true, status: 200, adjusted: true };
     }
     const elapsed = Math.round(performance.now() - t0);
     log('finalize-fail', { apptId, elapsed, status: r?.status });

@@ -49,7 +49,6 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         }
 
         async function onOpenPending(det: PendingActionsOpenDetail) {
-
             try {
                 const stack = new Error().stack;
                 window.dispatchEvent(
@@ -93,7 +92,6 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
             }
 
             if (det.appt) {
-                setPendingReturnContext(null);
                 const rcTs = det.appt.id
                     ? recentCanceled.get(det.appt.id)
                     : undefined;
@@ -155,12 +153,16 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
                 );
                 if (!r.ok) throw new Error('Falha ao carregar agendamento');
                 const data = await r.json();
-                if (data.status && data.status !== 'scheduled') {
+                if (
+                    data.status &&
+                    data.status !== 'scheduled' &&
+                    data.status !== 'pending'
+                ) {
                     try {
                         window.dispatchEvent(
                             new CustomEvent('debug:log', {
                                 detail: {
-                                    label: 'Home: skipped open (status not scheduled)',
+                                    label: 'Home: skipped open (status not pending/scheduled)',
                                     data: { apptId, status: data.status },
                                     ts: Date.now(),
                                 },
@@ -182,7 +184,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
                     title: data.title,
                 };
                 setPendingAppt(appt);
-                setPendingReturnContext(null);
+                setPendingReturnContext(det.returnContext ?? null);
                 setPendingActionsOpen(true);
             } catch (err) {
                 const msg =

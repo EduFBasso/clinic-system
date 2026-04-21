@@ -16,7 +16,7 @@ vi.mock('../../services/pending', () => ({
         id: 777,
         start_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
         end_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        status: 'scheduled',
+        status: 'pending',
         title: 'Sessão correta',
         notes: 'Notas',
         client: 153,
@@ -30,12 +30,13 @@ interface TestClient {
     last_name: string;
     phone: string;
     email: string;
-    next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;
+    next_appointment_status?: 'scheduled' | 'pending' | 'done' | 'canceled' | null;
     next_appointment_start_at?: string | null;
     next_appointment_end_at?: string | null;
     next_appointment_id?: number | null;
     next_appointment_title?: string | null;
     next_appointment_notes?: string | null;
+    last_appointment_status?: 'scheduled' | 'pending' | 'done' | 'canceled' | null;
     has_pending_appointment?: boolean; // ativará heurística
 }
 
