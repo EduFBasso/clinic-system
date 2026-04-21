@@ -4,6 +4,7 @@ import AppModal from './Modal';
 import { clearOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
 import { dispatchers } from '../events/dispatchers';
+import { emit } from '../events/bus';
 import { cancelFlow } from '../services/flows/cancelFlow';
 import { finalizeFlow } from '../services/flows/finalizeFlow';
 import { formatTime } from '../utils/timeFormat';
@@ -617,6 +618,12 @@ export default function PendingActionsModal({
                 } catch {
                     /* noop */
                 }
+                // Fecha todos os modais de agenda antes de navegar (evita fundo vazando)
+                try {
+                    emit('agenda:closeAll', undefined);
+                } catch {
+                    /* noop */
+                }
                 // Navega para ConsultaPage com dados do atendimento
                 try {
                     navigate('/consulta', {
@@ -693,7 +700,7 @@ export default function PendingActionsModal({
                 data-appt-id={appt?.id ?? undefined}
                 data-instance={instanceId}
             >
-                <h3 style={{ margin: 0 }}>Consulta — Ação em Pendente</h3>
+                <h3 style={{ margin: 0 }}>Ação Pendente</h3>
                 <div style={{ display: 'grid', gap: 6 }}>
                     <div>
                         <span style={labelStyle}>Cliente: </span>

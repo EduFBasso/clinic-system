@@ -29,6 +29,7 @@ export type OpenDailyAgendaPayload =
 export type AgendaSettingsUpdatedPayload = undefined;
 export type AppointmentsChangedPayload = undefined;
 export type PendingActionsForceClosePayload = undefined;
+export type AgendaCloseAllPayload = undefined;
 export type EnsureScrollUnlockedPayload = undefined;
 export type AuthLoginPayload = undefined;
 export type AuthLogoutPayload = {
@@ -67,6 +68,7 @@ export interface EventMap {
     'client:clearOngoing': ClientClearOngoingPayload;
     'appointment:statusChanged': AppointmentStatusChangedPayload;
     'modal:closed': ModalClosedPayload;
+    'agenda:closeAll': AgendaCloseAllPayload;
     ensureScrollUnlocked: EnsureScrollUnlockedPayload;
 }
 
@@ -85,6 +87,7 @@ export const events: (keyof EventMap)[] = [
     'client:clearOngoing',
     'appointment:statusChanged',
     'modal:closed',
+    'agenda:closeAll',
     'ensureScrollUnlocked',
 ];
 

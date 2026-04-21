@@ -19,6 +19,9 @@ import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 import type { PendingReturnContext } from '../types/agendaFlow';
+import QuickScheduleModal from './QuickScheduleModal';
+import { makeClientBasic } from '../utils/appointments/agendaHelpers';
+import type { ClientBasic } from '../types/ClientBasic';
  
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -328,6 +331,16 @@ function WeeklyAgendaContent({
         useAppointmentDetailsModal<Appointment>();
     // PendingActions é global — nenhum estado local necessário
 
+    // QuickSchedule: abrir em modo edição ao tocar no cartão
+    const [qsOpen, setQsOpen] = React.useState(false);
+    const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
+    const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
+    const closeQuickSchedule = React.useCallback(() => {
+        setQsOpen(false);
+        setQsEdit(null);
+        setQsClient(null);
+    }, []);
+
     const headerTitle = 'Agenda';
     const weekRangeLabel = React.useMemo(() => {
         const first = days[0];
@@ -543,6 +556,16 @@ function WeeklyAgendaContent({
                                                     width: '100%',
                                                 }}
                                                 showEditAction={false}
+                                                onEdit={
+                                                    derivedStatus === 'scheduled'
+                                                        ? appt => {
+                                                              const client = makeClientBasic(appt);
+                                                              setQsClient(client);
+                                                              setQsEdit(appt as Appointment);
+                                                              setQsOpen(true);
+                                                          }
+                                                        : undefined
+                                                }
                                                 onClick={() =>
                                                     setSelected(iso, 'user')
                                                 }
@@ -598,6 +621,18 @@ function WeeklyAgendaContent({
 
             {detailsModal}
             {/* PendingActionsModal é global (Home) */}
+            {qsOpen && qsClient && (
+                <QuickScheduleModal
+                    open={qsOpen}
+                    onClose={closeQuickSchedule}
+                    client={qsClient}
+                    editAppointment={qsEdit}
+                    afterPersist={(_, action) => {
+                        if (action === 'updated') closeQuickSchedule();
+                        setReloadKey(x => x + 1);
+                    }}
+                />
+            )}
         </div>
     );
 }

@@ -254,6 +254,13 @@ export function useAgendaModals(): UseAgendaModalsReturn {
             }
         });
 
+        const disposeCloseAll = on('agenda:closeAll', () => {
+            setDailyOpen(false);
+            setMonthlyOpen(false);
+            setWeeklyOpen(false);
+            setQuickOpen(false);
+        });
+
         return () => {
             window.removeEventListener(
                 'openScheduleEdit',
@@ -261,6 +268,7 @@ export function useAgendaModals(): UseAgendaModalsReturn {
             );
             disposeDaily();
             disposeDetails();
+            disposeCloseAll();
         };
     }, [openDaily]);
 
