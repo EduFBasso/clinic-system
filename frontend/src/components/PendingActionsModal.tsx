@@ -545,6 +545,7 @@ export default function PendingActionsModal({
         setBusy('finalize');
         setErrorText(null);
         // Captura antes de qualquer operação async (props podem mudar)
+        const capturedStatus = appt?.status ?? 'scheduled';
         const capturedClientName = clientName;
         const capturedStartAt = appt?.start_at ?? '';
         const capturedEndAt = appt?.end_at ?? '';
@@ -559,7 +560,7 @@ export default function PendingActionsModal({
                 })(),
             ]);
             const res =
-                appt.status === 'pending'
+                capturedStatus === 'pending'
                     ? { ok: true, status: 200 }
                     : await finalizeFlow(id);
             debugLog('PendingActions: finalizeFlow response', res);
@@ -641,7 +642,7 @@ export default function PendingActionsModal({
                     });
                     debugLog('PendingActions: navigate to consulta', {
                         id,
-                        status: appt.status,
+                        status: capturedStatus,
                     });
                 } catch {
                     /* noop */
@@ -802,7 +803,7 @@ export default function PendingActionsModal({
                                 /* noop */
                             }
                         }}
-                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
+                        className='ui-btn ui-btn--neutral'
                         disabled={!!busy || closing}
                     >
                         Fechar
@@ -810,14 +811,11 @@ export default function PendingActionsModal({
                     <button
                         onClick={doFinalize}
                         disabled={!!busy || closing || finalizeTimeLock}
-                        style={{
-                            padding: '8px 12px',
-                            background: 'var(--color-done)',
-                            color: '#fff',
-                            fontWeight: 700,
-                            opacity: finalizeTimeLock ? 0.6 : 1,
-                            border: '1px solid color-mix(in oklab, var(--color-done) 60%, #0000)',
-                        }}
+                        className={`ui-btn ${
+                            finalizeTimeLock
+                                ? 'ui-btn--disabled'
+                                : 'ui-btn--secondary'
+                        }`}
                         title={
                             finalizeTimeLock
                                                                 ? 'Aguardando início para permitir avançar'
@@ -837,12 +835,7 @@ export default function PendingActionsModal({
                     <button
                         onClick={doCancel}
                         disabled={!!busy || closing}
-                        style={{
-                            padding: '8px 12px',
-                            background: '#ef4444',
-                            color: 'var(--color-bg-section)',
-                            fontWeight: 700,
-                        }}
+                        className='ui-btn ui-btn--danger'
                         title={
                             hasPaidCharge
                                 ? 'Cancelar compromisso com cobrança paga associada'

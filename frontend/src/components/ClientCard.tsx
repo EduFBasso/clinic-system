@@ -501,6 +501,9 @@ export default function ClientCard({
                                         // Usa mesma lógica do minicard daily: tenta abrir pendente ou fallback rápido
                                         await tryOpenPendingElseQuick(() => {
                                             // Se não houver nada pendente inesperadamente, apenas não faz nada (ou poderíamos abrir criação)
+                                        }, {
+                                            kind: 'home',
+                                            clientId: client.id,
                                         });
                                     }}
                                 />
@@ -823,6 +826,9 @@ export default function ClientCard({
                             }
                             await tryOpenPendingElseQuick(() => {
                                 /* noop fallback */
+                            }, {
+                                kind: 'home',
+                                clientId: client.id,
                             });
                         }}
                     />

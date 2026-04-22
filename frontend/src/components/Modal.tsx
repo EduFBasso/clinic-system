@@ -668,6 +668,24 @@ export default function AppModal(props: AppModalProps) {
         <Modal
             open={open}
             onClose={handleMuiClose}
+            sx={{ zIndex: 3000 }}
+            slotProps={{
+                root: {
+                    style: {
+                        zIndex: open ? 3000 : 0,
+                        pointerEvents: open ? 'auto' : 'none',
+                    },
+                },
+                backdrop: {
+                    style: {
+                        zIndex: open ? 2999 : 0,
+                        pointerEvents: open ? 'auto' : 'none',
+                    },
+                },
+            }}
+            // Em fullScreen o próprio conteúdo já cobre toda a viewport,
+            // então evitamos backdrop do MUI para não criar camada extra de clique.
+            hideBackdrop={fullScreen}
             disableEscapeKeyDown={disableEscapeKeyDown || !closeOnEscape}
             // Apenas mantém montado quando não pedimos unmount explícito
             keepMounted={!unmountOnClose}
@@ -781,7 +799,7 @@ export default function AppModal(props: AppModalProps) {
                                   overscrollBehaviorX: 'none',
                                   pointerEvents: 'auto',
                                   // Garante que o conteúdo esteja acima do overlay e de backdrops residuais
-                                  zIndex: 1310,
+                                  zIndex: 3001,
                                   // Overlays fixos para pintar áreas seguras (top já existe via ::before condicional; adicionamos ::after sempre para o bottom)
                                   '&::after': {
                                       content: '""',
@@ -818,6 +836,8 @@ export default function AppModal(props: AppModalProps) {
                                   // Permite ajustar a altura máxima por modal
                                   maxHeight: `calc(var(--appmodal-vh, 1vh) * ${maxHeightVh})`,
                                   position: 'absolute' as const,
+                                    // Conteúdo deve ficar acima do backdrop global do MUI.
+                                    zIndex: 3001,
                                   WebkitOverflowScrolling: 'touch',
                               }
                     }

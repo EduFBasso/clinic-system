@@ -840,31 +840,18 @@ export default function QuickScheduleModal({
                         >
                             <button
                                 onClick={handleImmediateClose}
-                                style={{
-                                    padding: '8px 12px',
-                                    background: '#e5e7eb',
-                                }}
+                                className='ui-btn ui-btn--neutral'
                                 disabled={saving}
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleSave}
-                                style={{
-                                    padding: '8px 12px',
-                                    background:
-                                        !isEditing && isSelectedPast
-                                            ? '#9ca3af'
-                                            : '#059669',
-                                    color: '#fff',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                    cursor:
-                                        !isEditing && isSelectedPast
-                                            ? 'not-allowed'
-                                            : 'pointer',
-                                }}
+                                className={`ui-btn ${
+                                    !isEditing && isSelectedPast
+                                        ? 'ui-btn--disabled'
+                                        : 'ui-btn--primary'
+                                }`}
                                 disabled={saving || (!isEditing && isSelectedPast)}
                                 title={
                                     !isEditing && isSelectedPast
@@ -873,18 +860,7 @@ export default function QuickScheduleModal({
                                 }
                             >
                                 {saving && (
-                                    <span
-                                        style={{
-                                            width: 14,
-                                            height: 14,
-                                            borderRadius: '50%',
-                                            border: '2px solid rgba(255,255,255,0.6)',
-                                            borderTopColor:
-                                                'rgba(255,255,255,1)',
-                                            animation:
-                                                'qsSpin 0.8s linear infinite',
-                                        }}
-                                    />
+                                    <span className='ui-btn__spinner' />
                                 )}
                                 {saving
                                     ? 'Salvando...'

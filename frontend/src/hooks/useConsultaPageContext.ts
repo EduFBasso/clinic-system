@@ -9,6 +9,7 @@ const CONSULTA_PAGE_CONTEXT_KEY = 'consultaPageContext';
 const RESUME_QUICK_SCHEDULE_KEY = 'resumeQuickSchedule';
 const RESUME_AGENDA_MODAL_KEY = 'resumeAgendaModal';
 const RESUME_DESKTOP_AGENDA_KEY = 'resumeDesktopAgenda';
+const RESUME_HOME_FOCUS_KEY = 'resumeHomeFocus';
 const REOPEN_APPOINTMENT_DETAILS_KEY = 'reopenAppointmentDetails';
 
 export interface ConsultaPageState<TItem = unknown> {
@@ -104,6 +105,21 @@ function persistResumeDesktopAgenda(returnContext?: PendingReturnContext) {
     return true;
 }
 
+function persistResumeHomeFocus(returnContext?: PendingReturnContext) {
+    if (returnContext?.kind !== 'home') return false;
+
+    try {
+        sessionStorage.setItem(
+            RESUME_HOME_FOCUS_KEY,
+            JSON.stringify({ clientId: returnContext.clientId }),
+        );
+    } catch {
+        /* noop */
+    }
+
+    return true;
+}
+
 function persistReopenAppointmentDetails(
     payload?: ReopenAppointmentDetailsContext,
 ) {
@@ -178,6 +194,11 @@ export function useConsultaPageContext<TItem>(params: {
 
         if (persistResumeDesktopAgenda(apptState.returnContext)) {
             navigate('/desktop');
+            return;
+        }
+
+        if (persistResumeHomeFocus(apptState.returnContext)) {
+            navigate('/');
             return;
         }
 

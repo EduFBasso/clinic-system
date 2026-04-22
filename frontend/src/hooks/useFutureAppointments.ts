@@ -12,7 +12,7 @@ export function useFutureAppointments(
             id: number;
             start_at: string;
             end_at: string;
-            status: 'scheduled' | 'done' | 'canceled';
+            status: 'scheduled' | 'pending' | 'done' | 'canceled';
             title?: string;
             notes?: string;
         }>

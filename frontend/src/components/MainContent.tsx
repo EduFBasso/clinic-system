@@ -6,7 +6,6 @@ import { useClients } from '../hooks/useClients';
 import ClientCard from './ClientCard';
 import type { ClientBasic } from '../types/ClientBasic';
 import AppModal from './Modal';
-import ClientView from './ClientView';
 import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
 import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
@@ -36,10 +35,6 @@ const MainContent: React.FC<MainContentProps> = ({
     const { clients, loading, error, setError } = useClients();
     const [filter, setFilter] = useState('');
     const [showPending, setShowPending] = useState(false);
-    const [selectedClient, setSelectedClient] = useState<ClientData | null>(
-        null,
-    );
-    const [modalOpen, setModalOpen] = useState(false);
     const [noResultsOpen, setNoResultsOpen] = useState(false);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
@@ -56,8 +51,6 @@ const MainContent: React.FC<MainContentProps> = ({
         }
 
         setSelectedClientId(null);
-        setSelectedClient(null);
-        setModalOpen(false);
         setError(
             'Sessão expirada ou usuário não autenticado. Faça login novamente.',
         );
@@ -69,8 +62,6 @@ const MainContent: React.FC<MainContentProps> = ({
     React.useEffect(() => {
         const handleClear = () => {
             setFilter('');
-            setSelectedClient(null);
-            setModalOpen(false);
             setNoResultsOpen(false);
         };
         window.addEventListener('clearClients', handleClear);
@@ -85,7 +76,6 @@ const MainContent: React.FC<MainContentProps> = ({
             if (action === 'clearFilter') {
                 localStorage.removeItem('postDeleteAction');
                 setFilter('');
-                setSelectedClient(null);
                 setSelectedClientId(null);
                 setNoResultsOpen(false);
                 lastNotifiedFilterRef.current = '';
@@ -483,55 +473,12 @@ const MainContent: React.FC<MainContentProps> = ({
         })
             .then(res => res.json())
             .then((data: ClientData) => {
-                if (onClientViewData) {
-                    onClientViewData(data);
-                    return;
-                }
-                setSelectedClient(data);
-                setModalOpen(true);
-                // Integração com botão voltar do navegador (especialmente no mobile)
-                // Empurra um novo estado; ao voltar (popstate) fechamos o modal.
-                try {
-                    window.history.pushState({ modal: 'clientView' }, '');
-                } catch (err) {
-                    // ignora navegadores antigos sem history API
-                    void err;
-                }
+                onClientViewData?.(data);
             })
             .catch(() => {
                 alert('Erro ao buscar dados completos do cliente');
             });
     }
-
-    function handleCloseModal() {
-        setModalOpen(false);
-        setSelectedClient(null);
-        // Se o histórico tiver um estado de modal, volta um passo para restaurar URL anterior
-        try {
-            if (
-                window.history.state &&
-                window.history.state.modal === 'clientView'
-            ) {
-                window.history.back();
-            }
-        } catch (err) {
-            void err;
-        }
-        // Após fechar o modal, garante refresh e desbloqueio
-        refreshAndUnlock();
-    }
-
-    // Fecha modal quando usuário pressiona o botão voltar (popstate) se o modal estiver aberto
-    React.useEffect(() => {
-        function onPopState() {
-            if (modalOpen) {
-                setModalOpen(false);
-                setSelectedClient(null);
-            }
-        }
-        window.addEventListener('popstate', onPopState);
-        return () => window.removeEventListener('popstate', onPopState);
-    }, [modalOpen]);
 
     return (
         <main className={styles.main}>
@@ -641,14 +588,6 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 ))}
             </div>
-            <AppModal
-                open={modalOpen}
-                onClose={handleCloseModal}
-                showCloseButton
-                fullScreen
-            >
-                {selectedClient && <ClientView client={selectedClient} />}
-            </AppModal>
 
             {/* Confirmation modal for Agenda selection */}
             <AppModal

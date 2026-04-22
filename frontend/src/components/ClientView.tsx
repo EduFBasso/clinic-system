@@ -16,6 +16,7 @@ interface ClientViewProps {
         address_number?: string | null;
         date_of_birth?: string | null;
     };
+    openToken?: number;
 }
 
 // ── label maps ──────────────────────────────────────────────────────────────
@@ -98,7 +99,18 @@ function ViewSection({
 
 // ── main component ───────────────────────────────────────────────────────────
 
-const ClientView: React.FC<ClientViewProps> = ({ client }) => {
+const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
+    const rootRef = React.useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const node = rootRef.current;
+        if (!node) return;
+        node.scrollTop = 0;
+        requestAnimationFrame(() => {
+            node.scrollTop = 0;
+        });
+    }, [client.id, openToken]);
+
     const photoUrl = client.photo || null;
     const initials = React.useMemo(() => {
         const fn = String(client.first_name || '').trim();
@@ -149,15 +161,16 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
         ['nationality', 'Nacionalidade'],
     ];
 
-    const personalRows = personalFields
-        .filter(([k]) => {
-            const v = client[k];
-            return v !== null && v !== undefined && v !== '';
-        })
-        .map(([k, label]) => ({
+    const personalRows = personalFields.map(([k, label]) => {
+        const raw = client[k];
+        const hasValue = raw !== null && raw !== undefined && raw !== '';
+        return {
             label,
-            value: formatField(k, client[k], client as ClientData),
-        }));
+            value: hasValue
+                ? formatField(k, raw, client as ClientData)
+                : '-',
+        };
+    });
 
     // Add Código at the top
     if (client.id) {
@@ -174,15 +187,16 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
         ['state', 'Estado'],
     ];
 
-    const addressRows = addressFields
-        .filter(([k]) => {
-            const v = client[k];
-            return v !== null && v !== undefined && v !== '';
-        })
-        .map(([k, label]) => ({
+    const addressRows = addressFields.map(([k, label]) => {
+        const raw = client[k];
+        const hasValue = raw !== null && raw !== undefined && raw !== '';
+        return {
             label,
-            value: formatField(k, client[k], client as ClientData),
-        }));
+            value: hasValue
+                ? formatField(k, raw, client as ClientData)
+                : '-',
+        };
+    });
 
     // ── Anamnese sectors ─────────────────────────────────────────────────────
     const sectorMap = new Map<
@@ -200,7 +214,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
     );
 
     return (
-        <div className={styles.viewRoot}>
+        <div ref={rootRef} className={styles.viewRoot}>
             {/* ── Header: avatar + nome ── */}
             <div data-theme='blue' className={styles.headerCard}>
                 {photoUrl ? (
@@ -229,7 +243,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client }) => {
                         {initials}
                     </div>
                 )}
-                <div>
+                <div className={styles.headerText}>
                     <div className={styles.clientName}>
                         {client.first_name} {client.last_name}
                     </div>

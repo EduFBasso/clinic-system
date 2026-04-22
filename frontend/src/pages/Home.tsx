@@ -57,6 +57,7 @@ export default function Home() {
     const [quickInitialDraft, setQuickInitialDraft] = useState<QuickScheduleInitialDraft | null>(null);
     const [clientViewOpen, setClientViewOpen] = useState(false);
     const [clientViewData, setClientViewData] = useState<ClientData | null>(null);
+    const [clientViewOpenToken, setClientViewOpenToken] = useState(0);
     const {
         monthlyOpen,
         setMonthlyOpen,
@@ -278,6 +279,7 @@ export default function Home() {
 
     const openClientView = React.useCallback((data: ClientData) => {
         setClientViewData(data);
+        setClientViewOpenToken(prev => prev + 1);
         setClientViewOpen(true);
         try {
             window.history.pushState({ modal: 'clientView' }, '');
@@ -383,6 +385,12 @@ export default function Home() {
                         client={routeClient}
                         editAppointment={routeEditAppt}
                         initialDraft={quickInitialDraft}
+                        afterPersist={(_, action) => {
+                            if (action !== 'created') return;
+                            setSelectedClientId(routeClient.id);
+                            focusClientCard(routeClient.id, { delayMs: 260 });
+                            focusClientCard(routeClient.id, { delayMs: 760 });
+                        }}
                     />
                 )}
                 {routeClient && (
@@ -461,8 +469,14 @@ export default function Home() {
                     onClose={closeClientView}
                     showCloseButton
                     fullScreen
+                    disableOuterScroll
                 >
-                    {clientViewData && <ClientView client={clientViewData} />}
+                    {clientViewData && (
+                        <ClientView
+                            client={clientViewData}
+                            openToken={clientViewOpenToken}
+                        />
+                    )}
                 </AppModal>
                 {/* Reminder: push notification click focuses the ClientCard directly (no modal) */}
             </div>

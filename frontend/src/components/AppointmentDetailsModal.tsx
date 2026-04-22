@@ -787,14 +787,8 @@ export default function AppointmentDetailsModal({
                 >
                     <button
                         onClick={openConsultaNotebook}
+                        className='ui-btn ui-btn--secondary'
                         style={{
-                            padding: '8px 16px',
-                            background: 'var(--color-primary)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 6,
-                            fontWeight: 600,
-                            cursor: 'pointer',
                             flex: isCompactViewport ? '1 1 180px' : undefined,
                         }}
                     >
@@ -802,9 +796,8 @@ export default function AppointmentDetailsModal({
                     </button>
                     <button
                         onClick={onClose}
+                        className='ui-btn ui-btn--neutral'
                         style={{
-                            padding: '8px 12px',
-                            background: '#e5e7eb',
                             flex: isCompactViewport ? '1 1 140px' : undefined,
                         }}
                     >

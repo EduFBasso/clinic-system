@@ -1,4 +1,5 @@
 import React from 'react';
+import { FaCalendarAlt } from 'react-icons/fa';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { useStickyHeaderHeight } from '../hooks/useStickyHeaderHeight';
 import AppModal from './Modal';
@@ -313,15 +314,10 @@ export default function WeeklyPreviewModal({
                                 onClick={() =>
                                     setAnchorDate(startOfDay(new Date()))
                                 }
+                                className='ui-btn ui-btn--primary'
                                 style={{
-                                    fontSize: 'var(--font-body)',
-                                    fontWeight: 700,
+                                    minHeight: 32,
                                     padding: '4px 10px',
-                                    border: 'none',
-                                    background: 'var(--color-success-dark)',
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    color: 'white',
                                 }}
                                 aria-label='Ir para hoje'
                             >
@@ -347,7 +343,7 @@ export default function WeeklyPreviewModal({
                                     userSelect: 'none',
                                 }}
                             >
-                                📆
+                                <FaCalendarAlt />
                             </button>
                         </div>
                         <div

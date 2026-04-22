@@ -94,6 +94,49 @@
     --card-radius: 8px; /* raio da borda do cartão */
     --card-padding-md: 8px 10px; /* padding padrão */
     --card-padding-compact: 6px 8px; /* padding compacto */
+
+    /* Shared control tokens - first step for CSS consolidation */
+    --radius-control: 6px;
+    --radius-surface: 8px;
+    --radius-panel: 10px;
+    --button-padding-sm: 6px 10px;
+    --button-padding-md: 8px 20px;
+    --button-padding-lg: 8px 24px;
+    --button-font-weight: 700;
+    --shadow-soft-sm: 0 2px 16px var(--color-shadow);
+
+    /* Semantic action button tokens */
+    --btn-radius: 6px;
+    --btn-font-weight: 700;
+    --btn-padding-md: 8px 12px;
+
+    --btn-primary-bg: var(--color-success-dark);
+    --btn-primary-border: var(--color-success-darker);
+    --btn-primary-text: #ffffff;
+
+    --btn-secondary-bg: var(--color-done);
+    --btn-secondary-border: color-mix(
+        in oklab,
+        var(--color-done) 60%,
+        #0000
+    );
+    --btn-secondary-text: #ffffff;
+
+    --btn-neutral-bg: #e5e7eb;
+    --btn-neutral-border: #d1d5db;
+    --btn-neutral-text: #1f2937;
+
+    --btn-danger-bg: var(--color-canceled);
+    --btn-danger-border: var(--color-danger-dark);
+    --btn-danger-text: #ffffff;
+
+    --btn-theme-bg: var(--color-primary);
+    --btn-theme-border: color-mix(in oklab, var(--color-primary) 70%, #0000);
+    --btn-theme-text: #ffffff;
+
+    --btn-disabled-bg: #9ca3af;
+    --btn-disabled-border: #9ca3af;
+    --btn-disabled-text: #f9fafb;
 }
 
 /* Removido override mobile para manter contraste entre cartões e fundo do main */

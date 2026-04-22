@@ -221,6 +221,7 @@ export default function MonthlyAgendaModal({
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <button
+                        className='ui-btn ui-btn--primary'
                         onClick={() => {
                             const now = new Date();
                             setMonth(startOfMonth(now));
@@ -231,16 +232,6 @@ export default function MonthlyAgendaModal({
                                 );
                                 if (el) el.scrollIntoView({ block: 'start' });
                             });
-                        }}
-                        style={{
-                            fontSize: 'var(--font-body)',
-                            fontWeight: 700,
-                            padding: '4px 10px',
-                            border: '1px solid var(--color-success-darker)',
-                            background: 'var(--color-success-dark)',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            color: 'white',
                         }}
                         aria-label='Ir para o mês atual'
                     >
@@ -533,12 +524,12 @@ export default function MonthlyAgendaModal({
                                 }}
                             >
                                 <button
+                                    className='ui-btn ui-btn--secondary'
                                     onClick={() =>
                                         setVisibleDaysCount(c =>
                                             Math.min(c + 7, sortedDays.length),
                                         )
                                     }
-                                    style={{ padding: '8px 12px' }}
                                     aria-label='Carregar mais dias'
                                 >
                                     Mostrar mais dias

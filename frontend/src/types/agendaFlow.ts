@@ -38,12 +38,18 @@ export interface DesktopAgendaReturnContext {
     focusAppointmentId?: number;
 }
 
+export interface HomeReturnContext {
+    kind: 'home';
+    clientId: number;
+}
+
 export type PendingReturnContext =
     | QuickScheduleReturnContext
     | DailyAgendaReturnContext
     | WeeklyAgendaReturnContext
     | MonthlyAgendaReturnContext
     | DesktopAgendaReturnContext
+    | HomeReturnContext
     | null;
 
 export interface PendingActionsOpenDetail {

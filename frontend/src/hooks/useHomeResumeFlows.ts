@@ -8,6 +8,7 @@ import type {
 } from '../types/agendaFlow';
 import type { Appointment } from './useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
+import { focusClientCard } from '../utils/focusClientCard';
 
 type SysMsg = {
     text: string;
@@ -18,6 +19,7 @@ type SysMsg = {
 const LOGIN_REQUIRED_MSG_KEY = 'loginRequiredMsg';
 const RESUME_QUICK_SCHEDULE_KEY = 'resumeQuickSchedule';
 const RESUME_AGENDA_MODAL_KEY = 'resumeAgendaModal';
+const RESUME_HOME_FOCUS_KEY = 'resumeHomeFocus';
 const REOPEN_APPOINTMENT_DETAILS_KEY = 'reopenAppointmentDetails';
 
 function consumeString(key: string) {
@@ -84,6 +86,22 @@ export function useHomeResumeFlows(params: {
                         .catch(() => {
                             /* noop */
                         });
+                }
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+
+        const resumeHomeRaw = consumeString(RESUME_HOME_FOCUS_KEY);
+        if (resumeHomeRaw) {
+            try {
+                const parsed = JSON.parse(resumeHomeRaw) as {
+                    clientId?: number;
+                };
+                if (typeof parsed.clientId === 'number') {
+                    focusClientCard(parsed.clientId, { delayMs: 180 });
+                    focusClientCard(parsed.clientId, { delayMs: 680 });
                 }
             } catch {
                 /* noop */

@@ -77,11 +77,18 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
                     aria-label='Abrir seletor de data'
                     title='Selecionar dia'
                     style={{
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-bg)',
-                        padding: 6,
+                        width: 32,
+                        height: 32,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'none',
+                        border: 'none',
                         borderRadius: 6,
                         cursor: 'pointer',
+                        color: 'var(--color-success-dark)',
+                        fontSize: 'var(--icon-size-lg)',
+                        userSelect: 'none',
                         flex: '0 0 auto',
                     }}
                 >

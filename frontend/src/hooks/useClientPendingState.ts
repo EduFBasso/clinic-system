@@ -6,6 +6,7 @@ import {
 } from '../utils/appointments/overrides';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import type { ClientBasic } from '../types/ClientBasic';
+import type { PendingReturnContext } from '../types/agendaFlow';
 
 interface UseClientPendingParams {
     client: ClientBasic;
@@ -16,8 +17,11 @@ interface UseClientPendingResult {
     isPendingHeuristic: boolean;
     pendingOverride: boolean;
     effectivePending: boolean;
-    openPendingActions: () => void;
-    tryOpenPendingElseQuick: (onNoPending: () => void) => Promise<void>;
+    openPendingActions: (returnContext?: PendingReturnContext) => void;
+    tryOpenPendingElseQuick: (
+        onNoPending: () => void,
+        returnContext?: PendingReturnContext,
+    ) => Promise<void>;
 }
 
 // Centraliza toda a lógica de pendência (flags futuras + heurística + override assíncrono)
@@ -180,7 +184,7 @@ export function useClientPendingState({
         effectivePending = false;
     }
 
-    const openPendingActions = React.useCallback(async () => {
+    const openPendingActions = React.useCallback(async (returnContext?: PendingReturnContext) => {
         let sISO = client.next_appointment_start_at || undefined;
         let eISO = client.next_appointment_end_at || undefined;
         let id = client.next_appointment_id ?? undefined;
@@ -219,18 +223,21 @@ export function useClientPendingState({
             return;
         }
 
-        openPendingActionsForAppointment(id);
+        openPendingActionsForAppointment(id, returnContext);
     }, [client, now, effectivePending]);
 
     const tryOpenPendingElseQuick = React.useCallback(
-        async (onNoPending: () => void) => {
+        async (
+            onNoPending: () => void,
+            returnContext?: PendingReturnContext,
+        ) => {
             if (effectivePending) {
-                await openPendingActions();
+                await openPendingActions(returnContext);
                 return;
             }
             const appt = await findFirstPendingForClient(client.id, now);
             if (appt) {
-                openPendingActionsForAppointment(appt);
+                openPendingActionsForAppointment(appt, returnContext);
                 return;
             }
             onNoPending();

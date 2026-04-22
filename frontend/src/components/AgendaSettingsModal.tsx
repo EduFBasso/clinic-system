@@ -363,7 +363,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 <div className={modalStyles.buttonBar}>
                     <button
                         type='button'
-                        className={`${modalStyles.buttonBase} ${modalStyles.secondary}`}
+                        className='ui-btn ui-btn--neutral'
                         onClick={resetDefaults}
                         disabled={isAtDefaults()}
                     >
@@ -371,13 +371,13 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                     </button>
                     <button
                         type='submit'
-                        className={`${modalStyles.buttonBase} ${modalStyles.primary}`}
+                        className='ui-btn ui-btn--theme'
                     >
                         Salvar
                     </button>
                     <button
                         type='button'
-                        className={`${modalStyles.buttonBase} ${modalStyles.secondary}`}
+                        className='ui-btn ui-btn--neutral'
                         onClick={onClose}
                     >
                         Fechar

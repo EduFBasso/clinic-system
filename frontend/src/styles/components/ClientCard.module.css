@@ -2,7 +2,7 @@
 .card {
     background-color: var(--card-bg);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-surface);
     padding: 1rem;
     box-shadow: 0 2px 4px var(--color-shadow);
     width: 100%;
@@ -115,7 +115,7 @@
     justify-content: center;
     width: 30px; /* uniform size for leading action icons */
     height: 30px;
-    border-radius: 6px;
+    border-radius: var(--radius-control);
 }
 /* On touch/coarse pointers, increase tap target for better ergonomics */
 @media (pointer: coarse) {
@@ -144,7 +144,7 @@
     color: #fff;
     font-family: inherit;
     line-height: 1;
-    border-radius: 3px; /* cantos retos padronizados */
+    border-radius: var(--radius-control);
     padding: 5px 9px;
     font-size: 1rem;
     font-weight: 500;
@@ -213,10 +213,10 @@
     border: 1px solid var(--color-border);
     background: var(--color-bg);
     color: var(--color-heading);
-    padding: 6px 10px;
+    padding: var(--button-padding-sm);
     font-size: 13px;
     line-height: 1.2;
-    border-radius: 6px;
+    border-radius: var(--radius-control);
     display: inline-flex;
     align-items: center;
     gap: 6px;
