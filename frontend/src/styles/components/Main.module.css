@@ -7,6 +7,7 @@
     ); /* altura da viewport - header/faixa/footer */
     padding: 1rem;
     background-color: var(--color-bg);
+    overflow-x: clip;
     /* A área principal deve rolar sob header+faixa+navbar. Não aplicar overflow aqui para não quebrar sticky. */
 }
 
@@ -25,9 +26,13 @@
     isolation: isolate; /* cria novo contexto de empilhamento para mascarar conteúdo abaixo */
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
-    /* Evita que a máscara lateral (::before) force rolagem horizontal */
+    /* Evita scroll lateral, mantendo abertura vertical do menu. */
     overflow-x: clip;
     overflow-y: visible;
+}
+
+.filterContainerMenuOpen {
+    z-index: 95;
 }
 
 /* Garanta que o conteúdo (rótulo e input) fique acima das máscaras (::before/::after) */
@@ -67,14 +72,8 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    max-width: 640px; /* não ocupar 100% em telas largas */
+    max-width: 100%;
     padding: 0; /* acompanha o padding do .main para alinhamento à esquerda */
-}
-
-.filterLabel {
-    margin-right: 0.5rem;
-    font-weight: 700; /* destacar o texto 'Filtrar Cliente' */
-    color: var(--color-primary);
 }
 
 .filterInput {
@@ -85,7 +84,28 @@
     min-width: 0;
 }
 
-.pendingFilterBtn {
+.filterActionsDesktop {
+    display: none;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.filterActionsMobile {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.filtersMenuBackdrop {
+    position: fixed;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    z-index: 4;
+}
+
+.filterToggleBtn {
     flex-shrink: 0;
     padding: 0.4rem 0.6rem;
     background: #111827;
@@ -100,16 +120,66 @@
     text-align: center;
 }
 
-.pendingFilterBtn:hover {
+.filterToggleBtn:hover {
     background: #374151;
 }
 
-.pendingFilterBtnActive {
+.filterToggleBtnActive {
     background: #dc2626;
 }
 
-.pendingFilterBtnActive:hover {
+.filterToggleBtnActive:hover {
     background: #b91c1c;
+}
+
+.filtersMenuButton {
+    min-width: 92px;
+    padding: 0.45rem 0.65rem;
+    background: #111827;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+.filtersMenuButtonActive {
+    background: #dc2626;
+}
+
+.filtersMenuPanel {
+    position: fixed;
+    min-width: 180px;
+    max-width: min(92vw, 220px);
+    background: var(--color-card-bg, #fff);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.14);
+    display: grid;
+    gap: 0;
+    z-index: 5;
+    overflow: hidden;
+}
+
+.filtersMenuItem {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    text-align: left;
+    padding: 0.62rem 0.75rem;
+    font-size: 0.9rem;
+    color: var(--color-text, #1f2937);
+}
+
+.filtersMenuItem + .filtersMenuItem {
+    border-top: 1px solid var(--color-border);
+}
+
+.filtersMenuItemActive {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    font-weight: 700;
 }
 
 /* Grade dos cartões: sempre em uma coluna para evitar desalinhamentos em larguras intermediárias */
@@ -158,7 +228,26 @@
     }
     .filterRow {
         max-width: 100%;
-        padding: 0 0.5rem;
+        padding: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+    }
+
+    .filterInput {
+        flex: 1 1 auto;
+        max-width: none;
+        width: auto;
+    }
+
+    .filtersMenuButton {
+        min-width: 86px;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+
+    .filterActionsMobile {
+        justify-self: end;
     }
 }
 
@@ -172,6 +261,14 @@
 
 /* Desktop: limitar a largura máxima do input do filtro a 35% da página */
 @media screen and (min-width: 665px) {
+    .filterActionsDesktop {
+        display: inline-flex;
+    }
+
+    .filterActionsMobile {
+        display: none;
+    }
+
     .filterInput {
         flex: 0 1 35vw; /* não cresce além de 35% da página */
         max-width: 35vw; /* teto absoluto */

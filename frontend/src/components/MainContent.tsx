@@ -26,6 +26,41 @@ interface MainContentProps {
     // ...outros props se necessário...
 }
 
+type FilterMode = 'all' | 'pending' | 'today' | 'tomorrow';
+
+interface PendingAppointmentLike {
+    id: number;
+    status: 'scheduled' | 'pending';
+    start_at?: string;
+    end_at?: string;
+    client?: number | { id?: number } | null;
+}
+
+function unwrapAppointmentsList(
+    payload: unknown,
+): PendingAppointmentLike[] {
+    if (Array.isArray(payload)) {
+        return payload as PendingAppointmentLike[];
+    }
+    if (
+        payload &&
+        typeof payload === 'object' &&
+        Array.isArray((payload as { results?: unknown[] }).results)
+    ) {
+        return (payload as { results: PendingAppointmentLike[] }).results;
+    }
+    return [];
+}
+
+function resolveAppointmentClientId(appt: PendingAppointmentLike): number | null {
+    if (typeof appt.client === 'number') return appt.client;
+    if (appt.client && typeof appt.client === 'object') {
+        const id = appt.client.id;
+        return typeof id === 'number' ? id : null;
+    }
+    return null;
+}
+
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
     setSelectedClientId,
@@ -34,7 +69,11 @@ const MainContent: React.FC<MainContentProps> = ({
 }) => {
     const { clients, loading, error, setError } = useClients();
     const [filter, setFilter] = useState('');
-    const [showPending, setShowPending] = useState(false);
+    const [filterMode, setFilterMode] = useState<FilterMode>('all');
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [pendingClientIds, setPendingClientIds] = useState<Set<number>>(
+        () => new Set(),
+    );
     const [noResultsOpen, setNoResultsOpen] = useState(false);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
@@ -44,6 +83,84 @@ const MainContent: React.FC<MainContentProps> = ({
         null,
     );
     const lastNotifiedFilterRef = React.useRef<string>('');
+    const mobileFiltersOpenedAtRef = React.useRef(0);
+    const mobileFiltersButtonRef = React.useRef<HTMLButtonElement | null>(
+        null,
+    );
+    const [mobileFiltersMenuStyle, setMobileFiltersMenuStyle] = React.useState<
+        React.CSSProperties
+    >({});
+
+    const updateMobileFiltersMenuPosition = React.useCallback(() => {
+        const button = mobileFiltersButtonRef.current;
+        if (!button) return;
+
+        const rect = button.getBoundingClientRect();
+        const menuWidth = Math.min(220, Math.max(180, Math.round(rect.width * 2.1)));
+        const viewportWidth = window.innerWidth;
+        const left = Math.max(
+            16,
+            Math.min(rect.right - menuWidth, viewportWidth - menuWidth - 16),
+        );
+
+        setMobileFiltersMenuStyle({
+            top: rect.bottom + 8,
+            left,
+            width: menuWidth,
+        });
+    }, []);
+
+    const openMobileFilters = React.useCallback(() => {
+        updateMobileFiltersMenuPosition();
+        mobileFiltersOpenedAtRef.current = Date.now();
+        setMobileFiltersOpen(true);
+    }, [updateMobileFiltersMenuPosition]);
+
+    const closeMobileFilters = React.useCallback(() => {
+        setMobileFiltersOpen(false);
+    }, []);
+
+    const closeMobileFiltersFromBackdrop = React.useCallback(() => {
+        if (Date.now() - mobileFiltersOpenedAtRef.current < 250) {
+            return;
+        }
+        setMobileFiltersOpen(false);
+    }, []);
+
+    React.useEffect(() => {
+        if (!mobileFiltersOpen) return;
+
+        const handleViewportChange = () => {
+            updateMobileFiltersMenuPosition();
+        };
+
+        window.addEventListener('resize', handleViewportChange);
+        window.addEventListener('scroll', handleViewportChange, true);
+        window.visualViewport?.addEventListener('resize', handleViewportChange);
+        window.visualViewport?.addEventListener('scroll', handleViewportChange);
+
+        return () => {
+            window.removeEventListener('resize', handleViewportChange);
+            window.removeEventListener('scroll', handleViewportChange, true);
+            window.visualViewport?.removeEventListener(
+                'resize',
+                handleViewportChange,
+            );
+            window.visualViewport?.removeEventListener(
+                'scroll',
+                handleViewportChange,
+            );
+        };
+    }, [mobileFiltersOpen, updateMobileFiltersMenuPosition]);
+
+    const applyFilterMode = React.useCallback(
+        (mode: FilterMode) => {
+            setFilterMode(prev => (prev === mode ? 'all' : mode));
+            setFilter('');
+            closeMobileFilters();
+        },
+        [closeMobileFilters],
+    );
 
     const requireActiveSession = React.useCallback(() => {
         if (hasActiveSession()) {
@@ -313,23 +430,138 @@ const MainContent: React.FC<MainContentProps> = ({
         ),
     );
 
-    // Clientes com compromisso pendente.
-    // O backend popula next_appointment_* apenas com start_at >= now (futuro),
-    // portanto um compromisso passado não finalizado aparece em last_appointment_status='scheduled'.
-    // Excluímos appointments que ainda estão em andamento (start_at < now < end_at) — esses
-    // são "ongoing" pelo horário e não devem aparecer como pendentes.
-    const pendingClients = React.useMemo(() => {
-        const nowMs = Date.now();
+    const sortByPeriodThenTime = React.useCallback(
+        (a: ClientBasic, b: ClientBasic) => {
+            const getPeriodRank = (iso?: string | null) => {
+                if (!iso) return 99;
+                const d = new Date(iso);
+                const hour = d.getHours();
+                if (hour < 12) return 0; // morning
+                if (hour < 18) return 1; // tarde
+                return 2; // noite
+            };
+
+            const ra = getPeriodRank(a.next_appointment_start_at);
+            const rb = getPeriodRank(b.next_appointment_start_at);
+            if (ra !== rb) return ra - rb;
+
+            const ta = a.next_appointment_start_at
+                ? new Date(a.next_appointment_start_at).getTime()
+                : Number.MAX_SAFE_INTEGER;
+            const tb = b.next_appointment_start_at
+                ? new Date(b.next_appointment_start_at).getTime()
+                : Number.MAX_SAFE_INTEGER;
+            return ta - tb;
+        },
+        [],
+    );
+
+    const isSameLocalDay = React.useCallback((iso: string, target: Date) => {
+        const d = new Date(iso);
+        return (
+            d.getFullYear() === target.getFullYear() &&
+            d.getMonth() === target.getMonth() &&
+            d.getDate() === target.getDate()
+        );
+    }, []);
+
+    const todayClients = React.useMemo(() => {
+        const today = new Date();
         return clients
             .filter(c => {
-                if (c.last_appointment_status !== 'scheduled') return false;
-                // Se temos end_at e ele ainda não passou, o atendimento está em andamento
-                if (c.last_appointment_end_at) {
-                    const endMs = new Date(c.last_appointment_end_at).getTime();
-                    if (!isNaN(endMs) && endMs > nowMs) return false;
-                }
-                return true;
+                if (c.next_appointment_status !== 'scheduled') return false;
+                if (!c.next_appointment_start_at) return false;
+                return isSameLocalDay(c.next_appointment_start_at, today);
             })
+            .sort(sortByPeriodThenTime);
+    }, [clients, isSameLocalDay, sortByPeriodThenTime]);
+
+    const tomorrowClients = React.useMemo(() => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return clients
+            .filter(c => {
+                if (c.next_appointment_status !== 'scheduled') return false;
+                if (!c.next_appointment_start_at) return false;
+                return isSameLocalDay(c.next_appointment_start_at, tomorrow);
+            })
+            .sort(sortByPeriodThenTime);
+    }, [clients, isSameLocalDay, sortByPeriodThenTime]);
+
+    // Clientes com compromisso pendente.
+    // A lista é derivada de consultas globais da agenda:
+    // - status='pending' (persistido)
+    // - status='scheduled' com end_at <= now (vencido, ainda não finalizado)
+    // Isso evita divergência entre status visual dos cards e o toggle no topo.
+    React.useEffect(() => {
+        let cancelled = false;
+
+        async function loadPendingClientIds() {
+            const token = localStorage.getItem('accessToken');
+            if (!token || clients.length === 0) {
+                if (!cancelled) setPendingClientIds(new Set());
+                return;
+            }
+
+            const nowMs = Date.now();
+            const headers = { Authorization: `Bearer ${token}` };
+            const pendingUrl = `${API_BASE}/agenda/appointments/?status=pending&ordering=-end_at&limit=300&ts=${Date.now()}`;
+            const scheduledUrl = `${API_BASE}/agenda/appointments/?status=scheduled&ordering=-end_at&limit=300&ts=${Date.now()}`;
+
+            try {
+                const [pendingRes, scheduledRes] = await Promise.all([
+                    fetch(pendingUrl, { headers, cache: 'no-store' }),
+                    fetch(scheduledUrl, { headers, cache: 'no-store' }),
+                ]);
+
+                const pendingData = pendingRes.ok
+                    ? unwrapAppointmentsList(await pendingRes.json())
+                    : [];
+                const scheduledData = scheduledRes.ok
+                    ? unwrapAppointmentsList(await scheduledRes.json())
+                    : [];
+
+                const ids = new Set<number>();
+
+                pendingData.forEach(appt => {
+                    const clientId = resolveAppointmentClientId(appt);
+                    if (clientId != null) ids.add(clientId);
+                });
+
+                scheduledData.forEach(appt => {
+                    const endMs = appt.end_at
+                        ? new Date(appt.end_at).getTime()
+                        : NaN;
+                    if (!Number.isFinite(endMs) || endMs > nowMs) return;
+
+                    const clientId = resolveAppointmentClientId(appt);
+                    if (clientId != null) ids.add(clientId);
+                });
+
+                if (!cancelled) {
+                    setPendingClientIds(ids);
+                }
+            } catch {
+                if (!cancelled) setPendingClientIds(new Set());
+            }
+        }
+
+        void loadPendingClientIds();
+
+        const onUpdateClients = () => {
+            void loadPendingClientIds();
+        };
+        window.addEventListener('updateClients', onUpdateClients);
+
+        return () => {
+            cancelled = true;
+            window.removeEventListener('updateClients', onUpdateClients);
+        };
+    }, [clients.length]);
+
+    const pendingClients = React.useMemo(() => {
+        return clients
+            .filter(c => pendingClientIds.has(c.id))
             .sort((a, b) => {
                 const ta = a.last_appointment_start_at
                     ? new Date(a.last_appointment_start_at).getTime()
@@ -338,17 +570,32 @@ const MainContent: React.FC<MainContentProps> = ({
                     ? new Date(b.last_appointment_start_at).getTime()
                     : 0;
                 return ta - tb;
-            });
-    }, [clients]);
+                });
+            }, [clients, pendingClientIds]);
 
     const pendingCount = pendingClients.length;
+    const todayCount = todayClients.length;
+    const tomorrowCount = tomorrowClients.length;
 
     // Se o filtro de pendentes estiver ativo mas não houver mais pendentes, desativa
     React.useEffect(() => {
-        if (showPending && pendingCount === 0) setShowPending(false);
-    }, [showPending, pendingCount]);
+        if (filterMode === 'pending' && pendingCount === 0) {
+            setFilterMode('all');
+        }
+    }, [filterMode, pendingCount]);
 
-    const displayedClients = showPending ? pendingClients : filteredClients;
+    const displayedClients = React.useMemo(() => {
+        if (filterMode === 'pending') return pendingClients;
+        if (filterMode === 'today') return todayClients;
+        if (filterMode === 'tomorrow') return tomorrowClients;
+        return filteredClients;
+    }, [
+        filterMode,
+        pendingClients,
+        todayClients,
+        tomorrowClients,
+        filteredClients,
+    ]);
 
     // Abre modal de "Nenhum cliente encontrado" quando não houver resultados.
     React.useEffect(() => {
@@ -482,16 +729,10 @@ const MainContent: React.FC<MainContentProps> = ({
 
     return (
         <main className={styles.main}>
-            <div className={styles.filterContainer}>
+            <div
+                className={`${styles.filterContainer}${mobileFiltersOpen ? ` ${styles.filterContainerMenuOpen}` : ''}`}
+            >
                 <div className={styles.filterRow}>
-                    {pendingCount === 0 && (
-                        <label
-                            htmlFor='client-filter'
-                            className={styles.filterLabel}
-                        >
-                            Filtrar Cliente:
-                        </label>
-                    )}
                     <input
                         id='client-filter'
                         type='text'
@@ -500,25 +741,103 @@ const MainContent: React.FC<MainContentProps> = ({
                         value={filter}
                         onChange={e => {
                             setFilter(e.target.value);
-                            if (showPending) setShowPending(false);
+                            if (filterMode !== 'all') setFilterMode('all');
                         }}
                     />
-                    {pendingCount > 0 && (
+                    <div className={styles.filterActionsDesktop}>
                         <button
-                            className={`${styles.pendingFilterBtn}${showPending ? ' ' + styles.pendingFilterBtnActive : ''}`}
-                            onClick={() => {
-                                setShowPending(p => !p);
-                                setFilter('');
-                            }}
-                            title={
-                                showPending
-                                    ? 'Mostrar todos os clientes'
-                                    : `${pendingCount} compromisso${pendingCount > 1 ? 's' : ''} n\u00e3o finalizado${pendingCount > 1 ? 's' : ''}`
-                            }
+                            className={`${styles.filterToggleBtn}${filterMode === 'pending' ? ' ' + styles.filterToggleBtnActive : ''}`}
+                            onClick={() => applyFilterMode('pending')}
+                            title='Filtrar por compromissos pendentes'
                         >
                             {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
                         </button>
-                    )}
+                        <button
+                            className={`${styles.filterToggleBtn}${filterMode === 'today' ? ' ' + styles.filterToggleBtnActive : ''}`}
+                            onClick={() => applyFilterMode('today')}
+                            title='Filtrar compromissos de hoje'
+                        >
+                            Hoje {todayCount > 0 ? `(${todayCount})` : ''}
+                        </button>
+                        <button
+                            className={`${styles.filterToggleBtn}${filterMode === 'tomorrow' ? ' ' + styles.filterToggleBtnActive : ''}`}
+                            onClick={() => applyFilterMode('tomorrow')}
+                            title='Filtrar compromissos de amanhã'
+                        >
+                            Amanhã {tomorrowCount > 0 ? `(${tomorrowCount})` : ''}
+                        </button>
+                    </div>
+
+                    <div className={styles.filterActionsMobile}>
+                        <button
+                            ref={mobileFiltersButtonRef}
+                            className={`${styles.filtersMenuButton}${filterMode !== 'all' ? ' ' + styles.filtersMenuButtonActive : ''}`}
+                            onClick={e => {
+                                e.stopPropagation();
+                                if (mobileFiltersOpen) {
+                                    closeMobileFilters();
+                                } else {
+                                    openMobileFilters();
+                                }
+                            }}
+                            aria-expanded={mobileFiltersOpen}
+                            aria-haspopup='menu'
+                            title='Abrir filtros'
+                        >
+                            Filtros
+                        </button>
+
+                        {mobileFiltersOpen && (
+                            <button
+                                type='button'
+                                className={styles.filtersMenuBackdrop}
+                                onClick={closeMobileFiltersFromBackdrop}
+                                aria-label='Fechar filtros'
+                            />
+                        )}
+
+                        {mobileFiltersOpen && (
+                            <div
+                                className={styles.filtersMenuPanel}
+                                style={mobileFiltersMenuStyle}
+                                role='menu'
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <button
+                                    className={`${styles.filtersMenuItem}${filterMode === 'all' ? ' ' + styles.filtersMenuItemActive : ''}`}
+                                    onClick={() => {
+                                        setFilterMode('all');
+                                        setFilter('');
+                                        closeMobileFilters();
+                                    }}
+                                    role='menuitem'
+                                >
+                                    Sem filtro
+                                </button>
+                                <button
+                                    className={`${styles.filtersMenuItem}${filterMode === 'pending' ? ' ' + styles.filtersMenuItemActive : ''}`}
+                                    onClick={() => applyFilterMode('pending')}
+                                    role='menuitem'
+                                >
+                                    Pendentes ({pendingCount})
+                                </button>
+                                <button
+                                    className={`${styles.filtersMenuItem}${filterMode === 'today' ? ' ' + styles.filtersMenuItemActive : ''}`}
+                                    onClick={() => applyFilterMode('today')}
+                                    role='menuitem'
+                                >
+                                    Hoje ({todayCount})
+                                </button>
+                                <button
+                                    className={`${styles.filtersMenuItem}${filterMode === 'tomorrow' ? ' ' + styles.filtersMenuItemActive : ''}`}
+                                    onClick={() => applyFilterMode('tomorrow')}
+                                    role='menuitem'
+                                >
+                                    Amanhã ({tomorrowCount})
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
             {loading && clients.length === 0 && (
