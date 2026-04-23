@@ -12,9 +12,9 @@
     background-color: var(--color-selected-bg);
     /* Uniformiza espessura com estado normal para evitar salto visual em ongoing */
     border: 1px solid var(--color-selected-border);
-    /* Shadow mais sutil mantendo foco */
+    /* Mantém o destaque dentro do cartão para não vazar sob o filtro sticky */
     box-shadow:
-        0 0 0 2px var(--color-selected-border),
+        inset 0 0 0 1px var(--color-selected-border),
         0 3px 8px rgba(0, 0, 0, 0.16);
     transition:
         background 0.25s,
@@ -168,12 +168,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     display: -webkit-box;
+    line-clamp: 1;
     -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
 }
 
 .notesText {
     display: -webkit-box;
+    line-clamp: 3;
     -webkit-line-clamp: 3; /* allow up to 3 lines before truncation */
     -webkit-box-orient: vertical;
     overflow: hidden;

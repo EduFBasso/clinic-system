@@ -1,4 +1,3 @@
-import React from 'react';
 import { emit } from '../../events/bus';
 import { formatTime } from '../../utils/timeFormat';
 import styles from '../../styles/components/ClientCard.module.css';

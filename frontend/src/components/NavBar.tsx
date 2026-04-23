@@ -685,6 +685,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 !loginEmail ||
                                 totpCode.length !== 6
                             }
+                            aria-busy={loadingOtp}
                             onClick={async () => {
                                 setLoadingOtp(true);
                                 try {
@@ -798,7 +799,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 setLoadingOtp(false);
                             }}
                         >
-                            Entrar
+                            {loadingOtp ? 'Entrando...' : 'Entrar'}
                         </button>
                     </>
                 )}

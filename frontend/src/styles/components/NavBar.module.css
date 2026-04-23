@@ -165,18 +165,45 @@
 }
 
 .loginButton {
+    -webkit-appearance: none;
+    appearance: none;
     background-color: var(--color-primary);
     color: var(--color-bg-section);
-    border: none;
+    border: 1px solid var(--color-primary);
     padding: 0.5rem 1rem;
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition:
+        background-color 0.3s ease,
+        color 0.2s ease,
+        border-color 0.2s ease,
+        opacity 0.2s ease;
 }
 
 .loginButton:hover {
     background-color: var(--color-primary-light);
     color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.loginButton:focus-visible {
+    background-color: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.loginButton:active:not(:disabled) {
+    background-color: color-mix(in oklab, var(--color-primary) 88%, black 12%);
+    color: var(--color-bg-section);
+    border-color: color-mix(in oklab, var(--color-primary) 88%, black 12%);
+}
+
+.loginButton:disabled {
+    background-color: var(--color-primary);
+    color: var(--color-bg-section);
+    border-color: var(--color-primary);
+    opacity: 0.64;
+    cursor: not-allowed;
 }
 
 .logoutButton {

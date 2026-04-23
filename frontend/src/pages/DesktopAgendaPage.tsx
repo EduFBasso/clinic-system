@@ -14,7 +14,6 @@ import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
-    isClientLike,
     makeClientBasic,
     matchesStatusFilter,
     type ClientLike,
@@ -158,7 +157,6 @@ export default function DesktopAgendaPage() {
             .catch(() => {
                 /* noop */
             });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location]);
 
     const dayStart = React.useMemo(

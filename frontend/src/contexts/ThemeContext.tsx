@@ -14,8 +14,29 @@ export type AppTheme = 'blue' | 'green' | 'pink' | 'black';
 const VALID_THEMES: AppTheme[] = ['blue', 'green', 'pink', 'black'];
 const DEFAULT_THEME: AppTheme = 'blue';
 
+const THEME_META_COLOR: Record<AppTheme, string> = {
+    blue: '#004aad',
+    green: '#15803d',
+    pink: '#be185d',
+    black: '#0d1117',
+};
+
+function applyThemeMetaColor(theme: AppTheme) {
+    if (typeof document === 'undefined') return;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+        meta.setAttribute('content', THEME_META_COLOR[theme]);
+        return;
+    }
+    const created = document.createElement('meta');
+    created.setAttribute('name', 'theme-color');
+    created.setAttribute('content', THEME_META_COLOR[theme]);
+    document.head.appendChild(created);
+}
+
 function applyThemeToDom(theme: AppTheme) {
     document.documentElement.setAttribute('data-theme', theme);
+    applyThemeMetaColor(theme);
 }
 
 function readThemeFromStorage(): AppTheme {
