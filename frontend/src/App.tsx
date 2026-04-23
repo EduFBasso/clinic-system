@@ -27,6 +27,7 @@ import {
     hydrateAgendaSettings,
     resetAgendaSettings,
 } from './utils/agendaSettings';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 function App() {
     useEffect(() => {
@@ -59,6 +60,7 @@ function App() {
         };
     }, []);
     return (
+        <ThemeProvider>
         <Router>
             <Routes>
                 <Route path='/' element={<Home />} />
@@ -100,6 +102,7 @@ function App() {
                 />
             </Routes>
         </Router>
+        </ThemeProvider>
     );
 }
 

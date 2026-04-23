@@ -384,7 +384,7 @@ export default function ClientCard({
                     <span
                         style={{
                             fontWeight: 900,
-                            color: iconColor,
+                            color: 'var(--color-primary)',
                             fontFamily:
                                 'system-ui, Segoe UI, Roboto, sans-serif',
                         }}

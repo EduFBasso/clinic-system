@@ -116,7 +116,7 @@ const linkBtnStyle: React.CSSProperties = {
     cursor: 'pointer',
     fontSize: 15,
     marginTop: 8,
-    boxShadow: '0 1px 4px rgba(37,99,235,0.08)',
+    boxShadow: 'var(--shadow-soft-sm)',
     transition:
         'transform 120ms ease, filter 120ms ease, box-shadow 160ms ease, background-color 140ms ease, color 140ms ease',
     WebkitTapHighlightColor: 'transparent',
@@ -163,9 +163,9 @@ function AddItemButton({ title, onClick }: AddItemButtonProps) {
             style={{
                 ...addBtnStyle,
                 background: confirmed
-                    ? 'var(--color-success-dark)'
+                                        ? 'var(--color-primary)'
                     : pressed
-                      ? '#1d4ed8'
+                                            ? 'var(--color-primary)'
                       : 'var(--color-primary)',
                 transform: confirmed
                     ? 'scale(1.08)'
@@ -173,10 +173,10 @@ function AddItemButton({ title, onClick }: AddItemButtonProps) {
                       ? 'scale(0.94)'
                       : 'scale(1)',
                 boxShadow: confirmed
-                    ? '0 0 0 4px rgba(16,185,129,0.16), 0 8px 18px rgba(5,150,105,0.24)'
+                                        ? 'var(--shadow-soft-sm)'
                     : pressed
-                      ? '0 2px 8px rgba(29,78,216,0.28) inset'
-                      : '0 2px 6px rgba(37,99,235,0.18)',
+                                            ? 'inset 0 2px 8px color-mix(in oklab, var(--color-primary) 45%, #0000)'
+                                            : 'var(--shadow-soft-sm)',
                 opacity: pressed ? 0.96 : 1,
             }}
             title={title}
@@ -548,7 +548,7 @@ export default function ConsultaPage() {
                             width: 56,
                             height: 56,
                             borderRadius: '999px',
-                            background: 'var(--color-success-dark)',
+                            background: 'var(--color-primary)',
                             color: '#fff',
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -1065,30 +1065,28 @@ export default function ConsultaPage() {
                             fontSize: 16,
                         }}
                     >
-                        Pular
+                        ← Voltar
                     </button>
                     <button
                         type='button'
                         onClick={handleRegister}
                         disabled={selectedItems.length === 0 || saving}
                         style={{
-                            background:
-                                selectedItems.length === 0 || saving
-                                    ? 'var(--color-border)'
-                                    : 'var(--color-primary)',
-                            color:
-                                selectedItems.length === 0 || saving
-                                    ? 'var(--color-text-muted)'
-                                    : '#fff',
+                            background: 'var(--color-primary)',
+                            color: '#fff',
                             border: 'none',
                             borderRadius: 8,
                             padding: '10px 24px',
                             fontWeight: 700,
                             cursor:
                                 selectedItems.length === 0 || saving
-                                    ? 'default'
+                                    ? 'not-allowed'
                                     : 'pointer',
                             fontSize: 16,
+                            opacity:
+                                selectedItems.length === 0 || saving
+                                    ? 0.55
+                                    : 1,
                             transition: 'background 0.2s',
                         }}
                     >

@@ -110,7 +110,7 @@ export const QuickScheduleHeader: React.FC<QuickScheduleHeaderProps> = ({
                                 fontWeight: 600,
                                 letterSpacing: subtitle ? 0.1 : 0.4,
                                 textTransform: subtitle ? 'none' : 'uppercase',
-                                color: isEditing ? '#2563eb' : '#059669',
+                                color: 'var(--color-primary)',
                             }}
                         >
                             {subtitle ||

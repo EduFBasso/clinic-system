@@ -850,7 +850,7 @@ export default function QuickScheduleModal({
                                 className={`ui-btn ${
                                     !isEditing && isSelectedPast
                                         ? 'ui-btn--disabled'
-                                        : 'ui-btn--primary'
+                                                                                : 'ui-btn--theme'
                                 }`}
                                 disabled={saving || (!isEditing && isSelectedPast)}
                                 title={

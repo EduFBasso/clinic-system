@@ -11,12 +11,14 @@ import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
 import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
 import type { AnamnesisResponse } from '../types/AnamnesisTypes';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function ClientForm({
     cliente,
 }: {
     cliente?: Partial<ClientData>;
 }) {
+    const { theme } = useTheme();
     // Removido auto-timeout: fluxo agora depende de modal com botão OK
     // Marca erros já tratados para não sobrescrever mensagens específicas em catch
     type HandledError = Error & { handled?: boolean };
@@ -1101,7 +1103,7 @@ export default function ClientForm({
                 ref={formRef}
                 onSubmit={handleSubmit}
                 noValidate
-                data-theme='blue'
+                data-theme={theme}
             >
                 <ClientPersonalDataForm
                     formData={formData}

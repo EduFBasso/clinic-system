@@ -49,7 +49,7 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
                     aria-pressed={isToday}
                     style={{
                         border: 'none',
-                        background: 'var(--color-success-dark)',
+                        background: 'var(--color-primary)',
                         color: '#fff',
                         padding: '6px 10px',
                         borderRadius: 6,
@@ -86,7 +86,7 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
                         border: 'none',
                         borderRadius: 6,
                         cursor: 'pointer',
-                        color: 'var(--color-success-dark)',
+                        color: 'var(--color-primary)',
                         fontSize: 'var(--icon-size-lg)',
                         userSelect: 'none',
                         flex: '0 0 auto',
@@ -101,13 +101,14 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
                     aria-label='Anterior'
                     disabled={prevDisabled}
                     style={{
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-bg)',
+                        border: 'none',
+                        background: 'none',
                         padding: 6,
                         borderRadius: 6,
                         cursor: prevDisabled ? 'not-allowed' : 'pointer',
                         flex: '0 0 auto',
                         opacity: prevDisabled ? 0.35 : 1,
+                        color: 'var(--color-primary)',
                     }}
                 >
                     <FaArrowLeft />
@@ -117,7 +118,7 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
                     aria-level={2}
                     style={{
                         fontWeight: 700,
-                        color: 'var(--color-heading)',
+                        color: 'var(--color-primary)',
                         whiteSpace: 'nowrap',
                         minWidth: 0,
                     }}
@@ -129,12 +130,13 @@ export const DateControlsHeader: React.FC<DateControlsHeaderProps> = ({
                     onClick={onNext}
                     aria-label='Próximo'
                     style={{
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-bg)',
+                        border: 'none',
+                        background: 'none',
                         padding: 6,
                         borderRadius: 6,
                         cursor: 'pointer',
                         flex: '0 0 auto',
+                        color: 'var(--color-primary)',
                     }}
                 >
                     <FaArrowRight />

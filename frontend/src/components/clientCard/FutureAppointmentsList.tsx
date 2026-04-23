@@ -77,7 +77,7 @@ export default function FutureAppointmentsList({
                                 <span
                                     style={{
                                         fontWeight: 600,
-                                        color: '#065f46',
+                                        color: labelColor,
                                         whiteSpace: 'nowrap',
                                     }}
                                 >

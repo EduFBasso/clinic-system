@@ -1,6 +1,7 @@
 import React from 'react';
 import type { AnamnesisField } from '../../types/AnamnesisTypes';
 import styles from './ClientAnamnesisForm.module.css';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props {
     fields: AnamnesisField[];
@@ -15,6 +16,8 @@ export default function ClientAnamnesisForm({
     onChange,
     isEdit = false,
 }: Props) {
+    const { theme } = useTheme();
+
     if (fields.length === 0) return null;
 
     // Group fields by sector, preserving sector_order
@@ -43,7 +46,7 @@ export default function ClientAnamnesisForm({
     }
 
     return (
-        <div data-theme='blue' className={styles.wrapper}>
+        <div data-theme={theme} className={styles.wrapper}>
             <div className={styles.form}>
                 <header className={styles.header}>
                     <span className={styles.eyebrow}>

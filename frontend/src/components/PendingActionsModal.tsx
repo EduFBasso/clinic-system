@@ -46,6 +46,47 @@ type AppointmentCharge = {
     }>;
 };
 
+const actionBtnBaseStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 40,
+    padding: '8px 12px',
+    borderRadius: 'var(--btn-radius)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    fontSize: 'var(--font-body)',
+    fontWeight: 'var(--btn-font-weight)',
+    lineHeight: 1,
+};
+
+const actionBtnNeutralStyle: React.CSSProperties = {
+    background: 'var(--btn-neutral-bg)',
+    borderColor: 'var(--btn-neutral-border)',
+    color: 'var(--btn-neutral-text)',
+};
+
+const actionBtnSecondaryStyle: React.CSSProperties = {
+    background: 'var(--btn-secondary-bg)',
+    borderColor: 'var(--btn-secondary-border)',
+    color: 'var(--btn-secondary-text)',
+};
+
+const actionBtnDangerStyle: React.CSSProperties = {
+    background: 'var(--btn-danger-bg)',
+    borderColor: 'var(--btn-danger-border)',
+    color: 'var(--btn-danger-text)',
+};
+
+const actionBtnDisabledStyle: React.CSSProperties = {
+    background: 'var(--btn-disabled-bg)',
+    borderColor: 'var(--btn-disabled-border)',
+    color: 'var(--btn-disabled-text)',
+    opacity: 0.72,
+    cursor: 'not-allowed',
+};
+
 export default function PendingActionsModal({
     open,
     onClose,
@@ -264,6 +305,9 @@ export default function PendingActionsModal({
         appt.status === 'scheduled' && !Number.isNaN(startPlannedMs)
             ? !inconsistentWindow && nowMsForButtons < startPlannedMs
             : false;
+    const closeDisabled = !!busy || closing;
+    const finalizeDisabled = !!busy || closing || finalizeTimeLock;
+    const cancelDisabled = !!busy || closing;
     const apptId = appt.id; // safe after null check
     const apptClientId =
         typeof appt.client === 'number'
@@ -804,18 +848,30 @@ export default function PendingActionsModal({
                             }
                         }}
                         className='ui-btn ui-btn--neutral'
-                        disabled={!!busy || closing}
+                        disabled={closeDisabled}
+                        style={{
+                            ...actionBtnBaseStyle,
+                            ...(closeDisabled
+                                ? actionBtnDisabledStyle
+                                : actionBtnNeutralStyle),
+                        }}
                     >
                         Fechar
                     </button>
                     <button
                         onClick={doFinalize}
-                        disabled={!!busy || closing || finalizeTimeLock}
+                        disabled={finalizeDisabled}
                         className={`ui-btn ${
                             finalizeTimeLock
                                 ? 'ui-btn--disabled'
                                 : 'ui-btn--secondary'
                         }`}
+                        style={{
+                            ...actionBtnBaseStyle,
+                            ...(finalizeDisabled
+                                ? actionBtnDisabledStyle
+                                : actionBtnSecondaryStyle),
+                        }}
                         title={
                             finalizeTimeLock
                                                                 ? 'Aguardando início para permitir avançar'
@@ -834,8 +890,14 @@ export default function PendingActionsModal({
                     </button>
                     <button
                         onClick={doCancel}
-                        disabled={!!busy || closing}
+                        disabled={cancelDisabled}
                         className='ui-btn ui-btn--danger'
+                        style={{
+                            ...actionBtnBaseStyle,
+                            ...(cancelDisabled
+                                ? actionBtnDisabledStyle
+                                : actionBtnDangerStyle),
+                        }}
                         title={
                             hasPaidCharge
                                 ? 'Cancelar compromisso com cobrança paga associada'

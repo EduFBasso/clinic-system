@@ -221,7 +221,7 @@ export default function MonthlyAgendaModal({
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <button
-                        className='ui-btn ui-btn--primary'
+                        className='ui-btn ui-btn--theme'
                         onClick={() => {
                             const now = new Date();
                             setMonth(startOfMonth(now));
@@ -251,7 +251,7 @@ export default function MonthlyAgendaModal({
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: 'var(--color-success-dark)',
+                            color: 'var(--color-primary)',
                             width: 32,
                             height: 32,
                             display: 'inline-flex',
@@ -265,7 +265,7 @@ export default function MonthlyAgendaModal({
                     <span
                         style={{
                             fontWeight: 700,
-                            color: 'var(--color-success-dark)',
+                            color: 'var(--color-primary)',
                             minWidth: 40,
                             textAlign: 'center',
                         }}
@@ -286,7 +286,7 @@ export default function MonthlyAgendaModal({
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: 'var(--color-success-dark)',
+                            color: 'var(--color-primary)',
                             width: 32,
                             height: 32,
                             display: 'inline-flex',
@@ -325,7 +325,7 @@ export default function MonthlyAgendaModal({
                                     fontWeight: selected ? 800 : 500,
                                     fontSize: '0.78rem',
                                     background: selected
-                                        ? 'var(--color-success-dark)'
+                                        ? 'var(--color-primary)'
                                         : 'transparent',
                                     color: selected
                                         ? 'white'

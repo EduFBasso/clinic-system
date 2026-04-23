@@ -60,7 +60,7 @@ class ProfessionalViewSet(ModelViewSet):
             return Response({"detail": "Authentication required."}, status=401)
         if request.method.lower() == "get":
             return Response(ProfessionalBasicSerializer(user).data)
-        allowed_fields = {"first_name", "last_name", "register_number"}
+        allowed_fields = {"first_name", "last_name", "register_number", "ui_theme"}
         payload = {k: v for k, v in request.data.items() if k in allowed_fields}
         if not payload:
             return Response({"detail": "No allowed fields to update."}, status=400)

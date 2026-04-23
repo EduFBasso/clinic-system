@@ -52,7 +52,7 @@
     width: 64px;
     height: 64px;
     border-radius: 999px;
-    background: var(--color-success-dark);
+    background: var(--color-primary);
     color: #fff;
     display: inline-flex;
     align-items: center;
@@ -118,7 +118,7 @@
     text-transform: uppercase;
     letter-spacing: 0.18em;
     font-size: 0.83rem;
-    color: var(--color-accent-strong);
+    color: var(--color-primary);
 }
 
 .sectionTitle {
@@ -177,7 +177,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: var(--color-accent-strong);
+    color: var(--color-primary);
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 5px;
 }

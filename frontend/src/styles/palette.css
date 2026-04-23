@@ -65,8 +65,8 @@
     --color-icon-default: var(--color-primary);
     --color-card-border: var(--color-border);
 
-    --color-selected-bg: #e0f7fa; /* exemplo: azul claro */
-    --color-selected-border: #00838f; /* exemplo: azul escuro */
+    --color-selected-bg: #eaf2ff;
+    --color-selected-border: #155eef;
 
     /* Font sizes (tokens de tipografia) */
     --font-title-lg: 22px; /* títulos de modais principais */
@@ -183,6 +183,8 @@
 }
 
 [data-theme='blue'] {
+    --color-primary: #004aad;
+    --color-primary-light: #e6f0fa;
     --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.78);
     --color-surface: #ffffff;
@@ -205,10 +207,14 @@
     --color-danger-ring: rgb(224 86 102 / 0.16);
     --color-card-dark-top: #143459;
     --color-card-dark-bottom: #0f223a;
+    --color-selected-bg: #eaf2ff;
+    --color-selected-border: var(--color-primary);
 }
 
 [data-theme='green'] {
-    --color-bg: #edf6ef;
+    --color-primary: #15803d;
+    --color-primary-light: #e6f9ea;
+    --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.82);
     --color-surface: #ffffff;
     --color-surface-alt: #ebf8ef;
@@ -230,10 +236,14 @@
     --color-danger-ring: rgb(223 90 99 / 0.16);
     --color-card-dark-top: #183a2c;
     --color-card-dark-bottom: #10271e;
+    --color-selected-bg: #e8f6ec;
+    --color-selected-border: var(--color-primary);
 }
 
 [data-theme='pink'] {
-    --color-bg: #fff5f8;
+    --color-primary: #be185d;
+    --color-primary-light: #fff0f6;
+    --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.8);
     --color-surface: #ffffff;
     --color-surface-alt: #fff0f6;
@@ -255,6 +265,8 @@
     --color-danger-ring: rgb(219 73 103 / 0.16);
     --color-card-dark-top: #4b1838;
     --color-card-dark-bottom: #321024;
+    --color-selected-bg: #fdebf4;
+    --color-selected-border: var(--color-primary);
 }
 
 [data-theme='black'] {
@@ -280,4 +292,6 @@
     --color-danger-ring: rgb(244 63 94 / 0.17);
     --color-card-dark-top: #111827;
     --color-card-dark-bottom: #090d14;
+    --color-selected-bg: #1f2937;
+    --color-selected-border: #60a5fa;
 }

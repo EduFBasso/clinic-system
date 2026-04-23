@@ -61,6 +61,20 @@ class Professional(AbstractBaseUser, PermissionsMixin):
         help_text="Base32 secret for TOTP (Google Authenticator). Empty = TOTP not configured.",
     )
 
+    # Preferência de tema da interface
+    UI_THEME_CHOICES = (
+        ("blue", "Azul"),
+        ("green", "Verde"),
+        ("pink", "Rosa"),
+        ("black", "Escuro"),
+    )
+    ui_theme = models.CharField(
+        "Tema da interface",
+        max_length=10,
+        choices=UI_THEME_CHOICES,
+        default="blue",
+    )
+
     # Endereço
     city = models.CharField("Cidade", max_length=50, blank=True)
     state = models.CharField("Estado", max_length=2, blank=True)

@@ -204,6 +204,7 @@
     object-fit: cover;
     display: block;
     background: var(--color-surface-strong);
+    border: 1.5px solid var(--color-primary);
 }
 
 /* Ações do card: botões de texto com sensação de pressionar */
@@ -255,10 +256,18 @@
     color: #ffffff;
 }
 .actionScheduled:hover {
-    background-color: color-mix(in srgb, var(--color-primary) 90%, white 10%);
+    background-color: color-mix(
+        in srgb,
+        var(--color-primary) 90%,
+        white 10%
+    );
 }
 .actionScheduled:active {
-    background-color: color-mix(in srgb, var(--color-primary) 85%, white 15%);
+    background-color: color-mix(
+        in srgb,
+        var(--color-primary) 85%,
+        white 15%
+    );
     transform: none !important;
 }
 .actionPrimary:hover {

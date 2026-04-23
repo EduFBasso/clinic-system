@@ -1,6 +1,20 @@
 import React from 'react';
 import AppModal from './Modal';
 import { coalesceVersion, fetchServerVersion } from '../hooks/useAppVersion';
+import { useTheme, type AppTheme } from '../contexts/ThemeContext';
+
+const THEME_OPTIONS: Array<{
+    value: AppTheme;
+    label: string;
+    swatch: string;
+}> = [
+    { value: 'blue', label: 'Azul', swatch: '#155eef' },
+    { value: 'green', label: 'Verde', swatch: '#15803d' },
+    { value: 'pink', label: 'Rosa', swatch: '#be185d' },
+    /* RETOMADA: Tema escuro 'black' deferred até que theme system esteja estável.
+       Para reativar, descomente a linha abaixo e adicione refinements ao palette.css.
+       { value: 'black', label: 'Escuro', swatch: '#111827' }, */
+];
 
 interface AboutModalProps {
     open: boolean;
@@ -26,6 +40,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
     buildTime,
     backendVersion,
 }) => {
+    const { theme, setTheme } = useTheme();
     const [resolvedBackendVersion, setResolvedBackendVersion] =
         React.useState<string | null>(backendVersion ?? null);
 
@@ -66,8 +81,56 @@ export const AboutModal: React.FC<AboutModalProps> = ({
                         Backend: {resolvedBackendVersion || 'N/D'}
                     </div>
                 </section>
+                <section style={{ marginBottom: 16 }}>
+                    <strong>Tema da Interface</strong>
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                            gap: 8,
+                            marginTop: 10,
+                        }}
+                    >
+                        {THEME_OPTIONS.map(option => {
+                            const selected = option.value === theme;
+                            return (
+                                <button
+                                    key={option.value}
+                                    type='button'
+                                    className={selected ? 'ui-btn ui-btn--theme' : 'ui-btn ui-btn--neutral'}
+                                    onClick={() => setTheme(option.value)}
+                                    aria-pressed={selected}
+                                    aria-label={`Aplicar tema ${option.label}`}
+                                    style={{
+                                        justifyContent: 'flex-start',
+                                        width: '100%',
+                                    }}
+                                >
+                                    <span
+                                        aria-hidden='true'
+                                        style={{
+                                            width: 12,
+                                            height: 12,
+                                            borderRadius: 999,
+                                            background: option.swatch,
+                                            border: '1px solid rgba(0,0,0,0.12)',
+                                            flexShrink: 0,
+                                        }}
+                                    />
+                                    <span>{option.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </section>
                 <div style={{ textAlign: 'right' }}>
-                    <button onClick={onClose}>Fechar</button>
+                    <button
+                        type='button'
+                        className='ui-btn ui-btn--neutral'
+                        onClick={onClose}
+                    >
+                        Fechar
+                    </button>
                 </div>
             </div>
         </AppModal>

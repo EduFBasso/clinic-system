@@ -55,15 +55,19 @@
     text-align: left;
     padding: 10px 18px;
     font-size: 1rem;
-    color: #1a2a3a;
+    color: var(--color-text-main, #1a2a3a);
     cursor: pointer;
     border-radius: var(--radius-surface);
-    transition: background 0.15s;
+    transition:
+        background 0.15s,
+        color 0.15s;
 }
 .dropdownItem:hover,
-.dropdownItem:focus {
-    background: var(--color-accent);
+.dropdownItem:focus,
+.dropdownItem:focus-visible {
+    background: var(--color-primary-light);
     color: var(--color-primary);
+    font-weight: 600;
 }
 /* frontend\src\styles\components\NavBar.module.css */
 .navBar {
@@ -170,6 +174,11 @@
     transition: background-color 0.3s ease;
 }
 
+.loginButton:hover {
+    background-color: var(--color-primary-light);
+    color: var(--color-primary);
+}
+
 .logoutButton {
     margin-left: 0; /* espaçamento controlado pelo gap do .loggedInfo */
 }
@@ -203,10 +212,6 @@
             --logout-max-width
         ); /* limita em telas um pouco maiores dentro do breakpoint */
     }
-}
-
-.loginButton:hover {
-    background-color: var(--color-secondary);
 }
 
 @media screen and (max-width: 600px) {

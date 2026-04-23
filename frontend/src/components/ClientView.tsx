@@ -10,6 +10,7 @@ import { formatDOBWithAge } from '../utils/dateOfBirth';
 import { formatCpf, formatCnpj, formatRg, formatCep } from '../utils/formatCpf';
 import { API_BASE } from '../config/api';
 import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface ClientViewProps {
     client: ClientData & {
@@ -68,17 +69,19 @@ function formatField(
 // ── sub-component: a read-only section panel ─────────────────────────────────
 
 function ViewSection({
+    theme,
     eyebrow,
     title,
     rows,
 }: {
+    theme: string;
     eyebrow: string;
     title: string;
     rows: { label: string; value: string }[];
 }) {
     if (rows.length === 0) return null;
     return (
-        <section data-theme='blue' className={styles.section}>
+        <section data-theme={theme} className={styles.section}>
             <div className={styles.sectionInner}>
                 <header className={styles.sectionHeader}>
                     <span className={styles.eyebrow}>{eyebrow}</span>
@@ -100,6 +103,7 @@ function ViewSection({
 // ── main component ───────────────────────────────────────────────────────────
 
 const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
+    const { theme } = useTheme();
     const rootRef = React.useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
@@ -216,7 +220,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
     return (
         <div ref={rootRef} className={styles.viewRoot}>
             {/* ── Header: avatar + nome ── */}
-            <div data-theme='blue' className={styles.headerCard}>
+            <div data-theme={theme} className={styles.headerCard}>
                 {photoUrl ? (
                     <img
                         src={photoUrl}
@@ -257,6 +261,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
 
             {/* ── Dados Pessoais ── */}
             <ViewSection
+                theme={theme}
                 eyebrow='Visualização'
                 title='Dados Pessoais'
                 rows={personalRows}
@@ -264,6 +269,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
 
             {/* ── Endereço ── */}
             <ViewSection
+                theme={theme}
                 eyebrow='Visualização'
                 title='Endereço'
                 rows={addressRows}
@@ -271,7 +277,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
 
             {/* ── Anamnese ── */}
             {fields.length > 0 && (
-                <section data-theme='blue' className={styles.section}>
+                <section data-theme={theme} className={styles.section}>
                     <div className={styles.sectionInner}>
                         <header className={styles.sectionHeader}>
                             <span className={styles.eyebrow}>Visualização</span>

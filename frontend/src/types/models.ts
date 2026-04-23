@@ -17,6 +17,7 @@ export interface Professional {
     created_at?: string;
     deactivated_at?: string | null;
     deactivation_reason?: string | null;
+    ui_theme?: 'blue' | 'green' | 'pink' | 'black';
 }
 
 export interface Client {

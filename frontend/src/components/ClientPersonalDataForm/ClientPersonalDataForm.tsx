@@ -4,6 +4,7 @@ import SelectField from '../FormElements/SelectField/SelectField';
 import { formatPhone } from '../../utils/formatPhone';
 import { formatCpf, formatCnpj, formatRg } from '../../utils/formatCpf';
 import styles from './ClientPersonalDataForm.module.css';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type ChangeHandler = (
     fieldOrEvent:
@@ -36,8 +37,10 @@ export default function ClientPersonalDataForm({
     feedback,
     isEdit = false,
 }: Props) {
+    const { theme } = useTheme();
+
     return (
-        <div data-theme='blue' className={styles.wrapper}>
+        <div data-theme={theme} className={styles.wrapper}>
             <div className={styles.form}>
                 <header className={styles.header}>
                     <span className={styles.eyebrow}>
