@@ -23,6 +23,11 @@ export type AgendaSettingsSnapshot = {
     defaultVisitType: DefaultVisitType;
     reminderEnabled: boolean;
     reminderMinutesBefore: number;
+    remindersGloballyEnabled: boolean;
+    telegramLinked: boolean;
+    telegramLinkActive: boolean;
+    telegramUsername: string;
+    telegramLastError: string;
     hydrated: boolean;
 };
 
@@ -36,6 +41,11 @@ type ProfessionalSettingsResponse = {
     default_visit_type?: DefaultVisitType;
     reminder_enabled?: boolean;
     reminder_minutes_before?: number;
+    reminders_globally_enabled?: boolean;
+    telegram_linked?: boolean;
+    telegram_link_active?: boolean;
+    telegram_username?: string;
+    telegram_last_error?: string;
 };
 
 type AgendaSettingsSaveInput = {
@@ -46,6 +56,14 @@ type AgendaSettingsSaveInput = {
     defaultVisitType: DefaultVisitType;
     reminderEnabled: boolean;
     reminderMinutesBefore: number;
+};
+
+export type TelegramLinkStartResult = {
+    botConfigured: boolean;
+    botUsername: string;
+    startToken: string;
+    linkUrl: string;
+    expiresAt: string;
 };
 
 type LegacyPersistedSettings = {
@@ -72,6 +90,11 @@ export const DEFAULT_AGENDA_SETTINGS: AgendaSettingsSnapshot = {
     defaultVisitType: 'consulta',
     reminderEnabled: false,
     reminderMinutesBefore: 90,
+    remindersGloballyEnabled: true,
+    telegramLinked: false,
+    telegramLinkActive: false,
+    telegramUsername: '',
+    telegramLastError: '',
     hydrated: false,
 };
 
@@ -224,6 +247,11 @@ function normalizeApiSettings(
     | 'defaultVisitType'
     | 'reminderEnabled'
     | 'reminderMinutesBefore'
+    | 'remindersGloballyEnabled'
+    | 'telegramLinked'
+    | 'telegramLinkActive'
+    | 'telegramUsername'
+    | 'telegramLastError'
 > {
     return {
         workStart: formatApiTime(
@@ -246,6 +274,14 @@ function normalizeApiSettings(
             1,
             1440,
         ),
+        remindersGloballyEnabled:
+            data.reminders_globally_enabled !== undefined
+                ? Boolean(data.reminders_globally_enabled)
+                : DEFAULT_AGENDA_SETTINGS.remindersGloballyEnabled,
+        telegramLinked: Boolean(data.telegram_linked ?? false),
+        telegramLinkActive: Boolean(data.telegram_link_active ?? false),
+        telegramUsername: String(data.telegram_username ?? ''),
+        telegramLastError: String(data.telegram_last_error ?? ''),
     };
 }
 
@@ -468,4 +504,116 @@ export async function saveAgendaSettings(
         ...normalizeApiSettings(response),
         hydrated: true,
     });
+}
+
+export async function startTelegramLink(): Promise<TelegramLinkStartResult> {
+    const token = readAccessToken();
+    if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+    }
+
+    const res = await fetch(
+        `${API_BASE}/register/professionals/telegram/link-start/`,
+        {
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    let data: Record<string, unknown> = {};
+    try {
+        data = (await res.json()) as Record<string, unknown>;
+    } catch {
+        data = {};
+    }
+
+    if (!res.ok) {
+        throw new Error(
+            typeof data.detail === 'string'
+                ? data.detail
+                : 'Erro ao iniciar vínculo com Telegram.',
+        );
+    }
+
+    return {
+        botConfigured: Boolean(data.bot_configured),
+        botUsername: String(data.bot_username || ''),
+        startToken: String(data.start_token || ''),
+        linkUrl: String(data.link_url || ''),
+        expiresAt: String(data.expires_at || ''),
+    };
+}
+
+export async function verifyTelegramLink(
+    startToken: string,
+): Promise<AgendaSettingsSnapshot> {
+    const token = readAccessToken();
+    if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+    }
+
+    const res = await fetch(
+        `${API_BASE}/register/professionals/telegram/link-verify/`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ start_token: startToken }),
+        },
+    );
+
+    let data: Record<string, unknown> = {};
+    try {
+        data = (await res.json()) as Record<string, unknown>;
+    } catch {
+        data = {};
+    }
+
+    if (!res.ok) {
+        throw new Error(
+            typeof data.detail === 'string'
+                ? data.detail
+                : 'Erro ao verificar vínculo Telegram.',
+        );
+    }
+
+    // Re-hydrate after successful verification so runtime fields reflect the new link.
+    return hydrateAgendaSettings(true);
+}
+
+export async function sendTelegramTest(): Promise<void> {
+    const token = readAccessToken();
+    if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+    }
+
+    const res = await fetch(
+        `${API_BASE}/register/professionals/telegram/test-send/`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    let data: Record<string, unknown> = {};
+    try {
+        data = (await res.json()) as Record<string, unknown>;
+    } catch {
+        data = {};
+    }
+
+    if (!res.ok) {
+        throw new Error(
+            typeof data.detail === 'string'
+                ? data.detail
+                : 'Erro ao enviar mensagem de teste.',
+        );
+    }
 }

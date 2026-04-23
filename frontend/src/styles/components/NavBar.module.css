@@ -192,6 +192,15 @@
     border-color: var(--color-primary);
 }
 
+@media (hover: none) and (pointer: coarse) {
+    .loginButton:focus-visible {
+        background-color: var(--color-primary);
+        color: var(--color-bg-section);
+        border-color: var(--color-primary);
+        outline: none;
+    }
+}
+
 .loginButton:active:not(:disabled) {
     background-color: color-mix(in oklab, var(--color-primary) 88%, black 12%);
     color: var(--color-bg-section);

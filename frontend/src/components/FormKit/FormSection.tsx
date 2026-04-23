@@ -16,6 +16,20 @@ export default function FormSection({
     onClose,
     closeTitle,
 }: Props) {
+    const handleCloseClick = React.useCallback(() => {
+        try {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+        } catch {
+            /* noop */
+        }
+        try {
+            window.dispatchEvent(new Event('ensureScrollUnlocked'));
+        } catch {
+            /* noop */
+        }
+        onClose?.();
+    }, [onClose]);
+
     return (
         <section style={{ position: 'relative', ...style }}>
             <h3 className={formStyles.panelTitle}>{title}</h3>
@@ -24,7 +38,11 @@ export default function FormSection({
                     type='button'
                     aria-label='Fechar'
                     title={closeTitle || 'Fechar'}
-                    onClick={onClose}
+                    onPointerDown={e => {
+                        // Evita retenção de foco visual no iOS ao fechar por este botão.
+                        e.preventDefault();
+                    }}
+                    onClick={handleCloseClick}
                     style={{
                         position: 'absolute',
                         top: 10,
@@ -39,6 +57,8 @@ export default function FormSection({
                         lineHeight: 1,
                         zIndex: 5,
                         boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                        touchAction: 'manipulation',
+                        WebkitTapHighlightColor: 'transparent',
                     }}
                 >
                     ✖

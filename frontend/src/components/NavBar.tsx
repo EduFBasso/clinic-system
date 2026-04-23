@@ -540,7 +540,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                     setAgendaSettingsOpen(true);
                                 }}
                             >
-                                Configurações
+                                Notificações
                             </button>
                         </div>
                     )}

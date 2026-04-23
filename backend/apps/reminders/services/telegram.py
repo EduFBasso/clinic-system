@@ -87,3 +87,78 @@ class TelegramBotClient:
             message_id=str(result.get("message_id", "")),
             raw=data,
         )
+
+    def get_me(self) -> dict:
+        if not self.is_configured:
+            raise TelegramDeliveryError("TELEGRAM_BOT_TOKEN não configurado.")
+
+        try:
+            response = requests.get(
+                f"{self.api_base}/bot{self.token}/getMe",
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise TelegramDeliveryError(
+                f"Erro HTTP ao consultar Telegram (getMe): {exc}"
+            ) from exc
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise TelegramDeliveryError(
+                f"Resposta inválida do Telegram (status {response.status_code})."
+            ) from exc
+
+        if response.status_code >= 400 or not data.get("ok"):
+            description = data.get("description") or response.text
+            raise TelegramDeliveryError(
+                f"Telegram recusou getMe: {description}"
+            )
+
+        return data.get("result") or {}
+
+    def get_updates(
+        self,
+        *,
+        limit: int = 100,
+        timeout: int = 0,
+        allowed_updates: list[str] | None = None,
+    ) -> list[dict]:
+        if not self.is_configured:
+            raise TelegramDeliveryError("TELEGRAM_BOT_TOKEN não configurado.")
+
+        payload: dict[str, object] = {
+            "limit": max(1, min(int(limit), 100)),
+            "timeout": max(0, int(timeout)),
+        }
+        if allowed_updates is not None:
+            payload["allowed_updates"] = allowed_updates
+
+        try:
+            response = requests.get(
+                f"{self.api_base}/bot{self.token}/getUpdates",
+                params=payload,
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise TelegramDeliveryError(
+                f"Erro HTTP ao consultar Telegram (getUpdates): {exc}"
+            ) from exc
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise TelegramDeliveryError(
+                f"Resposta inválida do Telegram (status {response.status_code})."
+            ) from exc
+
+        if response.status_code >= 400 or not data.get("ok"):
+            description = data.get("description") or response.text
+            raise TelegramDeliveryError(
+                f"Telegram recusou getUpdates: {description}"
+            )
+
+        result = data.get("result")
+        if isinstance(result, list):
+            return result
+        return []

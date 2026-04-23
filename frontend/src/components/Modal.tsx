@@ -208,6 +208,13 @@ export default function AppModal(props: AppModalProps) {
         );
     }, []);
 
+    const isCoarsePointerDevice = React.useMemo(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return false;
+        }
+        return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    }, []);
+
     const updateVhVar = React.useCallback(() => {
         try {
             const vhPx =
@@ -593,28 +600,32 @@ export default function AppModal(props: AppModalProps) {
                 setTimeout(() => applyScroll(), 50);
                 setTimeout(() => applyScroll(), 100);
 
-                // Restaura foco ao elemento anterior, evitando scroll
+                // Restaura foco ao elemento anterior em desktop.
+                // Em touch devices, evitar restauração de foco previne estado visual "preso"
+                // (ex.: botão Sair destacado após fechar modal pelo X no iPhone/PWA).
                 try {
-                    const prev = prevActiveElRef.current;
-                    if (prev && typeof prev.focus === 'function') {
-                        // Some browsers support options for focus; pass preventScroll when available
-                        (
-                            prev.focus as unknown as (opts?: {
-                                preventScroll?: boolean;
-                            }) => void
-                        )({
-                            preventScroll: true,
-                        });
+                    const active =
+                        (document.activeElement as HTMLElement | null) || null;
+                    if (isCoarsePointerDevice) {
+                        active?.blur?.();
                     } else {
-                        // Garanta foco fora do modal para evitar foco retido em container aria-hidden
-                        try {
+                        const prev = prevActiveElRef.current;
+                        if (prev && typeof prev.focus === 'function') {
+                            // Some browsers support options for focus; pass preventScroll when available
+                            (
+                                prev.focus as unknown as (opts?: {
+                                    preventScroll?: boolean;
+                                }) => void
+                            )({
+                                preventScroll: true,
+                            });
+                        } else {
+                            // Garanta foco fora do modal para evitar foco retido em container aria-hidden
                             (
                                 document.body as unknown as {
                                     focus?: () => void;
                                 }
                             ).focus?.();
-                        } catch {
-                            /* noop */
                         }
                     }
                 } catch {
@@ -636,7 +647,7 @@ export default function AppModal(props: AppModalProps) {
         return () => {
             timeouts.forEach(t => clearTimeout(t));
         };
-    }, [open]);
+    }, [open, isCoarsePointerDevice]);
 
     // Restauração imediata também no ciclo de desmontagem (caso o componente seja removido rapidamente)
     React.useEffect(() => {

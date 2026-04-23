@@ -8,7 +8,11 @@ import {
     getAgendaSettingsSnapshot,
     hydrateAgendaSettings,
     saveAgendaSettings,
+    startTelegramLink,
+    verifyTelegramLink,
+    sendTelegramTest,
 } from '../utils/agendaSettings';
+import { emit } from '../events/bus';
 
 interface AgendaSettingsModalProps {
     open: boolean;
@@ -18,6 +22,7 @@ interface AgendaSettingsModalProps {
 
 const intervalOptions = [5, 10, 15, 20, 30];
 const durationOptions = [30, 60, 90, 120, 150];
+const reminderMinuteOptions = [5, 10, 15, 30, 45, 60, 90, 120, 180, 240];
 const visitTypes = [
     { value: 'consulta', label: 'Consulta' },
     { value: 'avaliacao', label: 'Avaliação' },
@@ -42,6 +47,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     onClose,
     onApply,
 }) => {
+    const [compactViewport, setCompactViewport] = React.useState(false);
     const [workStart, setWorkStart] = React.useState(DEFAULTS.workStart);
     const [workEnd, setWorkEnd] = React.useState(DEFAULTS.workEnd);
     const [slotInterval, setSlotInterval] = React.useState(
@@ -53,6 +59,30 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     const [defaultVisitType, setDefaultVisitType] = React.useState(
         DEFAULTS.defaultVisitType,
     );
+    const [reminderEnabled, setReminderEnabled] = React.useState(
+        DEFAULTS.reminderEnabled,
+    );
+    const [remindersGloballyEnabled, setRemindersGloballyEnabled] =
+        React.useState(DEFAULTS.remindersGloballyEnabled);
+    const [telegramLinked, setTelegramLinked] = React.useState(
+        DEFAULTS.telegramLinked,
+    );
+    const [telegramLinkActive, setTelegramLinkActive] = React.useState(
+        DEFAULTS.telegramLinkActive,
+    );
+    const [telegramUsername, setTelegramUsername] = React.useState(
+        DEFAULTS.telegramUsername,
+    );
+    const [telegramLastError, setTelegramLastError] = React.useState(
+        DEFAULTS.telegramLastError,
+    );
+    const [telegramStartUrl, setTelegramStartUrl] = React.useState('');
+    const [telegramStartToken, setTelegramStartToken] = React.useState('');
+    const [telegramLinkBusy, setTelegramLinkBusy] = React.useState(false);
+    const [telegramTestBusy, setTelegramTestBusy] = React.useState(false);
+    const [reminderMinutesBefore, setReminderMinutesBefore] = React.useState(
+        DEFAULTS.reminderMinutesBefore,
+    );
     const [savedMsg, setSavedMsg] = React.useState<string | null>(null);
     const [msgType, setMsgType] = React.useState<'success' | 'error' | null>(
         null,
@@ -61,10 +91,40 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     const openRef = React.useRef(false);
 
     React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const updateCompactViewport = () => {
+            const vvHeight = window.visualViewport?.height ?? window.innerHeight;
+            const isNarrow = window.innerWidth <= 640;
+            const isShort = vvHeight <= 560;
+            setCompactViewport(isNarrow || isShort);
+        };
+
+        updateCompactViewport();
+        window.addEventListener('resize', updateCompactViewport);
+        window.addEventListener('orientationchange', updateCompactViewport);
+        window.visualViewport?.addEventListener('resize', updateCompactViewport);
+
+        return () => {
+            window.removeEventListener('resize', updateCompactViewport);
+            window.removeEventListener(
+                'orientationchange',
+                updateCompactViewport,
+            );
+            window.visualViewport?.removeEventListener(
+                'resize',
+                updateCompactViewport,
+            );
+        };
+    }, []);
+
+    React.useEffect(() => {
         if (!open) return;
         let active = true;
         setSavedMsg(null);
         setMsgType(null);
+        setTelegramStartUrl('');
+        setTelegramStartToken('');
 
         const current = getAgendaSettingsSnapshot();
         setWorkStart(clampHM(current.workStart, DEFAULTS.workStart));
@@ -72,6 +132,13 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
         setSlotInterval(current.slotInterval);
         setDefaultDuration(current.defaultDuration);
         setDefaultVisitType(current.defaultVisitType);
+        setReminderEnabled(current.reminderEnabled);
+        setRemindersGloballyEnabled(current.remindersGloballyEnabled);
+        setTelegramLinked(current.telegramLinked);
+        setTelegramLinkActive(current.telegramLinkActive);
+        setTelegramUsername(current.telegramUsername);
+        setTelegramLastError(current.telegramLastError);
+        setReminderMinutesBefore(current.reminderMinutesBefore);
 
         void hydrateAgendaSettings()
             .then(settings => {
@@ -81,6 +148,13 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 setSlotInterval(settings.slotInterval);
                 setDefaultDuration(settings.defaultDuration);
                 setDefaultVisitType(settings.defaultVisitType);
+                setReminderEnabled(settings.reminderEnabled);
+                setRemindersGloballyEnabled(settings.remindersGloballyEnabled);
+                setTelegramLinked(settings.telegramLinked);
+                setTelegramLinkActive(settings.telegramLinkActive);
+                setTelegramUsername(settings.telegramUsername);
+                setTelegramLastError(settings.telegramLastError);
+                setReminderMinutesBefore(settings.reminderMinutesBefore);
             })
             .catch(() => {
                 /* silencioso */
@@ -111,8 +185,8 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 slotInterval,
                 defaultDuration,
                 defaultVisitType,
-                reminderEnabled: false,
-                reminderMinutesBefore: DEFAULTS.reminderMinutesBefore,
+                reminderEnabled,
+                reminderMinutesBefore,
             });
         } catch (error) {
             setSavedMsg(
@@ -124,8 +198,12 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
             return;
         }
 
-        setSavedMsg('Configurações salvas.');
-        setMsgType('success');
+        setSavedMsg(null);
+        setMsgType(null);
+        emit('systemMessage', {
+            text: 'Configurações salvas.',
+            type: 'success',
+        });
         if (onApply) onApply();
     }
 
@@ -135,7 +213,9 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
             workEnd === DEFAULTS.workEnd &&
             slotInterval === DEFAULTS.slotInterval &&
             defaultDuration === DEFAULTS.defaultDuration &&
-            defaultVisitType === DEFAULTS.defaultVisitType
+            defaultVisitType === DEFAULTS.defaultVisitType &&
+            reminderEnabled === DEFAULTS.reminderEnabled &&
+            reminderMinutesBefore === DEFAULTS.reminderMinutesBefore
         );
     }
 
@@ -145,8 +225,104 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
         setSlotInterval(DEFAULTS.slotInterval);
         setDefaultDuration(DEFAULTS.defaultDuration);
         setDefaultVisitType(DEFAULTS.defaultVisitType);
+        setReminderEnabled(DEFAULTS.reminderEnabled);
+        setRemindersGloballyEnabled(DEFAULTS.remindersGloballyEnabled);
+        setTelegramLinked(DEFAULTS.telegramLinked);
+        setTelegramLinkActive(DEFAULTS.telegramLinkActive);
+        setTelegramUsername(DEFAULTS.telegramUsername);
+        setTelegramLastError(DEFAULTS.telegramLastError);
+        setReminderMinutesBefore(DEFAULTS.reminderMinutesBefore);
         setSavedMsg('Padrões restaurados (não salvos ainda).');
         setMsgType('success');
+    }
+
+    const remindersEffectiveActive =
+        reminderEnabled && remindersGloballyEnabled;
+
+    async function handleStartTelegramLink() {
+        setTelegramLinkBusy(true);
+        try {
+            const result = await startTelegramLink();
+            if (!result.linkUrl || !result.startToken) {
+                throw new Error('Não foi possível gerar o link de vínculo.');
+            }
+            setTelegramStartUrl(result.linkUrl);
+            setTelegramStartToken(result.startToken);
+            emit('systemMessage', {
+                text: 'Link gerado. Abra no Telegram e toque em Iniciar.',
+                type: 'info',
+            });
+            try {
+                window.open(result.linkUrl, '_blank', 'noopener,noreferrer');
+            } catch {
+                /* noop */
+            }
+        } catch (error) {
+            emit('systemMessage', {
+                text:
+                    error instanceof Error
+                        ? error.message
+                        : 'Erro ao iniciar vínculo com Telegram.',
+                type: 'error',
+            });
+        } finally {
+            setTelegramLinkBusy(false);
+        }
+    }
+
+    async function handleSendTelegramTest() {
+        setTelegramTestBusy(true);
+        try {
+            await sendTelegramTest();
+            emit('systemMessage', {
+                text: 'Mensagem de teste enviada com sucesso!',
+                type: 'success',
+            });
+        } catch (error) {
+            emit('systemMessage', {
+                text:
+                    error instanceof Error
+                        ? error.message
+                        : 'Erro ao enviar teste.',
+                type: 'error',
+            });
+        } finally {
+            setTelegramTestBusy(false);
+        }
+    }
+
+    async function handleVerifyTelegramLink() {
+        if (!telegramStartToken) {
+            emit('systemMessage', {
+                text: 'Primeiro gere o link de conexão do Telegram.',
+                type: 'warning',
+            });
+            return;
+        }
+        setTelegramLinkBusy(true);
+        try {
+            const snapshot = await verifyTelegramLink(telegramStartToken);
+            setReminderEnabled(snapshot.reminderEnabled);
+            setRemindersGloballyEnabled(snapshot.remindersGloballyEnabled);
+            setTelegramLinked(snapshot.telegramLinked);
+            setTelegramLinkActive(snapshot.telegramLinkActive);
+            setTelegramUsername(snapshot.telegramUsername);
+            setTelegramLastError(snapshot.telegramLastError);
+            emit('systemMessage', {
+                text: 'Telegram conectado com sucesso.',
+                type: 'success',
+            });
+        } catch (error) {
+            emit('systemMessage', {
+                text:
+                    error instanceof Error
+                        ? error.message
+                        : 'Ainda não foi possível confirmar o vínculo.',
+                type: 'warning',
+            });
+        } finally {
+            setTelegramLinkBusy(false);
+        }
     }
 
     function handleKeyDown(e: React.KeyboardEvent) {
@@ -157,7 +333,14 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     }
 
     return (
-        <AppModal open={open} onClose={onClose} closeOnEnter={false}>
+        <AppModal
+            open={open}
+            onClose={onClose}
+            closeOnEnter={false}
+            fullScreen={compactViewport}
+            maxHeightVh={96}
+            unmountOnClose
+        >
             <form
                 className={modalStyles.container}
                 onKeyDown={handleKeyDown}
@@ -166,7 +349,7 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                     void save();
                 }}
             >
-                <h2 className={modalStyles.header}>Configurações da Agenda</h2>
+                <h2 className={modalStyles.header}>Notificações e Agenda</h2>
                 <div className={modalStyles.formGrid}>
                     <div className={modalStyles.timeRow}>
                         <div className={modalStyles.fieldGroup}>
@@ -325,17 +508,150 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                         Lembretes Telegram
                     </p>
 
+                    <div className={modalStyles.fieldGroup}>
+                        <label
+                            htmlFor='agenda-reminderEnabled'
+                            className={modalStyles.label}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                            }}
+                        >
+                            <input
+                                id='agenda-reminderEnabled'
+                                type='checkbox'
+                                checked={reminderEnabled}
+                                onChange={e =>
+                                    setReminderEnabled(e.target.checked)
+                                }
+                            />
+                            Notificações ativas
+                        </label>
+                    </div>
+
+                    <div className={modalStyles.fieldGroup}>
+                        <label
+                            htmlFor='agenda-reminderEffective'
+                            className={modalStyles.label}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                            }}
+                        >
+                            <input
+                                id='agenda-reminderEffective'
+                                type='checkbox'
+                                checked={remindersEffectiveActive}
+                                disabled
+                                readOnly
+                            />
+                            Envio efetivo:{' '}
+                            {remindersEffectiveActive ? 'Ativo' : 'Inativo'}
+                        </label>
+                    </div>
+
+                    <div className={modalStyles.fieldGroup}>
+                        <label className={modalStyles.label}>
+                            Vínculo Telegram:{' '}
+                            {telegramLinked && telegramLinkActive
+                                ? 'Conectado'
+                                : 'Não conectado'}
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                                type='button'
+                                className='ui-btn ui-btn--secondary'
+                                onClick={() => {
+                                    void handleStartTelegramLink();
+                                }}
+                                disabled={telegramLinkBusy}
+                            >
+                                Conectar Telegram
+                            </button>
+                            <button
+                                type='button'
+                                className='ui-btn ui-btn--neutral'
+                                onClick={() => {
+                                    void handleVerifyTelegramLink();
+                                }}
+                                disabled={telegramLinkBusy || !telegramStartToken}
+                            >
+                                Verificar conexão
+                            </button>
+                            <button
+                                type='button'
+                                className='ui-btn ui-btn--theme'
+                                onClick={() => {
+                                    void handleSendTelegramTest();
+                                }}
+                                disabled={telegramTestBusy || !(telegramLinked && telegramLinkActive)}
+                                title={!(telegramLinked && telegramLinkActive) ? 'Conecte o Telegram primeiro' : ''}
+                            >
+                                {telegramTestBusy ? 'Enviando…' : 'Enviar teste'}
+                            </button>
+                        </div>
+                        {!!telegramStartUrl && (
+                            <small className={modalStyles.smallNote}>
+                                Se não abriu automaticamente: {telegramStartUrl}
+                            </small>
+                        )}
+                        {telegramUsername && (
+                            <small className={modalStyles.smallNote}>
+                                Usuário: @{telegramUsername}
+                            </small>
+                        )}
+                        {!!telegramLastError && (
+                            <small
+                                className={modalStyles.smallNote}
+                                style={{ color: '#b91c1c' }}
+                            >
+                                Último erro do Telegram: {telegramLastError}
+                            </small>
+                        )}
+                    </div>
+
+                    <div className={modalStyles.fieldGroup}>
+                        <label
+                            htmlFor='agenda-reminderMinutesBefore'
+                            className={modalStyles.label}
+                        >
+                            Avisar com antecedência (min)
+                        </label>
+                        <select
+                            id='agenda-reminderMinutesBefore'
+                            className={modalStyles.select}
+                            value={reminderMinutesBefore}
+                            disabled={!reminderEnabled}
+                            onChange={e =>
+                                setReminderMinutesBefore(
+                                    parseInt(e.target.value, 10),
+                                )
+                            }
+                        >
+                            {reminderMinuteOptions.map(i => (
+                                <option key={i} value={i}>
+                                    {i}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
                     <div
                         style={{
+                            marginTop: '0.75rem',
                             fontSize: '0.85rem',
-                            color: '#6b7280',
+                            color: remindersGloballyEnabled
+                                ? '#6b7280'
+                                : '#b45309',
                             lineHeight: 1.5,
                         }}
                     >
-                        Os lembretes automáticos estão temporariamente
-                        desativados neste release. A agenda continua operando
-                        normalmente, mas o sistema não enviará notificações até
-                        o próximo update.
+                        Ative para enviar lembretes para a profissional no
+                        Telegram. Se o ambiente estiver com a flag global
+                        APPOINTMENT_REMINDERS_ENABLED=false, o envio permanece
+                        bloqueado mesmo com este toggle ativo.
                     </div>
                 </div>
 

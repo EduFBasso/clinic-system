@@ -239,6 +239,8 @@ button:not(:disabled):focus-visible {
 
 /* Evita panning lateral global sem quebrar posicionamento sticky em containers */
 html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     overflow-x: visible;
 }
 body {
