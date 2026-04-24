@@ -74,6 +74,9 @@ const MainContent: React.FC<MainContentProps> = ({
     const [pendingClientIds, setPendingClientIds] = useState<Set<number>>(
         () => new Set(),
     );
+    const [tomorrowClientIds, setTomorrowClientIds] = useState<Set<number>>(
+        () => new Set(),
+    );
     const [noResultsOpen, setNoResultsOpen] = useState(false);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
@@ -476,17 +479,16 @@ const MainContent: React.FC<MainContentProps> = ({
             .sort(sortByPeriodThenTime);
     }, [clients, isSameLocalDay, sortByPeriodThenTime]);
 
+    // Clientes com agendamento amanhã.
+    // Usa tomorrowClientIds (Set<number>) construído no effect de carregamento de agendamentos
+    // para cobrir TODOS os agendamentos do cliente amanhã — não apenas next_appointment_start_at.
+    // Exemplo: cliente com next_appointment hoje + future_appointment amanhã seria ignorado
+    // pelo filtro se só checássemos next_appointment_start_at.
     const tomorrowClients = React.useMemo(() => {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
         return clients
-            .filter(c => {
-                if (c.next_appointment_status !== 'scheduled') return false;
-                if (!c.next_appointment_start_at) return false;
-                return isSameLocalDay(c.next_appointment_start_at, tomorrow);
-            })
+            .filter(c => tomorrowClientIds.has(c.id))
             .sort(sortByPeriodThenTime);
-    }, [clients, isSameLocalDay, sortByPeriodThenTime]);
+    }, [clients, tomorrowClientIds, sortByPeriodThenTime]);
 
     // Clientes com compromisso pendente.
     // A lista é derivada de consultas globais da agenda:
@@ -499,7 +501,10 @@ const MainContent: React.FC<MainContentProps> = ({
         async function loadPendingClientIds() {
             const token = localStorage.getItem('accessToken');
             if (!token || clients.length === 0) {
-                if (!cancelled) setPendingClientIds(new Set());
+                if (!cancelled) {
+                    setPendingClientIds(new Set());
+                    setTomorrowClientIds(new Set());
+                }
                 return;
             }
 
@@ -522,6 +527,13 @@ const MainContent: React.FC<MainContentProps> = ({
                     : [];
 
                 const ids = new Set<number>();
+                const tomorrowIds = new Set<number>();
+
+                // Calcula os limites do dia de amanhã em hora local
+                const tmw = new Date();
+                tmw.setDate(tmw.getDate() + 1);
+                const tmwStart = new Date(tmw.getFullYear(), tmw.getMonth(), tmw.getDate(), 0, 0, 0, 0).getTime();
+                const tmwEnd   = new Date(tmw.getFullYear(), tmw.getMonth(), tmw.getDate(), 23, 59, 59, 999).getTime();
 
                 pendingData.forEach(appt => {
                     const clientId = resolveAppointmentClientId(appt);
@@ -529,20 +541,35 @@ const MainContent: React.FC<MainContentProps> = ({
                 });
 
                 scheduledData.forEach(appt => {
+                    const clientId = resolveAppointmentClientId(appt);
+                    if (clientId == null) return;
+
+                    // Vencidos (end_at <= now) → pendentes
                     const endMs = appt.end_at
                         ? new Date(appt.end_at).getTime()
                         : NaN;
-                    if (!Number.isFinite(endMs) || endMs > nowMs) return;
+                    if (Number.isFinite(endMs) && endMs <= nowMs) {
+                        ids.add(clientId);
+                    }
 
-                    const clientId = resolveAppointmentClientId(appt);
-                    if (clientId != null) ids.add(clientId);
+                    // Agendados para amanhã (qualquer horário do dia)
+                    const startMs = appt.start_at
+                        ? new Date(appt.start_at).getTime()
+                        : NaN;
+                    if (Number.isFinite(startMs) && startMs >= tmwStart && startMs <= tmwEnd) {
+                        tomorrowIds.add(clientId);
+                    }
                 });
 
                 if (!cancelled) {
                     setPendingClientIds(ids);
+                    setTomorrowClientIds(tomorrowIds);
                 }
             } catch {
-                if (!cancelled) setPendingClientIds(new Set());
+                if (!cancelled) {
+                    setPendingClientIds(new Set());
+                    setTomorrowClientIds(new Set());
+                }
             }
         }
 

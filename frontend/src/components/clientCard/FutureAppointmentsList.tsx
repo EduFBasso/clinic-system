@@ -1,9 +1,8 @@
-import { emit } from '../../events/bus';
 import { formatTime } from '../../utils/timeFormat';
 import styles from '../../styles/components/ClientCard.module.css';
 import type { Appointment } from '../../hooks/useAppointments';
 import { API_BASE } from '../../config/api';
-import { FaEdit, FaEye } from 'react-icons/fa';
+import { FaEdit } from 'react-icons/fa';
 
 type Props = {
     items: Appointment[];
@@ -93,40 +92,6 @@ export default function FutureAppointmentsList({
                                     {fmt(s)} - {fmt(e)}
                                 </span>
                             </div>
-                            <button
-                                className={styles.iconButton}
-                                title='Ver detalhes do compromisso'
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    fetch(
-                                        `${API_BASE}/agenda/appointments/${f.id}/`,
-                                        {
-                                            headers: {
-                                                Authorization: token
-                                                    ? `Bearer ${token}`
-                                                    : '',
-                                            },
-                                        },
-                                    )
-                                        .then(r => (r.ok ? r.json() : null))
-                                        .then(data => {
-                                            const appt = (data ||
-                                                f) as Appointment;
-                                            emit('openAppointmentDetails', {
-                                                appointment: appt,
-                                            });
-                                        })
-                                        .catch(() => {
-                                            emit('openAppointmentDetails', {
-                                                appointment: f,
-                                            });
-                                        });
-                                }}
-                            >
-                                <FaEye color={iconColor} />
-                            </button>
                             <button
                                 className={styles.iconButton}
                                 title='Editar este compromisso'
