@@ -2,8 +2,8 @@
  * Shared helpers for agenda views (DesktopAgendaPage, DailyAgendaModal).
  * Centralises logic that was duplicated across both components.
  */
-import type { EnrichedAppointment } from './status';
 import type { ClientBasic } from '../../types/ClientBasic';
+import type { EnrichedAppointment } from './status';
 
 /** Order for sorting appointments by status within the same time slot. */
 export const STATUS_ORDER = [
@@ -43,7 +43,11 @@ export function splitName(full?: string): { first: string; last: string } {
  * Used to open QuickScheduleModal pre-filled with the client.
  */
 export function makeClientBasic(
-    a: EnrichedAppointment & {
+    a: {
+        id: number;
+        status: 'scheduled' | 'pending' | 'done' | 'canceled' | 'ongoing';
+        start_at: string;
+        end_at: string;
         client?: ClientLike | number;
         client_name?: string;
         title?: string;

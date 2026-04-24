@@ -1,5 +1,9 @@
+from typing import cast
+
+from django.db.models import QuerySet
 from rest_framework import viewsets, permissions, generics
 from rest_framework.decorators import action
+from rest_framework.request import Request
 from rest_framework.response import Response
 from django.utils import timezone
 
@@ -11,6 +15,20 @@ from .serializers import (
     EncounterSerializer,
     FinalizeAuditSerializer,
 )
+from .state_utils import promote_overdue_scheduled_to_pending
+
+
+class TypedRequestMixin:
+    def drf_request(self) -> Request:
+        return cast(Request, getattr(self, "request"))
+
+    def query_param(self, key: str) -> str | None:
+        return self.drf_request().query_params.get(key)
+
+    def base_queryset(self) -> QuerySet:
+        queryset = getattr(self, "queryset", None)
+        assert queryset is not None, f"{self.__class__.__name__} must define queryset"
+        return cast(QuerySet, queryset)
 
 
 class IsProfessionalOrReadOnly(permissions.BasePermission):
@@ -18,7 +36,7 @@ class IsProfessionalOrReadOnly(permissions.BasePermission):
     Assumimos que request.user é Professional.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request, view):  # pyright: ignore[reportIncompatibleMethodOverride]
         return request.user and request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj: Appointment):
@@ -27,11 +45,11 @@ class IsProfessionalOrReadOnly(permissions.BasePermission):
         return getattr(request.user, "id", None) == getattr(obj.professional, "id", None)
 
 
-class ProfessionalOwnedViewSet(viewsets.ModelViewSet):
+class ProfessionalOwnedViewSet(TypedRequestMixin, viewsets.ModelViewSet):
     permission_classes = [IsProfessionalOrReadOnly]
 
-    def get_queryset(self):
-        qs = self.queryset
+    def get_queryset(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+        qs = self.base_queryset()
         user = getattr(self.request, "user", None)
         if user and getattr(user, "id", None):
             qs = qs.filter(professional_id=user.id)
@@ -41,9 +59,10 @@ class ProfessionalOwnedViewSet(viewsets.ModelViewSet):
         serializer.save(professional=self.request.user)
 
 
-class AppointmentViewSet(viewsets.ModelViewSet):
+class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     permission_classes = [IsProfessionalOrReadOnly]
+    queryset = Appointment.objects.select_related("professional", "client")
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -51,17 +70,21 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         ctx["request"] = getattr(self, "request", None)
         return ctx
 
-    def get_queryset(self):
-        qs = Appointment.objects.all()
+    def get_queryset(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+        qs = self.base_queryset()
         user = getattr(self.request, "user", None)
         # restringe a agenda ao profissional logado
         if user and getattr(user, "id", None):
             qs = qs.filter(professional_id=user.id)
+        # Promoção temporal oportunista: limitar a leituras de agenda.
+        # Evita escritas implícitas desnecessárias em fluxos de update/destroy.
+        if getattr(self, "action", None) in {"list", "next_for_client"}:
+            promote_overdue_scheduled_to_pending(qs)
         # filtros opcionais ?start=2025-09-01T00:00:00&end=2025-09-02T00:00:00&client=<id>
-        start = self.request.query_params.get("start")
-        end = self.request.query_params.get("end")
-        client_id = self.request.query_params.get("client")
-        status_val = self.request.query_params.get("status")
+        start = self.query_param("start")
+        end = self.query_param("end")
+        client_id = self.query_param("client")
+        status_val = self.query_param("status")
 
         if start:
             try:
@@ -77,7 +100,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(client_id=client_id)
         if status_val:
             qs = qs.filter(status=status_val)
-        return qs.select_related("professional", "client")
+        return qs
 
     def perform_create(self, serializer):
         # profissional sempre é o usuário autenticado
@@ -114,6 +137,11 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "forbidden"}, status=403)
         if obj.status == Appointment.Status.CANCELED:
             return Response({"detail": "já cancelado"}, status=200)
+        if obj.status == Appointment.Status.DONE:
+            return Response(
+                {"detail": "compromisso concluído não pode ser cancelado"},
+                status=400,
+            )
         obj.status = Appointment.Status.CANCELED
         from django.utils import timezone as _tz
         if not getattr(obj, "canceled_at", None):
@@ -150,10 +178,10 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="finalize")
     def finalize(self, request, pk=None):
-        """Conclui o compromisso como 'done' sem permitir edição geral.
+        """Encerra a fase programável do compromisso, movendo-o para 'pending'.
 
         Regras:
-        - Apenas o profissional dono pode concluir.
+        - Apenas o profissional dono pode finalizar.
         - Só é permitido se o status atual for 'scheduled'.
         - Permite finalização antecipada durante a janela em andamento (start_at <= now < end_at).
           Não permite antes do início.
@@ -164,6 +192,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         # Permissão explícita
         if getattr(request.user, "id", None) != getattr(obj.professional, "id", None):
             return Response({"detail": "forbidden"}, status=403)
+        if obj.status == obj.Status.PENDING:
+            return Response(self.get_serializer(obj).data, status=200)
         if obj.status == obj.Status.DONE:
             # idempotente
             return Response(self.get_serializer(obj).data, status=200)
@@ -187,8 +217,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             # 422 sinaliza regra de negócio
             return Response({"detail": "compromisso ainda não iniciou", "code": "too_early"}, status=422)
 
-        # Marca como concluído; encurta end_at apenas se em andamento
-        obj.status = obj.Status.DONE
+        # Move para pending; encurta end_at apenas se em andamento
+        obj.status = obj.Status.PENDING
         adjusted = False
         if obj.end_at and now < obj.end_at:
             obj.end_at = now
@@ -248,16 +278,37 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="done")
     def done(self, request, pk=None):
-        """Alias para finalize, por compatibilidade no frontend."""
-        return self.finalize(request, pk)
+        """Resolve explicitamente um compromisso pendente como concluído."""
+        obj = self.get_object()
+        if getattr(request.user, "id", None) != getattr(obj.professional, "id", None):
+            return Response({"detail": "forbidden"}, status=403)
+        if obj.status == obj.Status.DONE:
+            return Response(self.get_serializer(obj).data, status=200)
+        if obj.status == obj.Status.CANCELED:
+            return Response(
+                {"detail": "compromisso cancelado não pode ser concluído"},
+                status=400,
+            )
+        if obj.status != obj.Status.PENDING:
+            return Response(
+                {
+                    "detail": "compromisso deve ser finalizado antes de ser concluído",
+                    "code": "must_finalize_first",
+                },
+                status=409,
+            )
+
+        obj.status = obj.Status.DONE
+        obj.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(obj).data, status=200)
 
 
 class IsStaffOnly(permissions.BasePermission):
-    def has_permission(self, request, view):
+    def has_permission(self, request, view):  # pyright: ignore[reportIncompatibleMethodOverride]
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
 
 
-class FinalizeAuditListView(generics.ListAPIView):
+class FinalizeAuditListView(TypedRequestMixin, generics.ListAPIView):
     """Admin-only list endpoint to inspect finalize audits with optional filters.
 
     Query params:
@@ -269,13 +320,14 @@ class FinalizeAuditListView(generics.ListAPIView):
 
     serializer_class = FinalizeAuditSerializer
     permission_classes = [IsStaffOnly]
+    queryset = FinalizeAudit.objects.select_related("appointment", "professional", "client")
 
-    def get_queryset(self):
-        qs = FinalizeAudit.objects.select_related("appointment", "professional", "client").all()
-        appt_id = self.request.query_params.get("appointment")
-        device_id = self.request.query_params.get("device_id")
-        start = self.request.query_params.get("start")
-        end = self.request.query_params.get("end")
+    def get_queryset(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+        qs = self.base_queryset()
+        appt_id = self.query_param("appointment")
+        device_id = self.query_param("device_id")
+        start = self.query_param("start")
+        end = self.query_param("end")
         if appt_id:
             try:
                 qs = qs.filter(appointment_id=int(appt_id))
@@ -302,9 +354,9 @@ class EncounterViewSet(ProfessionalOwnedViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        client_id = self.request.query_params.get("client")
-        appointment_id = self.request.query_params.get("appointment")
-        status_val = self.request.query_params.get("status")
+        client_id = self.query_param("client")
+        appointment_id = self.query_param("appointment")
+        status_val = self.query_param("status")
         if client_id:
             qs = qs.filter(client_id=client_id)
         if appointment_id:
@@ -347,9 +399,9 @@ class ClinicalRecordViewSet(ProfessionalOwnedViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        client_id = self.request.query_params.get("client")
-        encounter_id = self.request.query_params.get("encounter")
-        record_type = self.request.query_params.get("record_type")
+        client_id = self.query_param("client")
+        encounter_id = self.query_param("encounter")
+        record_type = self.query_param("record_type")
         if client_id:
             qs = qs.filter(client_id=client_id)
         if encounter_id:
@@ -370,11 +422,11 @@ class ChargeViewSet(ProfessionalOwnedViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        client_id = self.request.query_params.get("client")
-        encounter_id = self.request.query_params.get("encounter")
-        appointment_id = self.request.query_params.get("appointment")
-        status_val = self.request.query_params.get("status")
-        charge_type = self.request.query_params.get("charge_type")
+        client_id = self.query_param("client")
+        encounter_id = self.query_param("encounter")
+        appointment_id = self.query_param("appointment")
+        status_val = self.query_param("status")
+        charge_type = self.query_param("charge_type")
         if client_id:
             qs = qs.filter(client_id=client_id)
         if encounter_id:
@@ -395,7 +447,8 @@ class ChargeViewSet(ProfessionalOwnedViewSet):
         charge = self.get_object()
         if charge.status == Charge.Status.CANCELED:
             return Response({"detail": "Cobrança cancelada não pode ser enviada."}, status=400)
-        charge.status = Charge.Status.SENT
+        if charge.status != Charge.Status.PAID:
+            charge.status = Charge.Status.SENT
         if charge.shared_at is None:
             charge.shared_at = timezone.now()
         charge.save()

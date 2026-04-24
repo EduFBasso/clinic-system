@@ -7,12 +7,12 @@
 
 `ClientCard` é um componente central que:
 
--   Exibe dados principais do cliente (nome, idade, contato, endereço).
--   Exibe estado de agenda: pendente, agendado (scheduled), em andamento
+- Exibe dados principais do cliente (nome, idade, contato, endereço).
+- Exibe estado de agenda: pendente, agendado (scheduled), em andamento
     (ongoing), futuros agendamentos.
--   Fornece ações rápidas: visualizar cliente, abrir agenda mensal/semanal,
+- Fornece ações rápidas: visualizar cliente, abrir agenda mensal/semanal,
     criar/editar agendamento rápido, finalizar atendimento.
--   Reage a eventos globais customizados para manter consistência na UI sem prop
+- Reage a eventos globais customizados para manter consistência na UI sem prop
     drilling extenso.
 
 O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
@@ -37,40 +37,40 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 ### 1. `useClientPendingState`
 
--   Entrada: `{ client, now }`
--   Saída: `effectivePending`, `openPendingActions()`,
+- Entrada: `{ client, now }`
+- Saída: `effectivePending`, `openPendingActions()`,
     `tryOpenPendingElseQuick(fallback)`.
--   Heurística: tenta inferir pendência quando cliente possuía compromisso recém
+- Heurística: tenta inferir pendência quando cliente possuía compromisso recém
     finalizado/cancelado e ainda não foi resolvido, com fallback eventual a
     fetch assíncrono.
 
 ### 2. `useClientOngoingState`
 
--   Entrada: `{ client, now, enableProbe, debug }`
--   Interno: snapshot, sweep global, probe condicional, latch persistente,
+- Entrada: `{ client, now, enableProbe, debug }`
+- Interno: snapshot, sweep global, probe condicional, latch persistente,
     hysterese (delay de entrada), supressão pós-finalização.
--   Saída: `isOngoing`, `displayStartISO`, `displayEndISO`, `effectiveApptId`,
+- Saída: `isOngoing`, `displayStartISO`, `displayEndISO`, `effectiveApptId`,
     `afterFinalizeSuccess()`, `hasTrustedWindow`.
--   Eventos: escuta `appointments:changed`, `client:clearOngoing`,
+- Eventos: escuta `appointments:changed`, `client:clearOngoing`,
     `scrollToClientCard` (dispatch). Telemetria quando entra em ongoing.
 
 ### 3. `useClientCardStyle`
 
--   Entrada: `{ isOngoing, selected, pressed, isScheduled, isPending }`
--   Saída: tokens de estilo (cores, opacidades, estilo container, etc.).
+- Entrada: `{ isOngoing, selected, pressed, isScheduled, isPending }`
+- Saída: tokens de estilo (cores, opacidades, estilo container, etc.).
 
 ### 4. `useFinalizeAppointment`
 
--   Gerencia estado de finalização (`finishing`) e executa chamada ao backend.
+- Gerencia estado de finalização (`finishing`) e executa chamada ao backend.
 
 ### (A extrair) `useClientFutureAppointments`
 
--   Objetivo: encapsular fetch de futuros agendamentos e mensagens de limite.
--   Situação Atual: lógica inline dentro de um `useEffect` em `ClientCard`.
+- Objetivo: encapsular fetch de futuros agendamentos e mensagens de limite.
+- Situação Atual: lógica inline dentro de um `useEffect` em `ClientCard`.
 
 ### (A extrair) `useClientCreateAction`
 
--   Objetivo: unificar lógica do botão + considerando estados: pendente,
+- Objetivo: unificar lógica do botão + considerando estados: pendente,
     ongoing, limite atingido, edição.
 
 ## Eventos Globais Relevantes
@@ -124,24 +124,24 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 ## Próximos Passos Técnicos Imediatos
 
--   Criar hook `useClientFutureAppointments` encapsulando:
-    -   Estado: `futureAppointments`, `loadingFuture`.
-    -   Efeitos: fetch inicial e em `appointments:changed`.
-    -   Mensagem de limite de compromissos (disparo de `systemMessage`).
-    -   Dependências: `client.id`, `client.next_appointment_start_at`,
+- Criar hook `useClientFutureAppointments` encapsulando:
+- Estado: `futureAppointments`, `loadingFuture`.
+- Efeitos: fetch inicial e em `appointments:changed`.
+- Mensagem de limite de compromissos (disparo de `systemMessage`).
+- Dependências: `client.id`, `client.next_appointment_start_at`,
         `client.next_appointment_id`, `isScheduled`.
--   Substituir bloco inline no `ClientCard` pelo hook.
--   Introduzir tipo retornado:
+- Substituir bloco inline no `ClientCard` pelo hook.
+- Introduzir tipo retornado:
     `{ futureAppointments, loadingFuture, limitReached, totalScheduled, dynLimit, refetch }`.
 
 ## Considerações de Performance
 
--   `useClientOngoingState` evita probe por cliente salvo se flag habilitada
+- `useClientOngoingState` evita probe por cliente salvo se flag habilitada
     (`VITE_ENABLE_ONGOING_PROBE`).
--   Sweep global (não mostrado aqui) minimiza chamadas por cliente.
--   Future appointments fetch restrito por `limit` dinâmico + debounced via
+- Sweep global (não mostrado aqui) minimiza chamadas por cliente.
+- Future appointments fetch restrito por `limit` dinâmico + debounced via
     eventos.
--   Hysterese reduz flicker de transições scheduled→ongoing.
+- Hysterese reduz flicker de transições scheduled→ongoing.
 
 ## Testes Recomendados (Vitest)
 
@@ -157,10 +157,10 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 ## Decisões de Design (Resumo)
 
--   Remoção de pill explícita de pendência para reduzir clutter visual.
--   Centralização de heurísticas complexas em hooks para permitir evolução sem
+- Remoção de pill explícita de pendência para reduzir clutter visual.
+- Centralização de heurísticas complexas em hooks para permitir evolução sem
     inflar JSX.
--   Uso de eventos globais leve para orquestrar interações entre cards e modais
+- Uso de eventos globais leve para orquestrar interações entre cards e modais
     sem store global pesado.
 
 ---

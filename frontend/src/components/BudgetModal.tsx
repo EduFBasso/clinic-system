@@ -198,10 +198,10 @@ export default function BudgetModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sendPix, pixKeyType, pixKeyValue, profFirstName, profLastName]);
 
-    if (!open) return null;
-
     // Budget (🧾) deve abrir WhatsApp com a mensagem preenchida, sem amarrar em um número.
     // O ícone do WhatsApp no ClientCard continua abrindo direto no número do cliente.
+    // NOTA: Não usar 'if (!open) return null' aqui — o AppModal precisa receber open=false
+    // para executar os efeitos de restauração de scroll antes de desmontar.
 
     const total = items.reduce(
         (acc, it) => acc + (it.price || 0) * (it.qty || 1),
@@ -329,6 +329,7 @@ export default function BudgetModal({
             closeOnEnter={false}
             disableBackdropClose
             disableEscapeKeyDown
+            unmountOnClose
         >
             <div
                 style={{
@@ -377,7 +378,7 @@ export default function BudgetModal({
                     linha ao orçamento.
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                    {/* Procedimentos (Serviços) — limitar dropdown (50vw) para não empurrar o botão + */}
+                    {/* Serviços — limitar dropdown (50vw) para não empurrar o botão + */}
                     <div
                         style={{
                             display: 'grid',
@@ -396,7 +397,7 @@ export default function BudgetModal({
                                 minWidth: 0,
                             }}
                         >
-                            <option value=''>Procedimento</option>
+                            <option value=''>Serviço</option>
                             {services.map(s => (
                                 <option key={s.id} value={String(s.id)}>
                                     {s.name} —{' '}
@@ -408,7 +409,7 @@ export default function BudgetModal({
                             title={
                                 selServiceId
                                     ? 'Adicionar linha'
-                                    : 'Selecione um procedimento'
+                                    : 'Selecione um serviço'
                             }
                             aria-label='Adicionar linha'
                             disabled={!selServiceId}
@@ -423,24 +424,19 @@ export default function BudgetModal({
                                 );
                                 setSelServiceId('');
                             }}
+                            className={`ui-btn ${
+                                selServiceId
+                                    ? 'ui-btn--theme'
+                                    : 'ui-btn--disabled'
+                            }`}
                             style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
                                 width: 44,
                                 height: 36,
                                 padding: 0,
                                 fontWeight: 800,
                                 fontSize: 28,
-                                background: 'transparent',
-                                color: 'var(--color-success-dark)',
-                                border: 'none',
                                 borderRadius: 6,
                                 lineHeight: 1,
-                                cursor: selServiceId
-                                    ? 'pointer'
-                                    : 'not-allowed',
-                                opacity: selServiceId ? 1 : 0.5,
                             }}
                         >
                             +
@@ -496,24 +492,19 @@ export default function BudgetModal({
                                 ]);
                                 setSelProductId('');
                             }}
+                            className={`ui-btn ${
+                                selProductId
+                                    ? 'ui-btn--theme'
+                                    : 'ui-btn--disabled'
+                            }`}
                             style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
                                 width: 44,
                                 height: 36,
                                 padding: 0,
                                 fontWeight: 800,
                                 fontSize: 28,
-                                background: 'transparent',
-                                color: 'var(--color-success-dark)',
-                                border: 'none',
                                 borderRadius: 6,
                                 lineHeight: 1,
-                                cursor: selProductId
-                                    ? 'pointer'
-                                    : 'not-allowed',
-                                opacity: selProductId ? 1 : 0.5,
                             }}
                         >
                             +
@@ -759,7 +750,7 @@ export default function BudgetModal({
                     <button
                         onClick={onClose}
                         disabled={busy}
-                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
+                        className='ui-btn ui-btn--neutral'
                     >
                         Fechar
                     </button>
@@ -771,16 +762,13 @@ export default function BudgetModal({
                                 ? 'Gerar e enviar'
                                 : 'Adicione pelo menos um item'
                         }
+                        className={`ui-btn ${
+                            busy || total <= 0
+                                ? 'ui-btn--disabled'
+                                : 'ui-btn--theme'
+                        }`}
                         style={{
                             padding: '10px 14px',
-                            background: 'var(--color-success-dark)',
-                            color: '#fff',
-                            fontWeight: 700,
-                            border: 'none',
-                            borderRadius: 8,
-                            cursor:
-                                busy || total <= 0 ? 'not-allowed' : 'pointer',
-                            opacity: busy || total <= 0 ? 0.6 : 1,
                         }}
                     >
                         {busy ? 'Enviando…' : 'Enviar'}

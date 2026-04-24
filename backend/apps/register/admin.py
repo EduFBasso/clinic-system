@@ -66,8 +66,12 @@ class ProfessionalSettingsAdmin(admin.ModelAdmin):
         "pix_key_type",
         "pix_key_value",
         "work_start_hour",
+        "work_start_minute",
         "work_end_hour",
+        "work_end_minute",
         "slot_minutes",
+        "default_duration_minutes",
+        "default_visit_type",
         "updated_at",
     )
     search_fields = ("professional__email", "pix_key_value")
@@ -77,7 +81,17 @@ class ProfessionalSettingsAdmin(admin.ModelAdmin):
         ("Profissional", {"fields": ("professional",)}),
         (
             "Agenda padrão",
-            {"fields": ("work_start_hour", "work_end_hour", "slot_minutes")},
+            {
+                "fields": (
+                    "work_start_hour",
+                    "work_start_minute",
+                    "work_end_hour",
+                    "work_end_minute",
+                    "slot_minutes",
+                    "default_duration_minutes",
+                    "default_visit_type",
+                )
+            },
         ),
         (
             "Mensageria",

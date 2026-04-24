@@ -4,20 +4,25 @@ import AppModal from './Modal';
 import { clearOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
 import { dispatchers } from '../events/dispatchers';
+import { emit } from '../events/bus';
 import { cancelFlow } from '../services/flows/cancelFlow';
 import { finalizeFlow } from '../services/flows/finalizeFlow';
 import { formatTime } from '../utils/timeFormat';
+import { API_BASE } from '../config/api';
+import { apiFetch } from '../utils/apiFetch';
 import {
     setAppointmentOverride,
     getAppointmentOverride,
     subscribeOverrides,
 } from '../utils/appointments/overrides';
+import type { PendingReturnContext } from '../types/agendaFlow';
 import { step, debugLog, isStepEnabled } from '../debug/stepper';
 
 interface PendingActionsModalProps {
     open: boolean;
     onClose: () => void;
     appt: SharedAppointmentLike | null;
+    returnContext?: PendingReturnContext;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -31,15 +36,102 @@ const valueStyle: React.CSSProperties = {
     color: 'var(--color-heading)',
 };
 
+type AppointmentCharge = {
+    id: number;
+    status: string;
+    paid_at?: string | null;
+    items?: Array<{
+        paid?: boolean;
+        paid_at?: string | null;
+    }>;
+};
+
+const actionBtnBaseStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 40,
+    padding: '8px 12px',
+    borderRadius: 'var(--btn-radius)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    fontSize: 'var(--font-body)',
+    fontWeight: 'var(--btn-font-weight)',
+    lineHeight: 1,
+};
+
+const actionBtnNeutralStyle: React.CSSProperties = {
+    background: 'var(--btn-neutral-bg)',
+    borderColor: 'var(--btn-neutral-border)',
+    color: 'var(--btn-neutral-text)',
+};
+
+const actionBtnSecondaryStyle: React.CSSProperties = {
+    background: 'var(--btn-secondary-bg)',
+    borderColor: 'var(--btn-secondary-border)',
+    color: 'var(--btn-secondary-text)',
+};
+
+const actionBtnDangerStyle: React.CSSProperties = {
+    background: 'var(--btn-danger-bg)',
+    borderColor: 'var(--btn-danger-border)',
+    color: 'var(--btn-danger-text)',
+};
+
+const actionBtnDisabledStyle: React.CSSProperties = {
+    background: 'var(--btn-disabled-bg)',
+    borderColor: 'var(--btn-disabled-border)',
+    color: 'var(--btn-disabled-text)',
+    opacity: 0.72,
+    cursor: 'not-allowed',
+};
+
 export default function PendingActionsModal({
     open,
     onClose,
     appt,
+    returnContext,
 }: PendingActionsModalProps) {
     const [busy, setBusy] = React.useState<'cancel' | 'finalize' | null>(null);
     const [closing, setClosing] = React.useState(false);
     const [errorText, setErrorText] = React.useState<string | null>(null);
+    const [hasPaidCharge, setHasPaidCharge] = React.useState(false);
     const [, forceRender] = React.useState(0);
+    React.useEffect(() => {
+        if (!open || !appt) {
+            setHasPaidCharge(false);
+            return;
+        }
+        let mounted = true;
+        apiFetch(`${API_BASE}/agenda/charges/?appointment=${appt.id}`)
+            .then(data => {
+                if (!mounted) return;
+                const raw = data as
+                    | { results?: AppointmentCharge[] }
+                    | AppointmentCharge[];
+                const charges = Array.isArray(raw)
+                    ? raw
+                    : ((raw as { results?: AppointmentCharge[] }).results ??
+                      []);
+                const paidDetected = charges.some(charge => {
+                    if (charge.status === 'paid' || !!charge.paid_at) {
+                        return true;
+                    }
+                    return (charge.items ?? []).some(
+                        item => item.paid || !!item.paid_at,
+                    );
+                });
+                setHasPaidCharge(paidDetected);
+            })
+            .catch(() => {
+                if (mounted) setHasPaidCharge(false);
+            });
+        return () => {
+            mounted = false;
+        };
+    }, [open, appt]);
+
     React.useEffect(() => {
         if (!appt) return undefined;
         const unsub = subscribeOverrides(ids => {
@@ -113,14 +205,18 @@ export default function PendingActionsModal({
 
     // Removed global singleton guard; centralized opening is now handled in Home via 'pendingActions:open' events
 
-    // If modal receives a non-scheduled appointment (e.g., canceled/done), auto-close defensively.
+    // If modal receives a terminal appointment (e.g., canceled/done), auto-close defensively.
     React.useEffect(() => {
         if (!open || !appt) return;
         const st = (appt as SharedAppointmentLike).status as string | undefined;
-        if (st && st.toLowerCase() !== 'scheduled') {
+        if (
+            st &&
+            st.toLowerCase() !== 'scheduled' &&
+            st.toLowerCase() !== 'pending'
+        ) {
             try {
                 debugLog(
-                    'PendingActions: auto-close due to non-scheduled status',
+                    'PendingActions: auto-close due to terminal status',
                     {
                         status: st,
                         id: appt.id,
@@ -209,6 +305,9 @@ export default function PendingActionsModal({
         appt.status === 'scheduled' && !Number.isNaN(startPlannedMs)
             ? !inconsistentWindow && nowMsForButtons < startPlannedMs
             : false;
+    const closeDisabled = !!busy || closing;
+    const finalizeDisabled = !!busy || closing || finalizeTimeLock;
+    const cancelDisabled = !!busy || closing;
     const apptId = appt.id; // safe after null check
     const apptClientId =
         typeof appt.client === 'number'
@@ -488,7 +587,9 @@ export default function PendingActionsModal({
     async function doFinalize() {
         if (busy) return;
         setBusy('finalize');
+        setErrorText(null);
         // Captura antes de qualquer operação async (props podem mudar)
+        const capturedStatus = appt?.status ?? 'scheduled';
         const capturedClientName = clientName;
         const capturedStartAt = appt?.start_at ?? '';
         const capturedEndAt = appt?.end_at ?? '';
@@ -502,7 +603,10 @@ export default function PendingActionsModal({
                     debugLog('PendingActions: step timeout (auto-continue)');
                 })(),
             ]);
-            const res = await finalizeFlow(id);
+            const res =
+                capturedStatus === 'pending'
+                    ? { ok: true, status: 200 }
+                    : await finalizeFlow(id);
             debugLog('PendingActions: finalizeFlow response', res);
             if (!res.ok) throw new Error(res.error || 'Falha ao finalizar');
             // Dispara eventos de atualização com pequeno backoff para evitar corrida
@@ -539,18 +643,6 @@ export default function PendingActionsModal({
             } catch {
                 /* noop */
             }
-            // Evento de resolução imediata para limpar pendente no ClientCard
-            try {
-                if (typeof apptClientId === 'number') {
-                    window.dispatchEvent(
-                        new CustomEvent('pending:resolved', {
-                            detail: { clientId: apptClientId, status: 'done' },
-                        }),
-                    );
-                }
-            } catch {
-                /* noop */
-            }
             // Feche primeiro este modal; depois mensagem
             setClosing(true);
             await Promise.race([
@@ -565,21 +657,15 @@ export default function PendingActionsModal({
                 })(),
             ]);
             onClose();
-            // Espera curta para garantir desmontagem antes de abrir SystemMessage
             setTimeout(() => {
                 try {
-                    window.dispatchEvent(
-                        new CustomEvent('systemMessage', {
-                            detail: {
-                                text: 'Atendimento marcado como concluído.',
-                                type: 'success',
-                            },
-                        }),
-                    );
                     window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                    debugLog(
-                        'PendingActions: systemMessage success (finalize)',
-                    );
+                } catch {
+                    /* noop */
+                }
+                // Fecha todos os modais de agenda antes de navegar (evita fundo vazando)
+                try {
+                    emit('agenda:closeAll', undefined);
                 } catch {
                     /* noop */
                 }
@@ -595,7 +681,12 @@ export default function PendingActionsModal({
                                     : undefined,
                             startAt: capturedStartAt,
                             endAt: capturedEndAt,
+                            returnContext,
                         },
+                    });
+                    debugLog('PendingActions: navigate to consulta', {
+                        id,
+                        status: capturedStatus,
                     });
                 } catch {
                     /* noop */
@@ -612,7 +703,8 @@ export default function PendingActionsModal({
                 }, 120);
             }, 120);
         } catch (e) {
-            const msg = e instanceof Error ? e.message : 'Falha ao concluir';
+            const msg =
+                e instanceof Error ? e.message : 'Falha ao abrir consulta';
             try {
                 window.dispatchEvent(
                     new CustomEvent('systemMessage', {
@@ -637,6 +729,7 @@ export default function PendingActionsModal({
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             closeOnEnter={false}
             disableBackdropClose={true}
             disableEscapeKeyDown={true}
@@ -652,7 +745,7 @@ export default function PendingActionsModal({
                 data-appt-id={appt?.id ?? undefined}
                 data-instance={instanceId}
             >
-                <h3 style={{ margin: 0 }}>Consulta — Ação em Pendente</h3>
+                <h3 style={{ margin: 0 }}>Ação Pendente</h3>
                 <div style={{ display: 'grid', gap: 6 }}>
                     <div>
                         <span style={labelStyle}>Cliente: </span>
@@ -694,6 +787,24 @@ export default function PendingActionsModal({
                             {timeStatus.detail ? ` — ${timeStatus.detail}` : ''}
                         </span>
                     </div>
+                    {hasPaidCharge && (
+                        <div
+                            style={{
+                                marginTop: 4,
+                                padding: '10px 12px',
+                                borderRadius: 10,
+                                background: '#fff7ed',
+                                border: '1px solid #fdba74',
+                                color: '#9a3412',
+                                fontSize: 13,
+                                lineHeight: 1.35,
+                                fontWeight: 600,
+                            }}
+                            role='status'
+                        >
+                            Aviso: esta consulta ja possui cobranca ou anotacao marcada como paga. Se desmarcar o compromisso, revise depois a cobranca para manter o registro consistente.
+                        </div>
+                    )}
                 </div>
                 {/* Campo de motivo removido por ora. Backend ainda não coleta. */}
                 <div
@@ -736,44 +847,62 @@ export default function PendingActionsModal({
                                 /* noop */
                             }
                         }}
-                        style={{ padding: '8px 12px', background: '#e5e7eb' }}
-                        disabled={!!busy || closing}
+                        className='ui-btn ui-btn--neutral'
+                        disabled={closeDisabled}
+                        style={{
+                            ...actionBtnBaseStyle,
+                            ...(closeDisabled
+                                ? actionBtnDisabledStyle
+                                : actionBtnNeutralStyle),
+                        }}
                     >
                         Fechar
                     </button>
                     <button
                         onClick={doFinalize}
-                        disabled={!!busy || closing || finalizeTimeLock}
+                        disabled={finalizeDisabled}
+                        className={`ui-btn ${
+                            finalizeTimeLock
+                                ? 'ui-btn--disabled'
+                                : 'ui-btn--secondary'
+                        }`}
                         style={{
-                            padding: '8px 12px',
-                            background: 'var(--color-done)',
-                            color: '#fff',
-                            fontWeight: 700,
-                            opacity: finalizeTimeLock ? 0.6 : 1,
-                            border: '1px solid color-mix(in oklab, var(--color-done) 60%, #0000)',
+                            ...actionBtnBaseStyle,
+                            ...(finalizeDisabled
+                                ? actionBtnDisabledStyle
+                                : actionBtnSecondaryStyle),
                         }}
                         title={
                             finalizeTimeLock
-                                ? 'Aguardando início para permitir concluir'
-                                : 'Marcar como concluído'
+                                                                ? 'Aguardando início para permitir avançar'
+                                                                : appt.status === 'pending'
+                                                                    ? 'Ir para a consulta'
+                                                                    : 'Encerrar atendimento e seguir para a consulta'
                         }
                     >
                         {busy === 'finalize'
-                            ? 'Concluindo…'
+                                                        ? 'Abrindo…'
                             : finalizeTimeLock
                               ? 'Aguardando início'
-                              : 'Concluir'}
+                                                            : appt.status === 'pending'
+                                                                ? 'Ir para Consulta'
+                                                                : 'Encerrar e Ir'}
                     </button>
                     <button
                         onClick={doCancel}
-                        disabled={!!busy || closing}
+                        disabled={cancelDisabled}
+                        className='ui-btn ui-btn--danger'
                         style={{
-                            padding: '8px 12px',
-                            background: '#ef4444',
-                            color: 'var(--color-bg-section)',
-                            fontWeight: 700,
+                            ...actionBtnBaseStyle,
+                            ...(cancelDisabled
+                                ? actionBtnDisabledStyle
+                                : actionBtnDangerStyle),
                         }}
-                        title='Cancelar compromisso'
+                        title={
+                            hasPaidCharge
+                                ? 'Cancelar compromisso com cobrança paga associada'
+                                : 'Cancelar compromisso'
+                        }
                     >
                         {busy === 'cancel' ? 'Cancelando…' : 'Cancelar'}
                     </button>

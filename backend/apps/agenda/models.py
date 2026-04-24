@@ -16,7 +16,7 @@ class Appointment(models.Model):
     - start_at / end_at: Janela do agendamento (timezone-aware)
     - location: Texto opcional (endereço, sala)
     - notes: Observações do profissional
-    - status: scheduled, done, canceled
+    - status: scheduled, pending, done, canceled
     - created_at/updated_at
     """
 
@@ -29,6 +29,7 @@ class Appointment(models.Model):
 
     class Status(models.TextChoices):
         SCHEDULED = "scheduled", "Agendado"
+        PENDING = "pending", "Pendente"
         DONE = "done", "Realizado"
         CANCELED = "canceled", "Cancelado"
 
@@ -121,12 +122,18 @@ class Appointment(models.Model):
 
     def overlaps(self):
         """Verifica se conflita com outro agendamento do mesmo profissional.
-        Critério: [start, end) com mesmo profissional e status diferente de canceled.
+        Critério: [start, end) com mesmo profissional e status ainda programável.
         """
         qs = (
             Appointment.objects.filter(professional=self.professional)
             .exclude(pk=self.pk)
-            .exclude(status__in=[Appointment.Status.CANCELED, Appointment.Status.DONE])
+            .exclude(
+                status__in=[
+                    Appointment.Status.PENDING,
+                    Appointment.Status.CANCELED,
+                    Appointment.Status.DONE,
+                ]
+            )
             .filter(start_at__lt=self.end_at, end_at__gt=self.start_at)
         )
         return qs.exists()
@@ -440,7 +447,16 @@ class Charge(models.Model):
         if errors:
             raise ValidationError(errors)
 
+    def sync_status_fields(self):
+        if self.status == self.Status.PAID:
+            if self.paid_at is None:
+                self.paid_at = timezone.now()
+            return
+
+        self.paid_at = None
+
     def save(self, *args, **kwargs):
+        self.sync_status_fields()
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -558,9 +574,9 @@ class ChargeItem(models.Model):
         product = getattr(self, "product", None)
         if not self.description:
             if service is not None:
-                self.description = self.service.name
+                self.description = service.name
             elif product is not None:
-                self.description = self.product.name
+                self.description = product.name
         self.full_clean()
         result = super().save(*args, **kwargs)
         self.charge.recalculate_total(save=True)

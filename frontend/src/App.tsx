@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Home from '../src/pages/Home';
 // DesktopAgendaPage carregado de forma lazy; se falhar import (arquivo ausente na branch remota), renderiza Home.
 import React from 'react';
+import { on } from './events/bus';
 const LazyDesktopAgenda: React.ComponentType = React.lazy(async () => {
     try {
         return (await import('./pages/DesktopAgendaPage')) as unknown as {
@@ -22,18 +23,44 @@ import ServiceFormPage from './pages/Catalog/ServiceFormPage';
 import ProductListPage from './pages/Catalog/ProductListPage';
 import ServiceListPage from './pages/Catalog/ServiceListPage';
 import ConsultaPage from './pages/ConsultaPage';
+import {
+    hydrateAgendaSettings,
+    resetAgendaSettings,
+} from './utils/agendaSettings';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 function App() {
     useEffect(() => {
         // Pre-warm device session once app loads if token exists
         try {
             const token = localStorage.getItem('accessToken');
-            if (token) ensureDeviceSession().catch(() => {});
+            if (token) {
+                ensureDeviceSession().catch(() => {});
+                hydrateAgendaSettings().catch(() => {});
+            } else {
+                resetAgendaSettings();
+            }
         } catch {
             /* noop */
         }
+
+        const handleLogin = () => {
+            hydrateAgendaSettings(true).catch(() => {});
+        };
+        const handleLogout = () => {
+            resetAgendaSettings();
+        };
+
+        const disposeLogin = on('auth:login', handleLogin);
+        const disposeLogout = on('auth:logout', handleLogout);
+
+        return () => {
+            disposeLogin();
+            disposeLogout();
+        };
     }, []);
     return (
+        <ThemeProvider>
         <Router>
             <Routes>
                 <Route path='/' element={<Home />} />
@@ -75,6 +102,7 @@ function App() {
                 />
             </Routes>
         </Router>
+        </ThemeProvider>
     );
 }
 

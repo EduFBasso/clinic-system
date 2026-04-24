@@ -3,6 +3,7 @@ import ensureDeviceSession from '../sessions';
 import { buildDeviceHeaders } from '../device';
 import { getServerNowOnce } from '../time';
 import { setAppointmentOverride } from '../../utils/appointments/overrides';
+import { emit } from '../../events/bus';
 
 export interface CancelFlowResult {
     ok: boolean;
@@ -101,7 +102,7 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
             ...(originalEnd ? { original_end_at: originalEnd } : null),
         });
         try {
-            window.dispatchEvent(new Event('pendingActions:forceClose'));
+            emit('pendingActions:forceClose', undefined);
         } catch {
             /* noop */
         }

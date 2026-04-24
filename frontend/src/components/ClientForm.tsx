@@ -11,12 +11,14 @@ import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
 import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
 import type { AnamnesisResponse } from '../types/AnamnesisTypes';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function ClientForm({
     cliente,
 }: {
     cliente?: Partial<ClientData>;
 }) {
+    const { theme } = useTheme();
     // Removido auto-timeout: fluxo agora depende de modal com botão OK
     // Marca erros já tratados para não sobrescrever mensagens específicas em catch
     type HandledError = Error & { handled?: boolean };
@@ -220,6 +222,7 @@ export default function ClientForm({
         title: string;
         message: string;
     } | null>(null);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     // Photo file selected in the mobile form (kept out of typed ClientData)
     const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(
         null,
@@ -288,13 +291,31 @@ export default function ClientForm({
         clientId: number,
         token: string,
     ): Promise<void> => {
-        const entries = Object.entries(anamnesisValues).map(
-            ([fieldId, value]) => ({
-                field: Number(fieldId),
-                value,
-            }),
-        );
-        if (entries.length === 0) return;
+        const fieldById = new Map(anamnesisFields.map(field => [field.id, field]));
+
+        function isFieldVisible(fieldId: number): boolean {
+            const field = fieldById.get(fieldId);
+            if (!field) return false;
+            if (!field.depends_on) return true;
+
+            const parent = fieldById.get(field.depends_on);
+            if (!parent || !isFieldVisible(parent.id)) return false;
+
+            const parentValue = anamnesisValues[parent.id] ?? '';
+            if (field.show_when_value) {
+                return parentValue === field.show_when_value;
+            }
+
+            return parentValue !== '';
+        }
+
+        const entries = anamnesisFields
+            .filter(field => isFieldVisible(field.id))
+            .map(field => ({
+                field: field.id,
+                value: anamnesisValues[field.id] ?? '',
+            }));
+
         await fetch(`${API_BASE}/anamnesis/responses/bulk_save/`, {
             method: 'POST',
             headers: {
@@ -302,6 +323,44 @@ export default function ClientForm({
                 Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({ client: clientId, responses: entries }),
+        });
+    };
+
+    const handleAnamnesisChange = (fieldId: number, value: string) => {
+        const childrenByParent = new Map<number, number[]>();
+        anamnesisFields.forEach(field => {
+            if (!field.depends_on) return;
+            const children = childrenByParent.get(field.depends_on) ?? [];
+            children.push(field.id);
+            childrenByParent.set(field.depends_on, children);
+        });
+
+        const fieldById = new Map(anamnesisFields.map(field => [field.id, field]));
+
+        setAnamnesisValues(prev => {
+            const next = { ...prev, [fieldId]: value };
+
+            function clearHiddenDescendants(parentId: number) {
+                const childIds = childrenByParent.get(parentId) ?? [];
+                childIds.forEach(childId => {
+                    const childField = fieldById.get(childId);
+                    if (!childField) return;
+
+                    const parentValue = next[parentId] ?? '';
+                    const shouldShow = childField.show_when_value
+                        ? parentValue === childField.show_when_value
+                        : parentValue !== '';
+
+                    if (!shouldShow) {
+                        delete next[childId];
+                    }
+
+                    clearHiddenDescendants(childId);
+                });
+            }
+
+            clearHiddenDescendants(fieldId);
+            return next;
         });
     };
 
@@ -811,96 +870,93 @@ export default function ClientForm({
     }
 
     function handleDelete() {
-        if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
-            // Antes de excluir, remove foco e locks que podem congelar a rolagem no iPhone
-            try {
-                (document.activeElement as HTMLElement | null)?.blur?.();
-                document.body.classList.remove('keyboardOpen');
-            } catch {
-                /* noop */
-            }
+        setDeleteModalOpen(true);
+    }
 
-            const token = localStorage.getItem('accessToken');
-            if (!token) {
-                setFeedback({
-                    type: 'error',
-                    message: 'Usuário não autenticado.',
-                });
-                return;
-            }
+    function confirmDelete() {
+        setDeleteModalOpen(false);
 
-            fetch(`${API_BASE}/register/clients/${cliente?.id}/`, {
-                method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-                .then(res => {
-                    if (!res.ok) {
-                        setFeedback({
-                            type: 'error',
-                            message: 'Erro ao excluir cliente',
-                        });
-                        throw new Error('Erro ao excluir cliente');
-                    }
-                    // Sucesso: sai imediatamente da tela de edição e atualiza a lista
-                    try {
-                        // Sinaliza para a lista limpar o filtro e não exibir o modal de "nenhum resultado" uma vez
-                        localStorage.setItem('postDeleteAction', 'clearFilter');
-                    } catch {
-                        /* noop: storage indisponível */
-                    }
+        try {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+            document.body.classList.remove('keyboardOpen');
+        } catch {
+            /* noop */
+        }
 
-                    // Dispara atualização da lista imediatamente
-                    try {
-                        if (window.opener) {
-                            // Limpa filtro dinâmico e atualiza a lista na tela principal
-                            window.opener.dispatchEvent(
-                                new Event('clearClients'),
-                            );
-                            window.opener.dispatchEvent(
-                                new Event('updateClients'),
-                            );
-                        } else {
-                            window.dispatchEvent(new Event('updateClients'));
-                        }
-                    } catch {
-                        /* noop: sem suporte a eventos */
-                    }
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+            setFeedback({
+                type: 'error',
+                message: 'Usuário não autenticado.',
+            });
+            return;
+        }
 
-                    // Fecha popup ou navega para a lista sem esperar
-                    if (window.opener) {
-                        try {
-                            window.close();
-                        } catch {
-                            /* noop: janela já fechada */
-                        }
-                    } else {
-                        // Remove locks e faz reload limpo para evitar travamento pós-exclusão
-                        try {
-                            document.body.classList.remove('keyboardOpen');
-                        } catch {
-                            /* noop */
-                        }
-                        // Garante limpeza do filtro dinâmico imediatamente
-                        try {
-                            window.dispatchEvent(new Event('clearClients'));
-                        } catch {
-                            /* noop */
-                        }
-                        window.location.assign('/');
-                    }
-                })
-                .catch(err => {
+        fetch(`${API_BASE}/register/clients/${cliente?.id}/`, {
+            method: 'DELETE',
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        })
+            .then(res => {
+                if (!res.ok) {
                     setFeedback({
                         type: 'error',
-                        message: 'Erro ao excluir cliente: ' + err.message,
+                        message: 'Erro ao excluir cliente',
                     });
+                    throw new Error('Erro ao excluir cliente');
+                }
+                try {
+                    localStorage.setItem('postDeleteAction', 'clearFilter');
+                } catch {
+                    /* noop: storage indisponível */
+                }
+
+                try {
+                    if (window.opener) {
+                        window.opener.dispatchEvent(new Event('clearClients'));
+                        window.opener.dispatchEvent(new Event('updateClients'));
+                    } else {
+                        window.dispatchEvent(new Event('updateClients'));
+                    }
+                } catch {
+                    /* noop: sem suporte a eventos */
+                }
+
+                if (window.opener) {
+                    try {
+                        window.close();
+                    } catch {
+                        /* noop: janela já fechada */
+                    }
+                } else {
+                    try {
+                        document.body.classList.remove('keyboardOpen');
+                    } catch {
+                        /* noop */
+                    }
+                    try {
+                        window.dispatchEvent(new Event('clearClients'));
+                    } catch {
+                        /* noop */
+                    }
+                    window.location.assign('/');
+                }
+            })
+            .catch(err => {
+                setFeedback({
+                    type: 'error',
+                    message: 'Erro ao excluir cliente: ' + err.message,
                 });
-        }
+            });
     }
 
     const isEdit = !!cliente?.id;
+    const clientFullName = [cliente?.first_name, cliente?.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+    const deleteModalTitle = clientFullName || 'Excluir cliente';
 
     // Render modal de sucesso quando existir mensagem
     const SuccessModal = infoModal ? (
@@ -959,13 +1015,95 @@ export default function ClientForm({
         </div>
     ) : null;
 
+    const DeleteConfirmModal = deleteModalOpen ? (
+        <div
+            role='dialog'
+            aria-modal='true'
+            style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999,
+                padding: '1rem',
+            }}
+        >
+            <div
+                style={{
+                    background: '#fff',
+                    borderRadius: 8,
+                    padding: '1.25rem 1.5rem',
+                    maxWidth: 480,
+                    width: '100%',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                    fontSize: '1rem',
+                }}
+            >
+                <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.15rem' }}>
+                    {deleteModalTitle}
+                </h2>
+                <p style={{ margin: '0 0 0.75rem', lineHeight: 1.45 }}>
+                    Esta exclusão é definitiva e também removerá:
+                </p>
+                <ul style={{ margin: '0 0 1rem 1.2rem', lineHeight: 1.5 }}>
+                    <li>agendamentos e compromissos antigos e futuros</li>
+                    <li>dados financeiros e cobranças deste cliente</li>
+                    <li>anamnese, prontuário e histórico relacionado</li>
+                </ul>
+                <p style={{ margin: '0 0 1.25rem', lineHeight: 1.45 }}>
+                    Após excluir, esses dados não poderão ser recuperados.
+                </p>
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        gap: '0.75rem',
+                    }}
+                >
+                    <button
+                        type='button'
+                        onClick={() => setDeleteModalOpen(false)}
+                        style={{
+                            background: '#e5e7eb',
+                            color: '#111827',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '0.6rem 1.1rem',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                        }}
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type='button'
+                        onClick={confirmDelete}
+                        style={{
+                            background: '#dc2626',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '0.6rem 1.1rem',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                        }}
+                    >
+                        Excluir
+                    </button>
+                </div>
+            </div>
+        </div>
+    ) : null;
+
     return (
         <>
             <form
                 ref={formRef}
                 onSubmit={handleSubmit}
                 noValidate
-                data-theme='blue'
+                data-theme={theme}
             >
                 <ClientPersonalDataForm
                     formData={formData}
@@ -982,12 +1120,7 @@ export default function ClientForm({
                     fields={anamnesisFields}
                     values={anamnesisValues}
                     isEdit={isEdit}
-                    onChange={(fieldId, value) =>
-                        setAnamnesisValues(prev => ({
-                            ...prev,
-                            [fieldId]: value,
-                        }))
-                    }
+                    onChange={handleAnamnesisChange}
                 />
                 <div className={styles.footer}>
                     {!isEdit && (
@@ -1021,6 +1154,7 @@ export default function ClientForm({
                 </div>
             </form>
             {SuccessModal}
+            {DeleteConfirmModal}
         </>
     );
 }

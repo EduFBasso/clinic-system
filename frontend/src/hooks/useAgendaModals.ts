@@ -1,10 +1,15 @@
 import React from 'react';
 import { on } from '../events/bus';
-import type { OpenDailyAgendaPayload } from '../events/bus';
+import type {
+    OpenAppointmentDetailsPayload,
+    OpenDailyAgendaPayload,
+    OpenMonthlyAgendaPayload,
+} from '../events/bus';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
+import type { PendingReturnContext } from '../types/agendaFlow';
 
 // ---------------------------------------------------------------------------
 // Helper: resolve basic client info (cached in localStorage)
@@ -84,6 +89,8 @@ export interface UseAgendaModalsReturn {
     // Weekly
     weeklyOpen: boolean;
     setWeeklyOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    weeklyInitialDate: Date | undefined;
+    setWeeklyInitialDate: React.Dispatch<React.SetStateAction<Date | undefined>>;
     // Quick
     quickOpen: boolean;
     setQuickOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -99,6 +106,10 @@ export interface UseAgendaModalsReturn {
     setDetailsOpen: React.Dispatch<React.SetStateAction<boolean>>;
     detailsAppt: Appointment | null;
     setDetailsAppt: React.Dispatch<React.SetStateAction<Appointment | null>>;
+    detailsReturnContext: PendingReturnContext;
+    setDetailsReturnContext: React.Dispatch<
+        React.SetStateAction<PendingReturnContext>
+    >;
     // Openers / helpers
     openMonthly: (clientId: number, date?: Date) => Promise<void>;
     openWeekly: (date?: Date) => void;
@@ -109,6 +120,9 @@ export interface UseAgendaModalsReturn {
 export function useAgendaModals(): UseAgendaModalsReturn {
     const [monthlyOpen, setMonthlyOpen] = React.useState(false);
     const [weeklyOpen, setWeeklyOpen] = React.useState(false);
+    const [weeklyInitialDate, setWeeklyInitialDate] = React.useState<
+        Date | undefined
+    >(undefined);
     const [quickOpen, setQuickOpen] = React.useState(false);
     const [routeClient, setRouteClient] = React.useState<
         ClientBasic | undefined
@@ -122,6 +136,9 @@ export function useAgendaModals(): UseAgendaModalsReturn {
     );
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
+        null,
+    );
+    const [detailsReturnContext, setDetailsReturnContext] = React.useState<PendingReturnContext>(
         null,
     );
     const [routeInitialMonth, setRouteInitialMonth] = React.useState<
@@ -160,7 +177,7 @@ export function useAgendaModals(): UseAgendaModalsReturn {
     );
 
     const openWeekly = React.useCallback((_date?: Date) => {
-        void _date;
+        setWeeklyInitialDate(_date);
         setRouteEditAppt(null);
         try {
             console.debug('[Home] Opening WeeklyAgendaModal');
@@ -174,6 +191,8 @@ export function useAgendaModals(): UseAgendaModalsReturn {
     const openDaily = React.useCallback((date: Date, focusId?: number) => {
         setDailyDate(date);
         setDailyFocusId(focusId);
+        setMonthlyOpen(false);
+        setWeeklyOpen(false);
         setDailyOpen(true);
     }, []);
 
@@ -215,11 +234,9 @@ export function useAgendaModals(): UseAgendaModalsReturn {
         );
 
         const disposeDaily = on('openDailyAgenda', det => {
-            const ext = det as OpenDailyAgendaPayload & {
-                focusAppointmentId?: number;
-            };
-            const dateIso = ext && ext.date;
-            const focusAppointmentId = ext.focusAppointmentId;
+            const ext: OpenDailyAgendaPayload = det;
+            const dateIso = ext?.date;
+            const focusAppointmentId = ext?.focusAppointmentId;
             if (dateIso) {
                 const d = new Date(dateIso);
                 if (!isNaN(d.getTime())) openDaily(d, focusAppointmentId);
@@ -228,14 +245,33 @@ export function useAgendaModals(): UseAgendaModalsReturn {
             }
         });
 
+        const disposeMonthly = on('openMonthlyAgenda', det => {
+            const ext: OpenMonthlyAgendaPayload = det;
+            if (!ext?.clientId) return;
+            const rawDate = ext.date;
+            if (rawDate) {
+                const d = new Date(rawDate);
+                openMonthly(ext.clientId, isNaN(d.getTime()) ? undefined : d);
+                return;
+            }
+            openMonthly(ext.clientId);
+        });
+
         const disposeDetails = on('openAppointmentDetails', det => {
-            const appt: Appointment | undefined = (
-                det as { appointment?: Appointment }
-            ).appointment;
+            const payload = det as OpenAppointmentDetailsPayload;
+            const appt = payload.appointment;
             if (appt) {
+                setDetailsReturnContext(payload.returnContext ?? null);
                 setDetailsAppt(appt);
                 setDetailsOpen(true);
             }
+        });
+
+        const disposeCloseAll = on('agenda:closeAll', () => {
+            setDailyOpen(false);
+            setMonthlyOpen(false);
+            setWeeklyOpen(false);
+            setQuickOpen(false);
         });
 
         return () => {
@@ -244,9 +280,11 @@ export function useAgendaModals(): UseAgendaModalsReturn {
                 onOpenScheduleEdit as EventListener,
             );
             disposeDaily();
+            disposeMonthly();
             disposeDetails();
+            disposeCloseAll();
         };
-    }, [openDaily]);
+    }, [openDaily, openMonthly]);
 
     return {
         monthlyOpen,
@@ -257,6 +295,8 @@ export function useAgendaModals(): UseAgendaModalsReturn {
         setRouteInitialMonth,
         weeklyOpen,
         setWeeklyOpen,
+        weeklyInitialDate,
+        setWeeklyInitialDate,
         quickOpen,
         setQuickOpen,
         routeEditAppt,
@@ -269,6 +309,8 @@ export function useAgendaModals(): UseAgendaModalsReturn {
         setDetailsOpen,
         detailsAppt,
         setDetailsAppt,
+        detailsReturnContext,
+        setDetailsReturnContext,
         openMonthly,
         openWeekly,
         openDaily,

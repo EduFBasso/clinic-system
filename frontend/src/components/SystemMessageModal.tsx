@@ -4,7 +4,7 @@ import AppModal from './Modal';
 interface SystemMessageModalProps {
     open: boolean;
     message: string | null;
-    type?: 'success' | 'error' | 'info';
+    type?: 'success' | 'error' | 'info' | 'warning';
     onClose: () => void;
     autoCloseMs?: number;
 }
@@ -20,6 +20,11 @@ const palette: Record<string, { bg: string; color: string; border: string }> = {
         color: 'var(--color-danger)',
         border: 'color-mix(in oklab, var(--color-danger) 55%, white)',
     },
+    warning: {
+        bg: '#fffbeb',
+        color: '#b45309',
+        border: '#f59e0b',
+    },
     info: { bg: '#eff6ff', color: '#1d4ed8', border: '#60a5fa' },
 };
 
@@ -32,20 +37,41 @@ export default function SystemMessageModal({
 }: SystemMessageModalProps) {
     const timerRef = React.useRef<number | null>(null);
     const wrappedClose = React.useCallback(() => {
+        const hasAnotherOpenModal = (() => {
+            try {
+                const openRoots = Array.from(
+                    document.querySelectorAll('.MuiModal-root'),
+                ).filter(root => {
+                    const el = root as HTMLElement;
+                    if (el.getAttribute('aria-hidden') === 'true') return false;
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden';
+                });
+                return openRoots.length > 1;
+            } catch {
+                return false;
+            }
+        })();
         try {
             console.debug('[SystemMessageModal] closing modal');
         } catch {
             /* noop */
         }
         try {
-            // Reforço: caso a sequência de modais deixe body travado
-            window.dispatchEvent(new Event('ensureScrollUnlocked'));
+            // Só destrava scroll quando este for realmente o último modal aberto.
+            if (!hasAnotherOpenModal) {
+                window.dispatchEvent(new Event('ensureScrollUnlocked'));
+            }
         } catch {
             /* noop */
         }
         // Re-dispacha updateClients se mensagem de sucesso de criação/atualização (heurística simples pelo texto)
         try {
-            if (message && /Compromisso (criado|atualizado)/i.test(message)) {
+            if (
+                !hasAnotherOpenModal &&
+                message &&
+                /Compromisso (criado|atualizado)/i.test(message)
+            ) {
                 window.dispatchEvent(new Event('updateClients'));
                 console.debug(
                     '[SystemMessageModal] re-dispatch updateClients (heuristic)',
@@ -84,6 +110,7 @@ export default function SystemMessageModal({
         <AppModal
             open={open}
             onClose={wrappedClose}
+            unmountOnClose
             closeOnEnter={false}
             showCloseButton={false}
         >

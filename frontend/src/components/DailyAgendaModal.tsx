@@ -8,19 +8,23 @@ import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
-    isClientLike,
     makeClientBasic,
     matchesStatusFilter,
     type ClientLike,
 } from '../utils/appointments/agendaHelpers';
 import { useNowTick } from '../hooks/useNowTick';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import QuickScheduleModal from './QuickScheduleModal';
 // PendingActionsModal é global (Home)
-import AppointmentDetailsModal from './AppointmentDetailsModal';
 import type { Appointment } from '../hooks/useAppointments';
 import { useAppointmentsRange } from '../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { focusClientCard } from '../utils/focusClientCard';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../types/agendaFlow';
 
 interface DailyAgendaModalProps {
     open: boolean;
@@ -39,6 +43,12 @@ function addDays(d: Date, n: number) {
     x.setDate(x.getDate() + n);
     return x;
 }
+function toISODate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
 
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 export default function DailyAgendaModal({
@@ -47,6 +57,7 @@ export default function DailyAgendaModal({
     onClose,
     focusAppointmentId,
 }: DailyAgendaModalProps) {
+    const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
     // Floating picker state/position (consistent with QuickScheduleModal)
     const [showPicker, setShowPicker] = React.useState(false);
     const [pickerPos, setPickerPos] = React.useState<
@@ -85,13 +96,19 @@ export default function DailyAgendaModal({
     // PendingActions é global — nenhum estado local
 
     // Removido listener local de forceClose — Home coordena
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
     const dayStart = React.useMemo(
         () => startOfDay(selectedDay),
         [selectedDay],
+    );
+    const buildReturnContext = React.useCallback(
+        (appointmentId?: number): PendingReturnContext => ({
+            kind: 'daily-agenda',
+            dateISO: toISODate(dayStart),
+            focusAppointmentId: appointmentId,
+        }),
+        [dayStart],
     );
     const dayEnd = React.useMemo(() => addDays(dayStart, 1), [dayStart]);
     const { items, loading, error } = useAppointmentsRange(
@@ -100,6 +117,32 @@ export default function DailyAgendaModal({
         undefined,
         reloadKey,
     );
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
+    const handleCancel = React.useCallback(async (appt: Appointment) => {
+        const res = await cancelAppointment(appt.id);
+        if (!res.ok) {
+            const msg = res.text || 'Erro ao cancelar';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'warning' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setReloadKey(x => x + 1);
+        try {
+            dispatchers.updateClients();
+            dispatchers.appointmentsChanged();
+        } catch {
+            /* noop */
+        }
+    }, []);
 
     // Forçar um refetch imediato ao abrir (caso evento appointments:changed tenha sido perdido antes de abrir)
     const prevOpenRef = React.useRef(open);
@@ -212,6 +255,17 @@ export default function DailyAgendaModal({
     });
 
     React.useEffect(() => {
+        if (!open) return;
+        const resetScroll = () => {
+            const el = scrollContainerRef.current;
+            if (el) el.scrollTop = 0;
+        };
+        resetScroll();
+        const frameId = window.requestAnimationFrame(resetScroll);
+        return () => window.cancelAnimationFrame(frameId);
+    }, [open, selectedDay]);
+
+    React.useEffect(() => {
         if (!open || !focusAppointmentId) return;
         const id = focusAppointmentId;
         const to = setTimeout(() => {
@@ -225,11 +279,17 @@ export default function DailyAgendaModal({
     const [qsOpen, setQsOpen] = React.useState(false);
     const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
     const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
+    const closeQuickSchedule = React.useCallback(() => {
+        setQsOpen(false);
+        setQsEdit(null);
+        setQsClient(null);
+    }, []);
 
     return (
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             fullScreen
             actionsBarStyle={{
                 background: 'transparent',
@@ -257,8 +317,8 @@ export default function DailyAgendaModal({
                                 fontSize: 'var(--font-body)',
                                 fontWeight: 700,
                                 padding: '4px 10px',
-                                border: '1px solid var(--color-success-darker)',
-                                background: 'var(--color-success-dark)',
+                                border: '1px solid var(--color-primary)',
+                                background: 'var(--color-primary)',
                                 borderRadius: 6,
                                 cursor: 'pointer',
                                 color: 'white',
@@ -281,7 +341,7 @@ export default function DailyAgendaModal({
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
-                                color: 'var(--color-success-dark)',
+                                color: 'var(--color-primary)',
                                 fontSize: 'var(--icon-size-lg)',
                                 userSelect: 'none',
                             }}
@@ -306,7 +366,7 @@ export default function DailyAgendaModal({
                                     background: 'none',
                                     border: 'none',
                                     cursor: 'pointer',
-                                    color: 'var(--color-success-dark)',
+                                    color: 'var(--color-primary)',
                                     width: 36,
                                     height: 36,
                                     display: 'inline-flex',
@@ -327,7 +387,7 @@ export default function DailyAgendaModal({
                                     background: 'transparent',
                                     border: 'none',
                                     cursor: 'pointer',
-                                    color: 'var(--color-success-dark)',
+                                    color: 'var(--color-primary)',
                                     fontWeight:
                                         'var(--heading-weight-md)' as unknown as number,
                                     whiteSpace: 'nowrap',
@@ -349,7 +409,7 @@ export default function DailyAgendaModal({
                                     background: 'none',
                                     border: 'none',
                                     cursor: 'pointer',
-                                    color: 'var(--color-success-dark)',
+                                    color: 'var(--color-primary)',
                                     width: 36,
                                     height: 36,
                                     display: 'inline-flex',
@@ -401,6 +461,7 @@ export default function DailyAgendaModal({
             </StickyModalHeader>
             {/* Wrapper scrollável interno (AppModal com disableOuterScroll) */}
             <div
+                ref={scrollContainerRef}
                 style={{
                     flex: 1,
                     minHeight: 0,
@@ -442,92 +503,43 @@ export default function DailyAgendaModal({
                                         maxWidth: 'min(704px, 94%)',
                                     }}
                                     showEditAction={false}
-                                    onClick={() => {
+                                    onEdit={() => {
                                         const client = makeClientBasic(a);
                                         setQsClient(client);
                                         setQsEdit(a);
                                         setQsOpen(true);
                                     }}
                                     onResolvePending={appt => {
-                                        try {
-                                            const a = appt as Appointment;
-                                            const anyAppt =
-                                                a as unknown as Record<
-                                                    string,
-                                                    unknown
-                                                >;
-                                            const clientName = (():
-                                                | string
-                                                | undefined => {
-                                                if (
-                                                    typeof anyAppt.client_name ===
-                                                    'string'
-                                                )
-                                                    return anyAppt.client_name as string;
-                                                const c =
-                                                    anyAppt.client as unknown;
-                                                if (
-                                                    c &&
-                                                    typeof c === 'object' &&
-                                                    'name' in
-                                                        (c as Record<
-                                                            string,
-                                                            unknown
-                                                        >)
-                                                ) {
-                                                    const n = (
-                                                        c as {
-                                                            name?: unknown;
-                                                        }
-                                                    ).name;
-                                                    if (typeof n === 'string')
-                                                        return n;
-                                                }
-                                                return undefined;
-                                            })();
-                                            const clientField =
-                                                ((): unknown => {
-                                                    const c =
-                                                        anyAppt.client as unknown;
-                                                    if (
-                                                        typeof c === 'number' ||
-                                                        typeof c === 'object'
-                                                    )
-                                                        return c;
-                                                    return undefined;
-                                                })();
-                                            const payload = {
-                                                id: a.id,
-                                                start_at: a.start_at,
-                                                end_at: a.end_at,
-                                                status: a.status,
-                                                notes: a.notes,
-                                                client_name: clientName,
-                                                client: clientField,
-                                                title: a.title,
-                                            } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                            window.dispatchEvent(
-                                                new CustomEvent(
-                                                    'pendingActions:open',
-                                                    {
-                                                        detail: {
-                                                            appt: payload,
-                                                        },
-                                                    },
-                                                ),
-                                            );
-                                        } catch {
-                                            /* noop */
-                                        }
+                                        openPendingActionsForAppointment(
+                                            appt,
+                                            buildReturnContext(appt.id),
+                                        );
                                     }}
+                                    finalizeRequestContext={buildReturnContext(
+                                        a.id,
+                                    )}
                                     onDetails={
                                         a.status === 'done'
-                                            ? appt => {
-                                                  setDetailsAppt(
+                                            ? appt =>
+                                                  openDetails(
                                                       appt as Appointment,
-                                                  );
-                                                  setDetailsOpen(true);
-                                              }
+                                                      buildReturnContext(
+                                                          appt.id,
+                                                      ),
+                                                  )
+                                            : undefined
+                                    }
+                                    onCancel={
+                                        (a.status === 'scheduled' ||
+                                            a.status === 'ongoing' ||
+                                            a._isOngoing) &&
+                                        !(a.status === 'scheduled' && !a._isOngoing && a._end < effectiveNowRef)
+                                            ? handleCancel
+                                            : undefined
+                                    }
+                                    onFinalize={
+                                        a.status === 'ongoing' || a._isOngoing
+                                            ? handleFinalize
                                             : undefined
                                     }
                                     highlight={focusAppointmentId === a.id}
@@ -551,26 +563,19 @@ export default function DailyAgendaModal({
             {qsOpen && qsClient && (
                 <QuickScheduleModal
                     open={qsOpen}
-                    onClose={() => setQsOpen(false)}
+                    onClose={closeQuickSchedule}
                     client={qsClient}
                     editAppointment={qsEdit}
-                    afterPersist={() => {
-                        setQsOpen(false);
+                    afterPersist={(_, action) => {
+                        if (action === 'updated') {
+                            closeQuickSchedule();
+                        }
                         setReloadKey(x => x + 1); // força recarregar agenda diária
                     }}
                 />
             )}
             {/* PendingActionsModal é global (Home) */}
-            {detailsOpen && detailsAppt && (
-                <AppointmentDetailsModal
-                    open={detailsOpen}
-                    onClose={() => {
-                        setDetailsOpen(false);
-                        setDetailsAppt(null);
-                    }}
-                    appt={detailsAppt}
-                />
-            )}
+            {detailsModal}
         </AppModal>
     );
 }

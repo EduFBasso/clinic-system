@@ -100,7 +100,7 @@ describe('finalizeFlow', () => {
         expect(res.ok).toBe(true);
         expect(res.status).toBe(200);
         const ov = getAppointmentOverride(apptId);
-        expect(ov?.status).toBe('done');
+        expect(ov?.status).toBe('pending');
         expect(fetchSpy).toHaveBeenCalled();
     });
 
@@ -141,7 +141,7 @@ describe('finalizeFlow', () => {
         expect(res.adjusted).toBe(true);
         expect(forcePatched).toBe(true);
         const ov = getAppointmentOverride(apptId);
-        expect(ov?.status).toBe('done');
+        expect(ov?.status).toBe('pending');
         expect(fetchSpy).toHaveBeenCalled();
     });
 });

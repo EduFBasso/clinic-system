@@ -1,16 +1,22 @@
 import React from 'react';
+import { FaCalendarAlt } from 'react-icons/fa';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { useStickyHeaderHeight } from '../hooks/useStickyHeaderHeight';
 import AppModal from './Modal';
 import { track } from '../utils/telemetry';
 import FloatingDatePicker from './FloatingDatePicker';
 import AppointmentCard from './shared/AppointmentCard';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
+import { deriveStatus } from '../utils/appointments/status';
 import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
-
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+ 
 function startOfDay(d: Date) {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -89,7 +95,33 @@ export default function WeeklyPreviewModal({
         undefined,
         reloadKey,
     );
-    // Forçar refetch ao abrir (pode ter perdido evento de mudança antes de abrir)
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
+    const handleCancel = React.useCallback(async (appt: Appointment) => {
+        const res = await cancelAppointment(appt.id);
+        if (!res.ok) {
+            const msg = res.text || 'Erro ao cancelar';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'warning' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setReloadKey(x => x + 1);
+        try {
+            dispatchers.updateClients();
+            dispatchers.appointmentsChanged();
+        } catch {
+            /* noop */
+        }
+    }, []);
+    // Forcar refetch ao abrir (pode ter perdido evento de mudança antes de abrir)
     const prevOpenRef = React.useRef(open);
     React.useEffect(() => {
         if (!prevOpenRef.current && open) {
@@ -220,10 +252,8 @@ export default function WeeklyPreviewModal({
         }
     }, [selectedDayISO, headerRef]);
 
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
     // Pending actions modal state
     // PendingActions é global — nenhum estado local necessário
 
@@ -284,15 +314,10 @@ export default function WeeklyPreviewModal({
                                 onClick={() =>
                                     setAnchorDate(startOfDay(new Date()))
                                 }
+                                className='ui-btn ui-btn--primary'
                                 style={{
-                                    fontSize: 'var(--font-body)',
-                                    fontWeight: 700,
+                                    minHeight: 32,
                                     padding: '4px 10px',
-                                    border: 'none',
-                                    background: 'var(--color-success-dark)',
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    color: 'white',
                                 }}
                                 aria-label='Ir para hoje'
                             >
@@ -318,7 +343,7 @@ export default function WeeklyPreviewModal({
                                     userSelect: 'none',
                                 }}
                             >
-                                📆
+                                <FaCalendarAlt />
                             </button>
                         </div>
                         <div
@@ -544,80 +569,8 @@ export default function WeeklyPreviewModal({
                                                 }
                                                 onResolvePending={appt => {
                                                     try {
-                                                        const a =
-                                                            appt as Appointment;
-                                                        const anyAppt =
-                                                            a as unknown as Record<
-                                                                string,
-                                                                unknown
-                                                            >;
-                                                        const clientName = (():
-                                                            | string
-                                                            | undefined => {
-                                                            if (
-                                                                typeof anyAppt.client_name ===
-                                                                'string'
-                                                            )
-                                                                return anyAppt.client_name as string;
-                                                            const c =
-                                                                anyAppt.client as unknown;
-                                                            if (
-                                                                c &&
-                                                                typeof c ===
-                                                                    'object' &&
-                                                                'name' in
-                                                                    (c as Record<
-                                                                        string,
-                                                                        unknown
-                                                                    >)
-                                                            ) {
-                                                                const n = (
-                                                                    c as {
-                                                                        name?: unknown;
-                                                                    }
-                                                                ).name;
-                                                                if (
-                                                                    typeof n ===
-                                                                    'string'
-                                                                )
-                                                                    return n;
-                                                            }
-                                                            return undefined;
-                                                        })();
-                                                        const clientField =
-                                                            ((): unknown => {
-                                                                const c =
-                                                                    anyAppt.client as unknown;
-                                                                if (
-                                                                    typeof c ===
-                                                                        'number' ||
-                                                                    typeof c ===
-                                                                        'object'
-                                                                )
-                                                                    return c;
-                                                                return undefined;
-                                                            })();
-                                                        const payload = {
-                                                            id: a.id,
-                                                            start_at:
-                                                                a.start_at,
-                                                            end_at: a.end_at,
-                                                            status: a.status,
-                                                            notes: a.notes,
-                                                            client_name:
-                                                                clientName,
-                                                            client: clientField,
-                                                            title: a.title,
-                                                        } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'pendingActions:open',
-                                                                {
-                                                                    detail: {
-                                                                        appt: payload,
-                                                                    },
-                                                                },
-                                                            ),
+                                                        openPendingActionsForAppointment(
+                                                            appt,
                                                         );
                                                     } catch {
                                                         /* noop */
@@ -625,14 +578,30 @@ export default function WeeklyPreviewModal({
                                                 }}
                                                 onDetails={
                                                     a.status === 'done'
-                                                        ? appt => {
-                                                              setDetailsAppt(
+                                                        ? appt =>
+                                                              openDetails(
                                                                   appt as Appointment,
-                                                              );
-                                                              setDetailsOpen(
-                                                                  true,
-                                                              );
-                                                          }
+                                                              )
+                                                        : undefined
+                                                }
+                                                onCancel={
+                                                    deriveStatus(
+                                                        a,
+                                                        new Date(),
+                                                    ) === 'scheduled' ||
+                                                    deriveStatus(
+                                                        a,
+                                                        new Date(),
+                                                    ) === 'ongoing'
+                                                        ? handleCancel
+                                                        : undefined
+                                                }
+                                                onFinalize={
+                                                    deriveStatus(
+                                                        a,
+                                                        new Date(),
+                                                    ) === 'ongoing'
+                                                        ? handleFinalize
                                                         : undefined
                                                 }
                                             />
@@ -659,16 +628,7 @@ export default function WeeklyPreviewModal({
                 />
                 {/* PendingActionsModal é global (Home) */}
 
-                {detailsOpen && detailsAppt && (
-                    <AppointmentDetailsModal
-                        open={detailsOpen}
-                        onClose={() => {
-                            setDetailsOpen(false);
-                            setDetailsAppt(null);
-                        }}
-                        appt={detailsAppt}
-                    />
-                )}
+                {detailsModal}
             </div>
         </AppModal>
     );

@@ -7,7 +7,9 @@ import { API_BASE } from '../config/api';
 import { apiFetch, ApiError } from '../utils/apiFetch';
 import FormPage from '../components/FormKit/FormPage';
 import FormSection from '../components/FormKit/FormSection';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useConsultaPageContext } from '../hooks/useConsultaPageContext';
+import { postDone } from '../services/appointments';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -51,20 +53,20 @@ function formatBRL(val: number): string {
 // ─── Style constants ─────────────────────────────────────────────────────────
 
 const thStyle: React.CSSProperties = {
-    padding: '8px 10px',
+    padding: '10px 12px',
     textAlign: 'left',
-    fontWeight: 600,
-    fontSize: 12,
-    color: 'var(--color-text-muted)',
+    fontWeight: 700,
+    fontSize: 14,
+    color: '#4b5563',
     borderBottom: '2px solid var(--color-border)',
     whiteSpace: 'nowrap',
 };
 
 const tdStyle: React.CSSProperties = {
-    padding: '9px 10px',
+    padding: '11px 12px',
     verticalAlign: 'middle',
     color: 'var(--color-text)',
-    fontSize: 14,
+    fontSize: 16,
 };
 
 const addBtnStyle: React.CSSProperties = {
@@ -72,9 +74,9 @@ const addBtnStyle: React.CSSProperties = {
     color: '#fff',
     border: 'none',
     borderRadius: 6,
-    width: 30,
-    height: 30,
-    fontSize: 20,
+    width: 34,
+    height: 34,
+    fontSize: 22,
     lineHeight: '1',
     display: 'flex',
     alignItems: 'center',
@@ -82,6 +84,9 @@ const addBtnStyle: React.CSSProperties = {
     cursor: 'pointer',
     margin: '0 auto',
     padding: 0,
+    transition:
+        'transform 120ms ease, background-color 120ms ease, box-shadow 160ms ease, opacity 120ms ease',
+    WebkitTapHighlightColor: 'transparent',
 };
 
 const editBtnStyle: React.CSSProperties = {
@@ -89,9 +94,9 @@ const editBtnStyle: React.CSSProperties = {
     color: 'var(--color-text-muted)',
     border: '1px solid var(--color-border)',
     borderRadius: 6,
-    width: 28,
-    height: 28,
-    fontSize: 14,
+    width: 32,
+    height: 32,
+    fontSize: 16,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -106,11 +111,15 @@ const linkBtnStyle: React.CSSProperties = {
     color: 'var(--color-primary)',
     border: '1px dashed var(--color-primary)',
     borderRadius: 8,
-    padding: '7px 14px',
-    fontWeight: 500,
+    padding: '9px 16px',
+    fontWeight: 600,
     cursor: 'pointer',
-    fontSize: 13,
+    fontSize: 15,
     marginTop: 8,
+    boxShadow: 'var(--shadow-soft-sm)',
+    transition:
+        'transform 120ms ease, filter 120ms ease, box-shadow 160ms ease, background-color 140ms ease, color 140ms ease',
+    WebkitTapHighlightColor: 'transparent',
 };
 
 // ─── ItemsTable ──────────────────────────────────────────────────────────────
@@ -123,6 +132,70 @@ interface ItemsTableProps {
     emptyMsg: string;
 }
 
+interface AddItemButtonProps {
+    title: string;
+    onClick: () => void;
+}
+
+function AddItemButton({ title, onClick }: AddItemButtonProps) {
+    const [pressed, setPressed] = React.useState(false);
+    const [confirmed, setConfirmed] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!confirmed) return;
+        const timeoutId = window.setTimeout(() => setConfirmed(false), 240);
+        return () => window.clearTimeout(timeoutId);
+    }, [confirmed]);
+
+    return (
+        <button
+            onClick={() => {
+                setConfirmed(true);
+                onClick();
+            }}
+            onMouseDown={() => setPressed(true)}
+            onMouseUp={() => setPressed(false)}
+            onMouseLeave={() => setPressed(false)}
+            onTouchStart={() => setPressed(true)}
+            onTouchEnd={() => setPressed(false)}
+            onTouchCancel={() => setPressed(false)}
+            onBlur={() => setPressed(false)}
+            style={{
+                ...addBtnStyle,
+                background: confirmed
+                                        ? 'var(--color-primary)'
+                    : pressed
+                                            ? 'var(--color-primary)'
+                      : 'var(--color-primary)',
+                transform: confirmed
+                    ? 'scale(1.08)'
+                    : pressed
+                      ? 'scale(0.94)'
+                      : 'scale(1)',
+                boxShadow: confirmed
+                                        ? 'var(--shadow-soft-sm)'
+                    : pressed
+                                            ? 'inset 0 2px 8px color-mix(in oklab, var(--color-primary) 45%, #0000)'
+                                            : 'var(--shadow-soft-sm)',
+                opacity: pressed ? 0.96 : 1,
+            }}
+            title={title}
+            aria-label={title}
+            type='button'
+        >
+            <span
+                aria-hidden='true'
+                style={{
+                    transform: confirmed ? 'scale(1.04)' : 'none',
+                    transition: 'transform 120ms ease',
+                }}
+            >
+                +
+            </span>
+        </button>
+    );
+}
+
 function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
     return (
         <div style={{ overflowX: 'auto', marginBottom: 4 }}>
@@ -130,7 +203,7 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
                 style={{
                     width: '100%',
                     borderCollapse: 'collapse',
-                    fontSize: 14,
+                    fontSize: 16,
                 }}
             >
                 <thead>
@@ -158,10 +231,10 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
                             <td
                                 colSpan={3}
                                 style={{
-                                    padding: '12px 8px',
+                                    padding: '14px 10px',
                                     color: 'var(--color-text-muted)',
                                     textAlign: 'center',
-                                    fontSize: 13,
+                                    fontSize: 15,
                                 }}
                             >
                                 {emptyMsg}
@@ -214,14 +287,10 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
                                         >
                                             ✏️
                                         </button>
-                                        <button
+                                        <AddItemButton
                                             onClick={() => onAdd(kind, item)}
-                                            style={addBtnStyle}
                                             title={`Adicionar ${item.name}`}
-                                            type='button'
-                                        >
-                                            +
-                                        </button>
+                                        />
                                     </div>
                                 </td>
                             </tr>
@@ -237,68 +306,29 @@ function ItemsTable({ rows, kind, onAdd, onEdit, emptyMsg }: ItemsTableProps) {
 
 export default function ConsultaPage() {
     const navigate = useNavigate();
-    const location = useLocation();
+    const [services, setServices] = useState<Service[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
+    const [notes, setNotes] = useState('');
+    const [saving, setSaving] = useState(false);
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const {
+        apptState,
+        saveAndNavigateToCatalog,
+        handleSuccessfulRegister,
+        returnToOrigin,
+    } =
+        useConsultaPageContext<SelectedItem>({
+            selectedItems,
+            notes,
+        });
 
-    // Dados opcionais vindos do PendingActionsModal (via router state)
-    // Fallback: sessionStorage quando voltamos de ServiceFormPage/ProductFormPage (navigate(-1) perde state)
-    const [apptState] = useState<{
-        appointmentId?: number;
-        clientName?: string;
-        clientId?: number;
-        startAt?: string;
-        endAt?: string;
-        chargeId?: number;
-        chargeItems?: SelectedItem[];
-        chargeNotes?: string;
-    }>(() => {
-        const fromRouter = (location.state ?? {}) as {
-            appointmentId?: number;
-            clientName?: string;
-            clientId?: number;
-            startAt?: string;
-            endAt?: string;
-            chargeId?: number;
-            chargeItems?: SelectedItem[];
-            chargeNotes?: string;
-        };
-        if (fromRouter.appointmentId) return fromRouter;
-        try {
-            const saved = sessionStorage.getItem('consultaPageContext');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (parsed.appointmentId) {
-                    sessionStorage.removeItem('consultaPageContext');
-                    return parsed;
-                }
-            }
-        } catch {
-            /* noop */
-        }
-        return fromRouter;
-    });
-
-    // Salva contexto no sessionStorage e navega para edição de serviço/produto.
-    // Ao voltar (navigate(-1)), ConsultaPage restaura o contexto do sessionStorage.
-    function saveAndNavigateToCatalog(path: string) {
-        try {
-            sessionStorage.setItem(
-                'consultaPageContext',
-                JSON.stringify({
-                    appointmentId: apptState.appointmentId,
-                    clientId: apptState.clientId,
-                    clientName: apptState.clientName,
-                    startAt: apptState.startAt,
-                    endAt: apptState.endAt,
-                    chargeId: apptState.chargeId,
-                    chargeItems: selectedItems,
-                    chargeNotes: notes,
-                }),
-            );
-        } catch {
-            /* noop */
-        }
-        navigate(path, { state: { returnTo: '/consulta' } });
-    }
+    useEffect(() => {
+        setSelectedItems(apptState.chargeItems ?? []);
+        setNotes(apptState.chargeNotes ?? '');
+    }, [apptState.chargeItems, apptState.chargeNotes]);
 
     // Formata data/hora no mesmo estilo do AppointmentDetailsModal
     const apptSubtitle = React.useMemo(() => {
@@ -316,17 +346,6 @@ export default function ConsultaPage() {
         const eh = `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`;
         return `${day}, ${sh} - ${eh}`;
     }, [apptState.clientName, apptState.startAt, apptState.endAt]);
-
-    const [services, setServices] = useState<Service[]>([]);
-    const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [selectedItems, setSelectedItems] = useState<SelectedItem[]>(
-        () => (apptState.chargeItems as SelectedItem[] | undefined) ?? [],
-    );
-    const [notes, setNotes] = useState(() => apptState.chargeNotes ?? '');
-    const [saving, setSaving] = useState(false);
-    const todayISO = new Date().toISOString().slice(0, 10);
 
     // Fetch services and products in parallel
     useEffect(() => {
@@ -405,6 +424,13 @@ export default function ConsultaPage() {
     }
 
     function togglePaid(key: string) {
+        const targetItem = selectedItems.find(i => i.key === key);
+        if (targetItem?.paid) {
+            const shouldUnmark = window.confirm(
+                'Remover a marcacao de pago deste item?',
+            );
+            if (!shouldUnmark) return;
+        }
         setSelectedItems(prev =>
             prev.map(i =>
                 i.key === key
@@ -434,7 +460,6 @@ export default function ConsultaPage() {
         setSaving(true);
         setError(null);
         try {
-            const anyPaid = selectedItems.some(i => i.paid);
             const payload: Record<string, unknown> = {
                 client: apptState.clientId,
                 appointment: apptState.appointmentId ?? null,
@@ -453,30 +478,27 @@ export default function ConsultaPage() {
                         i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
                 })),
             };
-            // status and paid_at on Charge are derived by the backend from item-level flags
+            // Item-level paid flags remain consultation annotations; charge status is controlled separately.
             if (apptState.chargeId) {
                 await apiFetch(
                     `${API_BASE}/agenda/charges/${apptState.chargeId}/`,
                     { method: 'PATCH', body: payload },
                 );
-                // Sinaliza que deve reabrir o modal de detalhes ao voltar
-                if (apptState.appointmentId) {
-                    try {
-                        sessionStorage.setItem(
-                            'reopenAppointmentDetails',
-                            String(apptState.appointmentId),
-                        );
-                    } catch {
-                        /* noop */
-                    }
-                }
             } else {
                 await apiFetch(`${API_BASE}/agenda/charges/`, {
                     method: 'POST',
                     body: payload,
                 });
             }
-            navigate(-1);
+            if (apptState.appointmentId) {
+                const markedDone = await postDone(apptState.appointmentId);
+                if (!markedDone) {
+                    throw new Error(
+                        'O registro foi salvo, mas não foi possível concluir o atendimento.',
+                    );
+                }
+            }
+            handleSuccessfulRegister();
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 sessionStorage.setItem(
@@ -526,7 +548,7 @@ export default function ConsultaPage() {
                             width: 56,
                             height: 56,
                             borderRadius: '999px',
-                            background: 'var(--color-success-dark)',
+                            background: 'var(--color-primary)',
                             color: '#fff',
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -555,7 +577,7 @@ export default function ConsultaPage() {
                         <div
                             style={{
                                 fontWeight: 800,
-                                fontSize: 15,
+                                fontSize: 21,
                                 color: 'var(--color-heading)',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -578,10 +600,10 @@ export default function ConsultaPage() {
                     </div>
                 </div>
             )}
-            {/* ── Procedimentos ── */}
+            {/* ── Serviços prestados ── */}
             <FormSection
-                title='Procedimentos'
-                onClose={() => navigate(-1)}
+                title='Serviços Prestados'
+                onClose={returnToOrigin}
                 closeTitle='Fechar sem salvar'
             >
                 {error && (
@@ -603,7 +625,7 @@ export default function ConsultaPage() {
                     <div
                         style={{
                             color: 'var(--color-text-muted)',
-                            fontSize: 13,
+                            fontSize: 15,
                             padding: '10px 0',
                         }}
                     >
@@ -620,14 +642,16 @@ export default function ConsultaPage() {
                                     `/catalog/services/${item.id}`,
                                 )
                             }
-                            emptyMsg='Nenhum procedimento cadastrado'
+                            emptyMsg='Nenhum serviço cadastrado'
                         />
                         <button
                             type='button'
-                            onClick={() => navigate('/catalog/services/new')}
+                            onClick={() =>
+                                saveAndNavigateToCatalog('/catalog/services')
+                            }
                             style={linkBtnStyle}
                         >
-                            + Novo procedimento
+                            + Novo serviço
                         </button>
                     </>
                 )}
@@ -639,7 +663,7 @@ export default function ConsultaPage() {
                     <div
                         style={{
                             color: 'var(--color-text-muted)',
-                            fontSize: 13,
+                            fontSize: 15,
                             padding: '10px 0',
                         }}
                     >
@@ -660,7 +684,9 @@ export default function ConsultaPage() {
                         />
                         <button
                             type='button'
-                            onClick={() => navigate('/catalog/products/new')}
+                            onClick={() =>
+                                saveAndNavigateToCatalog('/catalog/products')
+                            }
                             style={linkBtnStyle}
                         >
                             + Novo produto
@@ -675,7 +701,7 @@ export default function ConsultaPage() {
                     <p
                         style={{
                             color: 'var(--color-text-muted)',
-                            fontSize: 14,
+                            fontSize: 16,
                             margin: '8px 0 16px',
                         }}
                     >
@@ -688,7 +714,7 @@ export default function ConsultaPage() {
                                 style={{
                                     width: '100%',
                                     borderCollapse: 'collapse',
-                                    fontSize: 14,
+                                    fontSize: 16,
                                 }}
                             >
                                 <thead>
@@ -704,6 +730,9 @@ export default function ConsultaPage() {
                                                 ...thStyle,
                                                 width: 80,
                                                 textAlign: 'center',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                             }}
                                         >
                                             Qtd
@@ -712,6 +741,9 @@ export default function ConsultaPage() {
                                             style={{
                                                 ...thStyle,
                                                 textAlign: 'right',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                             }}
                                         >
                                             Subtotal
@@ -719,8 +751,11 @@ export default function ConsultaPage() {
                                         <th
                                             style={{
                                                 ...thStyle,
-                                                width: 140,
+                                                width: 180,
                                                 textAlign: 'center',
+                                                fontSize: 16,
+                                                fontWeight: 700,
+                                                color: '#4b5563',
                                             }}
                                         />
                                     </tr>
@@ -741,7 +776,7 @@ export default function ConsultaPage() {
                                             <td style={tdStyle}>
                                                 <span
                                                     style={{
-                                                        fontSize: 12,
+                                                        fontSize: 16,
                                                         marginRight: 6,
                                                     }}
                                                 >
@@ -755,6 +790,7 @@ export default function ConsultaPage() {
                                                 style={{
                                                     ...tdStyle,
                                                     textAlign: 'center',
+                                                    fontSize: 16,
                                                 }}
                                             >
                                                 <input
@@ -775,8 +811,8 @@ export default function ConsultaPage() {
                                                         textAlign: 'center',
                                                         border: '1px solid var(--color-border)',
                                                         borderRadius: 6,
-                                                        padding: '4px 6px',
-                                                        fontSize: 14,
+                                                        padding: '6px 8px',
+                                                        fontSize: 16,
                                                         background:
                                                             'var(--color-bg)',
                                                         color: 'var(--color-text)',
@@ -789,6 +825,7 @@ export default function ConsultaPage() {
                                                     textAlign: 'right',
                                                     whiteSpace: 'nowrap',
                                                     fontWeight: 600,
+                                                    fontSize: 16,
                                                 }}
                                             >
                                                 R${' '}
@@ -810,7 +847,7 @@ export default function ConsultaPage() {
                                                         display: 'flex',
                                                         flexDirection: 'column',
                                                         alignItems: 'center',
-                                                        gap: 4,
+                                                        gap: 8,
                                                     }}
                                                 >
                                                     <div
@@ -818,7 +855,7 @@ export default function ConsultaPage() {
                                                             display: 'flex',
                                                             alignItems:
                                                                 'center',
-                                                            gap: 6,
+                                                            gap: 8,
                                                         }}
                                                     >
                                                         <button
@@ -857,11 +894,9 @@ export default function ConsultaPage() {
                                                             }
                                                             style={{
                                                                 display: 'flex',
-                                                                flexDirection:
-                                                                    'column',
                                                                 alignItems:
                                                                     'center',
-                                                                gap: 1,
+                                                                gap: 6,
                                                                 background:
                                                                     item.paid
                                                                         ? 'var(--color-success, #22c55e)'
@@ -874,9 +909,9 @@ export default function ConsultaPage() {
                                                                     : '1.5px solid var(--color-border)',
                                                                 borderRadius: 20,
                                                                 padding:
-                                                                    '3px 10px 3px 6px',
-                                                                fontSize: 12,
-                                                                fontWeight: 600,
+                                                                    '6px 12px 6px 8px',
+                                                                fontSize: 16,
+                                                                fontWeight: 700,
                                                                 cursor: 'pointer',
                                                                 whiteSpace:
                                                                     'nowrap',
@@ -896,7 +931,7 @@ export default function ConsultaPage() {
                                                             >
                                                                 <span
                                                                     style={{
-                                                                        fontSize: 14,
+                                                                        fontSize: 16,
                                                                         lineHeight: 1,
                                                                     }}
                                                                 >
@@ -906,29 +941,6 @@ export default function ConsultaPage() {
                                                                 </span>
                                                                 Pago
                                                             </span>
-                                                            {item.paid &&
-                                                                item.paidAt && (
-                                                                    <span
-                                                                        style={{
-                                                                            fontSize: 10,
-                                                                            opacity: 0.9,
-                                                                            letterSpacing:
-                                                                                '0.01em',
-                                                                        }}
-                                                                    >
-                                                                        {new Date(
-                                                                            item.paidAt +
-                                                                                'T12:00:00',
-                                                                        ).toLocaleDateString(
-                                                                            'pt-BR',
-                                                                            {
-                                                                                day: '2-digit',
-                                                                                month: '2-digit',
-                                                                                year: '2-digit',
-                                                                            },
-                                                                        )}
-                                                                    </span>
-                                                                )}
                                                         </button>
                                                     </div>
                                                     {item.paid && (
@@ -952,8 +964,8 @@ export default function ConsultaPage() {
                                                                 border: '1px solid var(--color-success, #22c55e)',
                                                                 borderRadius: 6,
                                                                 padding:
-                                                                    '3px 6px',
-                                                                fontSize: 11,
+                                                                    '6px 8px',
+                                                                fontSize: 16,
                                                                 background:
                                                                     'var(--color-bg)',
                                                                 color: 'var(--color-text)',
@@ -961,7 +973,7 @@ export default function ConsultaPage() {
                                                                     'none',
                                                                 appearance:
                                                                     'none',
-                                                                width: 118,
+                                                                width: 136,
                                                                 boxSizing:
                                                                     'border-box',
                                                             }}
@@ -984,7 +996,7 @@ export default function ConsultaPage() {
                                 gap: 10,
                                 padding: '10px 4px',
                                 fontWeight: 700,
-                                fontSize: 17,
+                                fontSize: 18,
                                 color: 'var(--color-text)',
                                 borderTop: '2px solid var(--color-border)',
                                 marginBottom: 4,
@@ -1001,7 +1013,7 @@ export default function ConsultaPage() {
                     <label
                         style={{
                             display: 'block',
-                            fontSize: 13,
+                            fontSize: 16,
                             fontWeight: 600,
                             color: 'var(--color-text-muted)',
                             marginBottom: 6,
@@ -1020,7 +1032,7 @@ export default function ConsultaPage() {
                             border: '1px solid var(--color-border)',
                             borderRadius: 8,
                             padding: '10px 12px',
-                            fontSize: 14,
+                            fontSize: 16,
                             resize: 'vertical',
                             background: 'var(--color-bg)',
                             color: 'var(--color-text)',
@@ -1041,42 +1053,40 @@ export default function ConsultaPage() {
                 >
                     <button
                         type='button'
-                        onClick={() => navigate(-1)}
+                        onClick={returnToOrigin}
                         style={{
                             background: 'transparent',
                             color: 'var(--color-text-muted)',
                             border: '1px solid var(--color-border)',
                             borderRadius: 8,
                             padding: '10px 22px',
-                            fontWeight: 500,
+                            fontWeight: 600,
                             cursor: 'pointer',
-                            fontSize: 14,
+                            fontSize: 16,
                         }}
                     >
-                        Pular
+                        ← Voltar
                     </button>
                     <button
                         type='button'
                         onClick={handleRegister}
                         disabled={selectedItems.length === 0 || saving}
                         style={{
-                            background:
-                                selectedItems.length === 0 || saving
-                                    ? 'var(--color-border)'
-                                    : 'var(--color-primary)',
-                            color:
-                                selectedItems.length === 0 || saving
-                                    ? 'var(--color-text-muted)'
-                                    : '#fff',
+                            background: 'var(--color-primary)',
+                            color: '#fff',
                             border: 'none',
                             borderRadius: 8,
                             padding: '10px 24px',
                             fontWeight: 700,
                             cursor:
                                 selectedItems.length === 0 || saving
-                                    ? 'default'
+                                    ? 'not-allowed'
                                     : 'pointer',
-                            fontSize: 14,
+                            fontSize: 16,
+                            opacity:
+                                selectedItems.length === 0 || saving
+                                    ? 0.55
+                                    : 1,
                             transition: 'background 0.2s',
                         }}
                     >

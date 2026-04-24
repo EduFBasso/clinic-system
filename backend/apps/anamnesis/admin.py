@@ -3,10 +3,19 @@ from .models import AnamnesisField, AnamnesisResponse, AnamnesisPhoto
 
 
 class AnamnesisFieldAdmin(admin.ModelAdmin):
-    list_display = ('label', 'sector', 'field_type', 'order', 'is_active', 'professional')
+    list_display = (
+        'label',
+        'code',
+        'sector',
+        'field_type',
+        'depends_on',
+        'order',
+        'is_active',
+        'professional',
+    )
     list_filter = ('professional', 'sector', 'field_type', 'is_active')
     ordering = ('professional', 'sector_order', 'order')
-    search_fields = ('label', 'sector')
+    search_fields = ('label', 'code', 'sector')
 
 
 class AnamnesisResponseAdmin(admin.ModelAdmin):

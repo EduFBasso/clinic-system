@@ -65,8 +65,8 @@
     --color-icon-default: var(--color-primary);
     --color-card-border: var(--color-border);
 
-    --color-selected-bg: #e0f7fa; /* exemplo: azul claro */
-    --color-selected-border: #00838f; /* exemplo: azul escuro */
+    --color-selected-bg: #eaf2ff;
+    --color-selected-border: #155eef;
 
     /* Font sizes (tokens de tipografia) */
     --font-title-lg: 22px; /* títulos de modais principais */
@@ -94,6 +94,49 @@
     --card-radius: 8px; /* raio da borda do cartão */
     --card-padding-md: 8px 10px; /* padding padrão */
     --card-padding-compact: 6px 8px; /* padding compacto */
+
+    /* Shared control tokens - first step for CSS consolidation */
+    --radius-control: 6px;
+    --radius-surface: 8px;
+    --radius-panel: 10px;
+    --button-padding-sm: 6px 10px;
+    --button-padding-md: 8px 20px;
+    --button-padding-lg: 8px 24px;
+    --button-font-weight: 700;
+    --shadow-soft-sm: 0 2px 16px var(--color-shadow);
+
+    /* Semantic action button tokens */
+    --btn-radius: 6px;
+    --btn-font-weight: 700;
+    --btn-padding-md: 8px 12px;
+
+    --btn-primary-bg: var(--color-success-dark);
+    --btn-primary-border: var(--color-success-darker);
+    --btn-primary-text: #ffffff;
+
+    --btn-secondary-bg: var(--color-done);
+    --btn-secondary-border: color-mix(
+        in oklab,
+        var(--color-done) 60%,
+        #0000
+    );
+    --btn-secondary-text: #ffffff;
+
+    --btn-neutral-bg: #e5e7eb;
+    --btn-neutral-border: #d1d5db;
+    --btn-neutral-text: #1f2937;
+
+    --btn-danger-bg: var(--color-canceled);
+    --btn-danger-border: var(--color-danger-dark);
+    --btn-danger-text: #ffffff;
+
+    --btn-theme-bg: var(--color-primary);
+    --btn-theme-border: color-mix(in oklab, var(--color-primary) 70%, #0000);
+    --btn-theme-text: #ffffff;
+
+    --btn-disabled-bg: #9ca3af;
+    --btn-disabled-border: #9ca3af;
+    --btn-disabled-text: #f9fafb;
 }
 
 /* Removido override mobile para manter contraste entre cartões e fundo do main */
@@ -140,6 +183,8 @@
 }
 
 [data-theme='blue'] {
+    --color-primary: #004aad;
+    --color-primary-light: #e6f0fa;
     --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.78);
     --color-surface: #ffffff;
@@ -162,10 +207,14 @@
     --color-danger-ring: rgb(224 86 102 / 0.16);
     --color-card-dark-top: #143459;
     --color-card-dark-bottom: #0f223a;
+    --color-selected-bg: #eaf2ff;
+    --color-selected-border: var(--color-primary);
 }
 
 [data-theme='green'] {
-    --color-bg: #edf6ef;
+    --color-primary: #15803d;
+    --color-primary-light: #e6f9ea;
+    --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.82);
     --color-surface: #ffffff;
     --color-surface-alt: #ebf8ef;
@@ -187,10 +236,14 @@
     --color-danger-ring: rgb(223 90 99 / 0.16);
     --color-card-dark-top: #183a2c;
     --color-card-dark-bottom: #10271e;
+    --color-selected-bg: #e8f6ec;
+    --color-selected-border: var(--color-primary);
 }
 
 [data-theme='pink'] {
-    --color-bg: #fff5f8;
+    --color-primary: #be185d;
+    --color-primary-light: #fff0f6;
+    --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.8);
     --color-surface: #ffffff;
     --color-surface-alt: #fff0f6;
@@ -212,6 +265,8 @@
     --color-danger-ring: rgb(219 73 103 / 0.16);
     --color-card-dark-top: #4b1838;
     --color-card-dark-bottom: #321024;
+    --color-selected-bg: #fdebf4;
+    --color-selected-border: var(--color-primary);
 }
 
 [data-theme='black'] {
@@ -237,4 +292,6 @@
     --color-danger-ring: rgb(244 63 94 / 0.17);
     --color-card-dark-top: #111827;
     --color-card-dark-bottom: #090d14;
+    --color-selected-bg: #1f2937;
+    --color-selected-border: #60a5fa;
 }

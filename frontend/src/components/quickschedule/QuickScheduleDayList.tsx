@@ -1,6 +1,8 @@
 import React from 'react';
 import ClientDayList from '../shared/ClientDayList';
 import type { Appointment } from '../../hooks/useAppointments';
+import type { PendingReturnContext } from '../../types/agendaFlow';
+import { openPendingActionsForAppointment } from '../../utils/appointments/openPendingActions';
 
 export type DayFilter = 'todos' | 'ativos' | 'cancelados';
 
@@ -11,12 +13,15 @@ export interface QuickScheduleDayListProps {
     onChangeFilter: (f: DayFilter) => void;
     sectionDateTitle: string;
     highlightId: number | null;
+    conflictHighlightIds?: number[];
     editingHighlightId: number | null;
     currentEditId: number | null;
     listRef?: React.RefObject<HTMLDivElement | null>;
     onUseTime: (a: Appointment) => void;
     onEdit: (a: Appointment) => void;
     onCancel: (a: Appointment) => Promise<void>;
+    onFinalize?: (a: Appointment) => Promise<void> | void;
+    finalizeRequestContext?: PendingReturnContext;
     onDetails?: (a: Appointment) => void;
     minimal?: boolean; // when true, hide header/select and section title; show only minicards
 }
@@ -28,12 +33,15 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
     onChangeFilter,
     sectionDateTitle,
     highlightId,
+    conflictHighlightIds = [],
     editingHighlightId,
     currentEditId,
     listRef,
     onUseTime,
     onEdit,
     onCancel,
+    onFinalize,
+    finalizeRequestContext,
     onDetails,
     minimal = false,
 }) => {
@@ -220,26 +228,26 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                     getCardProps={appt => ({
                         showEditAction: false,
                         style: { padding: '6px 8px' },
-                        highlight: highlightId === appt.id,
+                        highlight:
+                            highlightId === appt.id ||
+                            conflictHighlightIds.includes(appt.id),
+                        selected: currentEditId === appt.id,
                         editingActive: editingHighlightId === appt.id,
                         pulse:
                             editingHighlightId === appt.id &&
                             currentEditId === appt.id,
                     })}
                     onResolvePending={appt => {
-                        try {
-                            window.dispatchEvent(
-                                new CustomEvent('pendingActions:open', {
-                                    detail: { appt },
-                                }),
-                            );
-                        } catch {
-                            /* noop */
-                        }
+                        openPendingActionsForAppointment(
+                            appt,
+                            finalizeRequestContext,
+                        );
                     }}
                     onUseTime={onUseTime}
                     onEdit={onEdit}
                     onCancel={onCancel}
+                    onFinalize={onFinalize}
+                    finalizeRequestContext={finalizeRequestContext}
                     onDetails={onDetails}
                     emptyPlaceholder={
                         !loading ? (

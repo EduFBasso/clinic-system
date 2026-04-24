@@ -1,9 +1,15 @@
-export type StatusKind = 'scheduled' | 'done' | 'canceled' | 'ongoing' | 'past';
+export type StatusKind =
+    | 'scheduled'
+    | 'done'
+    | 'canceled'
+    | 'ongoing'
+    | 'past';
 
 /**
  * Derive a visual status for an appointment-like object based on server-aligned time.
  * - canceled → 'canceled'
  * - done → 'done'
+ * - pending → 'past' (visual pending)
  * - start <= now < end → 'ongoing'
  * - end < now and status === 'scheduled' → 'past' (pending)
  * - else → 'scheduled'
@@ -12,7 +18,7 @@ export function deriveStatus(
     appt: {
         start_at: string;
         end_at: string;
-        status: 'scheduled' | 'done' | 'canceled' | 'ongoing';
+        status: 'scheduled' | 'pending' | 'done' | 'canceled' | 'ongoing';
     },
     now: Date,
 ): StatusKind {
@@ -20,6 +26,7 @@ export function deriveStatus(
     const end = new Date(appt.end_at);
     if (appt.status === 'canceled') return 'canceled';
     if (appt.status === 'done') return 'done';
+    if (appt.status === 'pending') return 'past';
     if (start <= now && end > now) return 'ongoing';
     if (end < now && appt.status === 'scheduled') return 'past';
     return 'scheduled';
@@ -67,7 +74,8 @@ export function enrichAppointment(
     const _isPast = _end < now;
     const _isOngoing =
         _start <= now && _end > now && appt.status === 'scheduled';
-    let _derivedStatus: EnrichedAppointment['_derivedStatus'] = appt.status;
+    let _derivedStatus: EnrichedAppointment['_derivedStatus'] =
+        appt.status === 'pending' ? 'past' : appt.status;
     if (_isOngoing) _derivedStatus = 'ongoing';
     else if (appt.status === 'scheduled' && _isPast) _derivedStatus = 'past';
     return { ...appt, _start, _end, _isPast, _isOngoing, _derivedStatus };

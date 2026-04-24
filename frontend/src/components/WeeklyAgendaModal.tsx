@@ -7,12 +7,22 @@ import FloatingDatePicker from './FloatingDatePicker';
 import DateControlsHeader from './shared/DateControlsHeader';
 // AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
 import ClientCardRow from './shared/ClientCardRow';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
+import { deriveStatus } from '../utils/appointments/status';
 import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
-
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
+import { useNowTick } from '../hooks/useNowTick';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../types/agendaFlow';
+import QuickScheduleModal from './QuickScheduleModal';
+import { makeClientBasic } from '../utils/appointments/agendaHelpers';
+import type { ClientBasic } from '../types/ClientBasic';
+ 
 function startOfDay(d: Date) {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -87,6 +97,13 @@ function WeeklyAgendaContent({
         () => startOfWeekMonday(anchorDate),
         [anchorDate],
     );
+    const buildReturnContext = React.useCallback(
+        (): PendingReturnContext => ({
+            kind: 'weekly-agenda',
+            dateISO: toISODate(anchorDate),
+        }),
+        [anchorDate],
+    );
     const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
     const [reloadKey, setReloadKey] = React.useState(0);
     React.useEffect(() => {
@@ -101,6 +118,33 @@ function WeeklyAgendaContent({
         undefined,
         reloadKey,
     );
+    const effectiveNowRef = useNowTick(30_000);
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
+    const handleCancel = React.useCallback(async (appt: Appointment) => {
+        const res = await cancelAppointment(appt.id);
+        if (!res.ok) {
+            const msg = res.text || 'Erro ao cancelar';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'warning' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setReloadKey(x => x + 1);
+        try {
+            dispatchers.updateClients();
+            dispatchers.appointmentsChanged();
+        } catch {
+            /* noop */
+        }
+    }, []);
 
     // Dev diagnostics to trace open/range/fetch lifecycle
     React.useEffect(() => {
@@ -283,12 +327,19 @@ function WeeklyAgendaContent({
         }
     }, [open]);
 
-    // Details modal (only for done)
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
     // PendingActions é global — nenhum estado local necessário
+
+    // QuickSchedule: abrir em modo edição ao tocar no cartão
+    const [qsOpen, setQsOpen] = React.useState(false);
+    const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
+    const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
+    const closeQuickSchedule = React.useCallback(() => {
+        setQsOpen(false);
+        setQsEdit(null);
+        setQsClient(null);
+    }, []);
 
     const headerTitle = 'Agenda';
     const weekRangeLabel = React.useMemo(() => {
@@ -489,7 +540,12 @@ function WeeklyAgendaContent({
                                 </div>
                             ) : (
                                 <div style={{ display: 'grid', gap: 8 }}>
-                                    {list.map(a => (
+                                    {list.map(a => {
+                                        const derivedStatus = deriveStatus(
+                                            a,
+                                            effectiveNowRef,
+                                        );
+                                        return (
                                         <div key={a.id}>
                                             <ClientCardRow<Appointment>
                                                 appt={a as Appointment}
@@ -500,105 +556,49 @@ function WeeklyAgendaContent({
                                                     width: '100%',
                                                 }}
                                                 showEditAction={false}
+                                                onEdit={
+                                                    derivedStatus === 'scheduled'
+                                                        ? appt => {
+                                                              const client = makeClientBasic(appt);
+                                                              setQsClient(client);
+                                                              setQsEdit(appt as Appointment);
+                                                              setQsOpen(true);
+                                                          }
+                                                        : undefined
+                                                }
                                                 onClick={() =>
                                                     setSelected(iso, 'user')
                                                 }
                                                 onResolvePending={appt => {
-                                                    try {
-                                                        const a =
-                                                            appt as Appointment;
-                                                        const anyAppt =
-                                                            a as unknown as Record<
-                                                                string,
-                                                                unknown
-                                                            >;
-                                                        const clientName = (():
-                                                            | string
-                                                            | undefined => {
-                                                            if (
-                                                                typeof anyAppt.client_name ===
-                                                                'string'
-                                                            )
-                                                                return anyAppt.client_name as string;
-                                                            const c =
-                                                                anyAppt.client as unknown;
-                                                            if (
-                                                                c &&
-                                                                typeof c ===
-                                                                    'object' &&
-                                                                'name' in
-                                                                    (c as Record<
-                                                                        string,
-                                                                        unknown
-                                                                    >)
-                                                            ) {
-                                                                const n = (
-                                                                    c as {
-                                                                        name?: unknown;
-                                                                    }
-                                                                ).name;
-                                                                if (
-                                                                    typeof n ===
-                                                                    'string'
-                                                                )
-                                                                    return n;
-                                                            }
-                                                            return undefined;
-                                                        })();
-                                                        const clientField =
-                                                            ((): unknown => {
-                                                                const c =
-                                                                    anyAppt.client as unknown;
-                                                                if (
-                                                                    typeof c ===
-                                                                        'number' ||
-                                                                    typeof c ===
-                                                                        'object'
-                                                                )
-                                                                    return c;
-                                                                return undefined;
-                                                            })();
-                                                        const payload = {
-                                                            id: a.id,
-                                                            start_at:
-                                                                a.start_at,
-                                                            end_at: a.end_at,
-                                                            status: a.status,
-                                                            notes: a.notes,
-                                                            client_name:
-                                                                clientName,
-                                                            client: clientField,
-                                                            title: a.title,
-                                                        } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                                        window.dispatchEvent(
-                                                            new CustomEvent(
-                                                                'pendingActions:open',
-                                                                {
-                                                                    detail: {
-                                                                        appt: payload,
-                                                                    },
-                                                                },
-                                                            ),
-                                                        );
-                                                    } catch {
-                                                        /* noop */
-                                                    }
+                                                    openPendingActionsForAppointment(
+                                                        appt,
+                                                        buildReturnContext(),
+                                                    );
                                                 }}
+                                                finalizeRequestContext={buildReturnContext()}
                                                 onDetails={
                                                     a.status === 'done'
-                                                        ? appt => {
-                                                              setDetailsAppt(
+                                                        ? appt =>
+                                                              openDetails(
                                                                   appt as Appointment,
-                                                              );
-                                                              setDetailsOpen(
-                                                                  true,
-                                                              );
-                                                          }
+                                                                  buildReturnContext(),
+                                                              )
+                                                        : undefined
+                                                }
+                                                onCancel={
+                                                        derivedStatus === 'scheduled' ||
+                                                        derivedStatus === 'ongoing'
+                                                        ? handleCancel
+                                                        : undefined
+                                                }
+                                                onFinalize={
+                                                        derivedStatus === 'ongoing'
+                                                        ? handleFinalize
                                                         : undefined
                                                 }
                                             />
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
                             )}
                         </div>
@@ -619,17 +619,20 @@ function WeeklyAgendaContent({
                 initialPosition={pickerPos}
             />
 
-            {detailsOpen && detailsAppt && (
-                <AppointmentDetailsModal
-                    open={detailsOpen}
-                    onClose={() => {
-                        setDetailsOpen(false);
-                        setDetailsAppt(null);
+            {detailsModal}
+            {/* PendingActionsModal é global (Home) */}
+            {qsOpen && qsClient && (
+                <QuickScheduleModal
+                    open={qsOpen}
+                    onClose={closeQuickSchedule}
+                    client={qsClient}
+                    editAppointment={qsEdit}
+                    afterPersist={(_, action) => {
+                        if (action === 'updated') closeQuickSchedule();
+                        setReloadKey(x => x + 1);
                     }}
-                    appt={detailsAppt}
                 />
             )}
-            {/* PendingActionsModal é global (Home) */}
         </div>
     );
 }
@@ -657,6 +660,7 @@ export default function WeeklyAgendaModal({
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             fullScreen
             actionsBarStyle={{
                 background: 'transparent',

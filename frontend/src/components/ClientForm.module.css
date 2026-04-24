@@ -37,12 +37,8 @@
 }
 
 .btnPrimary {
-    background: linear-gradient(
-        135deg,
-        var(--color-accent-strong),
-        var(--color-accent)
-    );
-    color: var(--color-on-accent);
+    background: var(--color-primary);
+    color: #ffffff;
 }
 
 .btnSecondary {

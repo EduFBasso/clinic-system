@@ -8,6 +8,7 @@ import FormSection from '../../components/FormKit/FormSection';
 import FormActions from '../../components/FormKit/FormActions';
 import SelectField from '../../components/FormKit/SelectField';
 import CheckboxField from '../../components/FormKit/CheckboxField';
+import { getCatalogFlashScope, queueFlashMessage } from '../../utils/flashMessage';
 
 type ProductType = 'PRODUCT' | 'MEDICATION';
 
@@ -33,8 +34,8 @@ export default function ProductFormPage() {
     const [error, setError] = useState<string | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
 
-    function format2DecimalsBR(value: number): string {
-        return value.toLocaleString('pt-BR', {
+    function format2DecimalsBR(value: number | string): string {
+        return Number(value || 0).toLocaleString('pt-BR', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
@@ -127,19 +128,15 @@ export default function ProductFormPage() {
                     body,
                 });
             }
-            try {
-                localStorage.setItem(
-                    'pendingSystemMessage',
-                    JSON.stringify({
-                        text: id
-                            ? 'Produto atualizado com sucesso.'
-                            : 'Produto salvo com sucesso.',
-                        type: 'success',
-                        autoCloseMs: 6000,
-                    }),
-                );
-            } catch {
-                // ignore storage errors
+            const flashScope = getCatalogFlashScope(returnTo);
+            if (flashScope) {
+                queueFlashMessage(flashScope, {
+                    text: id
+                        ? 'Produto atualizado com sucesso.'
+                        : 'Produto salvo com sucesso.',
+                    type: 'success',
+                    autoCloseMs: 6000,
+                });
             }
             if (returnTo === '/consulta') {
                 navigate(-1);

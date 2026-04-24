@@ -7,6 +7,7 @@ import FormPage from '../../components/FormKit/FormPage';
 import FormSection from '../../components/FormKit/FormSection';
 import FormActions from '../../components/FormKit/FormActions';
 import TextAreaField from '../../components/FormKit/TextAreaField';
+import { getCatalogFlashScope, queueFlashMessage } from '../../utils/flashMessage';
 
 type Service = {
     id: number;
@@ -17,8 +18,8 @@ type Service = {
     is_active?: boolean;
 };
 
-function format2DecimalsBR(value: number): string {
-    return value.toLocaleString('pt-BR', {
+function format2DecimalsBR(value: number | string): string {
+    return Number(value || 0).toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
@@ -103,19 +104,15 @@ export default function ServiceFormPage() {
                     body,
                 });
             }
-            try {
-                localStorage.setItem(
-                    'pendingSystemMessage',
-                    JSON.stringify({
-                        text: id
-                            ? 'Serviço atualizado com sucesso.'
-                            : 'Serviço salvo com sucesso.',
-                        type: 'success',
-                        autoCloseMs: 6000,
-                    }),
-                );
-            } catch {
-                /* noop */
+            const flashScope = getCatalogFlashScope(returnTo);
+            if (flashScope) {
+                queueFlashMessage(flashScope, {
+                    text: id
+                        ? 'Serviço atualizado com sucesso.'
+                        : 'Serviço salvo com sucesso.',
+                    type: 'success',
+                    autoCloseMs: 6000,
+                });
             }
             if (returnTo === '/consulta') {
                 navigate(-1);

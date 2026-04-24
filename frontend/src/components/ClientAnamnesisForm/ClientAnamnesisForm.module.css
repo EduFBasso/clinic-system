@@ -24,7 +24,7 @@
     text-transform: uppercase;
     letter-spacing: 0.18em;
     font-size: 0.72rem;
-    color: var(--color-accent-strong);
+    color: var(--color-primary);
 }
 
 .title {
@@ -47,7 +47,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: var(--color-accent-strong);
+    color: var(--color-primary);
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 6px;
 }
@@ -98,13 +98,13 @@
 }
 
 .radioBtn:hover {
-    border-color: var(--color-accent);
+    border-color: var(--color-primary);
 }
 
 .radioBtnSelected {
-    background: var(--color-accent);
-    border-color: var(--color-accent);
-    color: var(--color-on-accent);
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #ffffff;
 }
 
 /* ── Text inputs ─────────────────────────────────── */

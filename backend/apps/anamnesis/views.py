@@ -62,7 +62,10 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
         Upserts all anamnesis responses for a client in one request.
         Body: { "client": <id>, "responses": [{"field": <id>, "value": "..."}, ...] }
         """
-        serializer = AnamnesisResponseBulkSerializer(data=request.data)
+        serializer = AnamnesisResponseBulkSerializer(
+            data=request.data,
+            context={'request': request},
+        )
         serializer.is_valid(raise_exception=True)
         data: dict = serializer.validated_data  # type: ignore[assignment]
 
@@ -74,9 +77,19 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
         )
 
         saved = []
+        submitted_field_ids: set[int] = set()
         for item in data['responses']:
             field: AnamnesisField = item['field']
             value: str = item['value']
+
+            submitted_field_ids.add(field.id)
+
+            if value == '':
+                AnamnesisResponse.objects.filter(
+                    client=client,
+                    field=field,
+                ).delete()
+                continue
 
             obj, _ = AnamnesisResponse.objects.update_or_create(
                 client=client,
@@ -87,6 +100,11 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
                 },
             )
             saved.append(obj)
+
+        AnamnesisResponse.objects.filter(
+            client=client,
+            field__professional=request.user,
+        ).exclude(field_id__in=submitted_field_ids).delete()
 
         return Response(
             AnamnesisResponseSerializer(saved, many=True).data,

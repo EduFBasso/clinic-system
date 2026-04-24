@@ -9,10 +9,9 @@ import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import {
-    getDefaultDuration,
-    getSlotInterval,
-    getWorkTimes,
+    getWorkTimesFromSnapshot,
 } from '../utils/agendaSettings';
+import { useAgendaSettings } from '../hooks/useAgendaSettings';
 
 type DurationOption = 30 | 60 | 90 | 120 | 150;
 
@@ -64,6 +63,11 @@ export default function ScheduleEditorCore({
     defaultDate?: Date;
     editAppointment?: Appointment | null;
 }) {
+    const agendaSettings = useAgendaSettings();
+    const workTimes = React.useMemo(
+        () => getWorkTimesFromSnapshot(agendaSettings),
+        [agendaSettings],
+    );
     const TITLE_GREEN = 'var(--color-success-dark)';
     const ARROW_HOVER = 'var(--color-success-darker)';
     const ARROW_ACTIVE = 'var(--color-success-deep)';
@@ -102,11 +106,11 @@ export default function ScheduleEditorCore({
 
     const BUFFER = 30;
     const [duration, setDuration] = React.useState<DurationOption>(() =>
-        getDefaultDuration(),
+        agendaSettings.defaultDuration,
     );
     const initialHM = React.useMemo(() => {
-        const ws = getWorkTimes();
-        const step = getSlotInterval();
+        const ws = workTimes;
+        const step = agendaSettings.slotInterval;
         const now = getNow();
         const isToday = toISODate(selectedDay) === toISODate(now);
         let base = new Date(selectedDay);
@@ -126,7 +130,7 @@ export default function ScheduleEditorCore({
         workStartSel.setHours(ws.startHour, ws.startMin, 0, 0);
         if (base < workStartSel) base = workStartSel;
         return { h: base.getHours(), m: base.getMinutes() };
-    }, [selectedDay]);
+    }, [agendaSettings.slotInterval, selectedDay, workTimes]);
     const [hour, setHour] = React.useState<number>(initialHM.h);
     const [minute, setMinute] = React.useState<number>(initialHM.m);
     const [saving, setSaving] = React.useState(false);
@@ -135,23 +139,7 @@ export default function ScheduleEditorCore({
     const [conflicts, setConflicts] = React.useState<Appointment[]>([]);
     const [visitType, setVisitType] = React.useState<
         'consulta' | 'avaliacao' | 'retorno' | 'procedimento' | 'outro'
-    >(() => {
-        const raw = localStorage.getItem('defaultVisitType');
-        if (
-            raw === 'consulta' ||
-            raw === 'avaliacao' ||
-            raw === 'retorno' ||
-            raw === 'procedimento' ||
-            raw === 'outro'
-        )
-            return raw;
-        try {
-            localStorage.setItem('defaultVisitType', 'consulta');
-        } catch {
-            /* noop */
-        }
-        return 'consulta';
-    });
+    >(() => agendaSettings.defaultVisitType);
     const [notes, setNotes] = React.useState<string>('');
     const [editingId, setEditingId] = React.useState<number | null>(null);
     const [prevHover, setPrevHover] = React.useState(false);
@@ -253,8 +241,7 @@ export default function ScheduleEditorCore({
         lengthMin: number;
     }
 
-    const workTimes = React.useMemo(getWorkTimes, []);
-    const slotInterval = React.useMemo(getSlotInterval, []);
+    const slotInterval = agendaSettings.slotInterval;
     const minutesList = React.useMemo(() => {
         const step = Math.max(1, Math.min(30, slotInterval));
         const arr: number[] = [];
@@ -602,7 +589,7 @@ export default function ScheduleEditorCore({
                         <option value='consulta'>Consulta</option>
                         <option value='avaliacao'>Avaliação</option>
                         <option value='retorno'>Retorno</option>
-                        <option value='procedimento'>Procedimento</option>
+                        <option value='procedimento'>Serviço</option>
                         <option value='outro'>Outro</option>
                     </select>
                 </label>
@@ -662,21 +649,10 @@ export default function ScheduleEditorCore({
                                         const s = new Date(seg.start);
                                         setHour(s.getHours());
                                         setMinute(s.getMinutes());
-                                        const ddRaw = localStorage.getItem(
-                                            'agenda.defaultDuration',
+                                        const suggestedEnd = addMinutes(
+                                            s,
+                                            agendaSettings.defaultDuration,
                                         );
-                                        const dd = (() => {
-                                            const n = parseInt(
-                                                ddRaw || '60',
-                                                10,
-                                            );
-                                            return !isNaN(n) &&
-                                                n > 0 &&
-                                                n <= 240
-                                                ? n
-                                                : 60;
-                                        })();
-                                        const suggestedEnd = addMinutes(s, dd);
                                         const end =
                                             suggestedEnd > seg.end
                                                 ? seg.end

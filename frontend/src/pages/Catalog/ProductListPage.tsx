@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../../config/api';
 import { apiFetch, ApiError } from '../../utils/apiFetch';
 import FormPage from '../../components/FormKit/FormPage';
 import FormSection from '../../components/FormKit/FormSection';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { consumeFlashMessage } from '../../utils/flashMessage';
 
 type Product = {
     id: number;
@@ -26,7 +27,35 @@ export default function ProductListPage() {
     const [items, setItems] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const navigate = useNavigate();
+    const location = useLocation();
+    const returnTo =
+        (location.state as { returnTo?: string } | null)?.returnTo ??
+        '/catalog/products';
+    const cameFromConsulta = returnTo === '/consulta';
+
+    const handleClose = useMemo(
+        () => () => {
+            if (cameFromConsulta) {
+                navigate(-1);
+                return;
+            }
+            navigate('/');
+        },
+        [cameFromConsulta, navigate],
+    );
+
+    const openProductForm = useMemo(
+        () =>
+            (productId?: number) => {
+                const path = productId
+                    ? `/catalog/products/${productId}`
+                    : '/catalog/products/new';
+                navigate(path, { state: { returnTo } });
+            },
+        [navigate, returnTo],
+    );
 
     useEffect(() => {
         let mounted = true;
@@ -50,6 +79,17 @@ export default function ProductListPage() {
         };
     }, []);
 
+    useEffect(() => {
+        const message = consumeFlashMessage('catalog-products');
+        if (!message?.text) return;
+        setSuccessMsg(String(message.text));
+        const ms =
+            typeof message.autoCloseMs === 'number'
+                ? message.autoCloseMs
+                : 6000;
+        setTimeout(() => setSuccessMsg(null), ms);
+    }, []);
+
     if (loading) return <div style={{ padding: 16 }}>Carregando…</div>;
     if (error)
         return <div style={{ padding: 16, color: 'crimson' }}>{error}</div>;
@@ -58,19 +98,52 @@ export default function ProductListPage() {
         <FormPage title='Produtos' onSubmit={e => e.preventDefault()}>
             <FormSection
                 title='Lista'
-                onClose={() => navigate('/')}
+                onClose={handleClose}
                 closeTitle='Fechar'
             >
+                {successMsg && (
+                    <div
+                        style={{
+                            marginBottom: 8,
+                            padding: '10px 12px',
+                            background: 'var(--color-success-bg)',
+                            border: '1px solid var(--color-success-dark)',
+                            borderRadius: 8,
+                            color: 'var(--color-success-dark)',
+                            fontWeight: 600,
+                        }}
+                    >
+                        {successMsg}
+                    </div>
+                )}
                 <div
                     style={{
                         display: 'flex',
-                        justifyContent: 'flex-end',
-                        marginBottom: 8,
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 12,
+                        gap: 8,
                     }}
                 >
                     <button
                         className='btn'
-                        onClick={() => navigate('/catalog/products/new')}
+                        onClick={handleClose}
+                        style={{
+                            background: 'transparent',
+                            color: 'var(--color-text)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 8,
+                            padding: '8px 14px',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                        }}
+                        title='Voltar'
+                    >
+                        ← Voltar
+                    </button>
+                    <button
+                        className='btn'
+                        onClick={() => openProductForm()}
                         style={{
                             background: 'var(--color-primary)',
                             color: '#fff',
@@ -156,25 +229,7 @@ export default function ProductListPage() {
                                         <button
                                             aria-label='Editar'
                                             title='Editar'
-                                            onClick={() => {
-                                                // Próximo passo: abrir formulário de edição (rota dedicada)
-                                                try {
-                                                    window.dispatchEvent(
-                                                        new CustomEvent(
-                                                            'systemMessage',
-                                                            {
-                                                                detail: {
-                                                                    text: 'Edição via formulário será adicionada no próximo passo.',
-                                                                    type: 'info',
-                                                                    autoCloseMs: 5000,
-                                                                },
-                                                            },
-                                                        ),
-                                                    );
-                                                } catch {
-                                                    /* noop */
-                                                }
-                                            }}
+                                            onClick={() => openProductForm(p.id)}
                                             style={{
                                                 background: 'transparent',
                                                 border: 'none',

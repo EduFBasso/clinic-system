@@ -10,7 +10,6 @@ function isMobileDevice() {
 // frontend\src\components\NavBar.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import AboutModal from './AboutModal';
-import { useSessionsSummary } from '../hooks/useSessions';
 import SessionExpiredModal from './SessionExpiredModal';
 import { API_BASE } from '../config/api';
 import { openClientForm } from '../utils/openClientForm';
@@ -30,13 +29,19 @@ import AgendaSettingsModal from './AgendaSettingsModal';
 import AppModal from './Modal';
 import '../styles/modal-message.css';
 import { isTokenExpired } from '../utils/jwt';
-import { emit } from '../events/bus';
+import { emit, on } from '../events/bus';
+import {
+    clearStoredAuth,
+    dispatchLogout,
+    hasActiveSession,
+} from '../utils/auth/session';
 import ProfessionalCreateModal from './ProfessionalCreateModal';
 import TotpAdminResetModal from './TotpAdminResetModal';
 import {
     startRegistration,
     startAuthentication,
 } from '@simplewebauthn/browser';
+import { useNavigate } from 'react-router-dom';
 
 interface NavBarProps {
     openNewClientModal?: () => void;
@@ -51,6 +56,11 @@ const NavBar: React.FC<NavBarProps> = ({
     selectedClientId,
     agendaOpeners,
 }) => {
+    const navigate = useNavigate();
+    const biometricStorageKey = React.useCallback((email: string) => {
+        return `hasWebAuthn_${email.trim().toLowerCase()}`;
+    }, []);
+
     // Viewport listener removido (usado apenas pelo relógio)
     const [loginEmail, setLoginEmail] = useState<string>(
         () => localStorage.getItem('lastLoginEmail') ?? '',
@@ -89,15 +99,15 @@ const NavBar: React.FC<NavBarProps> = ({
     // Biometric / WebAuthn
     const [offerBiometricOpen, setOfferBiometricOpen] = useState(false);
     const [biometricLoading, setBiometricLoading] = useState(false);
-    // true when a passkey has been registered for the current email on this device
-    const hasWebAuthn =
-        !!loginEmail &&
-        !!localStorage.getItem(`hasWebAuthn_${loginEmail.toLowerCase()}`);
-    // Trigger summary fetch when dropdown toggles open
-    const { summary } = useSessionsSummary(dropdownOpen);
-
+    const [platformAuthenticatorAvailable, setPlatformAuthenticatorAvailable] =
+        useState(false);
+    const [biometricConfigured, setBiometricConfigured] = useState(false);
+    const hasWebAuthn = !!loginEmail && platformAuthenticatorAvailable;
     // Estado para modal de sessão expirada
     const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
+    const [sessionExpiredMessage, setSessionExpiredMessage] = useState(
+        'Sua sessão expirou. Por favor, faça login novamente.',
+    );
 
     // Fecha dropdown ao clicar fora
     useEffect(() => {
@@ -127,8 +137,7 @@ const NavBar: React.FC<NavBarProps> = ({
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         if (isTokenExpired(token)) {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('loggedProfessional');
+            clearStoredAuth({ clearNewClientId: false });
             setLoggedProfessional(null);
         } else {
             const stored = localStorage.getItem('loggedProfessional');
@@ -136,14 +145,117 @@ const NavBar: React.FC<NavBarProps> = ({
         }
     }, []);
 
+    useEffect(() => {
+        const disposeLogin = on('auth:login', () => {
+            try {
+                const stored = localStorage.getItem('loggedProfessional');
+                setLoggedProfessional(stored ? JSON.parse(stored) : null);
+            } catch {
+                setLoggedProfessional(null);
+            }
+            setSessionExpiredOpen(false);
+            setSessionExpiredMessage(
+                'Sua sessão expirou. Por favor, faça login novamente.',
+            );
+        });
+
+        const disposeLogout = on('auth:logout', detail => {
+            setLoggedProfessional(null);
+            setTotpCode('');
+            setDropdownOpen(false);
+            setAgendaDropdownOpen(false);
+            setConsultaDropdownOpen(false);
+
+            if (detail?.reason && detail.reason !== 'manual') {
+                setSessionExpiredMessage(
+                    detail.reason === 'device_session_invalid'
+                        ? 'Sua sessão deste dispositivo foi encerrada ou invalidada. Faça login novamente para continuar usando agenda, notificações e ações protegidas.'
+                        : 'Sua sessão expirou. Faça login novamente para continuar usando agenda, notificações e ações protegidas.',
+                );
+                setSessionExpiredOpen(true);
+            }
+        });
+
+        return () => {
+            disposeLogin();
+            disposeLogout();
+        };
+    }, []);
+
+    useEffect(() => {
+        const email = (loggedProfessional?.email || loginEmail || '').trim();
+        if (!email) {
+            setBiometricConfigured(false);
+            return;
+        }
+        setBiometricConfigured(
+            !!localStorage.getItem(biometricStorageKey(email)),
+        );
+    }, [biometricStorageKey, loggedProfessional, loginEmail]);
+
+    useEffect(() => {
+        let active = true;
+        async function detectPlatformAuthenticator() {
+            try {
+                if (
+                    typeof PublicKeyCredential === 'undefined' ||
+                    typeof (
+                        PublicKeyCredential as {
+                            isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
+                        }
+                    ).isUserVerifyingPlatformAuthenticatorAvailable !==
+                        'function'
+                ) {
+                    if (active) setPlatformAuthenticatorAvailable(false);
+                    return;
+                }
+
+                const available = await (
+                    PublicKeyCredential as {
+                        isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean>;
+                    }
+                ).isUserVerifyingPlatformAuthenticatorAvailable();
+                if (active) setPlatformAuthenticatorAvailable(Boolean(available));
+            } catch {
+                if (active) setPlatformAuthenticatorAvailable(false);
+            }
+        }
+
+        void detectPlatformAuthenticator();
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    const openSessionExpiredState = React.useCallback(
+        (
+            reason: 'session_expired' | 'device_session_invalid' =
+                'session_expired',
+        ) => {
+            dispatchLogout(reason);
+        },
+        [],
+    );
+
+    const toggleProtectedDropdown = React.useCallback(
+        (toggle: React.Dispatch<React.SetStateAction<boolean>>) => {
+            if (!hasActiveSession()) {
+                openSessionExpiredState();
+                return;
+            }
+
+            toggle(open => !open);
+        },
+        [openSessionExpiredState],
+    );
+
     // Handler para abrir modal de novo cliente (integração futura)
     // ...existing code...
 
     function handleNewClient() {
         setDropdownOpen(false);
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-            setSessionExpiredOpen(true);
+        if (!hasActiveSession()) {
+            openSessionExpiredState();
             return;
         }
         if (openNewClientModal && isMobileDevice()) {
@@ -180,6 +292,10 @@ const NavBar: React.FC<NavBarProps> = ({
         setBiometricLoading(true);
         try {
             const token = localStorage.getItem('accessToken');
+            const email = (loggedProfessional?.email || loginEmail || '').trim();
+            if (!token || !email) {
+                throw new Error('Entre na conta antes de ativar a biometria.');
+            }
             const beginRes = await fetch(
                 `${API_BASE}/register/auth/webauthn/register-begin/`,
                 {
@@ -220,9 +336,10 @@ const NavBar: React.FC<NavBarProps> = ({
             );
             if (!completeRes.ok) throw new Error('Erro ao concluir registro.');
             localStorage.setItem(
-                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                biometricStorageKey(email),
                 '1',
             );
+            setBiometricConfigured(true);
             setOfferBiometricOpen(false);
             setModalMessage('Face ID ativado para futuros logins!');
             setModalOpen(true);
@@ -276,13 +393,15 @@ const NavBar: React.FC<NavBarProps> = ({
                 data = { message: 'Falha ao interpretar resposta do servidor' };
             }
             if (completeRes.ok && data.access) {
-                let successMsg = 'Login realizado!';
-                if (typeof data.active_sessions_count === 'number') {
-                    successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
-                }
-                setModalMessage(successMsg);
+                setModalMessage('Login realizado!');
                 setModalOpen(true);
                 localStorage.setItem('accessToken', data.access);
+                localStorage.setItem('lastLoginEmail', loginEmail);
+                localStorage.setItem(
+                    biometricStorageKey(loginEmail),
+                    '1',
+                );
+                setBiometricConfigured(true);
                 localStorage.setItem(
                     'loggedProfessional',
                     JSON.stringify(data.professional),
@@ -292,9 +411,10 @@ const NavBar: React.FC<NavBarProps> = ({
                 }
                 setLoggedProfessional(data.professional || null);
                 if (data.professional?.is_superuser) {
-                    window.location.href = '/admin';
+                    navigate('/admin', { replace: true });
                     return;
                 }
+                emit('auth:login', undefined);
                 window.dispatchEvent(new Event('updateClients'));
                 window.dispatchEvent(new Event('clearClients'));
             } else {
@@ -328,9 +448,8 @@ const NavBar: React.FC<NavBarProps> = ({
                     <button
                         className={styles.menuButton}
                         onClick={() => {
-                            const token = localStorage.getItem('accessToken');
-                            if (!token) {
-                                setSessionExpiredOpen(true);
+                            if (!hasActiveSession()) {
+                                openSessionExpiredState();
                                 return;
                             }
                             setDropdownOpen(open => !open);
@@ -362,23 +481,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                     setAboutOpen(true);
                                 }}
                             >
-                                Sobre{' '}
-                                {summary && summary.has_others && (
-                                    <span
-                                        style={{
-                                            marginLeft: 6,
-                                            background: 'crimson',
-                                            color: '#fff',
-                                            borderRadius: 8,
-                                            padding: '0 6px',
-                                            fontSize: 11,
-                                            lineHeight: '16px',
-                                        }}
-                                        title='Outras sessões ativas'
-                                    >
-                                        !
-                                    </span>
-                                )}
+                                Sobre
                             </button>
                             {/* Opções adicionais removidas para simplificar o menu de Clientes */}
                         </div>
@@ -388,7 +491,9 @@ const NavBar: React.FC<NavBarProps> = ({
                 <div className={styles.dropdownWrapper} ref={agendaDropdownRef}>
                     <button
                         className={styles.menuButton}
-                        onClick={() => setAgendaDropdownOpen(open => !open)}
+                        onClick={() =>
+                            toggleProtectedDropdown(setAgendaDropdownOpen)
+                        }
                         aria-haspopup='true'
                         aria-expanded={agendaDropdownOpen}
                     >
@@ -400,10 +505,8 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setAgendaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
+                                    if (!hasActiveSession()) {
+                                        openSessionExpiredState();
                                         return;
                                     }
                                     // Abrir agenda diária via evento (usar {} para evitar access de propriedades em undefined no handler)
@@ -416,10 +519,8 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setAgendaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
+                                    if (!hasActiveSession()) {
+                                        openSessionExpiredState();
                                         return;
                                     }
                                     const now = new Date();
@@ -439,7 +540,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                     setAgendaSettingsOpen(true);
                                 }}
                             >
-                                Configurações
+                                Notificações
                             </button>
                         </div>
                     )}
@@ -450,14 +551,13 @@ const NavBar: React.FC<NavBarProps> = ({
                 >
                     <button
                         className={styles.menuButton}
-                        onClick={() => {
-                            // Permite abrir o menu mesmo sem token para visualizar as opções.
-                            setConsultaDropdownOpen(open => !open);
-                        }}
+                        onClick={() =>
+                            toggleProtectedDropdown(setConsultaDropdownOpen)
+                        }
                         aria-haspopup='true'
                         aria-expanded={consultaDropdownOpen}
                     >
-                        🩺 Consulta <span className={styles.caret}>▼</span>
+                        🩺 Catálogo <span className={styles.caret}>▼</span>
                     </button>
                     {consultaDropdownOpen && (
                         <div className={styles.dropdownMenu}>
@@ -465,29 +565,25 @@ const NavBar: React.FC<NavBarProps> = ({
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setConsultaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
+                                    if (!hasActiveSession()) {
+                                        openSessionExpiredState();
                                         return;
                                     }
-                                    window.location.href = '/catalog/services';
+                                    navigate('/catalog/services');
                                 }}
-                                title='Procedimentos'
+                                title='Serviços'
                             >
-                                📋 Procedimentos
+                                📋 Serviços
                             </button>
                             <button
                                 className={styles.dropdownItem}
                                 onClick={() => {
                                     setConsultaDropdownOpen(false);
-                                    const token =
-                                        localStorage.getItem('accessToken');
-                                    if (!token) {
-                                        setSessionExpiredOpen(true);
+                                    if (!hasActiveSession()) {
+                                        openSessionExpiredState();
                                         return;
                                     }
-                                    window.location.href = '/catalog/products';
+                                    navigate('/catalog/products');
                                 }}
                                 title='Produtos'
                             >
@@ -527,13 +623,10 @@ const NavBar: React.FC<NavBarProps> = ({
                                 styles.loginButton + ' ' + styles.logoutButton
                             }
                             onClick={() => {
-                                localStorage.removeItem('accessToken');
-                                localStorage.removeItem('loggedProfessional');
-                                localStorage.removeItem('newClientId');
                                 setLoggedProfessional(null);
                                 setLoginEmail('');
                                 setTotpCode('');
-                                window.dispatchEvent(new Event('clearClients'));
+                                dispatchLogout('manual');
                             }}
                         >
                             Sair
@@ -592,6 +685,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 !loginEmail ||
                                 totpCode.length !== 6
                             }
+                            aria-busy={loadingOtp}
                             onClick={async () => {
                                 setLoadingOtp(true);
                                 try {
@@ -623,15 +717,9 @@ const NavBar: React.FC<NavBarProps> = ({
                                         };
                                     }
                                     if (res.ok && data.access) {
-                                        let successMsg =
-                                            'Login realizado! Dados dos clientes liberados.';
-                                        if (
-                                            typeof data.active_sessions_count ===
-                                            'number'
-                                        ) {
-                                            successMsg += ` Sessões ativas: ${data.active_sessions_count}.`;
-                                        }
-                                        setModalMessage(successMsg);
+                                        setModalMessage(
+                                            'Login realizado! Dados dos clientes liberados.',
+                                        );
                                         setModalOpen(true);
                                         localStorage.setItem(
                                             'accessToken',
@@ -652,9 +740,12 @@ const NavBar: React.FC<NavBarProps> = ({
                                             );
                                         }
                                         if (data.professional?.is_superuser) {
-                                            window.location.href = '/admin';
+                                            navigate('/admin', {
+                                                replace: true,
+                                            });
                                             return;
                                         }
+                                        emit('auth:login', undefined);
                                         window.dispatchEvent(
                                             new Event('updateClients'),
                                         );
@@ -668,7 +759,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                         // Offer biometric registration if not already set
                                         if (
                                             !localStorage.getItem(
-                                                `hasWebAuthn_${loginEmail.toLowerCase()}`,
+                                                biometricStorageKey(loginEmail),
                                             ) &&
                                             typeof PublicKeyCredential !==
                                                 'undefined' &&
@@ -708,7 +799,7 @@ const NavBar: React.FC<NavBarProps> = ({
                                 setLoadingOtp(false);
                             }}
                         >
-                            Entrar
+                            {loadingOtp ? 'Entrando...' : 'Entrar'}
                         </button>
                     </>
                 )}
@@ -731,11 +822,9 @@ const NavBar: React.FC<NavBarProps> = ({
                 open={sessionExpiredOpen}
                 onClose={() => {
                     setSessionExpiredOpen(false);
-                    // Opcional: Limpar token e recarregar página
-                    localStorage.removeItem('accessToken');
-                    localStorage.removeItem('loggedProfessional');
-                    window.location.reload();
+                    dispatchLogout('manual');
                 }}
+                message={sessionExpiredMessage}
             />
             <AboutModal
                 open={aboutOpen}

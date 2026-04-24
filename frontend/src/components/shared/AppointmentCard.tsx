@@ -1,10 +1,12 @@
 import React from 'react';
+import ActionPromptModal from './ActionPromptModal';
 import StatusBadge from './StatusBadge';
 // StatusKind is exported from StatusBadge; not needed explicitly here
 import TimeRangeLabel from './TimeRangeLabel';
 import { formatTime } from '../../utils/timeFormat';
 import { FaEdit, FaBan, FaWhatsapp } from 'react-icons/fa';
 import { useAppointmentCardState } from '../../hooks/useAppointmentCardState.ts';
+import type { PendingReturnContext } from '../../types/agendaFlow';
 import {
     getAppointmentOverride,
     subscribeOverrides,
@@ -13,13 +15,14 @@ import {
     statusStripeColor,
     statusBackgroundColor,
 } from '../../utils/appointments/status';
+import { requestFinalizeAppointment } from '../../utils/appointments/requestFinalizeAppointment';
 
 export interface SharedAppointmentLike {
     id: number;
     title?: string;
     start_at: string;
     end_at: string;
-    status: 'scheduled' | 'done' | 'canceled' | 'ongoing';
+    status: 'scheduled' | 'pending' | 'done' | 'canceled' | 'ongoing';
     notes?: string;
     client_name?: string;
     client?: { id: number; name: string } | number;
@@ -41,6 +44,8 @@ export interface AppointmentCardProps<
     onResolvePending?: (appt: T) => void;
     onEdit?: (appt: T) => void;
     onCancel?: (appt: T) => void;
+    onFinalize?: (appt: T) => Promise<void> | void;
+    finalizeRequestContext?: PendingReturnContext;
     onDetails?: (appt: T) => void;
     highlight?: boolean;
     editingActive?: boolean;
@@ -74,6 +79,8 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     onResolvePending,
     onEdit,
     onCancel,
+    onFinalize,
+    finalizeRequestContext,
     onDetails,
     highlight,
     editingActive,
@@ -112,7 +119,10 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     const apptWithOverride = React.useMemo(() => {
         // Coleta override completo (status + end_at opcional)
         const ov = getAppointmentOverride(appt.id) as
-            | { status?: 'scheduled' | 'done' | 'canceled'; end_at?: string }
+            | {
+                  status?: 'scheduled' | 'pending' | 'done' | 'canceled';
+                  end_at?: string;
+              }
             | undefined;
         if (!ov) return appt;
         return {
@@ -127,6 +137,11 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
 
     const { status, canEdit, canCancel, isOngoing, start, end } =
         useAppointmentCardState(apptWithOverride, now);
+    const [actionPrompt, setActionPrompt] = React.useState<
+        'scheduled' | 'ongoing' | null
+    >(null);
+    const deferredActionFrameRef = React.useRef<number | null>(null);
+    const deferredActionTimeoutRef = React.useRef<number | null>(null);
     // Se houve encurtamento de end_at após finalize/cancel, preservar faixa original para exibição
     let displayEndForRange = appt.end_at; // original props (não override)
     try {
@@ -201,6 +216,68 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     }
 
     const isPending = status === 'past';
+    const scheduledEditAction = canEdit && onEdit ? onEdit : null;
+    const handleCancel = React.useCallback(() => {
+        if (!onCancel || !canCancel) return false;
+        onCancel(appt);
+        return true;
+    }, [appt, canCancel, onCancel]);
+    const runAfterPromptClose = React.useCallback((callback: () => void) => {
+        if (typeof window === 'undefined') {
+            callback();
+            return;
+        }
+        if (typeof window.requestAnimationFrame === 'function') {
+            deferredActionFrameRef.current = window.requestAnimationFrame(() => {
+                deferredActionFrameRef.current = null;
+                callback();
+            });
+            return;
+        }
+        deferredActionTimeoutRef.current = window.setTimeout(() => {
+            deferredActionTimeoutRef.current = null;
+            callback();
+        }, 0);
+    }, []);
+    const timeLabel = `${String(start.getHours()).padStart(2, '0')}:${String(
+        start.getMinutes(),
+    ).padStart(2, '0')} - ${String(end.getHours()).padStart(2, '0')}:${String(
+        end.getMinutes(),
+    ).padStart(2, '0')}`;
+    const requestFinalize = React.useCallback(() => {
+        const clientId =
+            typeof (appt as SharedAppointmentLike).client === 'number'
+                ? ((appt as SharedAppointmentLike).client as number)
+                : typeof (appt as SharedAppointmentLike).client === 'object' &&
+                    (appt as SharedAppointmentLike).client
+                  ? ((appt as SharedAppointmentLike).client as { id?: number })
+                        .id
+                  : undefined;
+        requestFinalizeAppointment({
+            clientId,
+            appointmentId: appt.id,
+            isEarly: true,
+            returnContext: finalizeRequestContext,
+            proceed: () => onFinalize?.(appt),
+        });
+    }, [appt, finalizeRequestContext, onFinalize]);
+    React.useEffect(() => {
+        return () => {
+            if (
+                deferredActionFrameRef.current !== null &&
+                typeof window !== 'undefined' &&
+                typeof window.cancelAnimationFrame === 'function'
+            ) {
+                window.cancelAnimationFrame(deferredActionFrameRef.current);
+            }
+            if (
+                deferredActionTimeoutRef.current !== null &&
+                typeof window !== 'undefined'
+            ) {
+                window.clearTimeout(deferredActionTimeoutRef.current);
+            }
+        };
+    }, []);
     // Overrides de tamanho via variáveis CSS locais
     const sizeVars: React.CSSProperties | undefined =
         size === 'sm'
@@ -218,13 +295,18 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         // Pending with resolver or any of the click handlers present
         (isPending && !!onResolvePending) ||
         (!!onDetails && apptWithOverride.status === 'done') ||
+        ((!!onCancel || !!scheduledEditAction) &&
+            status === 'scheduled' &&
+            (canCancel || canEdit)) ||
+        ((!!onFinalize || !!onCancel) && status === 'ongoing') ||
         !!onEdit ||
         !!onUseTime ||
         !!onClick;
 
+    const emphasisActive = selected || editingActive;
     const base: React.CSSProperties = {
-        border: selected
-            ? '3px solid var(--color-success)'
+        border: emphasisActive
+            ? '1px solid rgba(37,99,235,0.58)'
             : '1px solid var(--color-border)',
         borderRadius: 'var(--card-radius)',
         padding: compact
@@ -237,7 +319,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         gap: 4,
         fontFamily: 'var(--card-font-family)',
         cursor:
-            apptWithOverride.status === 'canceled' || isOngoing
+            apptWithOverride.status === 'canceled'
                 ? 'default'
                 : clickable
                   ? 'pointer'
@@ -245,37 +327,47 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         position: 'relative',
         maxWidth: '100%',
         // Avoid forcing GPU compositing to keep text rendering crisp on Windows
-        boxShadow: editingActive
+        boxShadow: emphasisActive
             ? pulse
-                ? '0 0 0 1px var(--color-primary), 0 1px 3px rgba(0,0,0,0.08)'
-                : '0 0 0 1px var(--color-primary), 0 1px 2px rgba(0,0,0,0.06)'
-            : 'none',
-        ...(highlight
-            ? { outline: '2px solid var(--color-primary)', outlineOffset: 2 }
-            : null),
+                ? '0 0 0 1px rgba(37,99,235,0.62), 0 0 0 5px rgba(96,165,250,0.22), 0 0 20px rgba(96,165,250,0.34), 0 8px 18px rgba(15,23,42,0.08)'
+                : '0 0 0 1px rgba(37,99,235,0.5), 0 0 0 4px rgba(96,165,250,0.16), 0 0 14px rgba(96,165,250,0.28), 0 6px 14px rgba(15,23,42,0.06)'
+            : highlight
+              ? '0 0 0 1px rgba(37,99,235,0.24), 0 0 10px rgba(96,165,250,0.18), 0 4px 10px rgba(15,23,42,0.05)'
+              : 'none',
         ...(sizeVars || {}),
         ...style,
     };
     // flags are derived by the shared hook
 
     return (
-        <div
+        <>
+            <div
             id={`appt-card-${appt.id}`}
             data-appt-id={appt.id}
+            data-highlighted={highlight ? 'true' : 'false'}
+            data-selected={selected ? 'true' : 'false'}
+            data-editing-active={editingActive ? 'true' : 'false'}
             data-original-start-at={appt.start_at}
             data-original-end-at={appt.end_at}
             className={className}
             style={base}
             onClick={() => {
-                // bloquear interações para cartões em andamento ou cancelados
-                if (isOngoing || apptWithOverride.status === 'canceled') return;
+                if (apptWithOverride.status === 'canceled') return;
                 if (isPending && onResolvePending) {
                     onResolvePending(appt);
+                    return;
+                }
+                if (status === 'ongoing') {
+                    if (onFinalize || onCancel) setActionPrompt('ongoing');
                     return;
                 }
                 // Novo: para concluídos, o clique do cartão abre detalhes (ícone removido)
                 if (onDetails && status === 'done') {
                     onDetails(appt);
+                    return;
+                }
+                if (status === 'scheduled' && (onCancel || scheduledEditAction)) {
+                    setActionPrompt('scheduled');
                     return;
                 }
                 // Prioriza edição quando disponível
@@ -410,7 +502,12 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                             showEditAction &&
                             canEdit
                         );
-                        const showCancel = !!(onCancel && canCancel);
+                        const showCancel = !!(
+                            onCancel &&
+                            canCancel &&
+                            status === 'scheduled' &&
+                            showEditAction
+                        );
                         // Só preservar placeholders de layout quando for útil (cards não compactos, sem stack e com ações visíveis)
                         const preserveActionsLayout =
                             !compact && !stackName && showEditAction !== false;
@@ -466,23 +563,8 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                         title='Cancel appointment'
                                         onClick={e => {
                                             e.stopPropagation();
-                                            if (!showCancel || !onCancel)
-                                                return;
-                                            const hh = (d: Date) =>
-                                                `${String(
-                                                    d.getHours(),
-                                                ).padStart(2, '0')}:${String(
-                                                    d.getMinutes(),
-                                                ).padStart(2, '0')}`;
-                                            const msg = `Tem certeza que deseja cancelar o agendamento de ${hh(
-                                                start,
-                                            )} - ${hh(end)}${
-                                                clientName
-                                                    ? ' para ' + clientName
-                                                    : ''
-                                            }?`;
-                                            if (window.confirm(msg))
-                                                onCancel(appt);
+                                            if (!showCancel) return;
+                                            handleCancel();
                                         }}
                                         style={{
                                             border: '1px solid var(--color-border)',
@@ -559,7 +641,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                     const map: Record<string, string> = {
                                         avaliacao: 'Avaliação',
                                         retorno: 'Retorno',
-                                        procedimento: 'Procedimento',
+                                        procedimento: 'Serviço',
                                         outro: 'Outro',
                                         consulta: 'Consulta',
                                     };
@@ -579,7 +661,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                                     const map: Record<string, string> = {
                                         avaliacao: 'Avaliação',
                                         retorno: 'Retorno',
-                                        procedimento: 'Procedimento',
+                                        procedimento: 'Serviço',
                                         outro: 'Outro',
                                         consulta: 'Consulta',
                                     };
@@ -666,7 +748,85 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                     />
                 </div>
             )}
-        </div>
+            </div>
+            <ActionPromptModal
+                open={actionPrompt === 'scheduled'}
+                onClose={() => setActionPrompt(null)}
+                title='Compromisso ativo'
+                message={
+                    <>
+                        O que deseja fazer com o compromisso de {timeLabel}
+                        {clientName ? ` para ${clientName}` : ''}?
+                    </>
+                }
+                actions={[
+                    {
+                        label: 'Voltar',
+                        onClick: () => setActionPrompt(null),
+                        variant: 'neutral',
+                    },
+                    ...(scheduledEditAction
+                        ? [
+                              {
+                                  label: 'Editar',
+                                  onClick: () => {
+                                      setActionPrompt(null);
+                                      runAfterPromptClose(() => {
+                                          scheduledEditAction(appt);
+                                      });
+                                  },
+                                  variant: 'primary' as const,
+                              },
+                          ]
+                        : []),
+                    ...(onCancel && canCancel
+                        ? [
+                              {
+                                  label: 'Cancelar compromisso',
+                                  onClick: () => {
+                                      setActionPrompt(null);
+                                      handleCancel();
+                                  },
+                                  variant: 'danger' as const,
+                              },
+                          ]
+                        : []),
+                ]}
+            />
+            <ActionPromptModal
+                open={actionPrompt === 'ongoing'}
+                onClose={() => setActionPrompt(null)}
+                title='Atendimento em andamento'
+                message='Deseja finalizar ou cancelar o atendimento agora?'
+                actions={[
+                    {
+                        label: 'Finalizar atendimento',
+                        onClick: () => {
+                            setActionPrompt(null);
+                            requestFinalize();
+                        },
+                        variant: 'success',
+                    },
+                    {
+                        label: 'Voltar',
+                        onClick: () => setActionPrompt(null),
+                        variant: 'neutral',
+                    },
+                    ...(onCancel && canCancel
+                        ? [
+                              {
+                                  label: 'Cancelar compromisso',
+                                  onClick: () => {
+                                      setActionPrompt(null);
+                                      handleCancel();
+                                  },
+                                  variant: 'danger' as const,
+                              },
+                          ]
+                        : []),
+                ]}
+            />
+        </>
     );
 }
 
@@ -705,6 +865,8 @@ function areEqualShallow(
         prev.onResolvePending !== next.onResolvePending ||
         prev.onEdit !== next.onEdit ||
         prev.onCancel !== next.onCancel ||
+        prev.onFinalize !== next.onFinalize ||
+        prev.finalizeRequestContext !== next.finalizeRequestContext ||
         prev.onDetails !== next.onDetails
     )
         return false;

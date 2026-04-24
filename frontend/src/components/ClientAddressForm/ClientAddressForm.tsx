@@ -6,6 +6,7 @@ import { formatCep } from '../../utils/formatCpf';
 import { BR_UFS } from '../../data/br-ufs';
 import { useViaCep } from '../../hooks/useViaCep';
 import styles from './ClientAddressForm.module.css';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type ChangeHandler = (
     fieldOrEvent:
@@ -27,6 +28,8 @@ export default function ClientAddressForm({
     handleChange,
     isEdit = false,
 }: Props) {
+    const { theme } = useTheme();
+
     const onFound = useCallback(
         (data: {
             address: string;
@@ -45,7 +48,7 @@ export default function ClientAddressForm({
     const { status, lookup } = useViaCep(onFound);
 
     return (
-        <div data-theme='blue' className={styles.wrapper}>
+        <div data-theme={theme} className={styles.wrapper}>
             <div className={styles.form}>
                 <header className={styles.header}>
                     <span className={styles.eyebrow}>

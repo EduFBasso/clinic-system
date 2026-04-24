@@ -13,9 +13,31 @@ Usage:
 import importlib
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils.text import slugify
 
 from apps.anamnesis.models import AnamnesisField
 from apps.register.models import Professional
+
+
+def find_existing_field(professional, code, label, sector):
+    field = AnamnesisField.objects.filter(
+        professional=professional,
+        code=code,
+    ).first()
+    if field:
+        return field, False
+
+    legacy_matches = list(
+        AnamnesisField.objects.filter(
+            professional=professional,
+            label=label,
+            sector=sector,
+        ).order_by('id')
+    )
+    if len(legacy_matches) == 1:
+        return legacy_matches[0], False
+
+    return None, True
 
 
 class Command(BaseCommand):
@@ -70,12 +92,15 @@ class Command(BaseCommand):
 
         created_count = 0
         existing_count = 0
+        field_by_code: dict[str, AnamnesisField] = {}
+        pending_dependencies: list[tuple[AnamnesisField, str | None, str]] = []
 
         for sector_block in sectors:
             sector = sector_block['sector']
             sector_order = sector_block['sector_order']
 
             for field_def in sector_block['fields']:
+                code = field_def.get('code') or slugify(field_def['label']).replace('-', '_')
                 if dry_run:
                     self.stdout.write(
                         f'  [dry-run] [{sector}] {field_def["label"]} '
@@ -84,28 +109,58 @@ class Command(BaseCommand):
                     created_count += 1
                     continue
 
-                obj, created = AnamnesisField.objects.get_or_create(
+                obj, should_create = find_existing_field(
                     professional=professional,
-                    sector=sector,
+                    code=code,
                     label=field_def['label'],
-                    defaults={
-                        'sector_order': sector_order,
-                        'field_type': field_def['field_type'],
-                        'options': field_def.get('options'),
-                        'order': field_def['order'],
-                        'is_active': True,
-                    },
+                    sector=sector,
                 )
+
+                created = False
+                if should_create:
+                    obj = AnamnesisField.objects.create(
+                        professional=professional,
+                        code=code,
+                        label=field_def['label'],
+                        sector=sector,
+                        sector_order=sector_order,
+                        field_type=field_def['field_type'],
+                        options=field_def.get('options'),
+                        placeholder=field_def.get('placeholder', ''),
+                        show_when_value=field_def.get('show_when_value', ''),
+                        order=field_def['order'],
+                        is_active=True,
+                    )
+                    created = True
+
+                field_by_code[code] = obj
 
                 if created:
                     created_count += 1
                     self.stdout.write(f'  + [{sector}] {obj.label}')
                 else:
-                    # Atualiza options e order se houve mudança no seed
                     updated_fields = []
+                    if obj.code != code:
+                        obj.code = code
+                        updated_fields.append('code')
+                    if obj.label != field_def['label']:
+                        obj.label = field_def['label']
+                        updated_fields.append('label')
+                    if obj.sector != sector:
+                        obj.sector = sector
+                        updated_fields.append('sector')
                     if obj.options != field_def.get('options'):
                         obj.options = field_def.get('options')
                         updated_fields.append('options')
+                    if obj.placeholder != field_def.get('placeholder', ''):
+                        obj.placeholder = field_def.get('placeholder', '')
+                        updated_fields.append('placeholder')
+                    if obj.show_when_value != field_def.get('show_when_value', ''):
+                        obj.show_when_value = field_def.get('show_when_value', '')
+                        updated_fields.append('show_when_value')
+                    if obj.field_type != field_def['field_type']:
+                        obj.field_type = field_def['field_type']
+                        updated_fields.append('field_type')
                     if obj.order != field_def['order']:
                         obj.order = field_def['order']
                         updated_fields.append('order')
@@ -118,6 +173,29 @@ class Command(BaseCommand):
                     else:
                         self.stdout.write(f'  ~ [{sector}] {obj.label} (já existia)')
                     existing_count += 1
+
+                pending_dependencies.append(
+                    (
+                        obj,
+                        field_def.get('depends_on'),
+                        field_def.get('show_when_value', ''),
+                    )
+                )
+
+        if not dry_run:
+            for obj, depends_on_code, show_when_value in pending_dependencies:
+                depends_on_field = (
+                    field_by_code.get(depends_on_code) if depends_on_code else None
+                )
+                updated_fields = []
+                if obj.depends_on_id != getattr(depends_on_field, 'id', None):
+                    obj.depends_on = depends_on_field
+                    updated_fields.append('depends_on')
+                if obj.show_when_value != show_when_value:
+                    obj.show_when_value = show_when_value
+                    updated_fields.append('show_when_value')
+                if updated_fields:
+                    obj.save(update_fields=updated_fields)
 
         if dry_run:
             self.stdout.write(

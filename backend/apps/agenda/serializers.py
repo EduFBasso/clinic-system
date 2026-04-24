@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.inventory.models import Product, Service
@@ -12,6 +13,7 @@ from .models import (
     Encounter,
     FinalizeAudit,
 )
+from .state_utils import promote_overdue_scheduled_to_pending
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -96,17 +98,21 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "detail": "Somente compromissos ativos podem ser editados."
                 })
+            # Status deve ser resolvido apenas via endpoints dedicados
+            # (/finalize, /cancel, /done), nunca por PATCH generico.
+            if "status" in attrs:
+                new_status = attrs.get("status")
+                if new_status is not None and new_status != inst_status:
+                    raise serializers.ValidationError({
+                        "status": "Use os endpoints dedicados para transição de status (finalize, cancel, done)."
+                    })
             # Se o compromisso já está no passado, bloquear edições genéricas
             # Exceções permitidas:
-            #  - status -> 'done' (finalização)
             #  - encurtar end_at (sem mover início)
             inst_start = getattr(self.instance, 'start_at', None)
             inst_end = getattr(self.instance, 'end_at', None)
             if inst_start and inst_start < now:
                 allowed = False
-                # permitir marcar como done
-                if 'status' in attrs and attrs.get('status') == Appointment.Status.DONE:
-                    allowed = True
                 # permitir apenas encurtar o fim (novo end <= atual end) e não mover início
                 if 'end_at' in attrs and 'start_at' not in attrs:
                     try:
@@ -147,12 +153,15 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 professional = user
         client = attrs.get("client", getattr(self.instance, "client", None))
 
-        # Regra de negócio: bloquear novo agendamento se o cliente possui compromisso pendente (status scheduled no passado)
-        # "Pendente" aqui significa agendamento que já terminou (end_at < now) mas não foi concluído (done) nem cancelado.
+        # Regra de transição: bloquear novo agendamento se o cliente possui compromisso pendente.
+        # A regra oficial depende apenas de status persistido `pending`.
         if self.instance is None and client is not None:
-            pending_qs = (
-                Appointment.objects.filter(client=client, status=Appointment.Status.SCHEDULED)
-                .filter(end_at__lt=now)
+            # Promoção oportunista para manter o estado persistido consistente no momento da criação.
+            promote_overdue_scheduled_to_pending(
+                Appointment.objects.filter(client=client)
+            )
+            pending_qs = Appointment.objects.filter(client=client).filter(
+                status=Appointment.Status.PENDING
             )
             if pending_qs.exists():
                 raise serializers.ValidationError({
@@ -161,11 +170,15 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if professional and start and end:
             # conflito simples
             inst = self.instance if getattr(self, "instance", None) else None
-            from django.db.models import Q
-
             conflict = (
                 Appointment.objects.filter(professional=professional)
-                .exclude(status__in=[Appointment.Status.CANCELED, Appointment.Status.DONE])
+                .exclude(
+                    status__in=[
+                        Appointment.Status.PENDING,
+                        Appointment.Status.CANCELED,
+                        Appointment.Status.DONE,
+                    ]
+                )
                 .filter(Q(start_at__lt=end) & Q(end_at__gt=start))
             )
             if inst is not None:
@@ -385,15 +398,15 @@ class ChargeSerializer(serializers.ModelSerializer):
         encounter = attrs.get("encounter", getattr(self.instance, "encounter", None))
         appointment = attrs.get("appointment", getattr(self.instance, "appointment", None))
         charge_type = attrs.get("charge_type", getattr(self.instance, "charge_type", Charge.ChargeType.CHARGE))
-        # status and paid_at are derived from item-level paid flags in _save_items; ignore frontend values
-        status = getattr(self.instance, "status", Charge.Status.DRAFT)
+        # Charge.status is the canonical state; item-level paid flags remain per-consultation annotations.
+        status = attrs.get("status", getattr(self.instance, "status", Charge.Status.DRAFT))
         title = attrs.get("title", getattr(self.instance, "title", ""))
         notes = attrs.get("notes", getattr(self.instance, "notes", ""))
         recipient_name = attrs.get("recipient_name", getattr(self.instance, "recipient_name", ""))
         recipient_phone = attrs.get("recipient_phone", getattr(self.instance, "recipient_phone", ""))
         currency = attrs.get("currency", getattr(self.instance, "currency", "BRL"))
         shared_at = attrs.get("shared_at", getattr(self.instance, "shared_at", None))
-        paid_at = getattr(self.instance, "paid_at", None)
+        paid_at = attrs.get("paid_at", getattr(self.instance, "paid_at", None))
 
         instance = Charge(
             professional=professional,
@@ -454,26 +467,6 @@ class ChargeSerializer(serializers.ModelSerializer):
                     **payload,
                 )
             charge.recalculate_total(save=True)
-            # Derive charge-level status and paid_at from item-level flags
-            all_paid = charge.items.filter(paid=False).count() == 0 and charge.items.count() > 0
-            any_paid = charge.items.filter(paid=True).exists()
-            if all_paid:
-                latest_paid_at = charge.items.order_by("-paid_at").values_list("paid_at", flat=True).first()
-                Charge.objects.filter(pk=charge.pk).update(
-                    status=Charge.Status.PAID,
-                    paid_at=latest_paid_at,
-                )
-            elif any_paid:
-                latest_paid_at = charge.items.filter(paid=True).order_by("-paid_at").values_list("paid_at", flat=True).first()
-                Charge.objects.filter(pk=charge.pk).update(
-                    status=Charge.Status.DRAFT,
-                    paid_at=latest_paid_at,
-                )
-            else:
-                Charge.objects.filter(pk=charge.pk).update(
-                    status=Charge.Status.DRAFT,
-                    paid_at=None,
-                )
             charge.refresh_from_db()
 
     def create(self, validated_data):

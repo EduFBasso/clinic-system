@@ -3,8 +3,8 @@
     background: #28a745;
     color: #fff;
     border: none;
-    padding: 8px 20px;
-    border-radius: 6px;
+    padding: var(--button-padding-md);
+    border-radius: var(--radius-control);
     font-weight: bold;
     cursor: pointer;
     transition: background 0.2s;
@@ -17,8 +17,8 @@
     background: #d32f2f;
     color: #fff;
     border: none;
-    padding: 8px 20px;
-    border-radius: 6px;
+    padding: var(--button-padding-md);
+    border-radius: var(--radius-control);
     font-weight: bold;
     cursor: pointer;
     transition: background 0.2s;
@@ -55,15 +55,19 @@
     text-align: left;
     padding: 10px 18px;
     font-size: 1rem;
-    color: #1a2a3a;
+    color: var(--color-text-main, #1a2a3a);
     cursor: pointer;
-    border-radius: 8px;
-    transition: background 0.15s;
+    border-radius: var(--radius-surface);
+    transition:
+        background 0.15s,
+        color 0.15s;
 }
 .dropdownItem:hover,
-.dropdownItem:focus {
-    background: var(--color-accent);
+.dropdownItem:focus,
+.dropdownItem:focus-visible {
+    background: var(--color-primary-light);
     color: var(--color-primary);
+    font-weight: 600;
 }
 /* frontend\src\styles\components\NavBar.module.css */
 .navBar {
@@ -161,13 +165,54 @@
 }
 
 .loginButton {
+    -webkit-appearance: none;
+    appearance: none;
     background-color: var(--color-primary);
     color: var(--color-bg-section);
-    border: none;
+    border: 1px solid var(--color-primary);
     padding: 0.5rem 1rem;
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition:
+        background-color 0.3s ease,
+        color 0.2s ease,
+        border-color 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.loginButton:hover {
+    background-color: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.loginButton:focus-visible {
+    background-color: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .loginButton:focus-visible {
+        background-color: var(--color-primary);
+        color: var(--color-bg-section);
+        border-color: var(--color-primary);
+        outline: none;
+    }
+}
+
+.loginButton:active:not(:disabled) {
+    background-color: color-mix(in oklab, var(--color-primary) 88%, black 12%);
+    color: var(--color-bg-section);
+    border-color: color-mix(in oklab, var(--color-primary) 88%, black 12%);
+}
+
+.loginButton:disabled {
+    background-color: var(--color-primary);
+    color: var(--color-bg-section);
+    border-color: var(--color-primary);
+    opacity: 0.64;
+    cursor: not-allowed;
 }
 
 .logoutButton {
@@ -203,10 +248,6 @@
             --logout-max-width
         ); /* limita em telas um pouco maiores dentro do breakpoint */
     }
-}
-
-.loginButton:hover {
-    background-color: var(--color-secondary);
 }
 
 @media screen and (max-width: 600px) {

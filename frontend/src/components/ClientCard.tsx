@@ -4,23 +4,20 @@ import { focusClientCard } from '../utils/focusClientCard';
 import styles from '../styles/components/ClientCard.module.css';
 import { FaEye, FaWhatsapp, FaCalendarAlt, FaPlus } from 'react-icons/fa';
 import { useClientCreateAction } from '../hooks/useClientCreateAction';
-import { getMaxScheduledPerClient } from '../config/limits';
 import { API_BASE } from '../config/api';
 import type { Appointment } from '../hooks/useAppointments';
-import QuickScheduleModal from './QuickScheduleModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { formatPhone } from '../utils/formatPhone';
 import { FaEdit } from 'react-icons/fa';
 import '../styles/palette.css';
 import { parseDOB, calcAge } from '../utils/dateOfBirth';
-import MonthlyAgendaModal from './MonthlyAgendaModal';
-import WeeklyAgendaModal from './WeeklyAgendaModal';
 import { useClientCardStyle } from './clientCard/useClientCardStyle';
 // PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
 import { useClientPendingState } from '../hooks/useClientPendingState';
 import FinalizeButton from './clientCard/FinalizeButton';
 // SolveButton lives in clientCard folder along with FinalizeButton
 import SolveButton from './clientCard/SolveButton';
+import { useClientCardFocusScroll } from './clientCard/useClientCardFocusScroll';
 import {
     FutureAppointmentsList,
     useClientFutureAppointments,
@@ -33,12 +30,18 @@ import { formatTime } from '../utils/timeFormat';
 import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
 import { useNowTick } from '../hooks/useNowTick';
+import { emit } from '../events/bus';
 
 interface ClientCardProps {
     client: ClientBasic;
     onView: (client: ClientBasic) => void;
     selected?: boolean;
     onSelect?: () => void;
+    /** Quando definido, o botão "Avisar" usa este agendamento em vez do next_appointment do cliente.
+     *  Útil quando o filtro ativo é "Amanhã" e o cliente tem um agendamento amanhã distinto do next. */
+    notifyAppt?: { start_at?: string; end_at?: string; title?: string };
+    /** Modo de filtro ativo. Quando 'today' ou 'tomorrow', o card exibe apenas o dia filtrado. */
+    filterMode?: 'all' | 'pending' | 'today' | 'tomorrow';
 }
 
 export default function ClientCard({
@@ -46,17 +49,12 @@ export default function ClientCard({
     onView,
     selected,
     onSelect,
+    notifyAppt,
+    filterMode = 'all',
 }: ClientCardProps) {
     // Feature flag: disable per-client ongoing probe unless explicitly enabled (reduces debug traffic)
     const ENABLE_ONGOING_PROBE =
         (import.meta as ImportMeta).env.VITE_ENABLE_ONGOING_PROBE === 'true';
-    const [showMonthly, setShowMonthly] = React.useState(false);
-    const [showWeekly, setShowWeekly] = React.useState(false);
-    const [showQuick, setShowQuick] = React.useState(false);
-    // Removido: PendingActions local — usar evento global
-    const [editingAppt, setEditingAppt] = React.useState<Appointment | null>(
-        null,
-    );
     const isScheduled = client.next_appointment_status === 'scheduled';
     // Futuros agora gerenciados por hook dedicado
     const { futureAppointments, loadingFuture, dynLimit } =
@@ -139,9 +137,13 @@ export default function ClientCard({
     // Regra revisada:
     //  - Quando pendente: não mostramos linha de agenda nem linha Data (substituímos por bloco compacto de pendência)
     //  - Linha de agenda aparece apenas se há scheduled ativo, em andamento ou futuros E não está pendente
+    // isTomorrowFilter / effectiveOngoing declarados aqui porque hasAgendaLine (abaixo) os usa
+    const isTomorrowFilter = filterMode === 'tomorrow' && !!notifyAppt;
+    const effectiveOngoing = isOngoing && !isTomorrowFilter;
+
     const hasAgendaLine =
         !isPending &&
-        (isScheduled || isOngoing || futureAppointments.length > 0);
+        (isScheduled || effectiveOngoing || futureAppointments.length > 0);
 
     // Ações unificadas (+) para agenda e fallback
     const createActionAgenda = useClientCreateAction({
@@ -152,8 +154,10 @@ export default function ClientCard({
         dynLimit,
         openPendingActions,
         tryOpenPendingElseQuick,
-        setEditing: setEditingAppt,
-        openQuick: () => setShowQuick(true),
+        setEditing: () => {
+            /* noop: scheduling flow is hosted globally in Home */
+        },
+        openQuick: () => openGlobalQuickSchedule(),
         baseTitle: 'Novo agendamento',
     });
     const createActionFallback = useClientCreateAction({
@@ -164,8 +168,10 @@ export default function ClientCard({
         dynLimit,
         openPendingActions,
         tryOpenPendingElseQuick,
-        setEditing: setEditingAppt,
-        openQuick: () => setShowQuick(true),
+        setEditing: () => {
+            /* noop: scheduling flow is hosted globally in Home */
+        },
+        openQuick: () => openGlobalQuickSchedule(),
         baseTitle: 'Agendar',
     });
     // Estilos centralizados via hook: mantém regra de cartão branco durante atendimento
@@ -177,14 +183,45 @@ export default function ClientCard({
         separatorColor,
         separatorOpacity,
     } = useClientCardStyle({
-        isOngoing,
+        isOngoing: effectiveOngoing,
         selected,
         pressed,
         isScheduled,
         isPending,
     });
+    const openGlobalQuickSchedule = React.useCallback(
+        (appointment?: Appointment | null) => {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('openScheduleEdit', {
+                        detail: {
+                            client,
+                            appointment: appointment ?? undefined,
+                        },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        },
+        [client],
+    );
     const cardRef = React.useRef<HTMLDivElement | null>(null);
     const [budgetOpen, setBudgetOpen] = React.useState(false);
+
+    const openGlobalMonthlyAgenda = React.useCallback(
+        (dateISO?: string | null) => {
+            try {
+                emit('openMonthlyAgenda', {
+                    clientId: client.id,
+                    date: dateISO || undefined,
+                });
+            } catch {
+                /* noop */
+            }
+        },
+        [client.id],
+    );
 
     // Align with global forceClose: ensure any ClientCard modal closes too
     // PendingActions global — sem necessidade de listener local
@@ -217,96 +254,31 @@ export default function ClientCard({
     // Borda e fundo já definidos no hook (containerStyle)
     // title display moved into the agenda section below when scheduled
     // Flash visual ao focar/entrar em andamento removido — mantemos apenas seleção + scroll
-    React.useEffect(() => {
-        let cancelled = false;
-        const cleanupTimers: number[] = [];
-        // Cancela auto-scroll se usuário interagir manualmente após o trigger
-        function cancelByUser() {
-            cancelled = true;
-        }
-        window.addEventListener('touchstart', cancelByUser, { passive: true });
-        window.addEventListener('wheel', cancelByUser, { passive: true });
-
-        function ensureVisible(attempt: number) {
-            if (cancelled) return;
-            const el = cardRef.current;
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
-            const vh =
-                window.innerHeight || document.documentElement.clientHeight;
-            const overlapTop = Math.max(
-                0,
-                Math.min(rect.bottom, vh) - Math.max(rect.top, 0),
-            );
-            const ratio = overlapTop / rect.height;
-            const needsScroll =
-                ratio < 0.7 || rect.top < 8 || rect.bottom > vh - 8;
-            if (needsScroll) {
-                try {
-                    // Calcula scroll target centralizado mas com leve offset para deixar título visível
-                    const currentY = window.scrollY || window.pageYOffset;
-                    const offset = 110; // maior offset para manter cabeçalho/label totalmente visível
-                    const targetTop = Math.max(0, rect.top + currentY - offset);
-                    window.scrollTo({ top: targetTop, behavior: 'smooth' });
-                } catch {
-                    try {
-                        el.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'start',
-                        });
-                    } catch {
-                        /* noop */
-                    }
-                }
-            }
-            // Re-tenta se ainda houver mudanças de layout (ex: futuros compromissos carregando)
-            if (attempt < 4) {
-                const t = window.setTimeout(
-                    () => ensureVisible(attempt + 1),
-                    [0, 150, 350, 700, 1200][attempt],
-                );
-                cleanupTimers.push(t as unknown as number);
-            }
-        }
-
-        function onScrollEv(e: Event) {
-            const det = (e as CustomEvent).detail;
-            if (det && det.clientId === client.id) {
-                // Garante seleção do cartão ao receber evento de foco/scroll
-                try {
-                    onSelect?.();
-                } catch {
-                    /* noop */
-                }
-                // agenda verificação assíncrona depois do repaint para pegar altura final inicial
-                requestAnimationFrame(() => ensureVisible(0));
-            }
-        }
-        window.addEventListener(
-            'scrollToClientCard',
-            onScrollEv as EventListener,
-        );
-        return () => {
-            window.removeEventListener(
-                'scrollToClientCard',
-                onScrollEv as EventListener,
-            );
-            window.removeEventListener('touchstart', cancelByUser);
-            window.removeEventListener('wheel', cancelByUser);
-        };
-    }, [
-        client.id,
+    useClientCardFocusScroll({
+        clientId: client.id,
+        cardRef,
         onSelect,
-        futureAppointments.length,
+        futureAppointmentsCount: futureAppointments.length,
         isOngoing,
         isScheduled,
-    ]);
+    });
 
     // Inline effect de futuros removido (substituído pelo hook)
 
     // Clear ongoing visual immediately when a targeted event is dispatched (same-tab UX)
     // Clear ongoing event handling moved to hook; listener removed
 
+    // Quando o filtro ativo é 'tomorrow' e temos o agendamento de amanhã, usamos seus dados
+    // para o bloco "Data:" e o botão "Avisar" — substituindo os dados de hoje.
+    // (isTomorrowFilter e effectiveOngoing já declarados acima, antes de hasAgendaLine)
+    const activeStartISO = isTomorrowFilter
+        ? (notifyAppt?.start_at ?? null)
+        : (displayStartISO || client.next_appointment_start_at || null);
+    const activeEndISO = isTomorrowFilter
+        ? (notifyAppt?.end_at ?? null)
+        : (displayEndISO || client.next_appointment_end_at || null);
+    // Ocultar o bloco "Próximos compromissos" quando um filtro de dia específico está ativo
+    const hideFutureList = filterMode === 'today' || filterMode === 'tomorrow';
     const cardClassNames = [styles.card, selected ? styles.cardSelected : '']
         .filter(Boolean)
         .join(' ');
@@ -434,7 +406,7 @@ export default function ClientCard({
                     <span
                         style={{
                             fontWeight: 900,
-                            color: iconColor,
+                            color: 'var(--color-primary)',
                             fontFamily:
                                 'system-ui, Segoe UI, Roboto, sans-serif',
                         }}
@@ -522,7 +494,7 @@ export default function ClientCard({
             {hasAgendaLine && (
                 <>
                     {(isScheduled ||
-                        isOngoing ||
+                        effectiveOngoing ||
                         futureAppointments.length > 0) && (
                         <div className={styles.infoRow}>
                             <span
@@ -551,6 +523,9 @@ export default function ClientCard({
                                         // Usa mesma lógica do minicard daily: tenta abrir pendente ou fallback rápido
                                         await tryOpenPendingElseQuick(() => {
                                             // Se não houver nada pendente inesperadamente, apenas não faz nada (ou poderíamos abrir criação)
+                                        }, {
+                                            kind: 'home',
+                                            clientId: client.id,
                                         });
                                     }}
                                 />
@@ -577,7 +552,11 @@ export default function ClientCard({
                                         title='Agenda mensal'
                                         onClick={e => {
                                             e.stopPropagation();
-                                            setShowMonthly(true);
+                                            openGlobalMonthlyAgenda(
+                                                displayStartISO ||
+                                                    client.next_appointment_start_at ||
+                                                    null,
+                                            );
                                         }}
                                     >
                                         <FaCalendarAlt color={iconColor} />
@@ -598,14 +577,8 @@ export default function ClientCard({
                             style={{ color: labelColor, fontWeight: 'bold' }}
                         >
                             {(() => {
-                                const sIso =
-                                    displayStartISO ||
-                                    client.next_appointment_start_at ||
-                                    null;
-                                const eIso =
-                                    displayEndISO ||
-                                    client.next_appointment_end_at ||
-                                    null;
+                                const sIso = activeStartISO;
+                                const eIso = activeEndISO;
                                 if (!sIso || !eIso) return '—';
                                 const s = new Date(sIso);
                                 const e = new Date(eIso);
@@ -627,7 +600,7 @@ export default function ClientCard({
                                 return `${wd} ${dd}/${mm}, ${fs} - ${fe}`;
                             })()}
                         </span>
-                        {client.next_appointment_id && !isOngoing && (
+                        {client.next_appointment_id && !effectiveOngoing && (
                             <button
                                 className={styles.iconButton}
                                 title='Editar agendamento'
@@ -647,12 +620,10 @@ export default function ClientCard({
                                     )
                                         .then(r => (r.ok ? r.json() : null))
                                         .then(data => {
-                                            setEditingAppt(data);
-                                            setShowQuick(true);
+                                            openGlobalQuickSchedule(data);
                                         })
                                         .catch(() => {
-                                            setEditingAppt(null);
-                                            setShowQuick(true);
+                                            openGlobalQuickSchedule();
                                         });
                                 }}
                             >
@@ -660,7 +631,7 @@ export default function ClientCard({
                             </button>
                         )}
                     </div>
-                    {(isScheduled || isOngoing) &&
+                    {(isScheduled || effectiveOngoing) &&
                         client.next_appointment_notes?.trim() && (
                             <div
                                 className={styles.infoRow}
@@ -682,7 +653,7 @@ export default function ClientCard({
                                 </span>
                             </div>
                         )}
-                    {isOngoing && (
+                    {effectiveOngoing && (
                         <div
                             className={styles.infoRow}
                             style={{ paddingTop: 2 }}
@@ -720,7 +691,7 @@ export default function ClientCard({
                             </div>
                         </div>
                     )}
-                    {isScheduled && !isOngoing && (
+                    {isScheduled && !effectiveOngoing && (
                         <div
                             className={styles.infoRow}
                             style={{ paddingTop: 2 }}
@@ -740,14 +711,13 @@ export default function ClientCard({
                                     style={{ fontWeight: 700 }}
                                     onClick={e => {
                                         e.stopPropagation();
-                                        const sIso =
-                                            displayStartISO ||
-                                            client.next_appointment_start_at ||
-                                            null;
+                                        // Prioridade: activeStartISO (já resolve tomorrow ou today corretamente)
+                                        const sIso = activeStartISO;
                                         const time = sIso
                                             ? formatTime(sIso)
                                             : '—';
                                         const visitType =
+                                            notifyAppt?.title ||
                                             client.next_appointment_title ||
                                             'Consulta';
                                         const profRaw =
@@ -772,7 +742,15 @@ export default function ClientCard({
                                         const profPart = profFirstName
                                             ? ` com ${profFirstName}`
                                             : '';
-                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para as ${time}${profPart}, confirma sua presença?`;
+                                        // Rótulo do dia: "amanhã, DD/MM" (filtro amanhã) ou "hoje, DD/MM" (demais casos)
+                                        const apptDate = sIso ? new Date(sIso) : null;
+                                        const datePart = apptDate && !isNaN(apptDate.getTime())
+                                            ? `, ${String(apptDate.getDate()).padStart(2, '0')}/${String(apptDate.getMonth() + 1).padStart(2, '0')}`
+                                            : '';
+                                        const dayLabel = filterMode === 'tomorrow'
+                                            ? `amanhã${datePart}`
+                                            : `hoje${datePart}`;
+                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para ${dayLabel} às ${time}${profPart}, confirma sua presença?`;
                                         const rawPhone = (
                                             client.phone || ''
                                         ).replace(/\D/g, '');
@@ -831,7 +809,9 @@ export default function ClientCard({
                         title='Agenda mensal'
                         onClick={e => {
                             e.stopPropagation();
-                            setShowMonthly(true);
+                            openGlobalMonthlyAgenda(
+                                client.next_appointment_start_at || null,
+                            );
                         }}
                     >
                         <FaCalendarAlt color={iconColor} />
@@ -869,6 +849,9 @@ export default function ClientCard({
                             }
                             await tryOpenPendingElseQuick(() => {
                                 /* noop fallback */
+                            }, {
+                                kind: 'home',
+                                clientId: client.id,
                             });
                         }}
                     />
@@ -879,103 +862,9 @@ export default function ClientCard({
 
             {/* Linha inferior de atalhos substituída pela seção "Opções da agenda" acima */}
 
-            {showMonthly && (
-                <MonthlyAgendaModal
-                    open={showMonthly}
-                    onClose={() => {
-                        setShowMonthly(false);
-                        try {
-                            document.body.dataset.keepScroll = '1';
-                            setTimeout(() => {
-                                try {
-                                    delete document.body.dataset.keepScroll;
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 800);
-                        } catch {
-                            /* noop */
-                        }
-                        try {
-                            window.dispatchEvent(
-                                new Event('ensureScrollUnlocked'),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                        // Reancora a lista no cartão do cliente, reutilizando o mesmo mecanismo do filtro dinâmico
-                        // e do latch de "em andamento". Fazemos após o ciclo de fechamento para garantir layout estável.
-                        // Pequeno atraso para deixar o MUI desmontar e a lista assentar
-                        setTimeout(() => focusClientCard(client.id), 60);
-                    }}
-                    client={client}
-                />
-            )}
-            {showWeekly && (
-                <WeeklyAgendaModal
-                    open={showWeekly}
-                    onClose={() => setShowWeekly(false)}
-                />
-            )}
-            {showQuick && (
-                <QuickScheduleModal
-                    open={showQuick}
-                    onClose={() => {
-                        setShowQuick(false);
-                        try {
-                            document.body.dataset.keepScroll = '1';
-                            setTimeout(() => {
-                                try {
-                                    delete document.body.dataset.keepScroll;
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 800);
-                        } catch {
-                            /* noop */
-                        }
-                        try {
-                            window.dispatchEvent(
-                                new Event('ensureScrollUnlocked'),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                    }}
-                    client={client}
-                    editAppointment={editingAppt}
-                    futureAppointments={futureAppointments}
-                    maxFutureAppointments={getMaxScheduledPerClient()}
-                    afterPersist={() => {
-                        // Atualizar clientes para refletir dados do próximo compromisso
-                        window.dispatchEvent(new Event('updateClients'));
-                        // Agora FECHA também em edição conforme solicitado (uniformizar experiência)
-                        setShowQuick(false);
-                        try {
-                            document.body.dataset.keepScroll = '1';
-                            setTimeout(() => {
-                                try {
-                                    delete document.body.dataset.keepScroll;
-                                } catch {
-                                    /* noop */
-                                }
-                            }, 800);
-                        } catch {
-                            /* noop */
-                        }
-                        try {
-                            window.dispatchEvent(
-                                new Event('ensureScrollUnlocked'),
-                            );
-                        } catch {
-                            /* noop */
-                        }
-                    }}
-                />
-            )}
             {/* PendingActionsModal é global (Home) */}
             {/* QuickScheduleModal é agora o único fluxo de agendamento (ScheduleModal legacy removido) */}
-            {futureAppointments.length > 0 && (
+            {futureAppointments.length > 0 && !hideFutureList && (
                 <div
                     style={{
                         display: 'flex',
@@ -998,8 +887,7 @@ export default function ClientCard({
                             labelColor={labelColor}
                             clientId={client.id}
                             onEdit={(appt: Appointment) => {
-                                setEditingAppt(appt);
-                                setShowQuick(true);
+                                openGlobalQuickSchedule(appt);
                             }}
                         />
                         {loadingFuture && (

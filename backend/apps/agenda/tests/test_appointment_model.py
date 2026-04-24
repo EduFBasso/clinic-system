@@ -72,3 +72,22 @@ def test_overlaps_false(db, professional, client):
         end_at=base + timezone.timedelta(hours=3),
     )
     assert a3.overlaps() is False
+
+
+def test_pending_status_persists(db, professional, client):
+    base = (timezone.now() + timezone.timedelta(hours=1)).replace(
+        second=0,
+        microsecond=0,
+    )
+    appt = Appointment.objects.create(
+        professional=professional,
+        client=client,
+        title='Pendente persistido',
+        visit_type=Appointment.VisitType.AVALIACAO,
+        start_at=base,
+        end_at=base + timezone.timedelta(minutes=30),
+        status=Appointment.Status.PENDING,
+    )
+
+    appt.refresh_from_db()
+    assert appt.status == Appointment.Status.PENDING

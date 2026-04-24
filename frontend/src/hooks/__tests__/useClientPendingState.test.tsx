@@ -9,12 +9,13 @@ interface TestClient {
     last_name: string;
     phone: string;
     email: string;
-    next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;
+    next_appointment_status?: 'scheduled' | 'pending' | 'done' | 'canceled' | null;
     next_appointment_start_at?: string | null;
     next_appointment_end_at?: string | null;
     next_appointment_id?: number | null;
     next_appointment_title?: string | null;
     next_appointment_notes?: string | null;
+    last_appointment_status?: 'scheduled' | 'pending' | 'done' | 'canceled' | null;
     has_pending_appointment?: boolean; // optional future flag
 }
 
@@ -24,7 +25,7 @@ const baseClient: TestClient = {
     last_name: 'Client',
     phone: '000',
     email: 't@example.com',
-    next_appointment_status: 'scheduled',
+    next_appointment_status: 'pending',
     next_appointment_start_at: new Date(
         Date.now() - 30 * 60 * 1000,
     ).toISOString(),

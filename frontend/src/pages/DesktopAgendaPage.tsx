@@ -14,7 +14,6 @@ import { enrichList } from '../utils/appointments/status';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
-    isClientLike,
     makeClientBasic,
     matchesStatusFilter,
     type ClientLike,
@@ -22,6 +21,14 @@ import {
 import { useNowTick } from '../hooks/useNowTick';
 import { API_BASE } from '../config/api';
 import { useLocation } from 'react-router-dom';
+import type {
+    PendingReturnContext,
+    ReopenAppointmentDetailsContext,
+} from '../types/agendaFlow';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -32,6 +39,12 @@ function addDays(d: Date, n: number) {
     const x = new Date(d);
     x.setDate(x.getDate() + n);
     return x;
+}
+function toISODate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
@@ -46,6 +59,7 @@ type EnrichedAppt = Appointment & {
 };
 
 export default function DesktopAgendaPage() {
+    const RESUME_DESKTOP_AGENDA_KEY = 'resumeDesktopAgenda';
     // Floating picker state/position
     const [showPicker, setShowPicker] = React.useState(false);
     const [pickerPos, setPickerPos] = React.useState<
@@ -86,22 +100,56 @@ export default function DesktopAgendaPage() {
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+    const [detailsReturnContext, setDetailsReturnContext] = React.useState<PendingReturnContext>(
+        null,
+    );
+    const buildReturnContext = React.useCallback(
+        (appointmentId?: number): PendingReturnContext => ({
+            kind: 'desktop-agenda',
+            dateISO: toISODate(selectedDay),
+            focusAppointmentId: appointmentId,
+        }),
+        [selectedDay],
+    );
 
-    // Reabre AppointmentDetailsModal após retorno da página de edição de charges
+    React.useEffect(() => {
+        const raw = sessionStorage.getItem(RESUME_DESKTOP_AGENDA_KEY);
+        if (!raw) return;
+        sessionStorage.removeItem(RESUME_DESKTOP_AGENDA_KEY);
+        try {
+            const parsed = JSON.parse(raw) as PendingReturnContext;
+            if (parsed?.kind !== 'desktop-agenda') return;
+            const date = new Date(`${parsed.dateISO}T00:00:00`);
+            if (!Number.isNaN(date.getTime())) {
+                setSelectedDay(startOfDay(date));
+            }
+        } catch {
+            /* noop */
+        }
+    }, [RESUME_DESKTOP_AGENDA_KEY]);
+
+    // Reabre AppointmentDetailsModal após retorno da página de registro/edição de charges
     React.useEffect(() => {
         const raw = sessionStorage.getItem('reopenAppointmentDetails');
         if (!raw) return;
         sessionStorage.removeItem('reopenAppointmentDetails');
-        const apptId = parseInt(raw, 10);
-        if (!apptId) return;
+        let payload: ReopenAppointmentDetailsContext | null = null;
+        try {
+            payload = JSON.parse(raw) as ReopenAppointmentDetailsContext;
+        } catch {
+            const apptId = parseInt(raw, 10);
+            if (apptId) payload = { appointmentId: apptId };
+        }
+        if (!payload?.appointmentId) return;
         const token = localStorage.getItem('accessToken');
         if (!token) return;
-        fetch(`${API_BASE}/agenda/appointments/${apptId}/`, {
+        fetch(`${API_BASE}/agenda/appointments/${payload.appointmentId}/`, {
             headers: { Authorization: `Bearer ${token}` },
         })
             .then(r => (r.ok ? r.json() : null))
             .then(appt => {
                 if (appt) {
+                    setDetailsReturnContext(payload?.returnContext ?? null);
                     setDetailsAppt(appt as Appointment);
                     setDetailsOpen(true);
                 }
@@ -109,7 +157,6 @@ export default function DesktopAgendaPage() {
             .catch(() => {
                 /* noop */
             });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location]);
 
     const dayStart = React.useMemo(
@@ -123,6 +170,32 @@ export default function DesktopAgendaPage() {
         undefined,
         reloadKey,
     );
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
+    const handleCancel = React.useCallback(async (appt: Appointment) => {
+        const res = await cancelAppointment(appt.id);
+        if (!res.ok) {
+            const msg = res.text || 'Erro ao cancelar';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'warning' },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+            return;
+        }
+        setReloadKey(x => x + 1);
+        try {
+            dispatchers.updateClients();
+            dispatchers.appointmentsChanged();
+        } catch {
+            /* noop */
+        }
+    }, []);
     const [statusFilter, setStatusFilter] = React.useState<
         'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing'
     >('active');
@@ -477,7 +550,7 @@ export default function DesktopAgendaPage() {
                                             }}
                                             style={{ padding: '6px 8px' }}
                                             showEditAction={false}
-                                            onClick={
+                                            onEdit={
                                                 isActive
                                                     ? () => {
                                                           const client =
@@ -491,97 +564,37 @@ export default function DesktopAgendaPage() {
                                                     : undefined
                                             }
                                             onResolvePending={appt => {
-                                                try {
-                                                    const a =
-                                                        appt as Appointment;
-                                                    const clientName = (():
-                                                        | string
-                                                        | undefined => {
-                                                        const anyAppt =
-                                                            a as unknown as Record<
-                                                                string,
-                                                                unknown
-                                                            >;
-                                                        if (
-                                                            typeof anyAppt.client_name ===
-                                                            'string'
-                                                        )
-                                                            return anyAppt.client_name as string;
-                                                        const c =
-                                                            anyAppt.client as unknown;
-                                                        if (
-                                                            c &&
-                                                            typeof c ===
-                                                                'object' &&
-                                                            'name' in
-                                                                (c as Record<
-                                                                    string,
-                                                                    unknown
-                                                                >)
-                                                        ) {
-                                                            const n = (
-                                                                c as {
-                                                                    name?: unknown;
-                                                                }
-                                                            ).name;
-                                                            if (
-                                                                typeof n ===
-                                                                'string'
-                                                            )
-                                                                return n;
-                                                        }
-                                                        return undefined;
-                                                    })();
-                                                    const clientField =
-                                                        ((): unknown => {
-                                                            const anyAppt =
-                                                                a as unknown as Record<
-                                                                    string,
-                                                                    unknown
-                                                                >;
-                                                            const c =
-                                                                anyAppt.client as unknown;
-                                                            if (
-                                                                typeof c ===
-                                                                    'number' ||
-                                                                typeof c ===
-                                                                    'object'
-                                                            )
-                                                                return c;
-                                                            return undefined;
-                                                        })();
-                                                    const payload = {
-                                                        id: a.id,
-                                                        start_at: a.start_at,
-                                                        end_at: a.end_at,
-                                                        status: a.status,
-                                                        notes: a.notes,
-                                                        client_name: clientName,
-                                                        client: clientField,
-                                                        title: a.title,
-                                                    } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                                    window.dispatchEvent(
-                                                        new CustomEvent(
-                                                            'pendingActions:open',
-                                                            {
-                                                                detail: {
-                                                                    appt: payload,
-                                                                },
-                                                            },
-                                                        ),
-                                                    );
-                                                } catch {
-                                                    /* noop */
-                                                }
+                                                openPendingActionsForAppointment(appt);
                                             }}
                                             onDetails={
                                                 a.status === 'done'
                                                     ? appt => {
+                                                          setDetailsReturnContext(
+                                                              buildReturnContext(
+                                                                  appt.id,
+                                                              ),
+                                                          );
                                                           setDetailsAppt(
                                                               appt as Appointment,
                                                           );
                                                           setDetailsOpen(true);
                                                       }
+                                                    : undefined
+                                            }
+                                            onCancel={
+                                                (a.status === 'scheduled' ||
+                                                    a.status === 'ongoing' ||
+                                                    a._isOngoing) &&
+                                                !(a.status === 'scheduled' &&
+                                                    !a._isOngoing &&
+                                                    a._end < effectiveNowRef)
+                                                    ? handleCancel
+                                                    : undefined
+                                            }
+                                            onFinalize={
+                                                a.status === 'ongoing' ||
+                                                a._isOngoing
+                                                    ? handleFinalize
                                                     : undefined
                                             }
                                         />
@@ -632,8 +645,10 @@ export default function DesktopAgendaPage() {
                     onClose={() => setQsOpen(false)}
                     client={qsClient}
                     editAppointment={qsEdit}
-                    afterPersist={() => {
-                        setQsOpen(false);
+                    afterPersist={(_, action) => {
+                        if (action === 'created' || (action === 'updated' && !!qsEdit)) {
+                            setQsOpen(false);
+                        }
                         setReloadKey(x => x + 1);
                     }}
                 />
@@ -645,7 +660,9 @@ export default function DesktopAgendaPage() {
                     onClose={() => {
                         setDetailsOpen(false);
                         setDetailsAppt(null);
+                        setDetailsReturnContext(null);
                     }}
+                    returnContext={detailsReturnContext}
                     appt={detailsAppt}
                 />
             )}

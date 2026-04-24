@@ -1,13 +1,6 @@
 // frontend\src\components\Modal.tsx
 import React from 'react';
 import { emitModalViewportMetric } from '../utils/telemetry/modalViewport';
-
-// Augmenta Window global (deve estar em nível de módulo)
-declare global {
-    interface Window {
-        __ensureScrollUnlockInstalled?: boolean;
-    }
-}
 import Modal from '@mui/material/Modal';
 import Box from '@mui/material/Box';
 import ModalActionsBar from './ModalActionsBar';
@@ -215,6 +208,13 @@ export default function AppModal(props: AppModalProps) {
         );
     }, []);
 
+    const isCoarsePointerDevice = React.useMemo(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return false;
+        }
+        return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    }, []);
+
     const updateVhVar = React.useCallback(() => {
         try {
             const vhPx =
@@ -363,12 +363,19 @@ export default function AppModal(props: AppModalProps) {
             e.preventDefault();
         };
         const passiveFalse: AddEventListenerOptions = { passive: false };
-        document.addEventListener(
-            'touchmove',
-            preventOutsideScroll,
-            passiveFalse,
-        );
-        document.addEventListener('wheel', preventOutsideScroll, passiveFalse);
+        const shouldBlockDocumentScroll = !fullScreen;
+        if (shouldBlockDocumentScroll) {
+            document.addEventListener(
+                'touchmove',
+                preventOutsideScroll,
+                passiveFalse,
+            );
+            document.addEventListener(
+                'wheel',
+                preventOutsideScroll,
+                passiveFalse,
+            );
+        }
 
         // Dar foco ao conteúdo do modal para capturar imediatamente a interação
         try {
@@ -382,14 +389,16 @@ export default function AppModal(props: AppModalProps) {
 
         return () => {
             try {
-                document.removeEventListener(
-                    'touchmove',
-                    preventOutsideScroll as EventListener,
-                );
-                document.removeEventListener(
-                    'wheel',
-                    preventOutsideScroll as EventListener,
-                );
+                if (shouldBlockDocumentScroll) {
+                    document.removeEventListener(
+                        'touchmove',
+                        preventOutsideScroll as EventListener,
+                    );
+                    document.removeEventListener(
+                        'wheel',
+                        preventOutsideScroll as EventListener,
+                    );
+                }
             } catch {
                 /* noop */
             }
@@ -473,6 +482,23 @@ export default function AppModal(props: AppModalProps) {
         onClose();
     };
 
+    // Contador de AppModals abertos — independente do aria-hidden gerenciado pelo MUI.
+    // Quando um modal abre sobre outro, o MUI seta aria-hidden="true" no modal de baixo
+    // por acessibilidade. Se usarmos apenas aria-hidden para decidir se há outro modal aberto,
+    // o modal "de baixo" (ex.: MonthlyAgendaModal) passa a ser invisível para a query e
+    // o restore() remove incorretamente os scroll locks.
+    // Este contador usa body.dataset.openModalCount e é gerenciado por este efeito.
+    React.useEffect(() => {
+        if (!open) return;
+        const body = document.body;
+        const prev = Number(body.dataset.openModalCount || 0);
+        body.dataset.openModalCount = String(prev + 1);
+        return () => {
+            const cur = Number(document.body.dataset.openModalCount || 0);
+            document.body.dataset.openModalCount = String(Math.max(0, cur - 1));
+        };
+    }, [open]);
+
     // Task #35 + Task #52: Defensive restoration de scroll + instrumentação.
     // Observado: em alguns fluxos (cancelar edição via mini-card) a página fica "travada".
     // Hipótese: corrida onde MUI remove classes após nosso efeito checar, ou restore abortado
@@ -494,14 +520,26 @@ export default function AppModal(props: AppModalProps) {
                 }
                 const body = document.body as HTMLBodyElement;
                 const html = document.documentElement as HTMLElement;
+                
+                // Verifica se ainda há outro AppModal aberto usando nosso contador próprio.
+                // NÃO usamos aria-hidden aqui porque o MUI seta aria-hidden="true" no modal
+                // de baixo quando um modal de cima está aberto (acessibilidade), tornando-o
+                // invisível para queries de aria-hidden="false" mesmo quando ainda visível.
+                const openModalCount = Number(
+                    (document.body as HTMLBodyElement).dataset.openModalCount ||
+                        0,
+                );
+                if (openModalCount > 0) return; // outro AppModal ainda aberto, não restaurar
+                
                 // Se a página marcou que o scroll deve permanecer como está, não tentar restaurar
+                // MAS: só pula se não há outro modal aberto (checagem acima confirmou)
                 if (body.dataset.keepScroll === '1') {
                     if (source) {
                         console.debug('[AppModal] keepScroll=1, skip restore', {
                             source,
                         });
                     }
-                    // Ainda assim, remova locks do modal
+                    // Ainda assim, remova locks do modal para evitar scroll travado
                     body.style.overflow = '';
                     html.style.overflow = '';
                     html.style.removeProperty('overscroll-behavior-y');
@@ -510,20 +548,6 @@ export default function AppModal(props: AppModalProps) {
                     if (body.dataset.appliedIosLock)
                         delete body.dataset.appliedIosLock;
                     return;
-                }
-                const activeModals = Array.from(
-                    document.querySelectorAll(
-                        '[role="presentation"][aria-hidden="false"]',
-                    ),
-                ).filter(el => el instanceof HTMLElement);
-                // Se ainda há um modal aberto, não restaurar (a menos que pareça um falso positivo)
-                if (activeModals.length > 0) {
-                    // Falso positivo heurístico: elementos sem filhos visíveis (width/height 0) – possivelmente já desmontados.
-                    const anyVisible = activeModals.some(el => {
-                        const r = el.getBoundingClientRect();
-                        return r.width > 2 && r.height > 2;
-                    });
-                    if (anyVisible) return; // existe de fato outro modal
                 }
 
                 // Limpa estilos de lock (seja do MUI ou do nosso)
@@ -541,6 +565,32 @@ export default function AppModal(props: AppModalProps) {
                 html.classList.remove('MuiModal-open');
                 if (body.dataset.appliedIosLock)
                     delete body.dataset.appliedIosLock;
+
+                // Neutraliza qualquer root escondido que tenha sobrado com z-index/pointer-events ativos.
+                try {
+                    const hiddenRoots = Array.from(
+                        document.querySelectorAll(
+                            '.MuiModal-root[aria-hidden="true"]',
+                        ),
+                    ) as HTMLElement[];
+                    hiddenRoots.forEach(root => {
+                        root.style.pointerEvents = 'none';
+                        root.style.zIndex = '0';
+                        const dialog = root.querySelector('[role="dialog"]') as
+                            | HTMLElement
+                            | null;
+                        if (dialog) {
+                            dialog.style.pointerEvents = 'none';
+                            try {
+                                dialog.blur();
+                            } catch {
+                                /* noop */
+                            }
+                        }
+                    });
+                } catch {
+                    /* noop */
+                }
 
                 // Reflow para garantir aplicação das mudanças de estilo
                 void body.offsetHeight;
@@ -565,28 +615,32 @@ export default function AppModal(props: AppModalProps) {
                 setTimeout(() => applyScroll(), 50);
                 setTimeout(() => applyScroll(), 100);
 
-                // Restaura foco ao elemento anterior, evitando scroll
+                // Restaura foco ao elemento anterior em desktop.
+                // Em touch devices, evitar restauração de foco previne estado visual "preso"
+                // (ex.: botão Sair destacado após fechar modal pelo X no iPhone/PWA).
                 try {
-                    const prev = prevActiveElRef.current;
-                    if (prev && typeof prev.focus === 'function') {
-                        // Some browsers support options for focus; pass preventScroll when available
-                        (
-                            prev.focus as unknown as (opts?: {
-                                preventScroll?: boolean;
-                            }) => void
-                        )({
-                            preventScroll: true,
-                        });
+                    const active =
+                        (document.activeElement as HTMLElement | null) || null;
+                    if (isCoarsePointerDevice) {
+                        active?.blur?.();
                     } else {
-                        // Garanta foco fora do modal para evitar foco retido em container aria-hidden
-                        try {
+                        const prev = prevActiveElRef.current;
+                        if (prev && typeof prev.focus === 'function') {
+                            // Some browsers support options for focus; pass preventScroll when available
+                            (
+                                prev.focus as unknown as (opts?: {
+                                    preventScroll?: boolean;
+                                }) => void
+                            )({
+                                preventScroll: true,
+                            });
+                        } else {
+                            // Garanta foco fora do modal para evitar foco retido em container aria-hidden
                             (
                                 document.body as unknown as {
                                     focus?: () => void;
                                 }
                             ).focus?.();
-                        } catch {
-                            /* noop */
                         }
                     }
                 } catch {
@@ -605,370 +659,74 @@ export default function AppModal(props: AppModalProps) {
         const timeouts = [0, 30, 60, 120, 250, 400].map(ms =>
             setTimeout(() => restore('close-timeout-' + ms), ms),
         );
-
-        // Guard adicional: remover aria-hidden de um root que ainda contenha o elemento focado
-        const focusGuard = () => {
-            try {
-                const active = document.activeElement as HTMLElement | null;
-                if (!active) return;
-                const staleRoot = active.closest(
-                    '.MuiModal-root[aria-hidden="true"]',
-                ) as HTMLElement | null;
-                if (staleRoot) {
-                    staleRoot.removeAttribute('aria-hidden');
-                    staleRoot.style.pointerEvents = 'none';
-                    staleRoot.style.zIndex = '0';
-                    // Move foco para body para evitar novo lock
-                    try {
-                        (document.body as HTMLElement).focus?.();
-                    } catch {
-                        /* noop */
-                    }
-                    window.dispatchEvent(
-                        new CustomEvent('debug:log', {
-                            detail: {
-                                label: 'Modal: focusGuard cleaned hidden root',
-                                ts: Date.now(),
-                            },
-                        }),
-                    );
-                }
-            } catch {
-                /* noop */
-            }
-        };
-        const fgTimeouts = [0, 40, 90, 180, 360, 600].map(ms =>
-            setTimeout(focusGuard, ms),
-        );
-
-        // Registrar fallback listeners uma única vez (singleton)
-        if (!window.__ensureScrollUnlockInstalled) {
-            window.__ensureScrollUnlockInstalled = true;
-            const handler = (ev?: Event) => {
-                const body = document.body as HTMLBodyElement;
-                if (
-                    body.classList.contains('MuiModal-open') ||
-                    body.style.position === 'fixed' ||
-                    body.style.overflow === 'hidden'
-                ) {
-                    // Tentativa adicional (não depende do estado local de 'open').
-                    restore(ev?.type ? 'global-' + ev.type : 'global-manual');
-                }
-            };
-            [
-                'click',
-                'focus',
-                'scroll',
-                'touchstart',
-                'ensureScrollUnlocked',
-            ].forEach(evt =>
-                window.addEventListener(evt, handler, {
-                    passive: true,
-                }),
-            );
-        }
         return () => {
             timeouts.forEach(t => clearTimeout(t));
-            fgTimeouts.forEach(t => clearTimeout(t));
         };
-    }, [open]);
+    }, [open, isCoarsePointerDevice]);
 
-    // MutationObserver: remove aria-hidden reintroduzido no dialog durante estado aberto
+    // Restauração imediata no ciclo de desmontagem.
+    // IMPORTANTE: não condicionar ao valor de 'open' — componentes pai podem
+    // retornar null com open=true ainda no closure (ex.: BudgetModal), fazendo
+    // com que o AppModal seja desmontado SEM ter passado por open=false.
+    // O efeito com [] garante que o cleanup roda em todo unmount.
+    // ATENÇÃO: verificar se outro modal ainda está aberto antes de limpar os locks,
+    // caso contrário remoções parciais (ex.: AppointmentDetailsModal fechando enquanto
+    // MonthlyAgendaModal ainda está visível) causam scroll travado.
     React.useEffect(() => {
-        if (!open) return;
-        const dialog = contentRef.current;
-        if (!dialog) return;
-        const observer = new MutationObserver(muts => {
-            muts.forEach(m => {
-                if (
-                    m.type === 'attributes' &&
-                    m.attributeName === 'aria-hidden'
-                ) {
-                    if (dialog.getAttribute('aria-hidden') === 'true') {
-                        dialog.removeAttribute('aria-hidden');
-                        dialog.style.pointerEvents = 'auto';
-                        window.dispatchEvent(
-                            new CustomEvent('debug:log', {
-                                detail: {
-                                    label: 'Modal: dialog aria-hidden auto-removed',
-                                    data: { classes: dialog.className },
-                                    ts: Date.now(),
-                                },
-                            }),
-                        );
-                    }
-                }
-            });
-        });
-        observer.observe(dialog, {
-            attributes: true,
-            attributeFilter: ['aria-hidden'],
-        });
-        return () => observer.disconnect();
-    }, [open]);
-
-    // Interaction watchdog: garante remoção de travas residuais (pointer-events / backdrops órfãos)
-    React.useEffect(() => {
-        function inspect(reason: string) {
+        return () => {
             try {
-                const body = document.body;
-                const html = document.documentElement;
-                const orphanBackdrops = Array.from(
-                    document.querySelectorAll('.MuiBackdrop-root'),
-                ).filter(b => !b.closest('[role="dialog"]'));
-                // Detect stale modal root containers (MuiModal-root) that remain in DOM after close but keep high z-index
-                const staleModalRoots = Array.from(
-                    document.querySelectorAll('.MuiModal-root'),
-                ) as HTMLElement[];
-                const filteredStaleModalRoots: HTMLElement[] =
-                    staleModalRoots.filter(root => {
-                        const hasDialog =
-                            !!root.querySelector('[role="dialog"]');
-                        const style = window.getComputedStyle(root);
-                        const z = parseInt(style.zIndex || '0', 10);
-                        // Consider stale if no dialog inside OR pointer-events none mismatch and high z-index
-                        return !hasDialog && z >= 1200;
-                    });
-                // Captura elemento sob o centro da viewport (se nada recebe click, elementFromPoint ajuda)
-                const cx = window.innerWidth / 2;
-                const cy = window.innerHeight / 2;
-                const elCenter = document.elementFromPoint(
-                    cx,
-                    cy,
-                ) as HTMLElement | null;
-                // Caminha ancestrais para detectar travas
-                const lockedAncestors: string[] = [];
-                let walker: HTMLElement | null = elCenter;
-                type InertEl = HTMLElement & { inert?: boolean };
-                while (walker) {
-                    const style = window.getComputedStyle(walker);
-                    const inertWalker = walker as InertEl;
-                    const inertAttr = inertWalker.inert ? 'inert' : '';
-                    if (
-                        style.pointerEvents === 'none' ||
-                        inertAttr ||
-                        walker.classList.contains('MuiModal-open')
-                    ) {
-                        lockedAncestors.push(
-                            `${walker.tagName.toLowerCase()}#${
-                                walker.id || ''
-                            }.$${walker.className}|pe:${
-                                style.pointerEvents
-                            }|inert:${inertAttr}`,
-                        );
-                        // Tentativa de limpeza
-                        if (style.pointerEvents === 'none') {
-                            (walker as HTMLElement).style.pointerEvents = '';
-                        }
-                        try {
-                            inertWalker.inert = false;
-                        } catch {
-                            /* noop */
-                        }
-                        walker.classList.remove('MuiModal-open');
-                    }
-                    walker = walker.parentElement;
-                }
-                const snapshot = {
-                    reason,
-                    bodyOverflow: body.style.overflow,
-                    bodyPosition: body.style.position,
-                    bodyPE: (body as HTMLElement).style.pointerEvents,
-                    htmlOverflow: html.style.overflow,
-                    htmlPE: (html as HTMLElement).style.pointerEvents,
-                    hasMuiModalOpenClass:
-                        body.classList.contains('MuiModal-open'),
-                    orphanBackdrops: orphanBackdrops.length,
-                    centerEl: elCenter?.tagName.toLowerCase(),
-                    centerElClasses: elCenter?.className || '',
-                    lockedAncestors,
-                };
-                // Correções forçadas globais
-                body.style.pointerEvents = '';
-                html.style.pointerEvents = '';
+                // Se outro AppModal ainda está aberto (via contador próprio), não limpar os locks.
+                // Não usamos aria-hidden aqui pois o MUI seta aria-hidden="true" no modal
+                // de baixo quando outro está em cima — o contador é a fonte de verdade.
+                const openModalCount = Number(
+                    document.body.dataset.openModalCount || 0,
+                );
+                if (openModalCount > 0) return;
+
+                const body = document.body as HTMLBodyElement;
+                const html = document.documentElement as HTMLElement;
+                body.style.overflow = '';
+                body.style.position = '';
+                body.style.top = '';
+                body.style.left = '';
+                body.style.right = '';
+                body.style.width = '';
+                body.style.touchAction = '';
+                html.style.overflow = '';
+                html.style.touchAction = '';
+                html.style.removeProperty('overscroll-behavior-y');
                 body.classList.remove('MuiModal-open');
                 html.classList.remove('MuiModal-open');
-                orphanBackdrops.forEach(b => b.parentElement?.removeChild(b));
-                filteredStaleModalRoots.forEach(r => {
-                    // Remove or neutralize overlays that might intercept clicks
-                    try {
-                        r.style.pointerEvents = 'none';
-                        r.style.zIndex = '0';
-                        // If empty, remove to keep DOM clean
-                        if (!r.firstElementChild)
-                            r.parentElement?.removeChild(r);
-                    } catch {
-                        /* noop */
-                    }
-                });
-                // Remove qualquer backdrop com pointer-events ainda ativo
-                const strayPeNone = document.querySelectorAll(
-                    '[style*="pointer-events: none"]',
-                );
-                strayPeNone.forEach(el => {
-                    if (el === body || el === html) return;
-                    (el as HTMLElement).style.pointerEvents = '';
-                });
-                window.dispatchEvent(
-                    new CustomEvent('debug:log', {
-                        detail: {
-                            label: 'Modal: interaction watchdog',
-                            data: snapshot,
-                            ts: Date.now(),
-                        },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-        }
-        const multipointScan = (tag: string) => {
-            try {
-                const points: Array<[number, number]> = [
-                    [window.innerWidth * 0.25, window.innerHeight * 0.5],
-                    [window.innerWidth * 0.5, window.innerHeight * 0.5],
-                    [window.innerWidth * 0.75, window.innerHeight * 0.5],
-                    [window.innerWidth * 0.5, window.innerHeight * 0.25],
-                    [window.innerWidth * 0.5, window.innerHeight * 0.75],
-                ];
-                const overlays: string[] = [];
-                points.forEach(([x, y]) => {
-                    const el = document.elementFromPoint(
-                        x,
-                        y,
-                    ) as HTMLElement | null;
-                    if (!el) return;
-                    const z = window.getComputedStyle(el).zIndex;
-                    const pe = window.getComputedStyle(el).pointerEvents;
-                    if (pe === 'none') return; // não bloqueia interação
-                    if (z && Number(z) >= 1000) {
-                        overlays.push(
-                            `${tag}:${el.tagName.toLowerCase()}#${el.id}.${
-                                el.className
-                            }.z${z}`,
-                        );
-                    }
-                });
-                if (overlays.length) {
-                    window.dispatchEvent(
-                        new CustomEvent('debug:log', {
-                            detail: {
-                                label: 'Modal: multipoint overlay scan',
-                                data: { overlays },
-                                ts: Date.now(),
-                            },
-                        }),
-                    );
-                }
+                if (body.dataset.appliedIosLock)
+                    delete body.dataset.appliedIosLock;
             } catch {
                 /* noop */
             }
         };
-        const onClosed = (e: Event) => {
-            const ce = e as CustomEvent;
-            inspect('modal:closed:' + (ce?.detail?.type || 'unknown'));
-            setTimeout(() => inspect('post-closed-120ms'), 120);
-            setTimeout(() => {
-                inspect('post-closed-400ms');
-                multipointScan('scan-400ms');
-            }, 400);
-        };
-        window.addEventListener('modal:closed', onClosed);
-        // Atalho emergencial: Ctrl+Shift+U para liberar travas manualmente
-        const onKey = (ev: KeyboardEvent) => {
-            if (ev.ctrlKey && ev.shiftKey && ev.key.toLowerCase() === 'u') {
-                inspect('manual-unlock-hotkey');
-                multipointScan('manual-unlock-hotkey');
-            }
-        };
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('modal:closed', onClosed);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, []);
-
-    // Restauração imediata também no ciclo de desmontagem (caso o componente seja removido rapidamente)
-    React.useEffect(() => {
-        return () => {
-            try {
-                if (!open) {
-                    const body = document.body as HTMLBodyElement;
-                    const html = document.documentElement as HTMLElement;
-                    body.style.overflow = '';
-                    body.style.position = '';
-                    body.style.top = '';
-                    body.style.left = '';
-                    body.style.right = '';
-                    body.style.width = '';
-                    body.style.touchAction = '';
-                    html.style.overflow = '';
-                    html.style.touchAction = '';
-                    html.style.removeProperty('overscroll-behavior-y');
-                    body.classList.remove('MuiModal-open');
-                    html.classList.remove('MuiModal-open');
-                }
-            } catch {
-                /* noop */
-            }
-        };
-    }, [open]);
-
-    // (Removed inert toggling) — inert causava estados 'aria-hidden' residuais combinados com pointer-events inconsistentes.
-    // Mantemos o conteúdo montado mas confiamos em aria-hidden/open e watchdog para desbloqueio.
-
-    // Extra stale-root watchdog (rápido): se existir .MuiModal-root[aria-hidden="true"] contendo role=dialog visível, corrigir atributos.
-    React.useEffect(() => {
-        if (!open) return;
-        const fix = () => {
-            try {
-                const roots = Array.from(
-                    document.querySelectorAll('.MuiModal-root'),
-                ) as HTMLElement[];
-                roots.forEach(r => {
-                    const dialog = r.querySelector('[role="dialog"]') as
-                        | (HTMLElement & { inert?: boolean })
-                        | null;
-                    if (!dialog) return;
-                    const hidden = r.getAttribute('aria-hidden') === 'true';
-                    const inertAttr = dialog.inert === true;
-                    if (hidden || inertAttr) {
-                        r.removeAttribute('aria-hidden');
-                        try {
-                            dialog.inert = false;
-                        } catch {
-                            /* noop */
-                        }
-                        r.style.pointerEvents = 'auto';
-                        dialog.style.pointerEvents = 'auto';
-                        window.dispatchEvent(
-                            new CustomEvent('debug:log', {
-                                detail: {
-                                    label: 'Modal: stale root fixed',
-                                    data: {
-                                        hidden,
-                                        inert: inertAttr,
-                                        classes: r.className,
-                                    },
-                                    ts: Date.now(),
-                                },
-                            }),
-                        );
-                    }
-                });
-            } catch {
-                /* noop */
-            }
-        };
-        // Tentativas rápidas para capturar transição
-        const timeouts = [0, 30, 90, 180, 360].map(ms => setTimeout(fix, ms));
-        return () => timeouts.forEach(t => clearTimeout(t));
-    }, [open]);
+    }, []); // [] = somente no unmount, independente de open
 
     return (
         <Modal
             open={open}
             onClose={handleMuiClose}
+            sx={{ zIndex: 3000 }}
+            slotProps={{
+                root: {
+                    style: {
+                        zIndex: open ? 3000 : 0,
+                        pointerEvents: open ? 'auto' : 'none',
+                    },
+                },
+                backdrop: {
+                    style: {
+                        zIndex: open ? 2999 : 0,
+                        pointerEvents: open ? 'auto' : 'none',
+                    },
+                },
+            }}
+            // Em fullScreen o próprio conteúdo já cobre toda a viewport,
+            // então evitamos backdrop do MUI para não criar camada extra de clique.
+            hideBackdrop={fullScreen}
             disableEscapeKeyDown={disableEscapeKeyDown || !closeOnEscape}
             // Apenas mantém montado quando não pedimos unmount explícito
             keepMounted={!unmountOnClose}
@@ -999,6 +757,7 @@ export default function AppModal(props: AppModalProps) {
                     aria-modal={open ? true : undefined}
                     // Removido aria-hidden dinâmico: causava conflito com foco e gerava estado read-only.
                     onTouchStart={e => {
+                        if (disableOuterScroll) return;
                         // Guard contra scroll elástico propagando para o body no iOS
                         const el = e.currentTarget as HTMLElement;
                         try {
@@ -1023,33 +782,14 @@ export default function AppModal(props: AppModalProps) {
                         }
                     }}
                     onTouchMove={e => {
-                        // Se o conteúdo não consegue rolar ou está numa borda e o gesto tenta exceder, previne a propagação (impede scroll da página)
-                        const el = e.currentTarget as HTMLElement;
+                        if (disableOuterScroll) return;
+                        // Em handlers React de touchmove o preventDefault pode ser tratado como passivo
+                        // em alguns cenários do Safari/Chrome mobile. Mantemos apenas a telemetria
+                        // da direção do gesto; o bloqueio real fica no listener nativo não passivo
+                        // registrado no efeito de scroll lock do modal.
                         try {
                             const t = (e.touches && e.touches[0]) || null;
                             const currentY = t ? t.clientY : null;
-                            const lastY = lastTouchYRef.current;
-                            if (currentY != null && lastY != null) {
-                                const dy = currentY - lastY; // positivo: arrastando para baixo
-                                const canScroll =
-                                    el.scrollHeight > el.clientHeight + 1;
-                                const atTop = el.scrollTop <= 0;
-                                const atBottom =
-                                    el.scrollTop + el.clientHeight >=
-                                    el.scrollHeight - 1;
-                                const tryingPastTop = dy > 0 && atTop;
-                                const tryingPastBottom = dy < 0 && atBottom;
-                                if (
-                                    !canScroll ||
-                                    tryingPastTop ||
-                                    tryingPastBottom
-                                ) {
-                                    // Previne o rubber-band atingir o body/viewport
-                                    e.preventDefault();
-                                    return;
-                                }
-                            }
-                            // Atualiza última posição
                             lastTouchYRef.current = currentY;
                         } catch {
                             /* noop */
@@ -1100,7 +840,7 @@ export default function AppModal(props: AppModalProps) {
                                   overscrollBehaviorX: 'none',
                                   pointerEvents: 'auto',
                                   // Garante que o conteúdo esteja acima do overlay e de backdrops residuais
-                                  zIndex: 1310,
+                                  zIndex: 3001,
                                   // Overlays fixos para pintar áreas seguras (top já existe via ::before condicional; adicionamos ::after sempre para o bottom)
                                   '&::after': {
                                       content: '""',
@@ -1137,6 +877,8 @@ export default function AppModal(props: AppModalProps) {
                                   // Permite ajustar a altura máxima por modal
                                   maxHeight: `calc(var(--appmodal-vh, 1vh) * ${maxHeightVh})`,
                                   position: 'absolute' as const,
+                                    // Conteúdo deve ficar acima do backdrop global do MUI.
+                                    zIndex: 3001,
                                   WebkitOverflowScrolling: 'touch',
                               }
                     }
@@ -1163,6 +905,15 @@ export default function AppModal(props: AppModalProps) {
                     <div
                         style={{
                             pointerEvents: 'auto',
+                            ...(disableOuterScroll
+                                ? {
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      flex: 1,
+                                      minHeight: 0,
+                                      width: '100%',
+                                  }
+                                : {}),
                         }}
                     >
                         {children}

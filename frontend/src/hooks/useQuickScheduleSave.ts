@@ -1,13 +1,15 @@
 import React from 'react';
 import { dispatchers } from '../events/dispatchers';
 import type { Appointment } from '../hooks/useAppointments';
-import { getSlotInterval, getDefaultDuration } from '../utils/agendaSettings';
+import { useAgendaSettings } from './useAgendaSettings';
 import { AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE } from '../config/limits';
 import { API_BASE } from '../config/api';
 import { track } from '../utils/telemetry';
 import { buildDeviceHeaders } from '../services/device';
 import ensureDeviceSession from '../services/sessions';
 import { pad2, toMinutes, fromMinutes } from '../utils/hmTime';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
+import { unlockPageScroll } from '../utils/unlockPageScroll';
 
 export interface UseQuickScheduleSaveParams {
     selectedDate: Date;
@@ -22,6 +24,7 @@ export interface UseQuickScheduleSaveParams {
     onSuccess: (updatedId: number | undefined, wasEdit: boolean) => void;
     /** Called to close the modal immediately (e.g. after auto-close on create). */
     onImmediateClose: () => void;
+    emitGlobalErrorMessage?: boolean;
 }
 
 export function useQuickScheduleSave({
@@ -35,6 +38,7 @@ export function useQuickScheduleSave({
     afterPersist,
     onSuccess,
     onImmediateClose,
+    emitGlobalErrorMessage = true,
 }: UseQuickScheduleSaveParams): {
     saving: boolean;
     error: string | null;
@@ -43,15 +47,53 @@ export function useQuickScheduleSave({
 } {
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+    const agendaSettings = useAgendaSettings();
 
     const clearError = React.useCallback(() => setError(null), []);
+
+    const emitSystemMessage = React.useCallback(
+        (
+            text: string,
+            type: 'success' | 'error' | 'info' | 'warning',
+        ) => {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text, type },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        },
+        [],
+    );
+
+    const emitPageFlashMessage = React.useCallback(
+        (
+            text: string,
+            type: 'success' | 'error' | 'info' | 'warning',
+            autoCloseMs = 3200,
+        ) => {
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('pageFlashMessage', {
+                        detail: { text, type, autoCloseMs },
+                    }),
+                );
+            } catch {
+                /* noop */
+            }
+        },
+        [],
+    );
 
     const handleSave = React.useCallback(async () => {
         setError(null);
         setSaving(true);
         const t0 = performance.now();
 
-        const slot = getSlotInterval();
+        const slot = agendaSettings.slotInterval;
         function snapIfNeeded(hm: string): string {
             const [h, m] = hm.split(':').map(n => parseInt(n, 10));
             if (isNaN(h) || isNaN(m)) return hm;
@@ -63,7 +105,8 @@ export function useQuickScheduleSave({
         const normalizedStartHM = snapIfNeeded(startHM);
         let normalizedEndHM = snapIfNeeded(endHM);
         if (toMinutes(normalizedEndHM) <= toMinutes(normalizedStartHM)) {
-            const mins = toMinutes(normalizedStartHM) + getDefaultDuration();
+            const mins =
+                toMinutes(normalizedStartHM) + agendaSettings.defaultDuration;
             normalizedEndHM = fromMinutes(mins);
         }
 
@@ -90,7 +133,7 @@ export function useQuickScheduleSave({
             consulta: 'Consulta',
             avaliacao: 'Avaliação',
             retorno: 'Retorno',
-            procedimento: 'Procedimento',
+            procedimento: 'Serviço',
             outro: 'Outro',
         };
         const title = visitTitles[String(visitType)] || 'Consulta';
@@ -103,6 +146,9 @@ export function useQuickScheduleSave({
         try {
             let updatedId: number | undefined;
             const wasEdit = !!currentEdit;
+            const successMessage = wasEdit
+                ? 'Compromisso atualizado'
+                : 'Compromisso criado';
 
             if (currentEdit) {
                 const resp = await fetch(
@@ -248,22 +294,7 @@ export function useQuickScheduleSave({
                                                 return c;
                                             return undefined;
                                         })();
-                                        const payload = {
-                                            id: a.id,
-                                            start_at: a.start_at,
-                                            end_at: a.end_at,
-                                            status: a.status,
-                                            notes: a.notes,
-                                            client_name: clientName,
-                                            client: clientField,
-                                            title: a.title,
-                                        } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                        window.dispatchEvent(
-                                            new CustomEvent(
-                                                'pendingActions:open',
-                                                { detail: { appt: payload } },
-                                            ),
-                                        );
+                                        openPendingActionsForAppointment(a);
                                     } catch {
                                         /* noop */
                                     }
@@ -293,7 +324,7 @@ export function useQuickScheduleSave({
                             if (parsed?.non_field_errors?.length) {
                                 const msg: string = parsed.non_field_errors[0];
                                 if (/conflito/i.test(msg))
-                                    return 'Conflito de horário: já existe um compromisso neste período. Escolha outro horário.';
+                                    return 'Existe um compromisso neste período. Toque no cartão destacado para remover o conflito ajustando data/hora ou cancelando o compromisso.';
                                 return msg;
                             }
                             const firstField = Object.values(parsed).find(
@@ -314,21 +345,6 @@ export function useQuickScheduleSave({
 
                 const data = (await resp.json()) as { id?: number };
                 updatedId = data?.id;
-            }
-
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: {
-                            text: wasEdit
-                                ? 'Compromisso atualizado'
-                                : 'Compromisso criado',
-                            type: 'success',
-                        },
-                    }),
-                );
-            } catch {
-                /* noop */
             }
 
             try {
@@ -370,19 +386,19 @@ export function useQuickScheduleSave({
             }
 
             if (!wasEdit && AUTO_CLOSE_QUICK_SCHEDULE_ON_CREATE) {
-                try {
-                    window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                } catch {
-                    /* noop */
-                }
+                unlockPageScroll();
+                onImmediateClose();
                 setTimeout(() => {
+                    unlockPageScroll();
                     try {
                         window.dispatchEvent(new Event('clients:forceRefresh'));
                     } catch {
                         /* noop */
                     }
-                    onImmediateClose();
-                }, 160);
+                    emitPageFlashMessage(successMessage, 'success');
+                }, 220);
+            } else {
+                emitSystemMessage(successMessage, 'success');
             }
         } catch (e) {
             const msg =
@@ -390,17 +406,20 @@ export function useQuickScheduleSave({
                     ? String((e as Error).message)
                     : 'Erro ao salvar';
             setError(msg);
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: { text: msg, type: 'error' },
-                    }),
-                );
-            } catch {
-                /* noop */
+            if (emitGlobalErrorMessage) {
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('systemMessage', {
+                            detail: { text: msg, type: 'error' },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
             }
         } finally {
             setSaving(false);
+            unlockPageScroll();
             const t1 = performance.now();
             console.debug(
                 '[QuickSchedule] handleSave latency ms',
@@ -423,6 +442,11 @@ export function useQuickScheduleSave({
         afterPersist,
         onSuccess,
         onImmediateClose,
+        emitGlobalErrorMessage,
+        emitPageFlashMessage,
+        emitSystemMessage,
+        agendaSettings.defaultDuration,
+        agendaSettings.slotInterval,
     ]);
 
     // Timeout guard: abort save after 20 s to avoid stuck spinner

@@ -5,15 +5,58 @@
 // emit('systemMessage', { text: 'Hello', type: 'success' });
 // const dispose = on('openAppointmentDetails', detail => { ... });
 
+import type { Appointment } from '../hooks/useAppointments';
+import type {
+    PendingActionsOpenDetail,
+    PendingReturnContext,
+} from '../types/agendaFlow';
+
 export type SystemMessagePayload = {
     text: string;
-    type: 'success' | 'error' | 'info';
+    type: 'success' | 'error' | 'info' | 'warning';
 };
-export type OpenAppointmentDetailsPayload = { id: number };
+export type OpenAppointmentDetailsPayload = {
+    appointment: Appointment;
+    returnContext?: PendingReturnContext;
+};
 export type ScrollToClientCardPayload = { clientId: number };
-export type OpenDailyAgendaPayload = { date?: string } | undefined; // ISO date optional
+export type OpenDailyAgendaPayload =
+    | {
+          date?: string;
+          focusAppointmentId?: number;
+      }
+    | undefined; // ISO date optional
+export type OpenMonthlyAgendaPayload =
+    | {
+          clientId: number;
+          date?: string;
+      }
+    | undefined;
 export type AgendaSettingsUpdatedPayload = undefined;
 export type AppointmentsChangedPayload = undefined;
+export type PendingActionsForceClosePayload = undefined;
+export type AgendaCloseAllPayload = undefined;
+export type EnsureScrollUnlockedPayload = undefined;
+export type AuthLoginPayload = undefined;
+export type AuthLogoutPayload = {
+    reason?: 'manual' | 'session_expired' | 'device_session_invalid';
+};
+export type PendingResolvedPayload = {
+    clientId: number;
+    status: 'done' | 'canceled';
+};
+export type ClientClearOngoingPayload = { clientId: number };
+export type AppointmentStatusChangedPayload = {
+    id?: number;
+    status?: string;
+    start_at?: string;
+    end_at?: string;
+    locallyShortened?: boolean;
+};
+export type ModalClosedPayload = {
+    type: string;
+    id?: number;
+};
 
 // Extend here as needed
 export interface EventMap {
@@ -21,8 +64,19 @@ export interface EventMap {
     openAppointmentDetails: OpenAppointmentDetailsPayload;
     scrollToClientCard: ScrollToClientCardPayload;
     openDailyAgenda: OpenDailyAgendaPayload;
+    openMonthlyAgenda: OpenMonthlyAgendaPayload;
     agendaSettingsUpdated: AgendaSettingsUpdatedPayload;
     'appointments:changed': AppointmentsChangedPayload;
+    'auth:login': AuthLoginPayload;
+    'auth:logout': AuthLogoutPayload;
+    'pendingActions:open': PendingActionsOpenDetail;
+    'pendingActions:forceClose': PendingActionsForceClosePayload;
+    'pending:resolved': PendingResolvedPayload;
+    'client:clearOngoing': ClientClearOngoingPayload;
+    'appointment:statusChanged': AppointmentStatusChangedPayload;
+    'modal:closed': ModalClosedPayload;
+    'agenda:closeAll': AgendaCloseAllPayload;
+    ensureScrollUnlocked: EnsureScrollUnlockedPayload;
 }
 
 export const events: (keyof EventMap)[] = [
@@ -30,8 +84,19 @@ export const events: (keyof EventMap)[] = [
     'openAppointmentDetails',
     'scrollToClientCard',
     'openDailyAgenda',
+    'openMonthlyAgenda',
     'agendaSettingsUpdated',
     'appointments:changed',
+    'auth:login',
+    'auth:logout',
+    'pendingActions:open',
+    'pendingActions:forceClose',
+    'pending:resolved',
+    'client:clearOngoing',
+    'appointment:statusChanged',
+    'modal:closed',
+    'agenda:closeAll',
+    'ensureScrollUnlocked',
 ];
 
 // Emit helper

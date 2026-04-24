@@ -1,6 +1,7 @@
 // frontend\src\hooks\useClients.ts
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
+import { emit } from '../events/bus';
 import { isTokenExpired } from '../utils/jwt';
 import type { ClientBasic } from '../types/ClientBasic';
 
@@ -16,12 +17,20 @@ export function useClients() {
         const fetchClients = () => {
             const token = localStorage.getItem('accessToken');
             if (isTokenExpired(token)) {
+                const hadLoggedProfessional = !!localStorage.getItem(
+                    'loggedProfessional',
+                );
                 // Clear immediately so UI shows login instead of a stale logged state
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('loggedProfessional');
                 setClients([]);
                 setLoading(false);
                 setError(null);
+                if (hadLoggedProfessional) {
+                    emit('auth:logout', {
+                        reason: 'session_expired',
+                    });
+                }
                 return;
             }
             // Only show the big loading state if we have no data yet (initial load)

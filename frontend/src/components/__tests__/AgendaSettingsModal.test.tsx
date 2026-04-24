@@ -1,9 +1,10 @@
 /// <reference types="vitest" />
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import AgendaSettingsModal from '../AgendaSettingsModal';
+import { resetAgendaSettings } from '../../utils/agendaSettings';
 
 vi.mock('../Modal', () => ({
     default: ({
@@ -17,9 +18,6 @@ vi.mock('../Modal', () => ({
 
 describe('AgendaSettingsModal', () => {
     const LS_KEYS = {
-        workStart: 'agenda.workStart',
-        workEnd: 'agenda.workEnd',
-        slotInterval: 'agenda.slotInterval',
         defaultDuration: 'agenda.defaultDuration',
         defaultVisitType: 'defaultVisitType',
     };
@@ -30,6 +28,9 @@ describe('AgendaSettingsModal', () => {
 
     beforeEach(() => {
         clearLS();
+        resetAgendaSettings();
+        vi.restoreAllMocks();
+        vi.stubGlobal('fetch', vi.fn());
     });
 
     it('renders fields with defaults when no localStorage', () => {
@@ -43,23 +44,111 @@ describe('AgendaSettingsModal', () => {
         expect(screen.getByLabelText(/Tipo padrão/)).toHaveValue('consulta');
     });
 
-    it('saves updated values to localStorage', () => {
+    it('loads persisted agenda settings from backend', async () => {
+        localStorage.setItem('accessToken', 'token');
+        vi.mocked(fetch).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                work_start_hour: 7,
+                work_start_minute: 30,
+                work_end_hour: 19,
+                work_end_minute: 15,
+                slot_minutes: 15,
+                reminder_enabled: true,
+                reminder_minutes_before: 120,
+            }),
+        } as Response);
+
+        render(<AgendaSettingsModal open={true} onClose={() => {}} />);
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/Início expediente/i)).toHaveValue(
+                '07:30',
+            );
+        });
+        expect(screen.getByLabelText(/Fim expediente/i)).toHaveValue('19:15');
+        expect(screen.getByLabelText(/Intervalo/)).toHaveValue('15');
+    });
+
+    it('saves persisted fields to backend', async () => {
+        localStorage.setItem('accessToken', 'token');
+        vi.mocked(fetch)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    work_start_hour: 6,
+                    work_start_minute: 0,
+                    work_end_hour: 21,
+                    work_end_minute: 0,
+                    slot_minutes: 10,
+                    reminder_enabled: false,
+                    reminder_minutes_before: 90,
+                }),
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    work_start_hour: 7,
+                    work_start_minute: 30,
+                    work_end_hour: 20,
+                    work_end_minute: 0,
+                    slot_minutes: 15,
+                    reminder_enabled: false,
+                    reminder_minutes_before: 90,
+                }),
+            } as Response);
+
         render(<AgendaSettingsModal open={true} onClose={() => {}} />);
         fireEvent.change(screen.getByLabelText(/Início expediente/i), {
             target: { value: '07:30' },
         });
+        fireEvent.change(screen.getByLabelText(/Fim expediente/i), {
+            target: { value: '20:00' },
+        });
         fireEvent.change(screen.getByLabelText(/Intervalo/), {
             target: { value: '15' },
         });
+        fireEvent.change(screen.getByLabelText(/Duração padrão/), {
+            target: { value: '90' },
+        });
         fireEvent.click(screen.getByRole('button', { name: /salvar/i }));
-        expect(localStorage.getItem(LS_KEYS.workStart)).toBe('07:30');
-        expect(localStorage.getItem(LS_KEYS.slotInterval)).toBe('15');
-        expect(screen.getByRole('status')).toHaveTextContent(
-            /Configurações salvas/i,
+
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledTimes(2);
+        });
+        expect(vi.mocked(fetch).mock.calls[1]?.[1]).toMatchObject({
+            method: 'PATCH',
+        });
+        expect(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body)).toContain(
+            '"work_start_minute":30',
         );
+        expect(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body)).toContain(
+            '"default_duration_minutes":90',
+        );
+        expect(String(vi.mocked(fetch).mock.calls[1]?.[1]?.body)).toContain(
+            '"default_visit_type":"consulta"',
+        );
+        await waitFor(() => {
+            expect(screen.getByRole('status')).toHaveTextContent(
+                /Configurações salvas/i,
+            );
+        });
     });
 
     it('shows error when end <= start and does not persist', () => {
+        localStorage.setItem('accessToken', 'token');
+        vi.mocked(fetch).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                work_start_hour: 6,
+                work_start_minute: 0,
+                work_end_hour: 21,
+                work_end_minute: 0,
+                slot_minutes: 10,
+                reminder_enabled: false,
+                reminder_minutes_before: 90,
+            }),
+        } as Response);
         render(<AgendaSettingsModal open={true} onClose={() => {}} />);
         fireEvent.change(screen.getByLabelText(/Fim expediente/i), {
             target: { value: '05:59' },
@@ -68,7 +157,7 @@ describe('AgendaSettingsModal', () => {
         expect(screen.getByRole('status')).toHaveTextContent(
             /Fim deve ser maior/i,
         );
-        expect(localStorage.getItem(LS_KEYS.workEnd)).toBeNull();
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 
     it('reset restores defaults and disables when already defaults', () => {
@@ -90,11 +179,41 @@ describe('AgendaSettingsModal', () => {
         );
     });
 
-    it('enter key triggers save', () => {
+    it('enter key triggers save', async () => {
+        localStorage.setItem('accessToken', 'token');
+        vi.mocked(fetch)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    work_start_hour: 6,
+                    work_start_minute: 0,
+                    work_end_hour: 21,
+                    work_end_minute: 0,
+                    slot_minutes: 10,
+                    reminder_enabled: false,
+                    reminder_minutes_before: 90,
+                }),
+            } as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    work_start_hour: 8,
+                    work_start_minute: 0,
+                    work_end_hour: 21,
+                    work_end_minute: 0,
+                    slot_minutes: 10,
+                    reminder_enabled: false,
+                    reminder_minutes_before: 90,
+                }),
+            } as Response);
+
         render(<AgendaSettingsModal open={true} onClose={() => {}} />);
         const start = screen.getByLabelText(/Início expediente/i);
         fireEvent.change(start, { target: { value: '08:00' } });
         fireEvent.keyDown(start, { key: 'Enter', code: 'Enter' });
-        expect(localStorage.getItem(LS_KEYS.workStart)).toBe('08:00');
+
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledTimes(2);
+        });
     });
 });

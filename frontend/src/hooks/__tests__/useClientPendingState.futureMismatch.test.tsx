@@ -16,7 +16,7 @@ vi.mock('../../services/pending', () => ({
         id: 777,
         start_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
         end_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        status: 'scheduled',
+        status: 'pending',
         title: 'Sessão correta',
         notes: 'Notas',
         client: 153,
@@ -30,12 +30,13 @@ interface TestClient {
     last_name: string;
     phone: string;
     email: string;
-    next_appointment_status?: 'scheduled' | 'done' | 'canceled' | null;
+    next_appointment_status?: 'scheduled' | 'pending' | 'done' | 'canceled' | null;
     next_appointment_start_at?: string | null;
     next_appointment_end_at?: string | null;
     next_appointment_id?: number | null;
     next_appointment_title?: string | null;
     next_appointment_notes?: string | null;
+    last_appointment_status?: 'scheduled' | 'pending' | 'done' | 'canceled' | null;
     has_pending_appointment?: boolean; // ativará heurística
 }
 
@@ -79,10 +80,10 @@ describe('useClientPendingState future mismatch', () => {
         await result.current.openPendingActions();
         expect(listener).toHaveBeenCalled();
         const detail = (
-            listener.mock.calls[0][0] as CustomEvent<{ appt: { id: number } }>
+            listener.mock.calls[0][0] as CustomEvent<{ appointmentId: number }>
         ).detail;
         // Deve ser o compromisso passado mockado (id 777) e não o futuro (id 999)
-        expect(detail.appt.id).toBe(777);
+        expect(detail.appointmentId).toBe(777);
         vi.useRealTimers();
     });
 });

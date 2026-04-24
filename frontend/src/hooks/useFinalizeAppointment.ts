@@ -6,18 +6,35 @@ import { clearOngoingSnapshot } from './useOngoingSnapshot';
 import { track } from '../utils/telemetry';
 import { setAppointmentOverride } from '../utils/appointments/overrides';
 
-export function useFinalizeAppointment(clientId: number) {
+export function useFinalizeAppointment(defaultClientId?: number) {
     const [finishing, setFinishing] = React.useState(false);
 
     const finalize = React.useCallback(
         async (
             appointmentId: number | null | undefined,
             opts?: {
+                clientId?: number;
                 preferEarly?: boolean;
                 openPendingAfter?: () => Promise<void> | void;
             },
         ) => {
             if (!appointmentId || finishing) return false;
+            const clientId = opts?.clientId ?? defaultClientId;
+            if (!clientId) {
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('systemMessage', {
+                            detail: {
+                                text: 'Não foi possível identificar o cliente para finalizar o atendimento.',
+                                type: 'error',
+                            },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+                return false;
+            }
             track({
                 type: 'appointment_finalize_clicked',
                 payload: { id: appointmentId },
@@ -39,9 +56,11 @@ export function useFinalizeAppointment(clientId: number) {
                 const ok = res.ok;
                 if (!ok) throw new Error('Não foi possível finalizar.');
 
-                // Optimistically mark as done immediately to avoid transient 'ongoing' visuals
+                // Keep the card out of the ongoing state while the consulta flow resolves it.
                 try {
-                    setAppointmentOverride(appointmentId, { status: 'done' });
+                    setAppointmentOverride(appointmentId, {
+                        status: 'pending',
+                    });
                 } catch {
                     /* noop */
                 }
@@ -52,7 +71,7 @@ export function useFinalizeAppointment(clientId: number) {
                         window.dispatchEvent(
                             new CustomEvent('systemMessage', {
                                 detail: {
-                                    text: 'Atendimento finalizado',
+                                    text: 'Atendimento enviado para pendência.',
                                     type: 'success',
                                 },
                             }),
@@ -120,7 +139,7 @@ export function useFinalizeAppointment(clientId: number) {
                 setFinishing(false);
             }
         },
-        [clientId, finishing],
+        [defaultClientId, finishing],
     );
 
     return { finishing, finalize } as const;

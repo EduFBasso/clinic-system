@@ -54,7 +54,7 @@
 }
 /* Melhora visual das seções do formulário */
 
-section {
+.clientForm section {
     width: 100%;
     background: var(--color-bg-section);
     box-shadow: 0 1px 6px 0 rgba(0, 0, 0, 0.04);
@@ -110,7 +110,8 @@ section {
 }
 
 .submitButton:hover {
-    background-color: var(--color-secondary);
+    background-color: var(--color-primary-light);
+    color: var(--color-primary);
 }
 
 .sectionTitle {
@@ -147,36 +148,50 @@ section {
 }
 
 .btn-save {
-    background: var(--color-primary);
-    color: #fff;
-    border: none;
+    background: var(--btn-theme-bg);
+    color: var(--btn-theme-text);
+    border: 1px solid var(--btn-theme-border);
     border-radius: 6px;
     padding: 0.6rem 1.4rem;
     font-weight: 600;
     font-size: 1rem;
     cursor: pointer;
     opacity: 0.95;
-    transition: background 0.2s, opacity 0.2s;
+    transition: background 0.2s, opacity 0.2s, color 0.2s, border-color 0.2s;
 }
 .btn-save:hover {
-    background: var(--color-secondary);
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
     opacity: 1;
 }
+.btn-save:focus-visible {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
 .btn-cancel {
-    background: var(--color-border);
-    color: var(--color-text);
-    border: none;
+    background: var(--btn-neutral-bg);
+    color: var(--btn-neutral-text);
+    border: 1px solid var(--btn-neutral-border);
     border-radius: 6px;
     padding: 0.6rem 1.4rem;
     font-weight: 600;
     font-size: 1rem;
     cursor: pointer;
     opacity: 0.92;
-    transition: background 0.2s, opacity 0.2s;
+    transition: background 0.2s, opacity 0.2s, color 0.2s, border-color 0.2s;
 }
 .btn-cancel:hover {
-    background: var(--color-accent);
-    color: #fff;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    opacity: 1;
+}
+.btn-cancel:focus-visible {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
     opacity: 1;
 }
 .btn-delete {

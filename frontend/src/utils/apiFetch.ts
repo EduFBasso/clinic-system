@@ -4,6 +4,7 @@
 // const data = await apiFetch('/sessions/summary');
 
 import { API_BASE } from '../config/api';
+import { emit } from '../events/bus';
 import { getOrCreateDeviceId } from './device';
 
 // Custom error shape so callers can differentiate
@@ -18,7 +19,7 @@ export class ApiError extends Error {
 }
 
 // Event names for global auth state changes
-export const AUTH_LOGOUT_EVENT = 'auth:loggedOut';
+export const AUTH_LOGOUT_EVENT = 'auth:logout';
 
 type JsonSerializable = Record<string, unknown> | unknown[];
 
@@ -47,13 +48,18 @@ function shouldTriggerDeviceLogout(status: number, bodyText: string) {
 function performLocalLogout(reason: string) {
     try {
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('loggedProfessional');
+        localStorage.removeItem('newClientId');
     } catch {
         // ignore storage errors (quota, disabled cookies, etc.)
     }
     // Dispatch a global event so any auth context / components can react.
-    window.dispatchEvent(
-        new CustomEvent(AUTH_LOGOUT_EVENT, { detail: { reason } }),
-    );
+    emit(AUTH_LOGOUT_EVENT, {
+        reason:
+            reason === 'device_session_invalid'
+                ? 'device_session_invalid'
+                : 'session_expired',
+    });
 }
 
 export async function apiFetch(path: string, options: ApiFetchOptions = {}) {

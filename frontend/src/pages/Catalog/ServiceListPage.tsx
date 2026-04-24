@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../../config/api';
 import { apiFetch, ApiError } from '../../utils/apiFetch';
 import FormPage from '../../components/FormKit/FormPage';
 import FormSection from '../../components/FormKit/FormSection';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { consumeFlashMessage } from '../../utils/flashMessage';
 
 type Service = {
     id: number;
@@ -26,6 +27,33 @@ export default function ServiceListPage() {
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const navigate = useNavigate();
+    const location = useLocation();
+    const returnTo =
+        (location.state as { returnTo?: string } | null)?.returnTo ??
+        '/catalog/services';
+    const cameFromConsulta = returnTo === '/consulta';
+
+    const handleClose = useMemo(
+        () => () => {
+            if (cameFromConsulta) {
+                navigate(-1);
+                return;
+            }
+            navigate('/');
+        },
+        [cameFromConsulta, navigate],
+    );
+
+    const openServiceForm = useMemo(
+        () =>
+            (serviceId?: number) => {
+                const path = serviceId
+                    ? `/catalog/services/${serviceId}`
+                    : '/catalog/services/new';
+                navigate(path, { state: { returnTo } });
+            },
+        [navigate, returnTo],
+    );
 
     useEffect(() => {
         let mounted = true;
@@ -51,30 +79,21 @@ export default function ServiceListPage() {
 
     // Exibe imediatamente a mensagem de sucesso ao retornar do formulário
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem('pendingSystemMessage');
-            if (raw) {
-                const obj = JSON.parse(raw);
-                if (obj && obj.text) {
-                    setSuccessMsg(String(obj.text));
-                    const ms =
-                        typeof obj.autoCloseMs === 'number'
-                            ? obj.autoCloseMs
-                            : 6000;
-                    setTimeout(() => setSuccessMsg(null), ms);
-                }
-                localStorage.removeItem('pendingSystemMessage');
-            }
-        } catch {
-            /* noop */
-        }
+        const message = consumeFlashMessage('catalog-services');
+        if (!message?.text) return;
+        setSuccessMsg(String(message.text));
+        const ms =
+            typeof message.autoCloseMs === 'number'
+                ? message.autoCloseMs
+                : 6000;
+        setTimeout(() => setSuccessMsg(null), ms);
     }, []);
 
     return (
-        <FormPage title='Procedimentos' onSubmit={e => e.preventDefault()}>
+        <FormPage title='Serviços' onSubmit={e => e.preventDefault()}>
             <FormSection
                 title='Lista'
-                onClose={() => navigate('/')}
+                onClose={handleClose}
                 closeTitle='Fechar'
             >
                 {successMsg && (
@@ -103,7 +122,7 @@ export default function ServiceListPage() {
                 >
                     <button
                         className='btn'
-                        onClick={() => navigate(-1)}
+                        onClick={handleClose}
                         style={{
                             background: 'transparent',
                             color: 'var(--color-text)',
@@ -128,8 +147,8 @@ export default function ServiceListPage() {
                             fontWeight: 600,
                             cursor: 'pointer',
                         }}
-                        title='Novo procedimento'
-                        onClick={() => navigate('/catalog/services/new')}
+                        title='Novo serviço'
+                        onClick={() => openServiceForm()}
                     >
                         + Novo
                     </button>
@@ -214,11 +233,7 @@ export default function ServiceListPage() {
                                             <button
                                                 aria-label='Editar'
                                                 title='Editar'
-                                                onClick={() =>
-                                                    navigate(
-                                                        `/catalog/services/${s.id}`,
-                                                    )
-                                                }
+                                                onClick={() => openServiceForm(s.id)}
                                                 style={{
                                                     background: 'transparent',
                                                     border: 'none',
@@ -269,7 +284,7 @@ export default function ServiceListPage() {
                         </table>
                         {!loading && items.length === 0 && (
                             <div style={{ padding: 12, color: '#666' }}>
-                                Nenhum procedimento cadastrado.
+                                Nenhum serviço cadastrado.
                             </div>
                         )}
                     </div>

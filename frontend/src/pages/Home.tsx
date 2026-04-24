@@ -6,6 +6,8 @@ import Faixa from '../components/Faixa';
 import NavBar from '../components/NavBar';
 import MainContent from '../components/MainContent';
 import Footer from '../components/Footer';
+import AppModal from '../components/Modal';
+import ClientView from '../components/ClientView';
 import UpdateBanner from '../components/UpdateBanner';
 import styles from '../styles/pages/Home.module.css';
 // ScheduleModal removido — usamos apenas QuickScheduleModal
@@ -16,17 +18,23 @@ import SystemMessageModal from '../components/SystemMessageModal';
 import DailyAgendaModal from '../components/DailyAgendaModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import PendingActionsModal from '../components/PendingActionsModal';
+import PageFlashMessage from '../components/PageFlashMessage';
 import type { Appointment } from '../hooks/useAppointments';
+import type { ClientData } from '../types/ClientData';
 import { useAppVersionWatcher, acceptAndReload } from '../hooks/useAppVersion';
 import { useAppointmentsLivePing } from '../hooks/useAppointmentsLivePing';
 import { dispatchers } from '../events/dispatchers';
 import { focusClientCard } from '../utils/focusClientCard';
 import { useAgendaModals, ensureClientBasic } from '../hooks/useAgendaModals';
+import type { QuickScheduleInitialDraft } from '../types/agendaFlow';
 import { API_BASE } from '../config/api';
 import { usePendingActionsListeners } from '../hooks/usePendingActionsListeners';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useHomeResumeFlows } from '../hooks/useHomeResumeFlows';
+import { unlockPageScroll } from '../utils/unlockPageScroll';
 
 export default function Home() {
+    const navigate = useNavigate();
     // Superusers go straight to /admin — they are not practitioners
     useEffect(() => {
         try {
@@ -34,18 +42,22 @@ export default function Home() {
             if (stored) {
                 const prof = JSON.parse(stored);
                 if (prof?.is_superuser) {
-                    window.location.replace('/admin');
+                    navigate('/admin', { replace: true });
                 }
             }
         } catch {
             /* noop */
         }
-    }, []);
+    }, [navigate]);
 
     const location = useLocation();
     const [selectedClientId, setSelectedClientId] = useState<number | null>(
         null,
     );
+    const [quickInitialDraft, setQuickInitialDraft] = useState<QuickScheduleInitialDraft | null>(null);
+    const [clientViewOpen, setClientViewOpen] = useState(false);
+    const [clientViewData, setClientViewData] = useState<ClientData | null>(null);
+    const [clientViewOpenToken, setClientViewOpenToken] = useState(0);
     const {
         monthlyOpen,
         setMonthlyOpen,
@@ -55,6 +67,7 @@ export default function Home() {
         setRouteInitialMonth,
         weeklyOpen,
         setWeeklyOpen,
+        weeklyInitialDate,
         quickOpen,
         setQuickOpen,
         routeEditAppt,
@@ -67,6 +80,8 @@ export default function Home() {
         setDetailsOpen,
         detailsAppt,
         setDetailsAppt,
+        detailsReturnContext,
+        setDetailsReturnContext,
         openMonthly,
         openWeekly,
         openDaily,
@@ -74,14 +89,24 @@ export default function Home() {
     } = useAgendaModals();
     const [sysMsg, setSysMsg] = useState<{
         text: string;
-        type: 'success' | 'error' | 'info';
+        type: 'success' | 'error' | 'info' | 'warning';
+        autoCloseMs?: number;
+    } | null>(null);
+    const [pageFlash, setPageFlash] = useState<{
+        text: string;
+        type: 'success' | 'error' | 'info' | 'warning';
         autoCloseMs?: number;
     } | null>(null);
     const version = useAppVersionWatcher();
     // Live ping: simple heuristic — enable while the page is open.
     // We can refine to enable only when there may be ongoing appointments by inspecting clients in future.
     useAppointmentsLivePing({ enabled: true, pollIntervalMs: 30000 });
-    const { pendingActionsOpen, pendingAppt, closePendingActions } =
+    const {
+        pendingActionsOpen,
+        pendingAppt,
+        pendingReturnContext,
+        closePendingActions,
+    } =
         usePendingActionsListeners();
 
     // Seleciona o cliente via ?client=ID e abre modais conforme params (?new, ?edit, ?mode)
@@ -94,7 +119,6 @@ export default function Home() {
                 const isNew = url.searchParams.get('new') === '1';
                 const editId = url.searchParams.get('edit');
                 const mode = url.searchParams.get('mode');
-                const reminderId = url.searchParams.get('reminder');
 
                 if (cid) setSelectedClientId(Number(cid));
 
@@ -109,87 +133,6 @@ export default function Home() {
 
                 if (mode === 'week') {
                     setWeeklyOpen(true);
-                }
-
-                // Push notification reminder: focus ClientCard (or save pending for post-login)
-                if (reminderId) {
-                    const token = localStorage.getItem('accessToken');
-                    const isWa = url.searchParams.get('wa') === '1';
-                    const waPhone = url.searchParams.get('wp') ?? '';
-                    const waText = url.searchParams.get('wt') ?? '';
-                    if (token) {
-                        try {
-                            const res = await fetch(
-                                `${API_BASE}/agenda/appointments/${reminderId}/`,
-                                {
-                                    headers: {
-                                        Authorization: `Bearer ${token}`,
-                                    },
-                                },
-                            );
-                            if (res.ok) {
-                                const appt = (await res.json()) as {
-                                    client_id?: number;
-                                    // API returns FK as integer ("client": 5), not nested object
-                                    client?: number | { id?: number };
-                                };
-                                const rawClient = appt.client;
-                                const clientId =
-                                    appt.client_id ??
-                                    (typeof rawClient === 'number'
-                                        ? rawClient
-                                        : (
-                                              rawClient as
-                                                  | { id?: number }
-                                                  | undefined
-                                          )?.id) ??
-                                    null;
-                                if (clientId) {
-                                    setSelectedClientId(clientId);
-                                    focusClientCard(clientId, { delayMs: 300 });
-                                }
-                                if (isWa) {
-                                    fetch(
-                                        `${API_BASE}/agenda/appointments/${reminderId}/confirm-whatsapp/`,
-                                        {
-                                            method: 'POST',
-                                            headers: {
-                                                Authorization: `Bearer ${token}`,
-                                                'Content-Type':
-                                                    'application/json',
-                                            },
-                                        },
-                                    ).catch(() => {
-                                        /* silencioso */
-                                    });
-                                    if (waPhone && waText) {
-                                        window.open(
-                                            `https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`,
-                                            '_blank',
-                                        );
-                                    }
-                                }
-                            }
-                        } catch {
-                            /* silencioso */
-                        }
-                    } else {
-                        sessionStorage.setItem(
-                            'pushPending',
-                            JSON.stringify({
-                                appointmentId: Number(reminderId),
-                                wa: isWa,
-                                waPhone,
-                                waText,
-                            }),
-                        );
-                    }
-                    const clean = new URL(window.location.href);
-                    clean.searchParams.delete('reminder');
-                    clean.searchParams.delete('wa');
-                    clean.searchParams.delete('wp');
-                    clean.searchParams.delete('wt');
-                    window.history.replaceState({}, '', clean.toString());
                 }
 
                 if (editId && cid) {
@@ -236,82 +179,6 @@ export default function Home() {
         })();
     }, []);
 
-    // Pós-login: se houver um pushPending salvo (clique em notificação sem estar logado),
-    // busca o appointment, seleciona e foca o ClientCard.
-    useEffect(() => {
-        const handlePostLoginFocus = () => {
-            const raw = sessionStorage.getItem('pushPending');
-            if (!raw) return;
-            const token = localStorage.getItem('accessToken');
-            if (!token) return;
-            let pending: {
-                appointmentId: number;
-                wa?: boolean;
-                waPhone: string;
-                waText: string;
-            };
-            try {
-                pending = JSON.parse(raw);
-            } catch {
-                sessionStorage.removeItem('pushPending');
-                return;
-            }
-            sessionStorage.removeItem('pushPending');
-            fetch(`${API_BASE}/agenda/appointments/${pending.appointmentId}/`, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
-                .then(r => (r.ok ? r.json() : null))
-                .then(
-                    (
-                        appt: {
-                            client_id?: number;
-                            // API returns FK as integer ("client": 5), not nested object
-                            client?: number | { id?: number };
-                        } | null,
-                    ) => {
-                        const rawClient = appt?.client;
-                        const clientId =
-                            appt?.client_id ??
-                            (typeof rawClient === 'number'
-                                ? rawClient
-                                : (rawClient as { id?: number } | undefined)
-                                      ?.id) ??
-                            null;
-                        if (clientId) {
-                            setSelectedClientId(clientId);
-                            focusClientCard(clientId, { delayMs: 400 });
-                        }
-                        if (pending.wa) {
-                            fetch(
-                                `${API_BASE}/agenda/appointments/${pending.appointmentId}/confirm-whatsapp/`,
-                                {
-                                    method: 'POST',
-                                    headers: {
-                                        Authorization: `Bearer ${token}`,
-                                        'Content-Type': 'application/json',
-                                    },
-                                },
-                            ).catch(() => {
-                                /* silencioso */
-                            });
-                            if (pending.waPhone && pending.waText) {
-                                window.open(
-                                    `https://wa.me/${pending.waPhone}?text=${encodeURIComponent(pending.waText)}`,
-                                    '_blank',
-                                );
-                            }
-                        }
-                    },
-                )
-                .catch(() => {
-                    /* silencioso */
-                });
-        };
-        window.addEventListener('updateClients', handlePostLoginFocus);
-        return () =>
-            window.removeEventListener('updateClients', handlePostLoginFocus);
-    }, []);
-
     // Listener global para mensagens do sistema
     useEffect(() => {
         function onSystemMessage(e: Event) {
@@ -338,60 +205,46 @@ export default function Home() {
             );
     }, []);
 
-    // Mensagem pendente via localStorage (usada quando navegamos para a Home após salvar)
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem('pendingSystemMessage');
-            if (raw) {
-                const obj = JSON.parse(raw);
-                if (obj && obj.text) {
-                    setSysMsg({
-                        text: String(obj.text),
-                        type: obj.type || 'info',
-                        autoCloseMs:
-                            typeof obj.autoCloseMs === 'number'
-                                ? obj.autoCloseMs
-                                : 10000,
-                    });
-                }
-                localStorage.removeItem('pendingSystemMessage');
+        function onPageFlashMessage(e: Event) {
+            const det = (e as CustomEvent).detail || {};
+            if (det && det.text) {
+                setPageFlash({
+                    text: String(det.text),
+                    type: det.type || 'info',
+                    autoCloseMs:
+                        typeof det.autoCloseMs === 'number'
+                            ? det.autoCloseMs
+                            : undefined,
+                });
             }
-        } catch {
-            /* noop */
         }
+        window.addEventListener(
+            'pageFlashMessage',
+            onPageFlashMessage as EventListener,
+        );
+        return () =>
+            window.removeEventListener(
+                'pageFlashMessage',
+                onPageFlashMessage as EventListener,
+            );
     }, []);
 
-    // Reabre AppointmentDetailsModal após retorno da página de edição de charges
-    // e exibe mensagem de sessão expirada quando redirecionado de outra página
-    useEffect(() => {
-        const loginMsg = sessionStorage.getItem('loginRequiredMsg');
-        if (loginMsg) {
-            sessionStorage.removeItem('loginRequiredMsg');
-            setSysMsg({ text: loginMsg, type: 'error', autoCloseMs: 8000 });
-        }
-
-        const raw = sessionStorage.getItem('reopenAppointmentDetails');
-        if (!raw) return;
-        sessionStorage.removeItem('reopenAppointmentDetails');
-        const apptId = parseInt(raw, 10);
-        if (!apptId) return;
-        const token = localStorage.getItem('accessToken');
-        if (!token) return;
-        fetch(`${API_BASE}/agenda/appointments/${apptId}/`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then(r => (r.ok ? r.json() : null))
-            .then(appt => {
-                if (appt) {
-                    setDetailsAppt(appt as Appointment);
-                    setDetailsOpen(true);
-                }
-            })
-            .catch(() => {
-                /* noop */
-            });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location]);
+    useHomeResumeFlows({
+        locationKey: `${location.pathname}${location.search}${location.hash}`,
+        openDaily,
+        openWeekly,
+        setRouteClient,
+        setRouteInitialMonth,
+        setMonthlyOpen,
+        setRouteEditAppt,
+        setQuickInitialDraft,
+        setQuickOpen,
+        setDetailsAppt,
+        setDetailsOpen,
+        setDetailsReturnContext,
+        setSysMsg,
+    });
 
     // Aberturas diretas dos modais da Agenda
     // openMonthly, openWeekly, openDaily e clearAgendaRouteFlags definidos em useAgendaModals
@@ -418,28 +271,48 @@ export default function Home() {
                 } catch {
                     /* noop */
                 }
-            } else if (ev.key === 'pendingSystemMessage' && ev.newValue) {
-                try {
-                    const obj = JSON.parse(ev.newValue);
-                    if (obj && obj.text) {
-                        setSysMsg({
-                            text: String(obj.text),
-                            type: obj.type || 'info',
-                            autoCloseMs:
-                                typeof obj.autoCloseMs === 'number'
-                                    ? obj.autoCloseMs
-                                    : 10000,
-                        });
-                    }
-                    localStorage.removeItem('pendingSystemMessage');
-                } catch {
-                    /* noop */
-                }
             }
         }
         window.addEventListener('storage', onStorage);
         return () => window.removeEventListener('storage', onStorage);
     }, []);
+
+    const openClientView = React.useCallback((data: ClientData) => {
+        setClientViewData(data);
+        setClientViewOpenToken(prev => prev + 1);
+        setClientViewOpen(true);
+        try {
+            window.history.pushState({ modal: 'clientView' }, '');
+        } catch {
+            /* noop */
+        }
+    }, []);
+
+    const closeClientView = React.useCallback(() => {
+        setClientViewOpen(false);
+        setClientViewData(null);
+        try {
+            if (
+                window.history.state &&
+                window.history.state.modal === 'clientView'
+            ) {
+                window.history.back();
+            }
+        } catch {
+            /* noop */
+        }
+    }, []);
+
+    useEffect(() => {
+        function onPopState() {
+            if (clientViewOpen) {
+                setClientViewOpen(false);
+                setClientViewData(null);
+            }
+        }
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, [clientViewOpen]);
 
     // Função para abrir o cadastro em nova janela
     const handleAddClient = () => {
@@ -454,13 +327,8 @@ export default function Home() {
     // openSchedule removido — consolidado no QuickSchedule
     // openMonthly, openWeekly, openDaily e clearAgendaRouteFlags definidos em useAgendaModals
 
-    // Listener global para mensagens do sistema
     useEffect(() => {
-        try {
-            window.dispatchEvent(new Event('ensureScrollUnlocked'));
-        } catch {
-            /* noop */
-        }
+        unlockPageScroll();
     }, []);
     // Also ensure unlock whenever no agenda/system modal is open
     useEffect(() => {
@@ -473,11 +341,7 @@ export default function Home() {
             !!sysMsg ||
             pendingActionsOpen;
         if (!anyOpen) {
-            try {
-                window.dispatchEvent(new Event('ensureScrollUnlocked'));
-            } catch {
-                /* noop */
-            }
+            unlockPageScroll();
         }
     }, [
         quickOpen,
@@ -504,17 +368,29 @@ export default function Home() {
                 <MainContent
                     setSelectedClientId={setSelectedClientId}
                     selectedClientId={selectedClientId}
+                    onClientViewData={openClientView}
                 />
                 {/* Route-driven Agenda modals (ScheduleModal removido) */}
                 {routeClient && (
                     <QuickScheduleModal
                         open={quickOpen}
                         onClose={() => {
+                            unlockPageScroll();
                             setQuickOpen(false);
+                            setQuickInitialDraft(null);
+                            setRouteEditAppt(null);
+                            setRouteClient(undefined);
                             clearAgendaRouteFlags();
                         }}
                         client={routeClient}
                         editAppointment={routeEditAppt}
+                        initialDraft={quickInitialDraft}
+                        afterPersist={(_, action) => {
+                            if (action !== 'created') return;
+                            setSelectedClientId(routeClient.id);
+                            focusClientCard(routeClient.id, { delayMs: 260 });
+                            focusClientCard(routeClient.id, { delayMs: 760 });
+                        }}
                     />
                 )}
                 {routeClient && (
@@ -530,6 +406,7 @@ export default function Home() {
                 )}
                 <WeeklyAgendaModal
                     open={weeklyOpen}
+                    initialDate={weeklyInitialDate}
                     onClose={() => {
                         setWeeklyOpen(false);
                         clearAgendaRouteFlags();
@@ -560,13 +437,26 @@ export default function Home() {
                     onClose={() => setSysMsg(null)}
                     autoCloseMs={sysMsg?.autoCloseMs ?? 10000}
                 />
+                <PageFlashMessage
+                    open={!!pageFlash}
+                    message={pageFlash?.text || null}
+                    type={pageFlash?.type || 'info'}
+                    autoCloseMs={pageFlash?.autoCloseMs ?? 3200}
+                    onClose={() => setPageFlash(null)}
+                />
                 {detailsAppt && (
                     <AppointmentDetailsModal
                         open={detailsOpen}
                         appt={detailsAppt as Appointment}
+                        returnContext={detailsReturnContext}
                         onClose={() => {
                             setDetailsOpen(false);
-                            setDetailsAppt(null);
+                            setDetailsReturnContext(null);
+                            // Adia o null para que AppModal processe open=false antes de desmontar.
+                            // Sem isso, quando dois modais estão abertos (ex.: Monthly + Details),
+                            // o Details desmonta com open=true no closure e o cleanup cega
+                            // remove os locks do Monthly que ainda está aberto.
+                            setTimeout(() => setDetailsAppt(null), 500);
                         }}
                     />
                 )}
@@ -574,9 +464,24 @@ export default function Home() {
                     <PendingActionsModal
                         open
                         appt={pendingAppt}
+                        returnContext={pendingReturnContext}
                         onClose={closePendingActions}
                     />
                 )}
+                <AppModal
+                    open={clientViewOpen}
+                    onClose={closeClientView}
+                    showCloseButton
+                    fullScreen
+                    disableOuterScroll
+                >
+                    {clientViewData && (
+                        <ClientView
+                            client={clientViewData}
+                            openToken={clientViewOpenToken}
+                        />
+                    )}
+                </AppModal>
                 {/* Reminder: push notification click focuses the ClientCard directly (no modal) */}
             </div>
         </>

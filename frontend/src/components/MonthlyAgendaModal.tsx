@@ -1,17 +1,25 @@
 import React from 'react';
 import AppModal from './Modal';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
 import {
     useAppointmentsRange,
     type Appointment,
 } from '../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
+import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
+import { deriveStatus } from '../utils/appointments/status';
 import ClientCardRow from './shared/ClientCardRow';
 // PendingActionsModal é global (Home)
 import StickyModalHeader from './shared/StickyModalHeader';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import FloatingDatePicker from './FloatingDatePicker';
+import { cancelAppointment } from '../services/appointments';
+import { dispatchers } from '../events/dispatchers';
+import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../types/agendaFlow';
+import QuickScheduleModal from './QuickScheduleModal';
+import { makeClientBasic } from '../utils/appointments/agendaHelpers';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -62,33 +70,6 @@ export default function MonthlyAgendaModal({
     const effectiveNowRef = React.useMemo(() => new Date(), []);
     // Floating date picker state — consistent with DailyAgendaModal / WeeklyAgendaModal
     const [showPicker, setShowPicker] = React.useState(false);
-    const [pickerPos, setPickerPos] = React.useState<
-        { x: number; y: number } | undefined
-    >(undefined);
-    const openDatePicker = React.useCallback(
-        (ev?: React.MouseEvent | React.PointerEvent | React.TouchEvent) => {
-            let px = 24;
-            let py = 120;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const native = (ev as any)?.nativeEvent ?? ev;
-                if (native) {
-                    if (typeof native.clientX === 'number') {
-                        px = native.clientX;
-                        py = native.clientY;
-                    } else if (native.touches && native.touches[0]) {
-                        px = native.touches[0].clientX;
-                        py = native.touches[0].clientY;
-                    }
-                }
-            } catch {
-                /* noop */
-            }
-            setPickerPos({ x: px, y: py });
-            setShowPicker(true);
-        },
-        [],
-    );
 
     const [month, setMonth] = React.useState<Date>(() =>
         startOfMonth(initialMonth ? new Date(initialMonth) : new Date()),
@@ -98,6 +79,14 @@ export default function MonthlyAgendaModal({
     const [visibleDaysCount, setVisibleDaysCount] = React.useState<number>(14);
 
     const monthStart = React.useMemo(() => startOfMonth(month), [month]);
+    const buildReturnContext = React.useCallback(
+        (): PendingReturnContext => ({
+            kind: 'monthly-agenda',
+            clientId: client.id,
+            monthISO: toISODate(monthStart),
+        }),
+        [client.id, monthStart],
+    );
     const monthEnd = React.useMemo(() => endOfMonth(month), [month]);
     const { items, loading } = useAppointmentsRange(
         monthStart,
@@ -109,17 +98,30 @@ export default function MonthlyAgendaModal({
     // PendingActions é global — sem estado local
 
     // Removido listener local — Home coordena
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
-        null,
-    );
+    const { detailsModal, openDetails } =
+        useAppointmentDetailsModal<Appointment>();
+    const [cancelError, setCancelError] = React.useState<string | null>(null);
+
+    // QuickSchedule: abrir em modo edição ao tocar no cartão
+    const [qsOpen, setQsOpen] = React.useState(false);
+    const [qsClient, setQsClient] = React.useState<ClientBasic | null>(null);
+    const [qsEdit, setQsEdit] = React.useState<Appointment | null>(null);
+    const closeQuickSchedule = React.useCallback(() => {
+        setQsOpen(false);
+        setQsEdit(null);
+        setQsClient(null);
+    }, []);
+    const { handleFinalize } = useAgendaFinalizeAction(() => {
+        setReloadKey(x => x + 1);
+    });
 
     const filteredItems = React.useMemo(() => {
         const now = effectiveNowRef;
         return items.filter(a => {
             const ov = getAppointmentOverride(a.id)?.status;
             const status =
-                (ov as 'scheduled' | 'done' | 'canceled') ?? a.status;
+                (ov as 'scheduled' | 'pending' | 'done' | 'canceled') ??
+                a.status;
             const start = new Date(a.start_at);
             const end = new Date(a.end_at);
             switch (statusFilter) {
@@ -130,13 +132,14 @@ export default function MonthlyAgendaModal({
                 case 'ongoing':
                     return status === 'scheduled' && start <= now && end > now;
                 case 'past':
-                    return status === 'scheduled' && end < now;
+                    return status === 'pending' ||
+                        (status === 'scheduled' && end < now);
                 case 'done':
                     return status === 'done';
                 case 'canceled':
                     return status === 'canceled';
                 default:
-                    return true;
+                    return false;
             }
         });
     }, [items, statusFilter, effectiveNowRef]);
@@ -193,6 +196,7 @@ export default function MonthlyAgendaModal({
         <AppModal
             open={open}
             onClose={onClose}
+            unmountOnClose
             actionsBarStyle={{
                 background: 'transparent',
                 boxShadow: 'none',
@@ -215,9 +219,9 @@ export default function MonthlyAgendaModal({
                 }
                 onClose={onClose}
             >
-                {/* Linha 1: Hoje + ano com setas */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <button
+                        className='ui-btn ui-btn--theme'
                         onClick={() => {
                             const now = new Date();
                             setMonth(startOfMonth(now));
@@ -228,16 +232,6 @@ export default function MonthlyAgendaModal({
                                 );
                                 if (el) el.scrollIntoView({ block: 'start' });
                             });
-                        }}
-                        style={{
-                            fontSize: 'var(--font-body)',
-                            fontWeight: 700,
-                            padding: '4px 10px',
-                            border: '1px solid var(--color-success-darker)',
-                            background: 'var(--color-success-dark)',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            color: 'white',
                         }}
                         aria-label='Ir para o mês atual'
                     >
@@ -257,7 +251,7 @@ export default function MonthlyAgendaModal({
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: 'var(--color-success-dark)',
+                            color: 'var(--color-primary)',
                             width: 32,
                             height: 32,
                             display: 'inline-flex',
@@ -271,7 +265,7 @@ export default function MonthlyAgendaModal({
                     <span
                         style={{
                             fontWeight: 700,
-                            color: 'var(--color-success-dark)',
+                            color: 'var(--color-primary)',
                             minWidth: 40,
                             textAlign: 'center',
                         }}
@@ -292,7 +286,7 @@ export default function MonthlyAgendaModal({
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: 'var(--color-success-dark)',
+                            color: 'var(--color-primary)',
                             width: 32,
                             height: 32,
                             display: 'inline-flex',
@@ -331,7 +325,7 @@ export default function MonthlyAgendaModal({
                                     fontWeight: selected ? 800 : 500,
                                     fontSize: '0.78rem',
                                     background: selected
-                                        ? 'var(--color-success-dark)'
+                                        ? 'var(--color-primary)'
                                         : 'transparent',
                                     color: selected
                                         ? 'white'
@@ -388,11 +382,13 @@ export default function MonthlyAgendaModal({
                                     </div>
 
                                     {(groupedFiltered[dayISO] || []).map(a => {
-                                        const end = new Date(a.end_at);
                                         const now = effectiveNowRef;
+                                        const derivedStatus = deriveStatus(
+                                            a,
+                                            now,
+                                        );
                                         const isPending =
-                                            a.status === 'scheduled' &&
-                                            end < now;
+                                            derivedStatus === 'past';
                                         return (
                                             <div
                                                 key={a.id}
@@ -409,6 +405,17 @@ export default function MonthlyAgendaModal({
                                             >
                                                 <ClientCardRow
                                                     appt={a as Appointment}
+                                                    showEditAction={false}
+                                                    onEdit={
+                                                        derivedStatus === 'scheduled' && !isPending
+                                                            ? appt => {
+                                                                  const client = makeClientBasic(appt);
+                                                                  setQsClient(client);
+                                                                  setQsEdit(appt as Appointment);
+                                                                  setQsOpen(true);
+                                                              }
+                                                            : undefined
+                                                    }
                                                     timeSize='md'
                                                     timeOrder='start-top'
                                                     style={{
@@ -418,105 +425,86 @@ export default function MonthlyAgendaModal({
                                                     }}
                                                     onClick={
                                                         isPending
-                                                            ? () => {
-                                                                  try {
-                                                                      const x =
-                                                                          a as Appointment;
-                                                                      const anyAppt =
-                                                                          x as unknown as Record<
-                                                                              string,
-                                                                              unknown
-                                                                          >;
-                                                                      const clientName =
-                                                                          (():
-                                                                              | string
-                                                                              | undefined => {
-                                                                              if (
-                                                                                  typeof anyAppt.client_name ===
-                                                                                  'string'
-                                                                              )
-                                                                                  return anyAppt.client_name as string;
-                                                                              const c =
-                                                                                  anyAppt.client as unknown;
-                                                                              if (
-                                                                                  c &&
-                                                                                  typeof c ===
-                                                                                      'object' &&
-                                                                                  'name' in
-                                                                                      (c as Record<
-                                                                                          string,
-                                                                                          unknown
-                                                                                      >)
-                                                                              ) {
-                                                                                  const n =
-                                                                                      (
-                                                                                          c as {
-                                                                                              name?: unknown;
-                                                                                          }
-                                                                                      )
-                                                                                          .name;
-                                                                                  if (
-                                                                                      typeof n ===
-                                                                                      'string'
-                                                                                  )
-                                                                                      return n;
-                                                                              }
-                                                                              return undefined;
-                                                                          })();
-                                                                      const clientField =
-                                                                          ((): unknown => {
-                                                                              const c =
-                                                                                  anyAppt.client as unknown;
-                                                                              if (
-                                                                                  typeof c ===
-                                                                                      'number' ||
-                                                                                  typeof c ===
-                                                                                      'object'
-                                                                              )
-                                                                                  return c;
-                                                                              return undefined;
-                                                                          })();
-                                                                      const payload =
-                                                                          {
-                                                                              id: x.id,
-                                                                              start_at:
-                                                                                  x.start_at,
-                                                                              end_at: x.end_at,
-                                                                              status: x.status,
-                                                                              notes: x.notes,
-                                                                              client_name:
-                                                                                  clientName,
-                                                                              client: clientField,
-                                                                              title: x.title,
-                                                                          } as unknown as import('../components/shared/AppointmentCard').SharedAppointmentLike;
-                                                                      window.dispatchEvent(
-                                                                          new CustomEvent(
-                                                                              'pendingActions:open',
-                                                                              {
-                                                                                  detail: {
-                                                                                      appt: payload,
-                                                                                  },
-                                                                              },
-                                                                          ),
-                                                                      );
-                                                                  } catch {
-                                                                      /* noop */
-                                                                  }
-                                                              }
+                                                            ? () =>
+                                                                  openPendingActionsForAppointment(
+                                                                      a,
+                                                                      buildReturnContext(),
+                                                                  )
                                                             : undefined
                                                     }
                                                     onDetails={
                                                         a.status === 'done'
-                                                            ? appt => {
-                                                                  setDetailsAppt(
+                                                            ? appt =>
+                                                                  openDetails(
                                                                       appt as Appointment,
-                                                                  );
-                                                                  setDetailsOpen(
-                                                                      true,
-                                                                  );
+                                                                      buildReturnContext(),
+                                                                  )
+                                                            : undefined
+                                                    }
+                                                    onCancel={
+                                                        (derivedStatus ===
+                                                            'scheduled' ||
+                                                            derivedStatus ===
+                                                                'ongoing') &&
+                                                        !isPending
+                                                            ? async appt => {
+                                                                  try {
+                                                                      setCancelError(
+                                                                          null,
+                                                                      );
+                                                                      const res =
+                                                                          await cancelAppointment(
+                                                                              appt.id,
+                                                                          );
+                                                                      if (
+                                                                          !res.ok
+                                                                      ) {
+                                                                          throw new Error(
+                                                                              res.text ||
+                                                                                  'Erro ao cancelar',
+                                                                          );
+                                                                      }
+                                                                      setReloadKey(
+                                                                          x =>
+                                                                              x +
+                                                                              1,
+                                                                      );
+                                                                      try {
+                                                                          dispatchers.updateClients();
+                                                                          dispatchers.appointmentsChanged();
+                                                                      } catch {
+                                                                          /* noop */
+                                                                      }
+                                                                  } catch (
+                                                                      err
+                                                                  ) {
+                                                                      const msg =
+                                                                          err &&
+                                                                          typeof err ===
+                                                                              'object' &&
+                                                                          'message' in
+                                                                              err
+                                                                              ? String(
+                                                                                    (
+                                                                                        err as Error
+                                                                                    )
+                                                                                        .message,
+                                                                                )
+                                                                              : 'Erro ao cancelar';
+                                                                      setCancelError(
+                                                                          msg,
+                                                                      );
+                                                                  }
                                                               }
                                                             : undefined
                                                     }
+                                                    onFinalize={
+                                                        derivedStatus ===
+                                                        'ongoing'
+                                                            ? handleFinalize
+                                                            : undefined
+                                                    }
+                                                    finalizeRequestContext={buildReturnContext()}
                                                     cardContainerStyle={{
                                                         // Evita que o stripe + conteúdo comprimam o closed pill
                                                         minWidth: 0,
@@ -536,30 +524,44 @@ export default function MonthlyAgendaModal({
                                 }}
                             >
                                 <button
+                                    className='ui-btn ui-btn--secondary'
                                     onClick={() =>
                                         setVisibleDaysCount(c =>
                                             Math.min(c + 7, sortedDays.length),
                                         )
                                     }
-                                    style={{ padding: '8px 12px' }}
                                     aria-label='Carregar mais dias'
                                 >
                                     Mostrar mais dias
                                 </button>
                             </div>
                         )}
+                        {cancelError && (
+                            <div
+                                style={{
+                                    color: '#b91c1c',
+                                    fontSize: 14,
+                                    paddingTop: 4,
+                                }}
+                            >
+                                {cancelError}
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {/* PendingActionsModal é global (Home) */}
-                {detailsOpen && detailsAppt && (
-                    <AppointmentDetailsModal
-                        open={detailsOpen}
-                        onClose={() => {
-                            setDetailsOpen(false);
-                            setDetailsAppt(null);
+                {detailsModal}
+                {qsOpen && qsClient && (
+                    <QuickScheduleModal
+                        open={qsOpen}
+                        onClose={closeQuickSchedule}
+                        client={qsClient}
+                        editAppointment={qsEdit}
+                        afterPersist={(_, action) => {
+                            if (action === 'updated') closeQuickSchedule();
+                            setReloadKey(x => x + 1);
                         }}
-                        appt={detailsAppt}
                     />
                 )}
             </div>
@@ -580,7 +582,7 @@ export default function MonthlyAgendaModal({
                         if (el) el.scrollIntoView({ block: 'start' });
                     });
                 }}
-                initialPosition={pickerPos}
+                initialPosition={undefined}
             />
         </AppModal>
     );

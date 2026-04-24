@@ -20,6 +20,25 @@ function ModalHarness({ initiallyOpen = true }: { initiallyOpen?: boolean }) {
     );
 }
 
+function NamedModalHarness({
+    openerLabel,
+}: {
+    openerLabel: string;
+}) {
+    const [open, setOpen] = React.useState(false);
+    return (
+        <>
+            <button onClick={() => setOpen(true)}>{openerLabel}</button>
+            <AppModal open={open} onClose={() => setOpen(false)}>
+                <div>
+                    <h2>{`Conteudo ${openerLabel}`}</h2>
+                    <button onClick={() => setOpen(false)}>{`fechar ${openerLabel}`}</button>
+                </div>
+            </AppModal>
+        </>
+    );
+}
+
 function getBodyStyles() {
     const body = document.body as HTMLBodyElement;
     const html = document.documentElement as HTMLElement;
@@ -136,5 +155,46 @@ describe('AppModal scroll lock', () => {
         const ev2 = new WheelEvent('wheel', { cancelable: true });
         const preventedAfter = !document.dispatchEvent(ev2);
         expect(preventedAfter).toBe(false);
+    });
+
+    it('global unlock fallback uses the latest modal restore callback', async () => {
+        const user = userEvent.setup();
+        render(
+            <>
+                <NamedModalHarness openerLabel='open A' />
+                <NamedModalHarness openerLabel='open B' />
+            </>,
+        );
+
+        const modalWindow = window as typeof window & {
+            __appModalLatestRestore?: ((source?: string) => void) | null;
+        };
+
+        await user.click(screen.getByRole('button', { name: 'open A' }));
+        await user.click(screen.getByRole('button', { name: 'fechar open A' }));
+        await waitFor(() => {
+            expect(typeof modalWindow.__appModalLatestRestore).toBe('function');
+        });
+        const firstRestore = modalWindow.__appModalLatestRestore;
+
+        await user.click(screen.getByRole('button', { name: 'open B' }));
+        await user.click(screen.getByRole('button', { name: 'fechar open B' }));
+        await waitFor(() => {
+            expect(typeof modalWindow.__appModalLatestRestore).toBe('function');
+        });
+        const secondRestore = modalWindow.__appModalLatestRestore;
+        expect(secondRestore).not.toBe(firstRestore);
+
+        document.body.style.overflow = 'hidden';
+        document.body.classList.add('MuiModal-open');
+        window.dispatchEvent(new Event('ensureScrollUnlocked'));
+
+        await waitFor(() => {
+            const s = getBodyStyles();
+            const unlocked = !(
+                s.bodyOverflow === 'hidden' || s.htmlOverflow === 'hidden'
+            );
+            expect(unlocked).toBe(true);
+        });
     });
 });

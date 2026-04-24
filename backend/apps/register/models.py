@@ -61,6 +61,20 @@ class Professional(AbstractBaseUser, PermissionsMixin):
         help_text="Base32 secret for TOTP (Google Authenticator). Empty = TOTP not configured.",
     )
 
+    # Preferência de tema da interface
+    UI_THEME_CHOICES = (
+        ("blue", "Azul"),
+        ("green", "Verde"),
+        ("pink", "Rosa"),
+        ("black", "Escuro"),
+    )
+    ui_theme = models.CharField(
+        "Tema da interface",
+        max_length=10,
+        choices=UI_THEME_CHOICES,
+        default="blue",
+    )
+
     # Endereço
     city = models.CharField("Cidade", max_length=50, blank=True)
     state = models.CharField("Estado", max_length=2, blank=True)
@@ -136,12 +150,22 @@ class DeviceSession(models.Model):
 class ProfessionalSettings(models.Model):
     """Configurações por profissional para a agenda e comunicação.
 
-    - work_start_hour: hora de início padrão da agenda (0..23)
-    - work_end_hour: hora de fim padrão (1..24)
+    - work_start_hour/work_start_minute: início padrão da agenda
+    - work_end_hour/work_end_minute: fim padrão da agenda
     - slot_minutes: duração dos slots (ex.: 15, 30, 60)
+    - default_duration_minutes: duração sugerida para novos compromissos
+    - default_visit_type: tipo sugerido para novos compromissos
     - confirm_message_enabled: ativa envio de confirmação (futuro)
     - confirm_message_template: template opcional da mensagem
     """
+
+    DEFAULT_VISIT_TYPE_CHOICES = (
+        ("consulta", "Consulta"),
+        ("avaliacao", "Avaliação"),
+        ("retorno", "Retorno"),
+        ("procedimento", "Procedimento"),
+        ("outro", "Outro"),
+    )
 
     professional = models.OneToOneField(
         Professional,
@@ -149,9 +173,17 @@ class ProfessionalSettings(models.Model):
         related_name="settings",
         verbose_name="Profissional",
     )
-    work_start_hour = models.PositiveSmallIntegerField(default=8)
-    work_end_hour = models.PositiveSmallIntegerField(default=18)
-    slot_minutes = models.PositiveSmallIntegerField(default=30)
+    work_start_hour = models.PositiveSmallIntegerField(default=6)
+    work_start_minute = models.PositiveSmallIntegerField(default=0)
+    work_end_hour = models.PositiveSmallIntegerField(default=21)
+    work_end_minute = models.PositiveSmallIntegerField(default=0)
+    slot_minutes = models.PositiveSmallIntegerField(default=10)
+    default_duration_minutes = models.PositiveSmallIntegerField(default=60)
+    default_visit_type = models.CharField(
+        max_length=20,
+        choices=DEFAULT_VISIT_TYPE_CHOICES,
+        default="consulta",
+    )
 
     confirm_message_enabled = models.BooleanField(default=False)
     confirm_message_template = models.TextField(blank=True)
@@ -168,11 +200,11 @@ class ProfessionalSettings(models.Model):
     )
     pix_key_value = models.CharField(max_length=128, blank=True, default="")
 
-    # Push notification reminder (same-day)
+    # Professional reminder settings (Telegram)
     reminder_enabled = models.BooleanField(default=False)
     reminder_minutes_before = models.PositiveSmallIntegerField(
         default=90,
-        help_text="Quantos minutos antes do compromisso enviar o lembrete push.",
+        help_text="Quantos minutos antes do compromisso enviar o lembrete Telegram.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -183,35 +215,12 @@ class ProfessionalSettings(models.Model):
         verbose_name_plural = "Configurações de Profissionais"
 
     def __str__(self):
-        return f"Config {self.professional.email} ({self.work_start_hour}-{self.work_end_hour}/{self.slot_minutes}m)"
-
-
-class PushSubscription(models.Model):
-    """Assinatura Web Push de um profissional.
-
-    Uma por dispositivo/navegador. O endpoint é único e identifica a assinatura.
-    Deletada automaticamente quando o push retorna 404/410 (expirada).
-    """
-
-    professional = models.ForeignKey(
-        Professional,
-        on_delete=models.CASCADE,
-        related_name="push_subscriptions",
-        verbose_name="Profissional",
-    )
-    endpoint = models.TextField(unique=True)
-    p256dh = models.TextField()
-    auth = models.TextField()
-    user_agent = models.CharField(max_length=256, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Assinatura Push"
-        verbose_name_plural = "Assinaturas Push"
-
-    def __str__(self):
-        return f"{self.professional.email} — {self.endpoint[:60]}"
+        start = f"{self.work_start_hour:02d}:{self.work_start_minute:02d}"
+        end = f"{self.work_end_hour:02d}:{self.work_end_minute:02d}"
+        return (
+            f"Config {self.professional.email} "
+            f"({start}-{end}/{self.slot_minutes}m/{self.default_duration_minutes}m)"
+        )
 
 
 class WebAuthnCredential(models.Model):

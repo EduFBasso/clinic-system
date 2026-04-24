@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.text import slugify
 
 
 class AnamnesisField(models.Model):
@@ -18,6 +19,12 @@ class AnamnesisField(models.Model):
         on_delete=models.CASCADE,
         related_name='anamnesis_fields',
         verbose_name='Profissional',
+    )
+    code = models.SlugField(
+        'Código',
+        max_length=120,
+        blank=True,
+        help_text='Identificador estável do campo para seeds, migrações e lógica de dependência.',
     )
     sector = models.CharField(
         'Setor',
@@ -42,6 +49,29 @@ class AnamnesisField(models.Model):
         blank=True,
         help_text='Lista de strings para radio buttons. Null para text/textarea.',
     )
+    placeholder = models.CharField(
+        'Placeholder',
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Texto de apoio opcional para campos text/textarea.',
+    )
+    depends_on = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='dependent_fields',
+        verbose_name='Depende de',
+        help_text='Campo pai que controla a visibilidade deste campo.',
+    )
+    show_when_value = models.CharField(
+        'Exibir quando valor for',
+        max_length=100,
+        blank=True,
+        default='',
+        help_text='Valor do campo pai que deve habilitar este campo. Vazio = qualquer valor não vazio.',
+    )
     order = models.PositiveSmallIntegerField(
         'Ordem dentro do setor',
         default=0,
@@ -56,8 +86,23 @@ class AnamnesisField(models.Model):
     class Meta:
         app_label = 'anamnesis'
         ordering = ['sector_order', 'order']
+        unique_together = [('professional', 'code')]
         verbose_name = 'Campo de anamnese'
         verbose_name_plural = 'Campos de anamnese'
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            base_code = slugify(self.label).replace('-', '_') or 'anamnesis_field'
+            candidate = base_code
+            suffix = 2
+            while AnamnesisField.objects.filter(
+                professional=self.professional,
+                code=candidate,
+            ).exclude(pk=self.pk).exists():
+                candidate = f'{base_code}_{suffix}'
+                suffix += 1
+            self.code = candidate
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'[{self.sector}] {self.label} ({self.professional})'

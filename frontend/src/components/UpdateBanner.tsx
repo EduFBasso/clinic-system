@@ -1,5 +1,4 @@
 // src/components/UpdateBanner.tsx
-import React from 'react';
 
 type Props = {
     onReload: () => void;

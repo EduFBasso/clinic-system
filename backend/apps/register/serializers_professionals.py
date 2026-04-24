@@ -10,6 +10,7 @@ class ProfessionalSerializer(serializers.ModelSerializer):
             'specialty', 'phone', 'city', 'state',
             'can_manage_professionals', 'is_active', 'is_staff', 'is_superuser',
             'created_at', 'deactivated_at', 'deactivation_reason',
+            'ui_theme',
         ]
         extra_kwargs = {
             'can_manage_professionals': {'required': False},

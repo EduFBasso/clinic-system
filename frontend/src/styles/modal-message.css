@@ -2,10 +2,10 @@
 .modal-message {
     background: var(--color-primary-light);
     color: var(--color-text);
-    border-radius: 8px;
+    border-radius: var(--radius-surface);
     padding: 24px 32px;
     font-size: 1.05rem;
-    box-shadow: 0 2px 16px var(--color-shadow);
+    box-shadow: var(--shadow-soft-sm);
     border: 2px solid var(--color-primary);
     text-align: center;
     min-width: 280px;
@@ -21,9 +21,10 @@
     background: var(--color-primary);
     color: #fff;
     border: none;
-    border-radius: 4px;
-    padding: 8px 24px;
+    border-radius: var(--radius-control);
+    padding: var(--button-padding-lg);
     font-size: 1rem;
+    font-weight: var(--button-font-weight);
     cursor: pointer;
     margin-top: 12px;
     transition: background 0.2s;

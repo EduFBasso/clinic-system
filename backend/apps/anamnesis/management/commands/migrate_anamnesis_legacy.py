@@ -23,30 +23,49 @@ from apps.clients.models import Client
 from apps.register.models import Professional
 
 
-# Maps legacy Client field name → AnamnesisField label (must match seed exactly)
 LEGACY_FIELD_MAP = [
-    ('sport_activity',                      'Atividade esportiva'),
-    ('academic_activity',                   'Atividade acadêmica'),
-    ('takes_medication',                    'Toma medicação'),
-    ('had_surgery',                         'Já fez cirurgia'),
-    ('pain_sensitivity',                    'Sensibilidade à dor'),
-    ('clinical_history',                    'Histórico clínico'),
-    ('footwear_used',                       'Calçado utilizado'),
-    ('sock_used',                           'Meia utilizada'),
-    ('plantar_view_right',                  'Vista plantar direita'),
-    ('dermatological_pathologies_right',    'Patologias dermatológicas direito'),
-    ('nail_changes_right',                  'Alterações ungueais direito'),
-    ('deformities_right',                   'Deformidades direito'),
-    ('sensitivity_test',                    'Teste de sensibilidade direito'),
-    ('plantar_view_left',                   'Vista plantar esquerda'),
-    ('dermatological_pathologies_left',     'Patologias dermatológicas esquerdo'),
-    ('nail_changes_left',                   'Alterações ungueais esquerdo'),
-    ('deformities_left',                    'Deformidades esquerdo'),
-    ('other_procedures',                    'Outros procedimentos'),
+    ('sport_activity', 'sport_activity'),
+    ('academic_activity', 'academic_activity'),
+    ('pain_sensitivity', 'pain_sensitivity'),
+    ('clinical_history', 'clinical_history'),
+    ('footwear_used', 'footwear_used'),
+    ('sock_used', 'sock_used'),
+    ('plantar_view_right', 'plantar_view_right'),
+    ('dermatological_pathologies_right', 'dermatological_pathologies_right'),
+    ('nail_changes_right', 'nail_changes_right'),
+    ('deformities_right', 'deformities_right'),
+    ('sensitivity_test', 'sensitivity_test'),
+    ('plantar_view_left', 'plantar_view_left'),
+    ('dermatological_pathologies_left', 'dermatological_pathologies_left'),
+    ('nail_changes_left', 'nail_changes_left'),
+    ('deformities_left', 'deformities_left'),
+    ('other_procedures', 'other_procedures'),
 ]
 
-# is_pregnant is boolean — convert to 'Sim'/'Não'
-IS_PREGNANT_LABEL = 'Está grávida'
+DETAIL_FIELD_MAP = [
+    ('takes_medication', 'takes_medication', 'takes_medication_details'),
+    ('had_surgery', 'had_surgery', 'had_surgery_details'),
+]
+
+IS_PREGNANT_CODE = 'is_pregnant'
+
+
+def normalize_yes_no_with_detail(raw_value):
+    if raw_value is None:
+        return None, None
+
+    if isinstance(raw_value, bool):
+        return ('Sim' if raw_value else 'Não'), None
+
+    value = str(raw_value).strip()
+    if not value:
+        return None, None
+
+    normalized = value.lower()
+    if normalized in {'sim', 'não', 'nao'}:
+        return ('Sim' if normalized == 'sim' else 'Não'), None
+
+    return 'Sim', value
 
 
 class Command(BaseCommand):
@@ -79,11 +98,11 @@ class Command(BaseCommand):
             )
         )
 
-        # Build label → AnamnesisField lookup for this professional
+        # Build code → AnamnesisField lookup for this professional
         fields_qs = AnamnesisField.objects.filter(professional=professional)
-        field_by_label = {f.label: f for f in fields_qs}
+        field_by_code = {f.code: f for f in fields_qs}
 
-        if not field_by_label:
+        if not field_by_code:
             raise CommandError(
                 'Nenhum AnamnesisField encontrado para este profissional. '
                 'Execute seed_anamnesis primeiro.'
@@ -96,55 +115,103 @@ class Command(BaseCommand):
         total_skipped = 0
         total_empty = 0
 
-        full_map = LEGACY_FIELD_MAP + [('is_pregnant', IS_PREGNANT_LABEL)]
+        def upsert_response(client, anamnesis_field, value):
+            nonlocal total_created, total_skipped
+
+            if dry_run:
+                self.stdout.write(
+                    f'  [dry-run] {client} | {anamnesis_field.label}: {value[:60]}'
+                )
+                total_created += 1
+                return
+
+            _, created = AnamnesisResponse.objects.get_or_create(
+                client=client,
+                field=anamnesis_field,
+                defaults={
+                    'field_label_snap': anamnesis_field.label,
+                    'value': value,
+                },
+            )
+            if created:
+                total_created += 1
+            else:
+                total_skipped += 1
 
         with transaction.atomic():
             for client in clients:
-                for legacy_field, label in full_map:
+                for legacy_field, code in LEGACY_FIELD_MAP:
                     raw_value = getattr(client, legacy_field, None)
 
-                    # Normalize value to string
                     if raw_value is None or raw_value == '':
                         total_empty += 1
                         continue
 
-                    if legacy_field == 'is_pregnant':
-                        value = 'Sim' if raw_value else 'Não'
-                    else:
-                        value = str(raw_value).strip()
-                        if not value:
-                            total_empty += 1
-                            continue
+                    value = str(raw_value).strip()
+                    if not value:
+                        total_empty += 1
+                        continue
 
-                    anamnesis_field = field_by_label.get(label)
+                    anamnesis_field = field_by_code.get(code)
                     if not anamnesis_field:
                         self.stdout.write(
                             self.style.WARNING(
-                                f'  ! Campo "{label}" não encontrado no seed — pulando'
+                                f'  ! Campo "{code}" não encontrado no seed — pulando'
                             )
                         )
                         total_skipped += 1
                         continue
 
-                    if dry_run:
-                        self.stdout.write(
-                            f'  [dry-run] {client} | {label}: {value[:60]}'
-                        )
-                        total_created += 1
+                    upsert_response(client, anamnesis_field, value)
+
+                for legacy_field, base_code, detail_code in DETAIL_FIELD_MAP:
+                    raw_value = getattr(client, legacy_field, None)
+                    answer_value, detail_value = normalize_yes_no_with_detail(raw_value)
+                    if answer_value is None:
+                        total_empty += 1
                         continue
 
-                    _, created = AnamnesisResponse.objects.get_or_create(
-                        client=client,
-                        field=anamnesis_field,
-                        defaults={
-                            'field_label_snap': anamnesis_field.label,
-                            'value': value,
-                        },
-                    )
-                    if created:
-                        total_created += 1
-                    else:
+                    parent_field = field_by_code.get(base_code)
+                    if not parent_field:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f'  ! Campo "{base_code}" não encontrado no seed — pulando'
+                            )
+                        )
                         total_skipped += 1
+                        continue
+
+                    upsert_response(client, parent_field, answer_value)
+
+                    if detail_value:
+                        detail_field = field_by_code.get(detail_code)
+                        if not detail_field:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f'  ! Campo "{detail_code}" não encontrado no seed — pulando detalhe'
+                                )
+                            )
+                            total_skipped += 1
+                            continue
+                        upsert_response(client, detail_field, detail_value)
+
+                if getattr(client, 'is_pregnant', None) is not None:
+                    pregnancy_field = field_by_code.get(IS_PREGNANT_CODE)
+                    if not pregnancy_field:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f'  ! Campo "{IS_PREGNANT_CODE}" não encontrado no seed — pulando'
+                            )
+                        )
+                        total_skipped += 1
+                    else:
+                        upsert_response(
+                            client,
+                            pregnancy_field,
+                            'Sim' if client.is_pregnant else 'Não',
+                        )
+                else:
+                    total_empty += 1
 
             if dry_run:
                 transaction.set_rollback(True)
