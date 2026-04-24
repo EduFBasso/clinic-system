@@ -659,9 +659,24 @@ export default function AppModal(props: AppModalProps) {
     // retornar null com open=true ainda no closure (ex.: BudgetModal), fazendo
     // com que o AppModal seja desmontado SEM ter passado por open=false.
     // O efeito com [] garante que o cleanup roda em todo unmount.
+    // ATENÇÃO: verificar se outro modal ainda está aberto antes de limpar os locks,
+    // caso contrário remoções parciais (ex.: AppointmentDetailsModal fechando enquanto
+    // MonthlyAgendaModal ainda está visível) causam scroll travado.
     React.useEffect(() => {
         return () => {
             try {
+                // Se outro modal ainda está visível, não limpar os locks —
+                // ele ainda precisa deles para manter o scroll bloqueado.
+                const anyOtherVisible = Array.from(
+                    document.querySelectorAll(
+                        '[role="presentation"][aria-hidden="false"]',
+                    ),
+                ).some(el => {
+                    const r = (el as HTMLElement).getBoundingClientRect();
+                    return r.width > 2 && r.height > 2;
+                });
+                if (anyOtherVisible) return;
+
                 const body = document.body as HTMLBodyElement;
                 const html = document.documentElement as HTMLElement;
                 body.style.overflow = '';

@@ -451,8 +451,12 @@ export default function Home() {
                         returnContext={detailsReturnContext}
                         onClose={() => {
                             setDetailsOpen(false);
-                            setDetailsAppt(null);
                             setDetailsReturnContext(null);
+                            // Adia o null para que AppModal processe open=false antes de desmontar.
+                            // Sem isso, quando dois modais estão abertos (ex.: Monthly + Details),
+                            // o Details desmonta com open=true no closure e o cleanup cega
+                            // remove os locks do Monthly que ainda está aberto.
+                            setTimeout(() => setDetailsAppt(null), 500);
                         }}
                     />
                 )}
