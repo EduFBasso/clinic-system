@@ -503,14 +503,33 @@ export default function AppModal(props: AppModalProps) {
                 }
                 const body = document.body as HTMLBodyElement;
                 const html = document.documentElement as HTMLElement;
+                
+                // Verifica se ainda há outro modal aberto ANTES de decidir sobre keepScroll
+                const activeModals = Array.from(
+                    document.querySelectorAll(
+                        '[role="presentation"][aria-hidden="false"]',
+                    ),
+                ).filter(el => el instanceof HTMLElement);
+                
+                // Se ainda há um modal aberto, não restaurar (a menos que pareça um falso positivo)
+                if (activeModals.length > 0) {
+                    // Falso positivo heurístico: elementos sem filhos visíveis (width/height 0) – possivelmente já desmontados.
+                    const anyVisible = activeModals.some(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 2 && r.height > 2;
+                    });
+                    if (anyVisible) return; // existe de fato outro modal, não restaurar
+                }
+                
                 // Se a página marcou que o scroll deve permanecer como está, não tentar restaurar
+                // MAS: só pula se não há outro modal aberto (checagem acima confirmou)
                 if (body.dataset.keepScroll === '1') {
                     if (source) {
                         console.debug('[AppModal] keepScroll=1, skip restore', {
                             source,
                         });
                     }
-                    // Ainda assim, remova locks do modal
+                    // Ainda assim, remova locks do modal para evitar scroll travado
                     body.style.overflow = '';
                     html.style.overflow = '';
                     html.style.removeProperty('overscroll-behavior-y');
@@ -519,20 +538,6 @@ export default function AppModal(props: AppModalProps) {
                     if (body.dataset.appliedIosLock)
                         delete body.dataset.appliedIosLock;
                     return;
-                }
-                const activeModals = Array.from(
-                    document.querySelectorAll(
-                        '[role="presentation"][aria-hidden="false"]',
-                    ),
-                ).filter(el => el instanceof HTMLElement);
-                // Se ainda há um modal aberto, não restaurar (a menos que pareça um falso positivo)
-                if (activeModals.length > 0) {
-                    // Falso positivo heurístico: elementos sem filhos visíveis (width/height 0) – possivelmente já desmontados.
-                    const anyVisible = activeModals.some(el => {
-                        const r = el.getBoundingClientRect();
-                        return r.width > 2 && r.height > 2;
-                    });
-                    if (anyVisible) return; // existe de fato outro modal
                 }
 
                 // Limpa estilos de lock (seja do MUI ou do nosso)
