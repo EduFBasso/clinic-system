@@ -34,6 +34,7 @@ interface PendingAppointmentLike {
     start_at?: string;
     end_at?: string;
     client?: number | { id?: number } | null;
+    title?: string;
 }
 
 function unwrapAppointmentsList(
@@ -76,6 +77,10 @@ const MainContent: React.FC<MainContentProps> = ({
     );
     const [tomorrowClientIds, setTomorrowClientIds] = useState<Set<number>>(
         () => new Set(),
+    );
+    // Mapa clientId → primeiro agendamento de amanhã (para o botão Avisar com horário correto)
+    const [tomorrowClientAppts, setTomorrowClientAppts] = useState<Map<number, PendingAppointmentLike>>(
+        () => new Map(),
     );
     const [noResultsOpen, setNoResultsOpen] = useState(false);
     // Agenda selection mode state
@@ -504,6 +509,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 if (!cancelled) {
                     setPendingClientIds(new Set());
                     setTomorrowClientIds(new Set());
+                    setTomorrowClientAppts(new Map());
                 }
                 return;
             }
@@ -528,6 +534,8 @@ const MainContent: React.FC<MainContentProps> = ({
 
                 const ids = new Set<number>();
                 const tomorrowIds = new Set<number>();
+                // Primeiro agendamento de amanhã por cliente (horário mais cedo)
+                const tomorrowAppts = new Map<number, PendingAppointmentLike>();
 
                 // Calcula os limites do dia de amanhã em hora local
                 const tmw = new Date();
@@ -540,7 +548,14 @@ const MainContent: React.FC<MainContentProps> = ({
                     if (clientId != null) ids.add(clientId);
                 });
 
-                scheduledData.forEach(appt => {
+                // Ordena agendados por start_at para garantir que o primeiro de amanhã seja o mais cedo
+                const sortedScheduled = [...scheduledData].sort((a, b) => {
+                    const ta = a.start_at ? new Date(a.start_at).getTime() : 0;
+                    const tb = b.start_at ? new Date(b.start_at).getTime() : 0;
+                    return ta - tb;
+                });
+
+                sortedScheduled.forEach(appt => {
                     const clientId = resolveAppointmentClientId(appt);
                     if (clientId == null) return;
 
@@ -558,17 +573,23 @@ const MainContent: React.FC<MainContentProps> = ({
                         : NaN;
                     if (Number.isFinite(startMs) && startMs >= tmwStart && startMs <= tmwEnd) {
                         tomorrowIds.add(clientId);
+                        // Guarda apenas o mais cedo (lista já ordenada)
+                        if (!tomorrowAppts.has(clientId)) {
+                            tomorrowAppts.set(clientId, appt);
+                        }
                     }
                 });
 
                 if (!cancelled) {
                     setPendingClientIds(ids);
                     setTomorrowClientIds(tomorrowIds);
+                    setTomorrowClientAppts(tomorrowAppts);
                 }
             } catch {
                 if (!cancelled) {
                     setPendingClientIds(new Set());
                     setTomorrowClientIds(new Set());
+                    setTomorrowClientAppts(new Map());
                 }
             }
         }
@@ -911,6 +932,7 @@ const MainContent: React.FC<MainContentProps> = ({
                         <ClientCard
                             client={client}
                             selected={selectedClientId === client.id}
+                            notifyAppt={filterMode === 'tomorrow' ? tomorrowClientAppts.get(client.id) : undefined}
                             onSelect={() => {
                                 if (!requireActiveSession()) {
                                     return;

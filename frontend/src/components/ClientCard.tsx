@@ -37,6 +37,9 @@ interface ClientCardProps {
     onView: (client: ClientBasic) => void;
     selected?: boolean;
     onSelect?: () => void;
+    /** Quando definido, o botão "Avisar" usa este agendamento em vez do next_appointment do cliente.
+     *  Útil quando o filtro ativo é "Amanhã" e o cliente tem um agendamento amanhã distinto do next. */
+    notifyAppt?: { start_at?: string; title?: string };
 }
 
 export default function ClientCard({
@@ -44,6 +47,7 @@ export default function ClientCard({
     onView,
     selected,
     onSelect,
+    notifyAppt,
 }: ClientCardProps) {
     // Feature flag: disable per-client ongoing probe unless explicitly enabled (reduces debug traffic)
     const ENABLE_ONGOING_PROBE =
@@ -695,7 +699,9 @@ export default function ClientCard({
                                     style={{ fontWeight: 700 }}
                                     onClick={e => {
                                         e.stopPropagation();
+                                        // Prioridade: notifyAppt (ex.: filtro Amanhã) → displayStartISO → next_appointment
                                         const sIso =
+                                            notifyAppt?.start_at ||
                                             displayStartISO ||
                                             client.next_appointment_start_at ||
                                             null;
@@ -703,6 +709,7 @@ export default function ClientCard({
                                             ? formatTime(sIso)
                                             : '—';
                                         const visitType =
+                                            notifyAppt?.title ||
                                             client.next_appointment_title ||
                                             'Consulta';
                                         const profRaw =
