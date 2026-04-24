@@ -932,6 +932,7 @@ const MainContent: React.FC<MainContentProps> = ({
                         <ClientCard
                             client={client}
                             selected={selectedClientId === client.id}
+                            filterMode={filterMode}
                             notifyAppt={filterMode === 'tomorrow' ? tomorrowClientAppts.get(client.id) : undefined}
                             onSelect={() => {
                                 if (!requireActiveSession()) {

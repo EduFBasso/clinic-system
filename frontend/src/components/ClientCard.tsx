@@ -39,7 +39,9 @@ interface ClientCardProps {
     onSelect?: () => void;
     /** Quando definido, o botão "Avisar" usa este agendamento em vez do next_appointment do cliente.
      *  Útil quando o filtro ativo é "Amanhã" e o cliente tem um agendamento amanhã distinto do next. */
-    notifyAppt?: { start_at?: string; title?: string };
+    notifyAppt?: { start_at?: string; end_at?: string; title?: string };
+    /** Modo de filtro ativo. Quando 'today' ou 'tomorrow', o card exibe apenas o dia filtrado. */
+    filterMode?: 'all' | 'pending' | 'today' | 'tomorrow';
 }
 
 export default function ClientCard({
@@ -48,6 +50,7 @@ export default function ClientCard({
     selected,
     onSelect,
     notifyAppt,
+    filterMode = 'all',
 }: ClientCardProps) {
     // Feature flag: disable per-client ongoing probe unless explicitly enabled (reduces debug traffic)
     const ENABLE_ONGOING_PROBE =
@@ -260,6 +263,18 @@ export default function ClientCard({
 
     // Clear ongoing visual immediately when a targeted event is dispatched (same-tab UX)
     // Clear ongoing event handling moved to hook; listener removed
+
+    // Quando o filtro ativo é 'tomorrow' e temos o agendamento de amanhã, usamos seus dados
+    // para o bloco "Data:" e o botão "Avisar" — substituindo os dados de hoje.
+    const isTomorrowFilter = filterMode === 'tomorrow' && !!notifyAppt;
+    const activeStartISO = isTomorrowFilter
+        ? (notifyAppt?.start_at ?? null)
+        : (displayStartISO || client.next_appointment_start_at || null);
+    const activeEndISO = isTomorrowFilter
+        ? (notifyAppt?.end_at ?? null)
+        : (displayEndISO || client.next_appointment_end_at || null);
+    // Ocultar o bloco "Próximos compromissos" quando um filtro de dia específico está ativo
+    const hideFutureList = filterMode === 'today' || filterMode === 'tomorrow';
 
     const cardClassNames = [styles.card, selected ? styles.cardSelected : '']
         .filter(Boolean)
@@ -559,14 +574,8 @@ export default function ClientCard({
                             style={{ color: labelColor, fontWeight: 'bold' }}
                         >
                             {(() => {
-                                const sIso =
-                                    displayStartISO ||
-                                    client.next_appointment_start_at ||
-                                    null;
-                                const eIso =
-                                    displayEndISO ||
-                                    client.next_appointment_end_at ||
-                                    null;
+                                const sIso = activeStartISO;
+                                const eIso = activeEndISO;
                                 if (!sIso || !eIso) return '—';
                                 const s = new Date(sIso);
                                 const e = new Date(eIso);
@@ -699,12 +708,8 @@ export default function ClientCard({
                                     style={{ fontWeight: 700 }}
                                     onClick={e => {
                                         e.stopPropagation();
-                                        // Prioridade: notifyAppt (ex.: filtro Amanhã) → displayStartISO → next_appointment
-                                        const sIso =
-                                            notifyAppt?.start_at ||
-                                            displayStartISO ||
-                                            client.next_appointment_start_at ||
-                                            null;
+                                        // Prioridade: activeStartISO (já resolve tomorrow ou today corretamente)
+                                        const sIso = activeStartISO;
                                         const time = sIso
                                             ? formatTime(sIso)
                                             : '—';
@@ -848,7 +853,7 @@ export default function ClientCard({
 
             {/* PendingActionsModal é global (Home) */}
             {/* QuickScheduleModal é agora o único fluxo de agendamento (ScheduleModal legacy removido) */}
-            {futureAppointments.length > 0 && (
+            {futureAppointments.length > 0 && !hideFutureList && (
                 <div
                     style={{
                         display: 'flex',
