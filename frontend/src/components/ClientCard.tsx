@@ -139,7 +139,7 @@ export default function ClientCard({
     //  - Linha de agenda aparece apenas se há scheduled ativo, em andamento ou futuros E não está pendente
     const hasAgendaLine =
         !isPending &&
-        (isScheduled || isOngoing || futureAppointments.length > 0);
+        (isScheduled || effectiveOngoing || futureAppointments.length > 0);
 
     // Ações unificadas (+) para agenda e fallback
     const createActionAgenda = useClientCreateAction({
@@ -179,7 +179,7 @@ export default function ClientCard({
         separatorColor,
         separatorOpacity,
     } = useClientCardStyle({
-        isOngoing,
+        isOngoing: effectiveOngoing,
         selected,
         pressed,
         isScheduled,
@@ -275,6 +275,10 @@ export default function ClientCard({
         : (displayEndISO || client.next_appointment_end_at || null);
     // Ocultar o bloco "Próximos compromissos" quando um filtro de dia específico está ativo
     const hideFutureList = filterMode === 'today' || filterMode === 'tomorrow';
+    // No filtro "Amanhã" suprimimos o estado "Em andamento" visualmente: o appointment
+    // em andamento é o de HOJE, não o de amanhã que está sendo exibido. O card deve
+    // mostrar o status "agendado" (botão Avisar) para o appointment de amanhã.
+    const effectiveOngoing = isOngoing && !isTomorrowFilter;
 
     const cardClassNames = [styles.card, selected ? styles.cardSelected : '']
         .filter(Boolean)
@@ -491,7 +495,7 @@ export default function ClientCard({
             {hasAgendaLine && (
                 <>
                     {(isScheduled ||
-                        isOngoing ||
+                        effectiveOngoing ||
                         futureAppointments.length > 0) && (
                         <div className={styles.infoRow}>
                             <span
@@ -597,7 +601,7 @@ export default function ClientCard({
                                 return `${wd} ${dd}/${mm}, ${fs} - ${fe}`;
                             })()}
                         </span>
-                        {client.next_appointment_id && !isOngoing && (
+                        {client.next_appointment_id && !effectiveOngoing && (
                             <button
                                 className={styles.iconButton}
                                 title='Editar agendamento'
@@ -628,7 +632,7 @@ export default function ClientCard({
                             </button>
                         )}
                     </div>
-                    {(isScheduled || isOngoing) &&
+                    {(isScheduled || effectiveOngoing) &&
                         client.next_appointment_notes?.trim() && (
                             <div
                                 className={styles.infoRow}
@@ -650,7 +654,7 @@ export default function ClientCard({
                                 </span>
                             </div>
                         )}
-                    {isOngoing && (
+                    {effectiveOngoing && (
                         <div
                             className={styles.infoRow}
                             style={{ paddingTop: 2 }}
@@ -688,7 +692,7 @@ export default function ClientCard({
                             </div>
                         </div>
                     )}
-                    {isScheduled && !isOngoing && (
+                    {isScheduled && !effectiveOngoing && (
                         <div
                             className={styles.infoRow}
                             style={{ paddingTop: 2 }}
