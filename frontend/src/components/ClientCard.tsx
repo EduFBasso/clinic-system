@@ -739,7 +739,15 @@ export default function ClientCard({
                                         const profPart = profFirstName
                                             ? ` com ${profFirstName}`
                                             : '';
-                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para as ${time}${profPart}, confirma sua presença?`;
+                                        // Rótulo do dia: "amanhã, DD/MM" (filtro amanhã) ou "hoje, DD/MM" (demais casos)
+                                        const apptDate = sIso ? new Date(sIso) : null;
+                                        const datePart = apptDate && !isNaN(apptDate.getTime())
+                                            ? `, ${String(apptDate.getDate()).padStart(2, '0')}/${String(apptDate.getMonth() + 1).padStart(2, '0')}`
+                                            : '';
+                                        const dayLabel = filterMode === 'tomorrow'
+                                            ? `amanhã${datePart}`
+                                            : `hoje${datePart}`;
+                                        const waText = `Olá ${client.first_name}, ${visitType} agendada para ${dayLabel} às ${time}${profPart}, confirma sua presença?`;
                                         const rawPhone = (
                                             client.phone || ''
                                         ).replace(/\D/g, '');
