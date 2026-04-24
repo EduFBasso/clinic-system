@@ -198,10 +198,10 @@ export default function BudgetModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sendPix, pixKeyType, pixKeyValue, profFirstName, profLastName]);
 
-    if (!open) return null;
-
     // Budget (🧾) deve abrir WhatsApp com a mensagem preenchida, sem amarrar em um número.
     // O ícone do WhatsApp no ClientCard continua abrindo direto no número do cliente.
+    // NOTA: Não usar 'if (!open) return null' aqui — o AppModal precisa receber open=false
+    // para executar os efeitos de restauração de scroll antes de desmontar.
 
     const total = items.reduce(
         (acc, it) => acc + (it.price || 0) * (it.qty || 1),
@@ -329,6 +329,7 @@ export default function BudgetModal({
             closeOnEnter={false}
             disableBackdropClose
             disableEscapeKeyDown
+            unmountOnClose
         >
             <div
                 style={{

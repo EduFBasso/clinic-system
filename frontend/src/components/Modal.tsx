@@ -654,31 +654,35 @@ export default function AppModal(props: AppModalProps) {
         };
     }, [open, isCoarsePointerDevice]);
 
-    // Restauração imediata também no ciclo de desmontagem (caso o componente seja removido rapidamente)
+    // Restauração imediata no ciclo de desmontagem.
+    // IMPORTANTE: não condicionar ao valor de 'open' — componentes pai podem
+    // retornar null com open=true ainda no closure (ex.: BudgetModal), fazendo
+    // com que o AppModal seja desmontado SEM ter passado por open=false.
+    // O efeito com [] garante que o cleanup roda em todo unmount.
     React.useEffect(() => {
         return () => {
             try {
-                if (!open) {
-                    const body = document.body as HTMLBodyElement;
-                    const html = document.documentElement as HTMLElement;
-                    body.style.overflow = '';
-                    body.style.position = '';
-                    body.style.top = '';
-                    body.style.left = '';
-                    body.style.right = '';
-                    body.style.width = '';
-                    body.style.touchAction = '';
-                    html.style.overflow = '';
-                    html.style.touchAction = '';
-                    html.style.removeProperty('overscroll-behavior-y');
-                    body.classList.remove('MuiModal-open');
-                    html.classList.remove('MuiModal-open');
-                }
+                const body = document.body as HTMLBodyElement;
+                const html = document.documentElement as HTMLElement;
+                body.style.overflow = '';
+                body.style.position = '';
+                body.style.top = '';
+                body.style.left = '';
+                body.style.right = '';
+                body.style.width = '';
+                body.style.touchAction = '';
+                html.style.overflow = '';
+                html.style.touchAction = '';
+                html.style.removeProperty('overscroll-behavior-y');
+                body.classList.remove('MuiModal-open');
+                html.classList.remove('MuiModal-open');
+                if (body.dataset.appliedIosLock)
+                    delete body.dataset.appliedIosLock;
             } catch {
                 /* noop */
             }
         };
-    }, [open]);
+    }, []); // [] = somente no unmount, independente de open
 
     return (
         <Modal
