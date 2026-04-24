@@ -137,6 +137,10 @@ export default function ClientCard({
     // Regra revisada:
     //  - Quando pendente: não mostramos linha de agenda nem linha Data (substituímos por bloco compacto de pendência)
     //  - Linha de agenda aparece apenas se há scheduled ativo, em andamento ou futuros E não está pendente
+    // isTomorrowFilter / effectiveOngoing declarados aqui porque hasAgendaLine (abaixo) os usa
+    const isTomorrowFilter = filterMode === 'tomorrow' && !!notifyAppt;
+    const effectiveOngoing = isOngoing && !isTomorrowFilter;
+
     const hasAgendaLine =
         !isPending &&
         (isScheduled || effectiveOngoing || futureAppointments.length > 0);
@@ -266,7 +270,7 @@ export default function ClientCard({
 
     // Quando o filtro ativo é 'tomorrow' e temos o agendamento de amanhã, usamos seus dados
     // para o bloco "Data:" e o botão "Avisar" — substituindo os dados de hoje.
-    const isTomorrowFilter = filterMode === 'tomorrow' && !!notifyAppt;
+    // (isTomorrowFilter e effectiveOngoing já declarados acima, antes de hasAgendaLine)
     const activeStartISO = isTomorrowFilter
         ? (notifyAppt?.start_at ?? null)
         : (displayStartISO || client.next_appointment_start_at || null);
@@ -275,11 +279,6 @@ export default function ClientCard({
         : (displayEndISO || client.next_appointment_end_at || null);
     // Ocultar o bloco "Próximos compromissos" quando um filtro de dia específico está ativo
     const hideFutureList = filterMode === 'today' || filterMode === 'tomorrow';
-    // No filtro "Amanhã" suprimimos o estado "Em andamento" visualmente: o appointment
-    // em andamento é o de HOJE, não o de amanhã que está sendo exibido. O card deve
-    // mostrar o status "agendado" (botão Avisar) para o appointment de amanhã.
-    const effectiveOngoing = isOngoing && !isTomorrowFilter;
-
     const cardClassNames = [styles.card, selected ? styles.cardSelected : '']
         .filter(Boolean)
         .join(' ');
