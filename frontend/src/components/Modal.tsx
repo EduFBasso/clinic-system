@@ -482,6 +482,23 @@ export default function AppModal(props: AppModalProps) {
         onClose();
     };
 
+    // Contador de AppModals abertos — independente do aria-hidden gerenciado pelo MUI.
+    // Quando um modal abre sobre outro, o MUI seta aria-hidden="true" no modal de baixo
+    // por acessibilidade. Se usarmos apenas aria-hidden para decidir se há outro modal aberto,
+    // o modal "de baixo" (ex.: MonthlyAgendaModal) passa a ser invisível para a query e
+    // o restore() remove incorretamente os scroll locks.
+    // Este contador usa body.dataset.openModalCount e é gerenciado por este efeito.
+    React.useEffect(() => {
+        if (!open) return;
+        const body = document.body;
+        const prev = Number(body.dataset.openModalCount || 0);
+        body.dataset.openModalCount = String(prev + 1);
+        return () => {
+            const cur = Number(document.body.dataset.openModalCount || 0);
+            document.body.dataset.openModalCount = String(Math.max(0, cur - 1));
+        };
+    }, [open]);
+
     // Task #35 + Task #52: Defensive restoration de scroll + instrumentação.
     // Observado: em alguns fluxos (cancelar edição via mini-card) a página fica "travada".
     // Hipótese: corrida onde MUI remove classes após nosso efeito checar, ou restore abortado
@@ -504,22 +521,15 @@ export default function AppModal(props: AppModalProps) {
                 const body = document.body as HTMLBodyElement;
                 const html = document.documentElement as HTMLElement;
                 
-                // Verifica se ainda há outro modal aberto ANTES de decidir sobre keepScroll
-                const activeModals = Array.from(
-                    document.querySelectorAll(
-                        '[role="presentation"][aria-hidden="false"]',
-                    ),
-                ).filter(el => el instanceof HTMLElement);
-                
-                // Se ainda há um modal aberto, não restaurar (a menos que pareça um falso positivo)
-                if (activeModals.length > 0) {
-                    // Falso positivo heurístico: elementos sem filhos visíveis (width/height 0) – possivelmente já desmontados.
-                    const anyVisible = activeModals.some(el => {
-                        const r = el.getBoundingClientRect();
-                        return r.width > 2 && r.height > 2;
-                    });
-                    if (anyVisible) return; // existe de fato outro modal, não restaurar
-                }
+                // Verifica se ainda há outro AppModal aberto usando nosso contador próprio.
+                // NÃO usamos aria-hidden aqui porque o MUI seta aria-hidden="true" no modal
+                // de baixo quando um modal de cima está aberto (acessibilidade), tornando-o
+                // invisível para queries de aria-hidden="false" mesmo quando ainda visível.
+                const openModalCount = Number(
+                    (document.body as HTMLBodyElement).dataset.openModalCount ||
+                        0,
+                );
+                if (openModalCount > 0) return; // outro AppModal ainda aberto, não restaurar
                 
                 // Se a página marcou que o scroll deve permanecer como está, não tentar restaurar
                 // MAS: só pula se não há outro modal aberto (checagem acima confirmou)
@@ -665,17 +675,13 @@ export default function AppModal(props: AppModalProps) {
     React.useEffect(() => {
         return () => {
             try {
-                // Se outro modal ainda está visível, não limpar os locks —
-                // ele ainda precisa deles para manter o scroll bloqueado.
-                const anyOtherVisible = Array.from(
-                    document.querySelectorAll(
-                        '[role="presentation"][aria-hidden="false"]',
-                    ),
-                ).some(el => {
-                    const r = (el as HTMLElement).getBoundingClientRect();
-                    return r.width > 2 && r.height > 2;
-                });
-                if (anyOtherVisible) return;
+                // Se outro AppModal ainda está aberto (via contador próprio), não limpar os locks.
+                // Não usamos aria-hidden aqui pois o MUI seta aria-hidden="true" no modal
+                // de baixo quando outro está em cima — o contador é a fonte de verdade.
+                const openModalCount = Number(
+                    document.body.dataset.openModalCount || 0,
+                );
+                if (openModalCount > 0) return;
 
                 const body = document.body as HTMLBodyElement;
                 const html = document.documentElement as HTMLElement;
