@@ -165,7 +165,24 @@ export function useQuickScheduleSave({
                         }),
                     },
                 );
-                if (!resp.ok) throw new Error('Erro ao atualizar');
+                if (!resp.ok) {
+                    let errorMsg = 'Erro ao atualizar';
+                    try {
+                        const data = await resp.json();
+                        if (typeof data.detail === 'string') {
+                            errorMsg = data.detail;
+                        } else if (data.end_at?.[0]) {
+                            errorMsg = data.end_at[0];
+                        } else if (data.start_at?.[0]) {
+                            errorMsg = data.start_at[0];
+                        } else if (typeof data === 'string') {
+                            errorMsg = data;
+                        }
+                    } catch {
+                        // Fallback to generic message if JSON parsing fails
+                    }
+                    throw new Error(errorMsg);
+                }
                 updatedId = currentEdit.id;
             } else {
                 try {
