@@ -253,9 +253,16 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                 type: 'info',
             });
             try {
-                window.open(result.linkUrl, '_blank', 'noopener,noreferrer');
+                const opened = window.open(
+                    result.linkUrl,
+                    '_blank',
+                    'noopener,noreferrer',
+                );
+                if (!opened) {
+                    window.location.href = result.linkUrl;
+                }
             } catch {
-                /* noop */
+                window.location.href = result.linkUrl;
             }
         } catch (error) {
             emit('systemMessage', {
@@ -267,6 +274,34 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
             });
         } finally {
             setTelegramLinkBusy(false);
+        }
+    }
+
+    function openTelegramLink(url: string) {
+        if (!url) return;
+        try {
+            const opened = window.open(url, '_blank', 'noopener,noreferrer');
+            if (!opened) {
+                window.location.href = url;
+            }
+        } catch {
+            window.location.href = url;
+        }
+    }
+
+    async function copyTelegramLink(url: string) {
+        if (!url) return;
+        try {
+            await navigator.clipboard.writeText(url);
+            emit('systemMessage', {
+                text: 'Link copiado. Cole no Safari/Telegram para abrir.',
+                type: 'success',
+            });
+        } catch {
+            emit('systemMessage', {
+                text: 'Não foi possível copiar automaticamente. Copie manualmente abaixo.',
+                type: 'warning',
+            });
         }
     }
 
@@ -593,9 +628,66 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
                             </button>
                         </div>
                         {!!telegramStartUrl && (
-                            <small className={modalStyles.smallNote}>
-                                Se não abriu automaticamente: {telegramStartUrl}
-                            </small>
+                            <div
+                                style={{
+                                    marginTop: '0.75rem',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: 10,
+                                    padding: '0.75rem',
+                                    background: '#f8fafc',
+                                }}
+                            >
+                                <p
+                                    style={{
+                                        margin: '0 0 0.5rem',
+                                        fontSize: '0.95rem',
+                                        color: '#1f2937',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Se não abriu automaticamente:
+                                </p>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        gap: '0.5rem',
+                                        flexWrap: 'wrap',
+                                        marginBottom: '0.5rem',
+                                    }}
+                                >
+                                    <button
+                                        type='button'
+                                        className='ui-btn ui-btn--secondary'
+                                        onClick={() => openTelegramLink(telegramStartUrl)}
+                                    >
+                                        Abrir Telegram
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className='ui-btn ui-btn--neutral'
+                                        onClick={() => {
+                                            void copyTelegramLink(telegramStartUrl);
+                                        }}
+                                    >
+                                        Copiar link
+                                    </button>
+                                </div>
+                                <a
+                                    href={telegramStartUrl}
+                                    target='_blank'
+                                    rel='noreferrer'
+                                    style={{
+                                        display: 'block',
+                                        fontSize: '0.95rem',
+                                        lineHeight: 1.45,
+                                        wordBreak: 'break-all',
+                                        color: '#1d4ed8',
+                                        textDecoration: 'underline',
+                                    }}
+                                >
+                                    {telegramStartUrl}
+                                </a>
+                            </div>
                         )}
                         {telegramUsername && (
                             <small className={modalStyles.smallNote}>

@@ -82,7 +82,6 @@ scripts/db/backups/**/*.json
 *.docx
 *.doc
 *.pdf
-*.txt
 
 # Misc local folders
 info/*
