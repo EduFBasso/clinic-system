@@ -1,6 +1,7 @@
 from typing import Any, cast
 
 from django.db.models import Prefetch
+from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -17,6 +18,29 @@ from .serializers import (
     SurfaceSerializer,
     ToothSerializer,
 )
+
+
+def _refresh_arcade_status(arcade: DentalArcade) -> None:
+    """Recalcula o status da arcada com base nos procedimentos ativos.
+
+    Regra: se todos os procedimentos ativos (is_active=True) estiverem
+    concluidos ou cancelados (nenhum PENDING), a arcada passa a COMPLETED.
+    Se houver ao menos um PENDING, a arcada volta para PENDING.
+    Sem procedimentos ativos, o status nao e alterado.
+    """
+    active_procs = arcade.procedures.filter(is_active=True)
+    total = active_procs.count()
+    if total == 0:
+        return
+    pending_count = active_procs.filter(status=Procedure.Status.PENDING).count()
+    if pending_count == 0:
+        arcade.status = DentalArcade.Status.COMPLETED
+        if not arcade.completed_at:
+            arcade.completed_at = timezone.now().date()
+    else:
+        arcade.status = DentalArcade.Status.PENDING
+        arcade.completed_at = None
+    arcade.save(update_fields=['status', 'completed_at'])
 
 
 class ProfessionalScopedMixin:
@@ -159,7 +183,12 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
             raise PermissionDenied('Arcada invalida para criacao do procedimento.')
         if arcade.professional_id != self.current_user().id:
             raise PermissionDenied('Arcada nao pertence ao profissional autenticado.')
-        serializer.save()
+        instance = serializer.save()
+        _refresh_arcade_status(instance.arcade)
+
+    def perform_update(self, serializer: BaseSerializer) -> None:
+        instance = serializer.save()
+        _refresh_arcade_status(instance.arcade)
 
     @action(detail=False, methods=['post'], url_path='bulk-status')
     def bulk_status(self, request):
@@ -173,11 +202,20 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
 
         qs = self.get_queryset().filter(id__in=procedure_ids)
 
-        update_data = {'status': new_status}
+        # Collect affected arcades before the bulk update
+        arcade_ids = list(qs.values_list('arcade_id', flat=True).distinct())
+
+        update_data: dict[str, Any] = {'status': new_status}
         if new_status == Procedure.Status.COMPLETED:
             update_data['completed_at'] = completed_at
+        else:
+            update_data['completed_at'] = None
 
         updated_count = qs.update(**update_data)
+
+        # Recalculate status for each affected arcade
+        for arcade_obj in DentalArcade.objects.filter(id__in=arcade_ids):
+            _refresh_arcade_status(arcade_obj)
 
         return Response(
             {'updated': updated_count, 'status': new_status},

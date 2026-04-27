@@ -81,9 +81,11 @@ class Command(BaseCommand):
         # Process data
         stats = {
             'arcades_created': 0,
+            'arcades_updated': 0,
             'teeth_created': 0,
             'surfaces_created': 0,
             'procedures_created': 0,
+            'procedures_updated': 0,
             'patients_not_found': 0,
             'treatments_skipped': 0,
         }
@@ -136,7 +138,7 @@ class Command(BaseCommand):
             if dry_run:
                 self.stdout.write(f'  [DRY] Would create arcade for {client.first_name} {client.last_name}')
             else:
-                arcade, created = DentalArcade.objects.get_or_create(
+                arcade, created = DentalArcade.objects.update_or_create(
                     professional=professional,
                     external_treatment_id=treat_id,
                     defaults={
@@ -149,6 +151,8 @@ class Command(BaseCommand):
                 if created:
                     stats['arcades_created'] += 1
                     self.stdout.write(f'  ✓ Created arcade #{arcade.id} for {client.first_name}')
+                else:
+                    stats['arcades_updated'] += 1
 
             # Create teeth and surfaces
             teeth_for_arcade = arcade_by_treatment.get(treat_id, [])
@@ -209,7 +213,7 @@ class Command(BaseCommand):
                             code=faces,
                         ).first()
 
-                    procedure, proc_created = Procedure.objects.get_or_create(
+                    procedure, proc_created = Procedure.objects.update_or_create(
                         arcade=arcade,
                         external_item_id=proc_row.get('ID_PT_ITEM'),
                         defaults={
@@ -229,12 +233,16 @@ class Command(BaseCommand):
                     )
                     if proc_created:
                         stats['procedures_created'] += 1
+                    else:
+                        stats['procedures_updated'] += 1
 
         self.stdout.write(self.style.SUCCESS('\n✅ Import completed!\n'))
         self.stdout.write(f"  Arcades created: {stats['arcades_created']}")
+        self.stdout.write(f"  Arcades updated: {stats['arcades_updated']}")
         self.stdout.write(f"  Teeth created: {stats['teeth_created']}")
         self.stdout.write(f"  Surfaces created: {stats['surfaces_created']}")
         self.stdout.write(f"  Procedures created: {stats['procedures_created']}")
+        self.stdout.write(f"  Procedures updated: {stats['procedures_updated']}")
         self.stdout.write(f"  Patients not found: {stats['patients_not_found']}")
 
     def _load_patients_csv(self, filepath):

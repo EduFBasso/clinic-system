@@ -30,6 +30,28 @@ class ProcedureSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def validate(self, attrs):
+        # On partial updates, fall back to the existing instance values when a
+        # field is not present in the incoming payload.
+        instance = self.instance
+        arcade = attrs.get('arcade', getattr(instance, 'arcade', None))
+        tooth = attrs.get('tooth', getattr(instance, 'tooth', None))
+        surface = attrs.get('surface', getattr(instance, 'surface', None))
+
+        if tooth is not None and arcade is not None:
+            if tooth.arcade_id != arcade.id:
+                raise serializers.ValidationError(
+                    {'tooth': 'O dente nao pertence a arcada informada.'}
+                )
+
+        if surface is not None and tooth is not None:
+            if surface.tooth_id != tooth.id:
+                raise serializers.ValidationError(
+                    {'surface': 'A face nao pertence ao dente informado.'}
+                )
+
+        return attrs
+
 
 class SurfaceSerializer(serializers.ModelSerializer):
     procedures = ProcedureSerializer(many=True, read_only=True)
