@@ -13,6 +13,12 @@ from apps.odonto.models import DentalArcade, Tooth, Surface, Procedure
 
 class Command(BaseCommand):
     help = 'Import dental arcade data from Bruna CSV exports into odonto models.'
+    INTERNATIONAL_NUMBER_BY_SEQUENCE = {
+        1: 18, 2: 17, 3: 16, 4: 15, 5: 14, 6: 13, 7: 12, 8: 11,
+        9: 21, 10: 22, 11: 23, 12: 24, 13: 25, 14: 26, 15: 27, 16: 28,
+        17: 48, 18: 47, 19: 46, 20: 45, 21: 44, 22: 43, 23: 42, 24: 41,
+        25: 31, 26: 32, 27: 33, 28: 34, 29: 35, 30: 36, 31: 37, 32: 38,
+    }
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -148,11 +154,22 @@ class Command(BaseCommand):
             teeth_for_arcade = arcade_by_treatment.get(treat_id, [])
             if not dry_run and teeth_for_arcade:
                 for arcade_row in teeth_for_arcade:
+                    sequence = self._parse_int(arcade_row.get('NR_DENTE'))
+                    if sequence is None:
+                        continue
+
+                    international_number = self._resolve_international_number(
+                        arcade_row.get('NR_ODONTO'),
+                        sequence,
+                    )
+                    if international_number is None:
+                        continue
+
                     tooth, tooth_created = Tooth.objects.get_or_create(
                         arcade=arcade,
-                        sequence=int(arcade_row['NR_DENTE']),
+                        sequence=sequence,
                         defaults={
-                            'international_number': int(arcade_row['NR_ODONTO']),
+                            'international_number': international_number,
                         },
                     )
                     if tooth_created:
@@ -328,3 +345,9 @@ class Command(BaseCommand):
             return int(float(str(value).replace(',', '.')))
         except (ValueError, AttributeError):
             return None
+
+    def _resolve_international_number(self, raw_number, sequence):
+        parsed = self._parse_int(raw_number)
+        if parsed and parsed in self.INTERNATIONAL_NUMBER_BY_SEQUENCE.values():
+            return parsed
+        return self.INTERNATIONAL_NUMBER_BY_SEQUENCE.get(sequence)
