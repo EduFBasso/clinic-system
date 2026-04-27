@@ -54,10 +54,34 @@ export function useClients() {
                 .then(data => {
                     setClients(data);
                     clientsRef.current = data;
+                    setError(null);
                     setLoading(false); // hide big loading (initial)
                 })
                 .catch(err => {
-                    setError(err.message);
+                    const rawMessage =
+                        err instanceof Error ? err.message : String(err);
+                    const isNetworkError =
+                        /Failed to fetch|NetworkError|Load failed/i.test(
+                            rawMessage,
+                        );
+                    const hasCachedClients =
+                        (clientsRef.current?.length || 0) > 0;
+
+                    if (hasCachedClients) {
+                        // Em refresh em segundo plano, preserva a lista já exibida sem poluir a UI.
+                        console.warn(
+                            '[useClients] refresh failed, keeping cached clients:',
+                            rawMessage,
+                        );
+                        setLoading(false);
+                        return;
+                    }
+
+                    setError(
+                        isNetworkError
+                            ? 'Falha de conexao ao atualizar clientes. Verifique backend/rede.'
+                            : rawMessage,
+                    );
                     setLoading(false);
                 });
         };
