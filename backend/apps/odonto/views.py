@@ -1,7 +1,11 @@
+from typing import Any, cast
+
 from django.db.models import Prefetch
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from .models import DentalArcade, Tooth, Surface, Procedure
 from .serializers import (
@@ -18,8 +22,9 @@ from .serializers import (
 class ProfessionalScopedMixin:
     permission_classes = [permissions.IsAuthenticated]
 
-    def current_user(self):
-        return self.request.user
+    def current_user(self) -> Any:
+        request = cast(Any, getattr(self, 'request', None))
+        return getattr(request, 'user', None)
 
 
 class DentalArcadeViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
@@ -50,14 +55,14 @@ class DentalArcadeViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
 
         return qs
 
-    def get_serializer_class(self):
+    def get_serializer_class(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         if self.action == 'list':
             return DentalArcadeListSerializer
         if self.action == 'retrieve':
             return DentalArcadeDetailSerializer
         return DentalArcadeWriteSerializer
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer) -> None:
         serializer.save(professional=self.current_user())
 
     @action(detail=True, methods=['post'], url_path='initialize-default-structure')
@@ -147,20 +152,24 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
 
         return qs
 
-    def perform_create(self, serializer):
-        arcade = serializer.validated_data.get('arcade')
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        payload = cast(dict[str, Any], serializer.validated_data)
+        arcade = payload.get('arcade')
+        if arcade is None:
+            raise PermissionDenied('Arcada invalida para criacao do procedimento.')
         if arcade.professional_id != self.current_user().id:
-            raise permissions.PermissionDenied('Arcada nao pertence ao profissional autenticado.')
+            raise PermissionDenied('Arcada nao pertence ao profissional autenticado.')
         serializer.save()
 
     @action(detail=False, methods=['post'], url_path='bulk-status')
     def bulk_status(self, request):
         serializer = ProcedureBulkStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        payload = cast(dict[str, Any], serializer.validated_data)
 
-        procedure_ids = serializer.validated_data['procedure_ids']
-        new_status = serializer.validated_data['status']
-        completed_at = serializer.validated_data.get('completed_at')
+        procedure_ids = payload['procedure_ids']
+        new_status = payload['status']
+        completed_at = payload.get('completed_at')
 
         qs = self.get_queryset().filter(id__in=procedure_ids)
 
