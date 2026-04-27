@@ -40,6 +40,7 @@ urlpatterns = [
     path('agenda/', include('apps.agenda.urls')),
     path('inventory/', include('apps.inventory.urls')),
     path('anamnesis/', include('apps.anamnesis.urls')),
+    path('odonto/', include('apps.odonto.urls')),
 
     # 📱 Sessões de dispositivos (fase 1)
     path('sessions/summary', sessions_summary),

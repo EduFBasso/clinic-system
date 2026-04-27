@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'apps.agenda',
     'apps.anamnesis',
     'apps.clients',
+    'apps.odonto',
     'apps.reminders',
     'apps.register',
     'apps.inventory',
