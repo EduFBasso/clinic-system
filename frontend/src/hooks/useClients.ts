@@ -54,7 +54,6 @@ export function useClients() {
                 .then(data => {
                     setClients(data);
                     clientsRef.current = data;
-                    setError(null);
                     setLoading(false); // hide big loading (initial)
                 })
                 .catch(err => {

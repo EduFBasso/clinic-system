@@ -30,9 +30,9 @@ export function useAppointmentsLivePing({
             clear();
             timerRef.current = window.setInterval(() => {
                 try {
-                    // Trigger local refresh listeners
+                    // Trigger refresh — useClients and other consumers already listen to appointments:changed.
+                    // updateClients is NOT dispatched here to avoid a redundant double-trigger in useClients.
                     dispatchers.appointmentsChanged();
-                    dispatchers.updateClients();
                 } catch {
                     /* noop */
                 }

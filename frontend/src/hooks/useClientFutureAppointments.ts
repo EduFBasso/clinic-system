@@ -31,10 +31,12 @@ export function useClientFutureAppointments({
     >([]);
     const [loadingFuture, setLoadingFuture] = React.useState(false);
     const dynLimit = getMaxScheduledPerClient();
+    // Stable reference to avoid creating a new [] on every call, preventing unnecessary re-renders
+    const emptyRef = React.useRef<Appointment[]>([]);
 
     const fetchFuture = React.useCallback(() => {
         if (!isScheduled) {
-            setFutureAppointments([]);
+            setFutureAppointments(emptyRef.current);
             return;
         }
         const token = localStorage.getItem('accessToken');
@@ -69,7 +71,7 @@ export function useClientFutureAppointments({
                 }
                 setFutureAppointments(list);
             })
-            .catch(() => setFutureAppointments([]))
+            .catch(() => setFutureAppointments(emptyRef.current))
             .finally(() => setLoadingFuture(false));
     }, [
         client.id,

@@ -600,10 +600,12 @@ const MainContent: React.FC<MainContentProps> = ({
             void loadPendingClientIds();
         };
         window.addEventListener('updateClients', onUpdateClients);
+        window.addEventListener('appointments:changed', onUpdateClients);
 
         return () => {
             cancelled = true;
             window.removeEventListener('updateClients', onUpdateClients);
+            window.removeEventListener('appointments:changed', onUpdateClients);
         };
     }, [clients.length]);
 

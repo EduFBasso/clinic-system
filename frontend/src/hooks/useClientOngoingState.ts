@@ -58,6 +58,9 @@ Params): UseClientOngoingStateResult {
 
     // Global sweep result (batched fetch outside this component tree)
     const sweepByClient = useOngoingSweep(now, 2 * 60 * 60 * 1000);
+    // Stable ref so async probe can read current `now` without being in effect deps
+    const nowRef = React.useRef(now);
+    nowRef.current = now;
 
     const [overrideOngoing, setOverrideOngoing] =
         React.useState<Appointment | null>(null);
@@ -121,7 +124,7 @@ Params): UseClientOngoingStateResult {
             try {
                 const token = localStorage.getItem('accessToken') || '';
                 if (!token) return;
-                const nowMs = now.getTime();
+                const nowMs = nowRef.current.getTime();
                 const start = new Date(nowMs - 120 * 60 * 1000);
                 const end = new Date(nowMs + 30 * 60 * 1000);
                 const url = `${API_BASE}/agenda/appointments/?client=${
@@ -170,7 +173,9 @@ Params): UseClientOngoingStateResult {
                 /* noop */
             }
         };
-    }, [client.id, isScheduled, now, enableProbe, sweepByClient]);
+    // NOTE: `now` intentionally excluded — async probe uses nowRef.current to avoid
+    // re-running this effect every 5s (useNowTick) for every ClientCard.
+    }, [client.id, isScheduled, enableProbe, sweepByClient]);
 
     const windowFromServer = !!(isScheduled && startISO && endISO);
     const windowFromOverride = React.useMemo(() => {
@@ -335,7 +340,7 @@ Params): UseClientOngoingStateResult {
         if (!latched) return;
         const endMs = new Date(latched.endAt).getTime();
         if (!isFinite(endMs)) return;
-        const nowMs = now.getTime();
+        const nowMs = Date.now();
         const CLEAR_GRACE_MS = 2 * 60 * 1000;
         if (nowMs >= endMs + CLEAR_GRACE_MS) {
             clearLatch();
@@ -344,7 +349,8 @@ Params): UseClientOngoingStateResult {
         const delay = endMs + CLEAR_GRACE_MS - nowMs;
         const t = window.setTimeout(() => clearLatch(), Math.max(0, delay));
         return () => window.clearTimeout(t);
-    }, [latched, now, clearLatch]);
+    // NOTE: `now` removed — effect fires once when latched changes; setTimeout handles timing.
+    }, [latched, clearLatch]);
 
     // Immediate clear if override marks done/canceled or window no longer trusted
     React.useEffect(() => {
