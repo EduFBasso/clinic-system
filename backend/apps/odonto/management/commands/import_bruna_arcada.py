@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import datetime
 from pathlib import Path
 import unicodedata
+from difflib import SequenceMatcher
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -38,12 +39,19 @@ class Command(BaseCommand):
             action='store_true',
             help='Print what would be done without saving to database.',
         )
+        parser.add_argument(
+            '--alias-csv',
+            type=str,
+            default='',
+            help='Optional CSV mapping legacy_name -> client_id/client_name for approved reconciliations.',
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
         csv_dir = Path(options['csv_dir'])
         professional_email = options['professional_email']
         dry_run = options['dry_run']
+        alias_csv = (options.get('alias_csv') or '').strip()
 
         if not csv_dir.exists():
             raise CommandError(f'CSV directory not found: {csv_dir}')
@@ -73,10 +81,13 @@ class Command(BaseCommand):
 
         # Build client lookup map (by name)
         client_map = self._build_client_lookup(professional)
+        alias_lookup = self._load_alias_lookup(alias_csv, professional) if alias_csv else {}
         self.stdout.write(
             f"✓ Found {len(client_map['exact'])} existing clients for professional "
             f"({len(client_map['relaxed'])} relaxed keys)"
         )
+        if alias_csv:
+            self.stdout.write(f"✓ Loaded {len(alias_lookup)} approved alias mappings")
 
         # Process data
         stats = {
@@ -87,6 +98,8 @@ class Command(BaseCommand):
             'procedures_created': 0,
             'procedures_updated': 0,
             'patients_not_found': 0,
+            'clients_matched_fuzzy': 0,
+            'clients_matched_alias': 0,
             'treatments_skipped': 0,
         }
 
@@ -120,14 +133,11 @@ class Command(BaseCommand):
 
             # Find client in local DB by name
             patient_name = patient.get('TX_NOME', '').strip()
-            patient_name_key = self._normalize_name(patient_name)
-            patient_name_relaxed = self._normalize_name_relaxed(patient_name)
-
-            client = None
-            if patient_name_key in client_map['exact']:
-                client = client_map['exact'][patient_name_key]
-            elif patient_name_relaxed in client_map['relaxed']:
-                client = client_map['relaxed'][patient_name_relaxed]
+            client, matched_mode = self._match_client(patient_name, client_map, alias_lookup)
+            if matched_mode == 'fuzzy':
+                stats['clients_matched_fuzzy'] += 1
+            elif matched_mode == 'alias':
+                stats['clients_matched_alias'] += 1
 
             if not patient_name or client is None:
                 stats['patients_not_found'] += 1
@@ -244,6 +254,8 @@ class Command(BaseCommand):
         self.stdout.write(f"  Procedures created: {stats['procedures_created']}")
         self.stdout.write(f"  Procedures updated: {stats['procedures_updated']}")
         self.stdout.write(f"  Patients not found: {stats['patients_not_found']}")
+        self.stdout.write(f"  Clients alias-matched: {stats['clients_matched_alias']}")
+        self.stdout.write(f"  Clients fuzzy-matched: {stats['clients_matched_fuzzy']}")
 
     def _load_patients_csv(self, filepath):
         return self._read_csv_rows(filepath)
@@ -288,6 +300,7 @@ class Command(BaseCommand):
         """Build lookup maps for exact and relaxed normalized patient names."""
         exact_lookup = {}
         relaxed_lookup = {}
+        relaxed_lookup_multi = {}
         clients = Client.objects.filter(professional=professional)
         for client in clients:
             full_name = f'{client.first_name} {client.last_name}'.strip()
@@ -296,7 +309,118 @@ class Command(BaseCommand):
             exact_lookup[exact_key] = client
             if relaxed_key and relaxed_key not in relaxed_lookup:
                 relaxed_lookup[relaxed_key] = client
-        return {'exact': exact_lookup, 'relaxed': relaxed_lookup}
+            if relaxed_key:
+                relaxed_lookup_multi.setdefault(relaxed_key, []).append(client)
+        return {
+            'exact': exact_lookup,
+            'relaxed': relaxed_lookup,
+            'relaxed_multi': relaxed_lookup_multi,
+        }
+
+    def _match_client(self, patient_name, client_map, alias_lookup=None):
+        patient_name = (patient_name or '').strip()
+        if not patient_name:
+            return None, 'none'
+
+        # Try direct/relaxed matching first using both raw and repaired text.
+        variants = [patient_name]
+        repaired = self._fix_mojibake(patient_name)
+        if repaired and repaired != patient_name:
+            variants.append(repaired)
+
+        alias_lookup = alias_lookup or {}
+        for variant in variants:
+            for key in {
+                variant,
+                self._normalize_name(variant),
+                self._normalize_name_relaxed(variant),
+            }:
+                if key and key in alias_lookup:
+                    return alias_lookup[key], 'alias'
+
+        for variant in variants:
+            exact_key = self._normalize_name(variant)
+            if exact_key in client_map['exact']:
+                return client_map['exact'][exact_key], 'exact'
+
+            relaxed_key = self._normalize_name_relaxed(variant)
+            if relaxed_key in client_map['relaxed']:
+                return client_map['relaxed'][relaxed_key], 'relaxed'
+
+        # Conservative fuzzy fallback to reduce false positives.
+        best_client = None
+        best_score = 0.0
+        second_score = 0.0
+        for variant in variants:
+            relaxed_key = self._normalize_name_relaxed(variant)
+            if not relaxed_key or len(relaxed_key) < 6:
+                continue
+            for key, candidates in client_map['relaxed_multi'].items():
+                if len(candidates) != 1:
+                    continue
+                if abs(len(key) - len(relaxed_key)) > 8:
+                    continue
+                score = SequenceMatcher(None, relaxed_key, key).ratio()
+                if score > best_score:
+                    second_score = best_score
+                    best_score = score
+                    best_client = candidates[0]
+                elif score > second_score:
+                    second_score = score
+
+        if best_client and best_score >= 0.93 and (best_score - second_score) >= 0.03:
+            return best_client, 'fuzzy'
+
+        return None, 'none'
+
+    def _load_alias_lookup(self, alias_csv, professional):
+        alias_path = Path(alias_csv)
+        if not alias_path.exists():
+            raise CommandError(f'Alias CSV file not found: {alias_path}')
+
+        clients = {
+            client.id: client
+            for client in Client.objects.filter(professional=professional)
+        }
+        alias_lookup = {}
+        with open(alias_path, 'r', encoding='utf-8', newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                client_id_raw = (row.get('client_id') or row.get('candidate_client_id') or '').strip()
+                if not client_id_raw:
+                    continue
+                try:
+                    client_id = int(client_id_raw)
+                except ValueError:
+                    continue
+                client = clients.get(client_id)
+                if client is None:
+                    continue
+                names = [
+                    (row.get('legacy_name') or '').strip(),
+                    (row.get('legacy_name_repaired') or '').strip(),
+                ]
+                for name in names:
+                    if not name:
+                        continue
+                    alias_lookup[name] = client
+                    alias_lookup[self._normalize_name(name)] = client
+                    alias_lookup[self._normalize_name_relaxed(name)] = client
+        return alias_lookup
+
+    def _fix_mojibake(self, value):
+        """Best-effort recovery for UTF-8 text read as latin-1/cp1252."""
+        text = (value or '').strip()
+        if not text:
+            return text
+        try:
+            repaired = text.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore').strip()
+            # Return only if we still have something meaningful.
+            if repaired and any(ch.isalpha() for ch in repaired):
+                return repaired
+        except Exception:
+            return text
+        return text
 
     def _normalize_name(self, value):
         normalized = unicodedata.normalize('NFKD', (value or '').strip().lower())
@@ -317,6 +441,8 @@ class Command(BaseCommand):
         for token in tokens:
             raw = ''.join(ch for ch in token if ch.isalnum())
             if not raw:
+                continue
+            if raw.isdigit():
                 continue
             if raw in noise_tokens:
                 continue
