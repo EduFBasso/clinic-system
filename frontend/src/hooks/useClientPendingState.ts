@@ -11,6 +11,9 @@ import type { PendingReturnContext } from '../types/agendaFlow';
 interface UseClientPendingParams {
     client: ClientBasic;
     now: Date;
+    /** Habilita consulta HTTP por cliente para detectar pendências não capturadas pela heurística.
+     *  Padrão false — deixar false em listas grandes para evitar N×2 requests simultâneos. */
+    probeEnabled?: boolean;
 }
 
 interface UseClientPendingResult {
@@ -28,6 +31,7 @@ interface UseClientPendingResult {
 export function useClientPendingState({
     client,
     now,
+    probeEnabled = false,
 }: UseClientPendingParams): UseClientPendingResult {
     // Ref keeps the current `now` accessible inside effects without adding it to dep arrays
     // (avoids re-running network effects every 5 s on each clock tick)
@@ -69,6 +73,13 @@ export function useClientPendingState({
                 cancelled = true;
             };
         }
+        if (!probeEnabled) {
+            // Probe desabilitado — evita N×2 requests em listas grandes.
+            // O set global loadPendingClientIds (MainContent) já cobre esses casos.
+            return () => {
+                cancelled = true;
+            };
+        }
         // Só consulta o servidor quando a heurística não detectou — usa nowRef para não
         // reexecutar a cada tick de relógio (a cada 5 s), apenas em mudanças reais de estado.
         (async () => {
@@ -81,7 +92,7 @@ export function useClientPendingState({
         return () => {
             cancelled = true;
         };
-    }, [isPendingHeuristic, client.id]); // removido: now, pendingOverride (causavam 12×/min por cartão)
+    }, [isPendingHeuristic, client.id, probeEnabled]); // removido: now, pendingOverride (causavam 12×/min por cartão)
 
     // Observa override para o next_appointment_id (se existir)
     const overrideStatus = React.useMemo(() => {

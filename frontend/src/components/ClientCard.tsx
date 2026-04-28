@@ -154,7 +154,7 @@ export default function ClientCard({
         effectivePending: isPending,
         openPendingActions,
         tryOpenPendingElseQuick,
-    } = useClientPendingState({ client, now });
+    } = useClientPendingState({ client, now, probeEnabled: ENABLE_ONGOING_PROBE });
 
     // Mostrar seção de agenda somente se há algo concreto (agendamento atual ou em andamento) ou futuros carregados.
     // Estado pendente isolado não exibe cabeçalho/tipo para manter UI minimalista.
