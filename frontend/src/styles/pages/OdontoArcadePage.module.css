@@ -147,6 +147,18 @@
     display: block;
 }
 
+.quadrantLabel {
+    font-size: 12px;
+    font-weight: 700;
+    fill: var(--color-text-muted);
+}
+
+.quadrantGuide {
+    stroke: color-mix(in oklab, var(--color-border) 78%, #9ca3af);
+    stroke-width: 1.2;
+    stroke-dasharray: 5 5;
+}
+
 .toothGroup {
     cursor: pointer;
 }
@@ -190,7 +202,7 @@
 
 .toothNumber {
     text-anchor: middle;
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 800;
     fill: var(--color-heading);
 }
@@ -200,6 +212,30 @@
     font-size: 11px;
     font-weight: 600;
     fill: var(--color-text-muted);
+}
+
+.legendRow {
+    margin-top: 10px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.legendSwatch {
+    width: 16px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+    border: 1.5px solid transparent;
 }
 
 .procList {

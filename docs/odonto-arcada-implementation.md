@@ -83,6 +83,11 @@ Entregue nesta etapa:
 - Leitura de dentes e procedimentos para pintar estado visual no SVG
 - Painel de detalhe por dente selecionado
 - Secao inicial de procedimentos gerais (sem dente)
+- Refinamento visual clinico:
+	- Numeracao FDI em destaque
+	- Quadrantes Q1/Q2/Q4/Q3 com guias visuais
+	- Reducao de ruido do identificador tecnico no grid (mantido no detalhe)
+	- Legenda de estados da arcada
 
 ## Fase 3 - Procedimentos e Faces
 
