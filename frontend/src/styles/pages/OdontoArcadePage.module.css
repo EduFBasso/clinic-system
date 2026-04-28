@@ -89,6 +89,12 @@
     border-color: color-mix(in oklab, var(--color-success-dark) 24%, #ffffff);
 }
 
+.badgeCanceled {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: color-mix(in oklab, #b91c1c 24%, #ffffff);
+}
+
 .btn {
     border: 1px solid var(--color-border);
     background: var(--color-bg);
@@ -283,8 +289,29 @@
 
 .procMeta {
     color: var(--color-text-muted);
-    white-space: nowrap;
     font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.procName {
+    flex: 1;
+    min-width: 0;
+}
+
+.faceBadge {
+    background: #ede9fe;
+    color: #5b21b6;
+    border: 1px solid #c4b5fd;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
 }
 
 .modalBody {
