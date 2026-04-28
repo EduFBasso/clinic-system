@@ -50,6 +50,15 @@
     color: var(--color-heading);
 }
 
+.sectionHeaderWithAction {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
 .text {
     margin: 0;
     color: var(--color-text);
@@ -92,6 +101,20 @@
 
 .btn:hover {
     background: var(--color-pending-bg);
+}
+
+.btnPrimary {
+    border: 1px solid color-mix(in oklab, var(--color-primary) 65%, #0000);
+    background: var(--color-primary);
+    color: #fff;
+    border-radius: 8px;
+    padding: 9px 13px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.btnPrimary:hover {
+    filter: brightness(0.96);
 }
 
 .kpiGrid {
@@ -262,6 +285,70 @@
     color: var(--color-text-muted);
     white-space: nowrap;
     font-size: 13px;
+}
+
+.modalBody {
+    display: grid;
+    gap: 10px;
+    min-width: min(92vw, 540px);
+}
+
+.modalTitle {
+    margin: 0;
+    color: var(--color-heading);
+    font-size: 20px;
+}
+
+.modalError {
+    margin: 0;
+    color: var(--color-danger);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.formGrid {
+    display: grid;
+    gap: 10px;
+}
+
+.formLabel {
+    display: grid;
+    gap: 5px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.input,
+.textarea {
+    width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg-section);
+    color: var(--color-text);
+    padding: 8px 10px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.textarea {
+    resize: vertical;
+    min-height: 78px;
+}
+
+.checkboxRow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.modalActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
 @media (min-width: 920px) {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../utils/apiFetch';
+import AppModal from '../components/Modal';
 import styles from '../styles/pages/OdontoArcadePage.module.css';
 
 type ArcadeListItem = {
@@ -90,6 +91,10 @@ function getToothState(procs: ProcedureItem[]): ToothVisualState {
     return 'canceled';
 }
 
+function todayISODate(): string {
+    return new Date().toISOString().slice(0, 10);
+}
+
 export default function OdontoArcadePage() {
     const navigate = useNavigate();
     const { clientId } = useParams();
@@ -103,6 +108,18 @@ export default function OdontoArcadePage() {
     const [selectedToothId, setSelectedToothId] = React.useState<number | null>(
         null,
     );
+    const [generalModalOpen, setGeneralModalOpen] = React.useState(false);
+    const [savingGeneral, setSavingGeneral] = React.useState(false);
+    const [generalError, setGeneralError] = React.useState<string | null>(null);
+    const [generalForm, setGeneralForm] = React.useState({
+        name: '',
+        code: '',
+        status: 'pending' as ProcedureItem['status'],
+        started_at: '',
+        patient_amount: '',
+        paid: false,
+        notes: '',
+    });
 
     const numericClientId = React.useMemo(
         () => Number(clientId || 0),
@@ -221,6 +238,78 @@ export default function OdontoArcadePage() {
         p => p.status === 'completed',
     ).length;
     const canceledCount = procedures.filter(p => p.status === 'canceled').length;
+
+    function openGeneralModal() {
+        setGeneralError(null);
+        setGeneralForm({
+            name: '',
+            code: '',
+            status: 'pending',
+            started_at: '',
+            patient_amount: '',
+            paid: false,
+            notes: '',
+        });
+        setGeneralModalOpen(true);
+    }
+
+    async function saveGeneralProcedure() {
+        if (!arcade) return;
+        const name = generalForm.name.trim();
+        if (!name) {
+            setGeneralError('Informe o nome do procedimento.');
+            return;
+        }
+
+        let amount: number | null = null;
+        const amountRaw = generalForm.patient_amount.replace(',', '.').trim();
+        if (amountRaw) {
+            const parsed = Number(amountRaw);
+            if (Number.isNaN(parsed) || parsed < 0) {
+                setGeneralError('Valor invalido. Use um numero maior ou igual a zero.');
+                return;
+            }
+            amount = parsed;
+        }
+
+        setSavingGeneral(true);
+        setGeneralError(null);
+        try {
+            const completedDate =
+                generalForm.status === 'completed'
+                    ? generalForm.started_at || todayISODate()
+                    : null;
+
+            await apiFetch('/odonto/procedures/', {
+                method: 'POST',
+                body: {
+                    arcade: arcade.id,
+                    tooth: null,
+                    surface: null,
+                    code: generalForm.code.trim(),
+                    name,
+                    status: generalForm.status,
+                    started_at: generalForm.started_at || null,
+                    completed_at: completedDate,
+                    patient_amount: amount,
+                    paid_amount: generalForm.paid ? amount : null,
+                    notes: generalForm.notes.trim(),
+                    is_active: true,
+                },
+            });
+
+            setGeneralModalOpen(false);
+            await loadArcade();
+        } catch (err) {
+            const message =
+                err instanceof ApiError
+                    ? err.message
+                    : 'Nao foi possivel salvar o procedimento geral.';
+            setGeneralError(message || 'Nao foi possivel salvar o procedimento geral.');
+        } finally {
+            setSavingGeneral(false);
+        }
+    }
 
     return (
         <div className={styles.page}>
@@ -471,9 +560,18 @@ export default function OdontoArcadePage() {
                     </section>
 
                     <section className={styles.generalCard}>
-                        <h2 className={styles.sectionTitle}>
-                            Procedimentos gerais (sem dente)
-                        </h2>
+                        <div className={styles.sectionHeaderWithAction}>
+                            <h2 className={styles.sectionTitle}>
+                                Procedimentos gerais (sem dente)
+                            </h2>
+                            <button
+                                type='button'
+                                className={styles.btnPrimary}
+                                onClick={openGeneralModal}
+                            >
+                                Novo geral
+                            </button>
+                        </div>
                         {generalProcedures.length === 0 ? (
                             <p className={styles.textMuted}>
                                 Nenhum procedimento geral cadastrado.
@@ -496,6 +594,167 @@ export default function OdontoArcadePage() {
                     </section>
                 </>
             )}
+
+            <AppModal
+                open={generalModalOpen}
+                onClose={() => {
+                    if (savingGeneral) return;
+                    setGeneralModalOpen(false);
+                }}
+                closeOnEscape
+                showCloseButton
+            >
+                <div className={styles.modalBody}>
+                    <h3 className={styles.modalTitle}>Novo procedimento geral</h3>
+                    <p className={styles.textMuted}>
+                        Registro sem vinculo de dente/face.
+                    </p>
+
+                    {generalError && (
+                        <p className={styles.modalError}>{generalError}</p>
+                    )}
+
+                    <div className={styles.formGrid}>
+                        <label className={styles.formLabel}>
+                            Nome do procedimento *
+                            <input
+                                value={generalForm.name}
+                                onChange={event =>
+                                    setGeneralForm(prev => ({
+                                        ...prev,
+                                        name: event.target.value,
+                                    }))
+                                }
+                                className={styles.input}
+                                placeholder='Ex.: Profilaxia'
+                                disabled={savingGeneral}
+                            />
+                        </label>
+
+                        <label className={styles.formLabel}>
+                            Codigo (opcional)
+                            <input
+                                value={generalForm.code}
+                                onChange={event =>
+                                    setGeneralForm(prev => ({
+                                        ...prev,
+                                        code: event.target.value,
+                                    }))
+                                }
+                                className={styles.input}
+                                placeholder='Ex.: PRC-001'
+                                disabled={savingGeneral}
+                            />
+                        </label>
+
+                        <label className={styles.formLabel}>
+                            Status
+                            <select
+                                value={generalForm.status}
+                                onChange={event =>
+                                    setGeneralForm(prev => ({
+                                        ...prev,
+                                        status:
+                                            event.target
+                                                .value as ProcedureItem['status'],
+                                    }))
+                                }
+                                className={styles.input}
+                                disabled={savingGeneral}
+                            >
+                                <option value='pending'>Pendente</option>
+                                <option value='completed'>Concluido</option>
+                                <option value='canceled'>Cancelado</option>
+                            </select>
+                        </label>
+
+                        <label className={styles.formLabel}>
+                            Data
+                            <input
+                                type='date'
+                                value={generalForm.started_at}
+                                onChange={event =>
+                                    setGeneralForm(prev => ({
+                                        ...prev,
+                                        started_at: event.target.value,
+                                    }))
+                                }
+                                className={styles.input}
+                                disabled={savingGeneral}
+                            />
+                        </label>
+
+                        <label className={styles.formLabel}>
+                            Valor
+                            <input
+                                type='text'
+                                inputMode='decimal'
+                                value={generalForm.patient_amount}
+                                onChange={event =>
+                                    setGeneralForm(prev => ({
+                                        ...prev,
+                                        patient_amount: event.target.value,
+                                    }))
+                                }
+                                className={styles.input}
+                                placeholder='0,00'
+                                disabled={savingGeneral}
+                            />
+                        </label>
+
+                        <label className={styles.checkboxRow}>
+                            <input
+                                type='checkbox'
+                                checked={generalForm.paid}
+                                onChange={event =>
+                                    setGeneralForm(prev => ({
+                                        ...prev,
+                                        paid: event.target.checked,
+                                    }))
+                                }
+                                disabled={savingGeneral}
+                            />
+                            Marcar como pago
+                        </label>
+
+                        <label className={styles.formLabel}>
+                            Observacao
+                            <textarea
+                                value={generalForm.notes}
+                                onChange={event =>
+                                    setGeneralForm(prev => ({
+                                        ...prev,
+                                        notes: event.target.value,
+                                    }))
+                                }
+                                className={styles.textarea}
+                                rows={3}
+                                placeholder='Anotacoes breves do atendimento'
+                                disabled={savingGeneral}
+                            />
+                        </label>
+                    </div>
+
+                    <div className={styles.modalActions}>
+                        <button
+                            type='button'
+                            className={styles.btn}
+                            onClick={() => setGeneralModalOpen(false)}
+                            disabled={savingGeneral}
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type='button'
+                            className={styles.btnPrimary}
+                            onClick={() => void saveGeneralProcedure()}
+                            disabled={savingGeneral}
+                        >
+                            {savingGeneral ? 'Salvando...' : 'Salvar'}
+                        </button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 }
