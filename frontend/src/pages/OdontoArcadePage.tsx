@@ -312,17 +312,17 @@ export default function OdontoArcadePage() {
                                 <text x='386' y='24' className={styles.quadrantLabel}>
                                     Q2 - Superior Esquerdo
                                 </text>
-                                <text x='24' y='214' className={styles.quadrantLabel}>
+                                <text x='24' y='222' className={styles.quadrantLabel}>
                                     Q4 - Inferior Direito
                                 </text>
-                                <text x='386' y='214' className={styles.quadrantLabel}>
+                                <text x='386' y='222' className={styles.quadrantLabel}>
                                     Q3 - Inferior Esquerdo
                                 </text>
                                 <line
                                     x1='371'
                                     y1='34'
                                     x2='371'
-                                    y2='366'
+                                    y2='376'
                                     className={styles.quadrantGuide}
                                 />
                                 <line
@@ -336,7 +336,8 @@ export default function OdontoArcadePage() {
                                     const row = Math.floor(index / 8);
                                     const col = index % 8;
                                     const x = 20 + col * 90;
-                                    const y = 40 + row * 82;
+                                    const lowerOffset = row >= 2 ? 24 : 0;
+                                    const y = 40 + row * 82 + lowerOffset;
                                     const state = getToothState(
                                         proceduresByTooth.get(tooth.id) ?? [],
                                     );
