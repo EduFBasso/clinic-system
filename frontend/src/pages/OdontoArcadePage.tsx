@@ -189,6 +189,16 @@ export default function OdontoArcadePage() {
         return proceduresByTooth.get(selectedToothId) ?? [];
     }, [proceduresByTooth, selectedToothId]);
 
+    const orderedTeeth = React.useMemo(() => {
+        if (teeth.length > 0) return teeth;
+        // fallback visual se ainda nao houver estrutura criada
+        return INTERNATIONAL_NUMBERS.map((internationalNumber, index) => ({
+            id: -(index + 1),
+            sequence: index + 1,
+            international_number: internationalNumber,
+        }));
+    }, [teeth]);
+
     if (!canAccess) {
         return (
             <div className={styles.page}>
@@ -211,16 +221,6 @@ export default function OdontoArcadePage() {
         p => p.status === 'completed',
     ).length;
     const canceledCount = procedures.filter(p => p.status === 'canceled').length;
-
-    const orderedTeeth = React.useMemo(() => {
-        if (teeth.length > 0) return teeth;
-        // fallback visual se ainda nao houver estrutura criada
-        return INTERNATIONAL_NUMBERS.map((internationalNumber, index) => ({
-            id: -(index + 1),
-            sequence: index + 1,
-            international_number: internationalNumber,
-        }));
-    }, [teeth]);
 
     return (
         <div className={styles.page}>
@@ -442,10 +442,6 @@ export default function OdontoArcadePage() {
                     </section>
                 </>
             )}
-        </div>
-    );
-}
-            </div>
         </div>
     );
 }

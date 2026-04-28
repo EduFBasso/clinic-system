@@ -28,7 +28,7 @@ def _refresh_arcade_status(arcade: DentalArcade) -> None:
     Se houver ao menos um PENDING, a arcada volta para PENDING.
     Sem procedimentos ativos, o status nao e alterado.
     """
-    active_procs = arcade.procedures.filter(is_active=True)
+    active_procs = arcade.procedures.filter(is_active=True)  # pyright: ignore[reportAttributeAccessIssue]
     total = active_procs.count()
     if total == 0:
         return

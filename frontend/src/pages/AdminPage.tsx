@@ -22,6 +22,13 @@ interface EditForm {
     state: string;
 }
 
+const SPECIALTY_OPTIONS = [
+    { value: '', label: 'Sem especialidade' },
+    { value: 'Odontologia', label: 'Odontologia' },
+    { value: 'Podologia', label: 'Podologia' },
+    { value: 'Outro', label: 'Outro' },
+];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function authHeader() {
@@ -144,7 +151,9 @@ const AdminPageContent: React.FC = () => {
         setSaveError('');
     }
 
-    function handleEditChange(e: React.ChangeEvent<HTMLInputElement>) {
+    function handleEditChange(
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    ) {
         const { name, value } = e.target;
         setEditForm(f => (f ? { ...f, [name]: value } : f));
     }
@@ -167,7 +176,16 @@ const AdminPageContent: React.FC = () => {
             );
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                setSaveError(d.message || `Erro ${res.status}`);
+                const detail =
+                    d?.message ||
+                    d?.detail ||
+                    (typeof d === 'object'
+                        ? Object.values(d)
+                              .flat()
+                              .map(v => String(v))
+                              .join(' | ')
+                        : '');
+                setSaveError(detail || `Erro ${res.status}`);
                 return;
             }
             const updated: Professional = await res.json();
@@ -584,7 +602,9 @@ interface RowProps {
     onEdit: () => void;
     onCancelEdit: () => void;
     onSaveEdit: () => void;
-    onEditChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onEditChange: (
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    ) => void;
     onDeactivate: () => void;
     onReactivate: () => void;
     onTotpReset: () => void;
@@ -637,13 +657,18 @@ const ProfRow: React.FC<RowProps> = ({
                         />
                     </td>
                     <td style={styles.td}>
-                        <input
+                        <select
                             name='specialty'
                             value={editForm.specialty}
                             onChange={onEditChange}
                             style={styles.cellInput}
-                            placeholder='Especialidade'
-                        />
+                        >
+                            {SPECIALTY_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
                     </td>
                     <td style={styles.td}>
                         <input

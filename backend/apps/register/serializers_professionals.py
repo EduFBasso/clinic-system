@@ -3,6 +3,22 @@ from .models import Professional
 from rest_framework.permissions import BasePermission
 
 class ProfessionalSerializer(serializers.ModelSerializer):
+    def validate_register_number(self, value):
+        # Campo e unico no banco; string vazia duplicada gera IntegrityError.
+        # Normalizamos vazio para None para manter comportamento seguro.
+        if value is None:
+            return None
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return cleaned or None
+        return value
+
+    def validate_specialty(self, value: str) -> str:
+        return (value or '').strip()
+
+    def validate_state(self, value: str) -> str:
+        return (value or '').strip().upper()
+
     class Meta:
         model = Professional
         fields = [

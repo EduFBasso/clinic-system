@@ -24,6 +24,13 @@ interface FormData {
     state: string;
 }
 
+const SPECIALTY_OPTIONS = [
+    { value: '', label: 'Sem especialidade' },
+    { value: 'Odontologia', label: 'Odontologia' },
+    { value: 'Podologia', label: 'Podologia' },
+    { value: 'Outro', label: 'Outro' },
+];
+
 const EMPTY_FORM: FormData = {
     email: '',
     first_name: '',
@@ -63,7 +70,9 @@ const ProfessionalCreateModal: React.FC<Props> = ({ open, onClose }) => {
         }
     }, [step, qrDataUrl]);
 
-    function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    function handleChange(
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    ) {
         const { name, value } = e.target;
         setForm(f => ({ ...f, [name]: value }));
     }
@@ -190,13 +199,20 @@ const ProfessionalCreateModal: React.FC<Props> = ({ open, onClose }) => {
                                 onChange={handleChange}
                                 autoComplete='off'
                             />
-                            <input
+                            <select
                                 name='specialty'
-                                placeholder='Especialidade'
                                 value={form.specialty}
                                 onChange={handleChange}
-                                autoComplete='off'
-                            />
+                            >
+                                {SPECIALTY_OPTIONS.map(option => (
+                                    <option
+                                        key={option.value}
+                                        value={option.value}
+                                    >
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
                             <input
                                 name='register_number'
                                 placeholder='Registro profissional'
