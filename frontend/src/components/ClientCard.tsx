@@ -2,7 +2,14 @@
 import React from 'react';
 import { focusClientCard } from '../utils/focusClientCard';
 import styles from '../styles/components/ClientCard.module.css';
-import { FaEye, FaWhatsapp, FaCalendarAlt, FaPlus } from 'react-icons/fa';
+import {
+    FaEye,
+    FaWhatsapp,
+    FaCalendarAlt,
+    FaPlus,
+    FaTooth,
+} from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import { useClientCreateAction } from '../hooks/useClientCreateAction';
 import { API_BASE } from '../config/api';
 import type { Appointment } from '../hooks/useAppointments';
@@ -52,6 +59,7 @@ export default function ClientCard({
     notifyAppt,
     filterMode = 'all',
 }: ClientCardProps) {
+    const navigate = useNavigate();
     // Feature flag: disable per-client ongoing probe unless explicitly enabled (reduces debug traffic)
     const ENABLE_ONGOING_PROBE =
         (import.meta as ImportMeta).env.VITE_ENABLE_ONGOING_PROBE === 'true';
@@ -78,6 +86,24 @@ export default function ClientCard({
             ? parsed.age
             : calcAge(parsed.year, parsed.month, parsed.day);
     }, [client.date_of_birth]);
+    const canAccessOdontoArcade = React.useMemo(() => {
+        try {
+            const stored = localStorage.getItem('loggedProfessional');
+            if (!stored) return false;
+            const professional = JSON.parse(stored) as { specialty?: string };
+            const specialty = (professional.specialty || '')
+                .toString()
+                .trim()
+                .toLowerCase();
+            return (
+                specialty.includes('odonto') ||
+                specialty.includes('dent') ||
+                specialty.includes('ortodont')
+            );
+        } catch {
+            return false;
+        }
+    }, []);
     // isScheduled já definido acima (reordenado para hook de futuros)
     // Base: informações vindas do servidor (se disponíveis)
     // startISO / endISO no longer directly used after ongoing refactor
@@ -316,6 +342,18 @@ export default function ClientCard({
                     </span>
                 </div>
                 <div className={styles.nameActions}>
+                    {canAccessOdontoArcade && (
+                        <button
+                            className={styles.iconButton}
+                            title='Abrir prontuario odontologico'
+                            onClick={e => {
+                                e.stopPropagation();
+                                navigate(`/odonto/arcada/${client.id}`);
+                            }}
+                        >
+                            <FaTooth color={iconColor} />
+                        </button>
+                    )}
                     <button
                         className={styles.iconButton}
                         title='Editar cliente'

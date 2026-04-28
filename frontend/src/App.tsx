@@ -23,6 +23,7 @@ import ServiceFormPage from './pages/Catalog/ServiceFormPage';
 import ProductListPage from './pages/Catalog/ProductListPage';
 import ServiceListPage from './pages/Catalog/ServiceListPage';
 import ConsultaPage from './pages/ConsultaPage';
+import OdontoArcadePage from './pages/OdontoArcadePage';
 import {
     hydrateAgendaSettings,
     resetAgendaSettings,
@@ -88,6 +89,10 @@ function App() {
                 <Route path='/catalog/services' element={<ServiceListPage />} />
                 <Route path='/admin' element={<AdminPage />} />
                 <Route path='/consulta' element={<ConsultaPage />} />
+                <Route
+                    path='/odonto/arcada/:clientId'
+                    element={<OdontoArcadePage />}
+                />
                 {/* Full-page scheduler for mobile */}
                 {/** Rota /schedule removida para unificar experiência via modais */}
                 {/* Rota /agenda/settings removida */}

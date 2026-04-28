@@ -1,0 +1,239 @@
+.page {
+    min-height: 100dvh;
+    padding: 20px 14px 28px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    display: grid;
+    align-content: start;
+    gap: 12px;
+}
+
+.headerCard,
+.kpiCard,
+.arcadeCard,
+.detailCard,
+.generalCard,
+.emptyCard,
+.errorCard {
+    background: var(--color-bg-section);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-soft-sm);
+}
+
+.headerCard {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px;
+    flex-wrap: wrap;
+}
+
+.headerActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.title {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.1;
+    color: var(--color-heading);
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 18px;
+    color: var(--color-heading);
+}
+
+.text {
+    margin: 0;
+    color: var(--color-text);
+}
+
+.textMuted {
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.badge {
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+
+.badgePending {
+    background: var(--color-warning-bg);
+    color: var(--color-warning-dark);
+    border-color: color-mix(in oklab, var(--color-warning-dark) 24%, #ffffff);
+}
+
+.badgeCompleted {
+    background: var(--color-success-bg);
+    color: var(--color-success-dark);
+    border-color: color-mix(in oklab, var(--color-success-dark) 24%, #ffffff);
+}
+
+.btn {
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+    color: var(--color-text);
+    border-radius: 8px;
+    padding: 9px 13px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn:hover {
+    background: var(--color-pending-bg);
+}
+
+.kpiGrid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.kpiCard {
+    padding: 10px 12px;
+    display: grid;
+    gap: 4px;
+}
+
+.kpiLabel {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.kpiValue {
+    color: var(--color-heading);
+    font-size: 22px;
+    line-height: 1;
+}
+
+.arcadeCard,
+.detailCard,
+.generalCard,
+.emptyCard,
+.errorCard {
+    padding: 14px;
+}
+
+.arcadeHeader {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.svgWrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 6px;
+}
+
+.arcadeSvg {
+    width: min(980px, 100%);
+    min-width: 740px;
+    height: auto;
+    display: block;
+}
+
+.toothGroup {
+    cursor: pointer;
+}
+
+.toothRect {
+    transition:
+        transform 0.08s ease,
+        stroke 0.12s ease,
+        fill 0.12s ease;
+    stroke-width: 1.5;
+}
+
+.toothGroup:hover .toothRect {
+    transform: translateY(-1px);
+}
+
+.toothSelected {
+    stroke: var(--color-primary);
+    stroke-width: 3;
+}
+
+.toothEmpty {
+    fill: #f3f4f6;
+    stroke: #d1d5db;
+}
+
+.toothPending {
+    fill: #fef3c7;
+    stroke: #d97706;
+}
+
+.toothCompleted {
+    fill: #dcfce7;
+    stroke: #047857;
+}
+
+.toothCanceled {
+    fill: #fee2e2;
+    stroke: #b91c1c;
+}
+
+.toothNumber {
+    text-anchor: middle;
+    font-size: 14px;
+    font-weight: 800;
+    fill: var(--color-heading);
+}
+
+.toothSequence {
+    text-anchor: middle;
+    font-size: 11px;
+    font-weight: 600;
+    fill: var(--color-text-muted);
+}
+
+.procList {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.procItem {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+.procMeta {
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+@media (min-width: 920px) {
+    .page {
+        padding: 24px;
+        gap: 14px;
+    }
+
+    .kpiGrid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
