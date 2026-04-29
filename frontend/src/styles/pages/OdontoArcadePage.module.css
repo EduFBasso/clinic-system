@@ -210,8 +210,8 @@
 }
 
 .toothEmpty {
-    fill: var(--color-bg);
-    stroke: var(--color-border);
+    fill: #ffffff;
+    stroke: var(--color-heading);
 }
 
 .toothPending {

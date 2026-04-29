@@ -88,9 +88,16 @@ function labelStatus(status: ProcedureItem['status']): string {
 
 function getToothState(procs: ProcedureItem[]): ToothVisualState {
     if (procs.length === 0) return 'empty';
-    if (procs.some(p => p.status === 'pending')) return 'pending';
+
+    // Tratamento pendente so entra no mapa quando ja foi iniciado no dente.
+    if (procs.some(p => p.status === 'pending' && !!p.started_at)) {
+        return 'pending';
+    }
     if (procs.some(p => p.status === 'completed')) return 'completed';
-    return 'canceled';
+    if (procs.some(p => p.status === 'canceled')) return 'canceled';
+
+    // Ex.: procedimento criado como pending sem data de inicio -> manter neutro.
+    return 'empty';
 }
 
 function todayISODate(): string {
@@ -608,7 +615,7 @@ export default function OdontoArcadePage() {
                                     className={`${styles.legendSwatch} ${styles.toothEmpty}`}
                                     aria-hidden
                                 />
-                                Sem procedimento
+                                Inicial (nao iniciado)
                             </span>
                         </div>
                     </section>
