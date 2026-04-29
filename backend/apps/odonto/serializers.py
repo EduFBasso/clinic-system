@@ -1,4 +1,3 @@
-from django.utils import timezone
 from rest_framework import serializers
 
 from apps.clients.models import Client
@@ -38,8 +37,6 @@ class ProcedureSerializer(serializers.ModelSerializer):
         arcade = attrs.get('arcade', getattr(instance, 'arcade', None))
         tooth = attrs.get('tooth', getattr(instance, 'tooth', None))
         surface = attrs.get('surface', getattr(instance, 'surface', None))
-        status = attrs.get('status', getattr(instance, 'status', None))
-        started_at = attrs.get('started_at', getattr(instance, 'started_at', None))
 
         if tooth is not None and arcade is not None:
             if tooth.arcade_id != arcade.id:
@@ -52,15 +49,6 @@ class ProcedureSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'surface': 'A face nao pertence ao dente informado.'}
                 )
-
-        # Regra operacional: procedimento de dente em pending representa
-        # tratamento iniciado. Se a data de inicio vier ausente, padroniza para hoje.
-        if (
-            tooth is not None
-            and status == Procedure.Status.PENDING
-            and started_at is None
-        ):
-            attrs['started_at'] = timezone.now().date()
 
         return attrs
 
