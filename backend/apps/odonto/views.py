@@ -213,6 +213,14 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
 
         updated_count = qs.update(**update_data)
 
+        # Ao voltar para pending em procedimentos de dente, garante data de inicio
+        # para manter consistencia com a identificacao visual da arcada.
+        if new_status == Procedure.Status.PENDING:
+            qs.filter(
+                tooth__isnull=False,
+                started_at__isnull=True,
+            ).update(started_at=timezone.now().date())
+
         # Recalculate status for each affected arcade
         for arcade_obj in DentalArcade.objects.filter(id__in=arcade_ids):
             _refresh_arcade_status(arcade_obj)
