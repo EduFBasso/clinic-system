@@ -173,6 +173,7 @@ class Procedure(models.Model):
     completed_at = models.DateField(null=True, blank=True)
     patient_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    paid_at = models.DateField(null=True, blank=True)
     duration_minutes = models.PositiveSmallIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True, default='')
     is_active = models.BooleanField(default=True)

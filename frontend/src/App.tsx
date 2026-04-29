@@ -23,7 +23,7 @@ import ServiceFormPage from './pages/Catalog/ServiceFormPage';
 import ProductListPage from './pages/Catalog/ProductListPage';
 import ServiceListPage from './pages/Catalog/ServiceListPage';
 import ConsultaPage from './pages/ConsultaPage';
-import OdontoArcadePage from './pages/OdontoArcadePage';
+import OdontoArcadePage from './pages/OdontoArcadePage.tsx';
 import {
     hydrateAgendaSettings,
     resetAgendaSettings,

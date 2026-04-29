@@ -455,13 +455,13 @@ export default function AppointmentDetailsModal({
                                                                 fontWeight: 700,
                                                                 background: item.paid
                                                                     ? 'var(--color-success, #22c55e)'
-                                                                    : '#f3f4f6',
+                                                                    : 'var(--color-warning-bg, #fff7e6)',
                                                                 color: item.paid
                                                                     ? '#fff'
-                                                                    : '#6b7280',
+                                                                    : 'var(--color-warning-dark, #9a6700)',
                                                                 border: item.paid
                                                                     ? 'none'
-                                                                    : '1px solid #d1d5db',
+                                                                    : '1px solid var(--color-warning-dark, #d1d5db)',
                                                                 whiteSpace: 'nowrap',
                                                                 flexShrink: 0,
                                                             }}
@@ -736,13 +736,13 @@ export default function AppointmentDetailsModal({
                                                                 fontWeight: 700,
                                                                 background: item.paid
                                                                     ? 'var(--color-success, #22c55e)'
-                                                                    : '#f3f4f6',
+                                                                    : 'var(--color-warning-bg, #fff7e6)',
                                                                 color: item.paid
                                                                     ? '#fff'
-                                                                    : '#6b7280',
+                                                                    : 'var(--color-warning-dark, #9a6700)',
                                                                 border: item.paid
                                                                     ? 'none'
-                                                                    : '1px solid #d1d5db',
+                                                                    : '1px solid var(--color-warning-dark, #d1d5db)',
                                                             }}
                                                         >
                                                             {item.paid ? 'Pago' : 'Pendente'}
@@ -787,7 +787,7 @@ export default function AppointmentDetailsModal({
                 >
                     <button
                         onClick={openConsultaNotebook}
-                        className='ui-btn ui-btn--secondary'
+                        className='ui-btn ui-btn--theme'
                         style={{
                             flex: isCompactViewport ? '1 1 180px' : undefined,
                         }}

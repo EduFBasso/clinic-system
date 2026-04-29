@@ -9,16 +9,14 @@
 }
 
 .headerCard,
-.kpiCard,
 .arcadeCard,
 .detailCard,
-.generalCard,
 .emptyCard,
 .errorCard {
-    background: var(--color-bg-section);
+    background: var(--color-panel, var(--color-bg-section));
     border: 1px solid var(--color-border);
-    border-radius: 10px;
-    box-shadow: var(--shadow-soft-sm);
+    border-radius: var(--radius-xl, 10px);
+    box-shadow: var(--shadow-panel, var(--shadow-soft-sm));
 }
 
 .headerCard {
@@ -41,13 +39,13 @@
     margin: 0;
     font-size: 24px;
     line-height: 1.1;
-    color: var(--color-heading);
+    color: var(--color-text-main, var(--color-heading));
 }
 
 .sectionTitle {
     margin: 0;
     font-size: 18px;
-    color: var(--color-heading);
+    color: var(--color-text-main, var(--color-heading));
 }
 
 .sectionHeaderWithAction {
@@ -97,23 +95,23 @@
 
 .btn {
     border: 1px solid var(--color-border);
-    background: var(--color-bg);
-    color: var(--color-text);
-    border-radius: 8px;
+    background: var(--btn-neutral-bg, var(--color-bg));
+    color: var(--btn-neutral-text, var(--color-text));
+    border-radius: var(--radius-lg, 8px);
     padding: 9px 13px;
     cursor: pointer;
     font-weight: 600;
 }
 
 .btn:hover {
-    background: var(--color-pending-bg);
+    filter: brightness(0.97);
 }
 
 .btnPrimary {
-    border: 1px solid color-mix(in oklab, var(--color-primary) 65%, #0000);
-    background: var(--color-primary);
-    color: #fff;
-    border-radius: 8px;
+    border: 1px solid var(--btn-theme-border, color-mix(in oklab, var(--color-primary) 65%, #0000));
+    background: var(--btn-theme-bg, var(--color-primary));
+    color: var(--btn-theme-text, #fff);
+    border-radius: var(--radius-lg, 8px);
     padding: 9px 13px;
     cursor: pointer;
     font-weight: 700;
@@ -123,35 +121,8 @@
     filter: brightness(0.96);
 }
 
-.kpiGrid {
-    display: grid;
-    gap: 8px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.kpiCard {
-    padding: 10px 12px;
-    display: grid;
-    gap: 4px;
-}
-
-.kpiLabel {
-    color: var(--color-text-muted);
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.kpiValue {
-    color: var(--color-heading);
-    font-size: 22px;
-    line-height: 1;
-}
-
 .arcadeCard,
 .detailCard,
-.generalCard,
 .emptyCard,
 .errorCard {
     padding: 14px;
@@ -161,6 +132,27 @@
     display: grid;
     gap: 6px;
     margin-bottom: 8px;
+}
+
+.timelineHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.timelineNav {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.timelineDateLabel {
+    min-width: 104px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--color-heading);
 }
 
 .svgWrap {
@@ -177,9 +169,10 @@
 }
 
 .quadrantLabel {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
-    fill: var(--color-text-muted);
+    fill: var(--color-text-main, var(--color-heading));
+    letter-spacing: 0.08em;
 }
 
 .quadrantGuide {
@@ -209,9 +202,14 @@
     stroke-width: 3;
 }
 
+.toothInDateEvent {
+    stroke: color-mix(in oklab, var(--color-primary) 72%, #111827);
+    stroke-width: 3;
+}
+
 .toothEmpty {
-    fill: #ffffff;
-    stroke: var(--color-heading);
+    fill: var(--color-input, #ffffff);
+    stroke: var(--color-text-main, var(--color-heading));
 }
 
 .toothPending {
@@ -233,39 +231,7 @@
     text-anchor: middle;
     font-size: 18px;
     font-weight: 800;
-    fill: var(--color-heading);
-}
-
-.toothSequence {
-    text-anchor: middle;
-    font-size: 11px;
-    font-weight: 600;
-    fill: var(--color-text-muted);
-}
-
-.legendRow {
-    margin-top: 22px;
-    padding-top: 6px;
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.legendItem {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--color-text-muted);
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.legendSwatch {
-    width: 16px;
-    height: 10px;
-    border-radius: 999px;
-    display: inline-block;
-    border: 1.5px solid transparent;
+    fill: var(--color-text-main, var(--color-heading));
 }
 
 .procList {
@@ -281,9 +247,9 @@
     justify-content: space-between;
     gap: 10px;
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg, 8px);
     padding: 8px 10px;
-    background: var(--color-bg);
+    background: var(--color-bg-section);
     color: var(--color-text);
 }
 
@@ -300,13 +266,185 @@
 .procName {
     flex: 1;
     min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.procValueWrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.paidDateDesktop,
+.paidDateMobile {
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+.paidDateMobile {
+    display: none;
+}
+
+.faceLegend {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 8px);
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+.faceLegend summary {
+    cursor: pointer;
+    font-weight: 700;
+    color: var(--color-text-main, var(--color-heading));
+}
+
+.faceLegend p {
+    margin: 8px 0 0;
+    line-height: 1.45;
+}
+
+.composerDivider {
+    margin-top: 8px;
+    border-top: 1px solid var(--color-border);
+}
+
+.inlineComposer {
+    margin-top: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl, 10px);
+    background: var(--color-panel, var(--color-bg));
+    padding: 20px;
+    display: grid;
+    gap: 16px;
+}
+
+.composerHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.typeToggle {
+    display: inline-flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.typeOption {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: var(--color-input, var(--color-bg-section));
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-main, var(--color-text));
+    cursor: pointer;
+}
+
+.typeOption input {
+    accent-color: var(--color-primary);
+}
+
+.typeOptionActive {
+    border-color: var(--color-accent-strong, var(--color-primary));
+    box-shadow: 0 0 0 4px var(--color-accent-ring, color-mix(in oklab, var(--color-primary) 16%, transparent));
+}
+
+.groupList {
+    display: grid;
+    gap: 12px;
+}
+
+.groupCard {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 10px);
+    background: color-mix(in oklab, var(--color-primary) 7%, var(--color-panel, var(--color-bg-section)));
+    padding: 12px;
+}
+
+.groupHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 2px 2px 0;
+}
+
+.groupTitle {
+    color: var(--color-text-main, var(--color-heading));
+    font-size: 15px;
+    letter-spacing: 0.03em;
+}
+
+.rowActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.attentionDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--color-warning-dark);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-warning-bg) 90%, transparent);
+}
+
+.iconBtn,
+.iconBtnDanger {
+    border: 1px solid var(--color-border);
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text);
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.iconBtn:hover,
+.iconBtnDanger:hover {
+    filter: brightness(0.97);
+}
+
+.iconBtnDanger {
+    color: var(--color-danger);
+    border-color: color-mix(in oklab, var(--color-danger) 35%, var(--color-border));
+}
+
+.iconBtnPaidActive {
+    color: var(--color-success-dark, var(--color-success));
+    border-color: color-mix(in oklab, var(--color-success) 35%, var(--color-border));
+    background: var(--color-success-bg);
+}
+
+.iconSvg {
+    width: 15px;
+    height: 15px;
+    display: block;
 }
 
 .faceBadge {
-    background: #ede9fe;
-    color: #5b21b6;
-    border: 1px solid #c4b5fd;
+    background: color-mix(in oklab, var(--color-primary) 14%, white);
+    color: var(--color-primary);
+    border: 1px solid color-mix(in oklab, var(--color-primary) 30%, white);
     border-radius: 999px;
+    margin-left: 2px;
     padding: 2px 8px;
     font-size: 11px;
     font-weight: 700;
@@ -314,35 +452,24 @@
     white-space: nowrap;
 }
 
-.modalBody {
-    display: grid;
-    gap: 10px;
-    min-width: min(92vw, 540px);
-}
-
-.modalTitle {
-    margin: 0;
-    color: var(--color-heading);
-    font-size: 20px;
-}
-
 .modalError {
     margin: 0;
-    color: var(--color-danger);
+    color: var(--color-danger-ink, var(--color-danger));
     font-weight: 700;
     font-size: 13px;
 }
 
 .formGrid {
     display: grid;
-    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
 }
 
 .formLabel {
     display: grid;
-    gap: 5px;
-    color: var(--color-text-muted);
-    font-size: 13px;
+    gap: 8px;
+    color: var(--color-text-main, var(--color-text-muted));
+    font-size: 0.9rem;
     font-weight: 700;
 }
 
@@ -350,26 +477,37 @@
 .textarea {
     width: 100%;
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-bg-section);
-    color: var(--color-text);
-    padding: 8px 10px;
-    font-size: 14px;
+    border-radius: var(--radius-lg, 8px);
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text-main, var(--color-text));
+    padding: 0.875rem 1rem;
+    font: inherit;
+    line-height: 1.5;
     box-sizing: border-box;
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+    color: var(--color-text-muted);
+}
+
+.input:hover,
+.input:focus-visible,
+.textarea:hover,
+.textarea:focus-visible {
+    outline: none;
+    border-color: var(--color-accent-strong, var(--color-primary));
+    box-shadow: 0 0 0 4px var(--color-accent-ring, color-mix(in oklab, var(--color-primary) 14%, transparent));
 }
 
 .textarea {
     resize: vertical;
     min-height: 78px;
-}
-
-.checkboxRow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--color-text);
-    font-size: 14px;
-    font-weight: 600;
 }
 
 .modalActions {
@@ -378,13 +516,32 @@
     gap: 8px;
 }
 
+@media (max-width: 700px) {
+    .formGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .inlineComposer {
+        padding: 16px;
+    }
+
+    .procMeta {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .paidDateDesktop {
+        display: none;
+    }
+
+    .paidDateMobile {
+        display: inline;
+    }
+}
+
 @media (min-width: 920px) {
     .page {
         padding: 24px;
         gap: 14px;
-    }
-
-    .kpiGrid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }

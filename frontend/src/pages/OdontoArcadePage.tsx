@@ -1,14 +1,11 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../utils/apiFetch';
-import AppModal from '../components/Modal';
 import styles from '../styles/pages/OdontoArcadePage.module.css';
 
 type ArcadeListItem = {
     id: number;
     status: 'pending' | 'completed';
-    started_at?: string | null;
-    completed_at?: string | null;
     updated_at?: string;
     pending_procedures?: number;
     completed_procedures?: number;
@@ -27,13 +24,23 @@ type ProcedureItem = {
     name: string;
     code?: string;
     faces_raw?: string | null;
-    patient_amount?: number | null;
+    patient_amount?: number | string | null;
+    paid_amount?: number | string | null;
+    paid_at?: string | null;
     started_at?: string | null;
     completed_at?: string | null;
+    notes?: string;
     is_active: boolean;
 };
 
 type ToothVisualState = 'empty' | 'pending' | 'completed' | 'canceled';
+type ProcedureFormKind = 'tooth' | 'general';
+
+type ProcedureGroup = {
+    key: string;
+    label: string;
+    procedures: ProcedureItem[];
+};
 
 const INTERNATIONAL_NUMBERS = [
     18, 17, 16, 15, 14, 13, 12, 11,
@@ -80,10 +87,46 @@ function formatDate(dateIso?: string | null): string {
     return d.toLocaleDateString('pt-BR');
 }
 
-function labelStatus(status: ProcedureItem['status']): string {
-    if (status === 'pending') return 'Pendente';
-    if (status === 'completed') return 'Concluido';
-    return 'Cancelado';
+function formatDateShort(dateIso?: string | null): string {
+    if (!dateIso) return '-';
+    const d = new Date(dateIso);
+    if (Number.isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+    });
+}
+
+function formatMoney(value?: number | null): string {
+    if (value == null) return '-';
+    return value.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    });
+}
+
+function toNumber(value?: number | string | null): number | null {
+    if (value == null) return null;
+    if (typeof value === 'number') return Number.isNaN(value) ? null : value;
+    const normalized = value.replace(',', '.').trim();
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isNaN(parsed) ? null : parsed;
+}
+
+function formatAmount(value?: number | string | null): string {
+    const numeric = toNumber(value);
+    if (numeric == null) return '-';
+    return formatMoney(numeric);
+}
+
+function eventDateISO(proc: ProcedureItem): string | null {
+    return proc.completed_at || proc.started_at || null;
+}
+
+function isInconsistentStatus(proc: ProcedureItem): boolean {
+    return proc.status === 'pending' && !!proc.completed_at;
 }
 
 function getToothState(procs: ProcedureItem[]): ToothVisualState {
@@ -112,36 +155,41 @@ export default function OdontoArcadePage() {
     const [selectedToothId, setSelectedToothId] = React.useState<number | null>(
         null,
     );
-    const [generalModalOpen, setGeneralModalOpen] = React.useState(false);
-    const [savingGeneral, setSavingGeneral] = React.useState(false);
-    const [generalError, setGeneralError] = React.useState<string | null>(null);
-    const [generalForm, setGeneralForm] = React.useState({
+    const [activeDateIndex, setActiveDateIndex] = React.useState(0);
+
+    const [formOpen, setFormOpen] = React.useState(false);
+    const [formMode, setFormMode] = React.useState<'create' | 'edit'>('create');
+    const [editingProcedureId, setEditingProcedureId] = React.useState<number | null>(
+        null,
+    );
+    const [savingForm, setSavingForm] = React.useState(false);
+    const [formError, setFormError] = React.useState<string | null>(null);
+    const [validatedProcedureIds, setValidatedProcedureIds] = React.useState<
+        Set<number>
+    >(new Set());
+    const [inlineForm, setInlineForm] = React.useState({
+        kind: 'tooth' as ProcedureFormKind,
+        toothId: '',
         name: '',
-        code: '',
-        status: 'pending' as ProcedureItem['status'],
-        started_at: '',
-        patient_amount: '',
-        paid: false,
-        notes: '',
-    });
-    const [toothModalOpen, setToothModalOpen] = React.useState(false);
-    const [savingTooth, setSavingTooth] = React.useState(false);
-    const [toothError, setToothError] = React.useState<string | null>(null);
-    const [toothForm, setToothForm] = React.useState({
-        name: '',
-        code: '',
         faces_raw: '',
-        status: 'pending' as ProcedureItem['status'],
-        started_at: '',
+        date: todayISODate(),
         patient_amount: '',
-        paid: false,
         notes: '',
     });
 
-    const numericClientId = React.useMemo(
-        () => Number(clientId || 0),
-        [clientId],
+    const standardProcedureSuggestions = React.useMemo(
+        () => [
+            'Restauracao em resina fotopolimerizavel 1 face',
+            'Restauracao em resina fotopolimerizavel 2 faces',
+            'Restauracao em resina fotopolimerizavel 4 faces',
+            'Tratamento endodontico multirradicular',
+            'Profilaxia: polimento coronario',
+            'Consulta odontologica inicial',
+        ],
+        [],
     );
+
+    const numericClientId = React.useMemo(() => Number(clientId || 0), [clientId]);
 
     const loadArcade = React.useCallback(async () => {
         if (!numericClientId || !canAccess) return;
@@ -162,6 +210,12 @@ export default function OdontoArcadePage() {
             const arcades = asList<ArcadeListItem>(arcadesRes);
 
             const currentArcade = [...arcades].sort((a, b) => {
+                const aCount =
+                    (a.pending_procedures || 0) + (a.completed_procedures || 0);
+                const bCount =
+                    (b.pending_procedures || 0) + (b.completed_procedures || 0);
+                if (bCount !== aCount) return bCount - aCount;
+
                 const ta = new Date(a.updated_at || 0).getTime();
                 const tb = new Date(b.updated_at || 0).getTime();
                 return tb - ta;
@@ -205,35 +259,86 @@ export default function OdontoArcadePage() {
         void loadArcade();
     }, [loadArcade]);
 
-    const proceduresByTooth = React.useMemo(() => {
+    const toothById = React.useMemo(() => {
+        const map = new Map<number, ToothItem>();
+        for (const tooth of teeth) map.set(tooth.id, tooth);
+        return map;
+    }, [teeth]);
+
+    const datedProcedures = React.useMemo(
+        () =>
+            [...procedures]
+                .filter(proc => !!eventDateISO(proc))
+                .sort((a, b) => {
+                    const ta = new Date(eventDateISO(a) || '').getTime();
+                    const tb = new Date(eventDateISO(b) || '').getTime();
+                    return ta - tb;
+                }),
+        [procedures],
+    );
+
+    const dateKeys = React.useMemo(() => {
+        const keys = new Set<string>();
+        for (const proc of datedProcedures) {
+            const date = eventDateISO(proc);
+            if (date) keys.add(date);
+        }
+        return Array.from(keys).sort(
+            (a, b) => new Date(a).getTime() - new Date(b).getTime(),
+        );
+    }, [datedProcedures]);
+
+    React.useEffect(() => {
+        if (dateKeys.length === 0) {
+            setActiveDateIndex(0);
+            return;
+        }
+        setActiveDateIndex(prev => {
+            const clamped = Math.max(0, Math.min(prev, dateKeys.length - 1));
+            if (prev === 0) return dateKeys.length - 1;
+            return clamped;
+        });
+    }, [dateKeys]);
+
+    const activeDateKey = dateKeys[activeDateIndex] ?? null;
+
+    const activeDateProcedures = React.useMemo(() => {
+        if (!activeDateKey) return [] as ProcedureItem[];
+        return datedProcedures.filter(proc => eventDateISO(proc) === activeDateKey);
+    }, [datedProcedures, activeDateKey]);
+
+    const activeDateProceduresByTooth = React.useMemo(() => {
         const map = new Map<number, ProcedureItem[]>();
-        for (const proc of procedures) {
+        for (const proc of activeDateProcedures) {
             if (proc.tooth == null) continue;
             const list = map.get(proc.tooth) ?? [];
             list.push(proc);
             map.set(proc.tooth, list);
         }
         return map;
-    }, [procedures]);
+    }, [activeDateProcedures]);
 
-    const generalProcedures = React.useMemo(
-        () => procedures.filter(proc => proc.tooth == null),
-        [procedures],
-    );
+    const activeDateToothIds = React.useMemo(() => {
+        const ids = new Set<number>();
+        for (const proc of activeDateProcedures) {
+            if (proc.tooth != null) ids.add(proc.tooth);
+        }
+        return ids;
+    }, [activeDateProcedures]);
 
-    const selectedTooth = React.useMemo(
-        () => teeth.find(t => t.id === selectedToothId) ?? null,
-        [teeth, selectedToothId],
-    );
-
-    const selectedToothProcedures = React.useMemo(() => {
-        if (!selectedToothId) return [] as ProcedureItem[];
-        return proceduresByTooth.get(selectedToothId) ?? [];
-    }, [proceduresByTooth, selectedToothId]);
+    React.useEffect(() => {
+        if (selectedToothId && toothById.has(selectedToothId)) return;
+        const firstToothId = Array.from(activeDateToothIds)[0] ?? null;
+        if (firstToothId != null) {
+            setSelectedToothId(firstToothId);
+            return;
+        }
+        const fallbackToothId = teeth[0]?.id ?? null;
+        if (fallbackToothId != null) setSelectedToothId(fallbackToothId);
+    }, [activeDateToothIds, selectedToothId, toothById, teeth]);
 
     const orderedTeeth = React.useMemo(() => {
         if (teeth.length > 0) return teeth;
-        // fallback visual se ainda nao houver estrutura criada
         return INTERNATIONAL_NUMBERS.map((internationalNumber, index) => ({
             id: -(index + 1),
             sequence: index + 1,
@@ -241,13 +346,235 @@ export default function OdontoArcadePage() {
         }));
     }, [teeth]);
 
+    const procedureGroups = React.useMemo(() => {
+        const sorted = [...procedures].sort((a, b) => {
+            const ad = eventDateISO(a);
+            const bd = eventDateISO(b);
+            if (!ad && !bd) return b.id - a.id;
+            if (!ad) return 1;
+            if (!bd) return -1;
+            const t = new Date(bd).getTime() - new Date(ad).getTime();
+            if (t !== 0) return t;
+            return b.id - a.id;
+        });
+
+        const map = new Map<string, ProcedureItem[]>();
+        for (const proc of sorted) {
+            const key = eventDateISO(proc) || 'SEM_DATA';
+            const list = map.get(key) ?? [];
+            list.push(proc);
+            map.set(key, list);
+        }
+
+        return Array.from(map.entries()).map<ProcedureGroup>(([key, list]) => ({
+            key,
+            label: key === 'SEM_DATA' ? 'Sem data' : formatDate(key),
+            procedures: list,
+        }));
+    }, [procedures]);
+
+    function openCreateForm() {
+        setFormError(null);
+        setFormMode('create');
+        setEditingProcedureId(null);
+        setInlineForm({
+            kind: selectedToothId ? 'tooth' : 'general',
+            toothId: selectedToothId ? String(selectedToothId) : '',
+            name: '',
+            faces_raw: '',
+            date: todayISODate(),
+            patient_amount: '',
+            notes: '',
+        });
+        setFormOpen(true);
+    }
+
+    function openEditForm(proc: ProcedureItem) {
+        setFormError(null);
+        setFormMode('edit');
+        setEditingProcedureId(proc.id);
+        setInlineForm({
+            kind: proc.tooth == null ? 'general' : 'tooth',
+            toothId: proc.tooth == null ? '' : String(proc.tooth),
+            name: proc.name,
+            faces_raw: proc.faces_raw || '',
+            date: eventDateISO(proc) || '',
+            patient_amount:
+                proc.patient_amount == null ? '' : String(proc.patient_amount),
+            notes: proc.notes || '',
+        });
+        setFormOpen(true);
+    }
+
+    async function saveInlineProcedure() {
+        if (!arcade) return;
+
+        const name = inlineForm.name.trim();
+        if (!name) {
+            setFormError('Informe o nome do procedimento.');
+            return;
+        }
+
+        const isTooth = inlineForm.kind === 'tooth';
+        const toothId = isTooth ? Number(inlineForm.toothId || 0) : null;
+        if (isTooth && !toothId) {
+            setFormError('Selecione o dente para salvar o procedimento.');
+            return;
+        }
+
+        let amount: number | null = null;
+        const amountRaw = inlineForm.patient_amount.replace(',', '.').trim();
+        if (amountRaw) {
+            const parsed = Number(amountRaw);
+            if (Number.isNaN(parsed) || parsed < 0) {
+                setFormError('Valor invalido. Use um numero maior ou igual a zero.');
+                return;
+            }
+            amount = parsed;
+        }
+
+        setSavingForm(true);
+        setFormError(null);
+
+        try {
+            if (formMode === 'create') {
+                const dateToUse = inlineForm.date || todayISODate();
+                if (dateToUse < todayISODate()) {
+                    setFormError(
+                        'Nao e permitido cadastrar novo procedimento com data retroativa.',
+                    );
+                    setSavingForm(false);
+                    return;
+                }
+
+                await apiFetch('/odonto/procedures/', {
+                    method: 'POST',
+                    body: {
+                        arcade: arcade.id,
+                        tooth: isTooth ? toothId : null,
+                        surface: null,
+                        faces_raw: isTooth ? inlineForm.faces_raw || null : null,
+                        code: '',
+                        name,
+                        status: 'pending',
+                        started_at: dateToUse,
+                        completed_at: null,
+                        patient_amount: amount,
+                        paid_amount: null,
+                        notes: inlineForm.notes.trim(),
+                        is_active: true,
+                    },
+                });
+            } else {
+                const original = procedures.find(p => p.id === editingProcedureId);
+                if (!original) {
+                    setFormError('Procedimento nao encontrado para edicao.');
+                    setSavingForm(false);
+                    return;
+                }
+
+                let startedAt = original.started_at || null;
+                let completedAt = original.completed_at || null;
+                if (inlineForm.date) {
+                    if (original.completed_at) completedAt = inlineForm.date;
+                    else startedAt = inlineForm.date;
+                } else if (!original.started_at && !original.completed_at) {
+                    startedAt = todayISODate();
+                }
+
+                await apiFetch(`/odonto/procedures/${original.id}/`, {
+                    method: 'PATCH',
+                    body: {
+                        tooth: isTooth ? toothId : null,
+                        faces_raw: isTooth ? inlineForm.faces_raw || null : null,
+                        name,
+                        patient_amount: amount,
+                        notes: inlineForm.notes.trim(),
+                        started_at: startedAt,
+                        completed_at: completedAt,
+                    },
+                });
+
+                setValidatedProcedureIds(prev => {
+                    const next = new Set(prev);
+                    next.add(original.id);
+                    return next;
+                });
+            }
+
+            setFormOpen(false);
+            await loadArcade();
+        } catch (err) {
+            const message =
+                err instanceof ApiError
+                    ? err.message
+                    : 'Nao foi possivel salvar o procedimento.';
+            setFormError(message || 'Nao foi possivel salvar o procedimento.');
+        } finally {
+            setSavingForm(false);
+        }
+    }
+
+    async function deleteProcedure(procId: number) {
+        if (!window.confirm('Deseja apagar este procedimento?')) return;
+        try {
+            await apiFetch(`/odonto/procedures/${procId}/`, { method: 'DELETE' });
+            await loadArcade();
+        } catch (err) {
+            const message =
+                err instanceof ApiError
+                    ? err.message
+                    : 'Nao foi possivel apagar o procedimento.';
+            setError(message || 'Nao foi possivel apagar o procedimento.');
+        }
+    }
+
+    function isProcedurePaid(proc: ProcedureItem): boolean {
+        return !!proc.paid_at;
+    }
+
+    async function toggleProcedurePaid(proc: ProcedureItem) {
+        const currentlyPaid = isProcedurePaid(proc);
+        if (currentlyPaid) {
+            const confirmed = window.confirm(
+                'Atenção: este procedimento voltará para pendente de pagamento. Deseja continuar?',
+            );
+            if (!confirmed) return;
+        }
+
+        try {
+            const patientAmount = toNumber(proc.patient_amount);
+            await apiFetch(`/odonto/procedures/${proc.id}/`, {
+                method: 'PATCH',
+                body: {
+                    paid_amount: currentlyPaid ? null : patientAmount,
+                    paid_at: currentlyPaid ? null : todayISODate(),
+                },
+            });
+            await loadArcade();
+        } catch (err) {
+            const message =
+                err instanceof ApiError
+                    ? err.message
+                    : 'Nao foi possivel atualizar o pagamento do procedimento.';
+            setError(
+                message ||
+                    'Nao foi possivel atualizar o pagamento do procedimento.',
+            );
+        }
+    }
+
+    function needsAttention(proc: ProcedureItem): boolean {
+        if (validatedProcedureIds.has(proc.id)) return false;
+        return isInconsistentStatus(proc) || (!proc.started_at && !proc.completed_at);
+    }
+
     if (!canAccess) {
         return (
             <div className={styles.page}>
                 <h1 className={styles.title}>Arcada odontologica</h1>
                 <p className={styles.text}>
-                    Este modulo esta disponivel apenas para profissionais da
-                    area odontologica.
+                    Este modulo esta disponivel apenas para profissionais da area odontologica.
                 </p>
                 <div>
                     <button type='button' onClick={() => navigate('/')} className={styles.btn}>
@@ -258,179 +585,17 @@ export default function OdontoArcadePage() {
         );
     }
 
-    const pendingCount = procedures.filter(p => p.status === 'pending').length;
-    const completedCount = procedures.filter(
-        p => p.status === 'completed',
-    ).length;
-    const canceledCount = procedures.filter(p => p.status === 'canceled').length;
-
-    function openGeneralModal() {
-        setGeneralError(null);
-        setGeneralForm({
-            name: '',
-            code: '',
-            status: 'pending',
-            started_at: '',
-            patient_amount: '',
-            paid: false,
-            notes: '',
-        });
-        setGeneralModalOpen(true);
-    }
-
-    async function saveGeneralProcedure() {
-        if (!arcade) return;
-        const name = generalForm.name.trim();
-        if (!name) {
-            setGeneralError('Informe o nome do procedimento.');
-            return;
-        }
-
-        let amount: number | null = null;
-        const amountRaw = generalForm.patient_amount.replace(',', '.').trim();
-        if (amountRaw) {
-            const parsed = Number(amountRaw);
-            if (Number.isNaN(parsed) || parsed < 0) {
-                setGeneralError('Valor invalido. Use um numero maior ou igual a zero.');
-                return;
-            }
-            amount = parsed;
-        }
-
-        setSavingGeneral(true);
-        setGeneralError(null);
-        try {
-            const completedDate =
-                generalForm.status === 'completed'
-                    ? generalForm.started_at || todayISODate()
-                    : null;
-
-            await apiFetch('/odonto/procedures/', {
-                method: 'POST',
-                body: {
-                    arcade: arcade.id,
-                    tooth: null,
-                    surface: null,
-                    code: generalForm.code.trim(),
-                    name,
-                    status: generalForm.status,
-                    started_at: generalForm.started_at || null,
-                    completed_at: completedDate,
-                    patient_amount: amount,
-                    paid_amount: generalForm.paid ? amount : null,
-                    notes: generalForm.notes.trim(),
-                    is_active: true,
-                },
-            });
-
-            setGeneralModalOpen(false);
-            await loadArcade();
-        } catch (err) {
-            const message =
-                err instanceof ApiError
-                    ? err.message
-                    : 'Nao foi possivel salvar o procedimento geral.';
-            setGeneralError(message || 'Nao foi possivel salvar o procedimento geral.');
-        } finally {
-            setSavingGeneral(false);
-        }
-    }
-
-    function openToothModal() {
-        setToothError(null);
-        setToothForm({
-            name: '',
-            code: '',
-            faces_raw: '',
-            status: 'pending',
-            started_at: '',
-            patient_amount: '',
-            paid: false,
-            notes: '',
-        });
-        setToothModalOpen(true);
-    }
-
-    async function saveToothProcedure() {
-        if (!arcade || !selectedToothId) return;
-        const name = toothForm.name.trim();
-        if (!name) {
-            setToothError('Informe o nome do procedimento.');
-            return;
-        }
-
-        let amount: number | null = null;
-        const amountRaw = toothForm.patient_amount.replace(',', '.').trim();
-        if (amountRaw) {
-            const parsed = Number(amountRaw);
-            if (Number.isNaN(parsed) || parsed < 0) {
-                setToothError('Valor invalido. Use um numero maior ou igual a zero.');
-                return;
-            }
-            amount = parsed;
-        }
-
-        setSavingTooth(true);
-        setToothError(null);
-        try {
-            const completedDate =
-                toothForm.status === 'completed'
-                    ? toothForm.started_at || todayISODate()
-                    : null;
-
-            await apiFetch('/odonto/procedures/', {
-                method: 'POST',
-                body: {
-                    arcade: arcade.id,
-                    tooth: selectedToothId,
-                    surface: null,
-                    faces_raw: toothForm.faces_raw || null,
-                    code: toothForm.code.trim(),
-                    name,
-                    status: toothForm.status,
-                    started_at: toothForm.started_at || null,
-                    completed_at: completedDate,
-                    patient_amount: amount,
-                    paid_amount: toothForm.paid ? amount : null,
-                    notes: toothForm.notes.trim(),
-                    is_active: true,
-                },
-            });
-
-            setToothModalOpen(false);
-            await loadArcade();
-        } catch (err) {
-            const message =
-                err instanceof ApiError
-                    ? err.message
-                    : 'Nao foi possivel salvar o procedimento.';
-            setToothError(message || 'Nao foi possivel salvar o procedimento.');
-        } finally {
-            setSavingTooth(false);
-        }
-    }
-
     return (
         <div className={styles.page}>
             <header className={styles.headerCard}>
                 <div>
                     <h1 className={styles.title}>Arcada odontologica</h1>
-                    <p className={styles.text}>
-                        {clientName ?? `Cliente #${clientId}`}
-                    </p>
+                    <p className={styles.text}>{clientName ?? `Cliente #${clientId}`}</p>
                 </div>
                 <div className={styles.headerActions}>
-                    <span
-                        className={`${styles.badge} ${
-                            arcade?.status === 'completed'
-                                ? styles.badgeCompleted
-                                : styles.badgePending
-                        }`}
-                    >
-                        {arcade?.status === 'completed'
-                            ? 'Arcada concluida'
-                            : 'Arcada pendente'}
-                    </span>
+                    <button type='button' onClick={openCreateForm} className={styles.btnPrimary}>
+                        + Novo procedimento
+                    </button>
                     <button type='button' onClick={() => navigate('/')} className={styles.btn}>
                         Voltar para clientes
                     </button>
@@ -450,44 +615,47 @@ export default function OdontoArcadePage() {
 
             {!loading && !error && !arcade && (
                 <div className={styles.emptyCard}>
-                    <p className={styles.text}>
-                        Este cliente ainda nao possui arcada cadastrada.
-                    </p>
-                    <p className={styles.textMuted}>
-                        Proximo passo: criar a arcada e inicializar a estrutura
-                        de 32 dentes.
-                    </p>
+                    <p className={styles.text}>Este cliente ainda nao possui arcada cadastrada.</p>
                 </div>
             )}
 
             {!loading && !error && arcade && (
                 <>
-                    <section className={styles.kpiGrid}>
-                        <div className={styles.kpiCard}>
-                            <span className={styles.kpiLabel}>Pendentes</span>
-                            <strong className={styles.kpiValue}>{pendingCount}</strong>
-                        </div>
-                        <div className={styles.kpiCard}>
-                            <span className={styles.kpiLabel}>Concluidos</span>
-                            <strong className={styles.kpiValue}>{completedCount}</strong>
-                        </div>
-                        <div className={styles.kpiCard}>
-                            <span className={styles.kpiLabel}>Cancelados</span>
-                            <strong className={styles.kpiValue}>{canceledCount}</strong>
-                        </div>
-                        <div className={styles.kpiCard}>
-                            <span className={styles.kpiLabel}>Gerais</span>
-                            <strong className={styles.kpiValue}>{generalProcedures.length}</strong>
-                        </div>
-                    </section>
-
                     <section className={styles.arcadeCard}>
                         <div className={styles.arcadeHeader}>
-                            <h2 className={styles.sectionTitle}>Mapa da arcada</h2>
-                            <p className={styles.textMuted}>
-                                Numeracao FDI em destaque. Toque em um dente
-                                para abrir o detalhe.
-                            </p>
+                            <div className={styles.timelineHeader}>
+                                <h2 className={styles.sectionTitle}>Mapa da arcada</h2>
+                                <div className={styles.timelineNav}>
+                                    <button
+                                        type='button'
+                                        className={styles.btn}
+                                        onClick={() =>
+                                            setActiveDateIndex(prev => Math.max(0, prev - 1))
+                                        }
+                                        disabled={activeDateIndex <= 0 || dateKeys.length === 0}
+                                    >
+                                        {'<'}
+                                    </button>
+                                    <span className={styles.timelineDateLabel}>
+                                        {activeDateKey ? formatDate(activeDateKey) : 'Sem data'}
+                                    </span>
+                                    <button
+                                        type='button'
+                                        className={styles.btn}
+                                        onClick={() =>
+                                            setActiveDateIndex(prev =>
+                                                Math.min(dateKeys.length - 1, prev + 1),
+                                            )
+                                        }
+                                        disabled={
+                                            activeDateIndex >= dateKeys.length - 1 ||
+                                            dateKeys.length === 0
+                                        }
+                                    >
+                                        {'>'}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                         <div className={styles.svgWrap}>
                             <svg
@@ -497,16 +665,16 @@ export default function OdontoArcadePage() {
                                 aria-label='Mapa da arcada com 32 dentes'
                             >
                                 <text x='24' y='24' className={styles.quadrantLabel}>
-                                    Q1 - Superior Direito
+                                    Q1 - SUPERIOR DIREITO
                                 </text>
                                 <text x='386' y='24' className={styles.quadrantLabel}>
-                                    Q2 - Superior Esquerdo
+                                    Q2 - SUPERIOR ESQUERDO
                                 </text>
                                 <text x='24' y='222' className={styles.quadrantLabel}>
-                                    Q4 - Inferior Direito
+                                    Q4 - INFERIOR DIREITO
                                 </text>
                                 <text x='386' y='222' className={styles.quadrantLabel}>
-                                    Q3 - Inferior Esquerdo
+                                    Q3 - INFERIOR ESQUERDO
                                 </text>
                                 <line
                                     x1='371'
@@ -529,9 +697,10 @@ export default function OdontoArcadePage() {
                                     const lowerOffset = row >= 2 ? 24 : 0;
                                     const y = 40 + row * 82 + lowerOffset;
                                     const state = getToothState(
-                                        proceduresByTooth.get(tooth.id) ?? [],
+                                        activeDateProceduresByTooth.get(tooth.id) ?? [],
                                     );
                                     const selected = selectedToothId === tooth.id;
+                                    const inDateEvent = activeDateToothIds.has(tooth.id);
 
                                     const stateClass =
                                         state === 'pending'
@@ -548,10 +717,7 @@ export default function OdontoArcadePage() {
                                             className={styles.toothGroup}
                                             onClick={() => setSelectedToothId(tooth.id)}
                                             onKeyDown={event => {
-                                                if (
-                                                    event.key === 'Enter' ||
-                                                    event.key === ' '
-                                                ) {
+                                                if (event.key === 'Enter' || event.key === ' ') {
                                                     event.preventDefault();
                                                     setSelectedToothId(tooth.id);
                                                 }
@@ -568,6 +734,8 @@ export default function OdontoArcadePage() {
                                                 rx='10'
                                                 className={`${styles.toothRect} ${stateClass} ${
                                                     selected ? styles.toothSelected : ''
+                                                } ${
+                                                    inDateEvent ? styles.toothInDateEvent : ''
                                                 }`}
                                             />
                                             <text
@@ -582,499 +750,371 @@ export default function OdontoArcadePage() {
                                 })}
                             </svg>
                         </div>
-                        <div className={styles.legendRow}>
-                            <span className={styles.legendItem}>
-                                <span
-                                    className={`${styles.legendSwatch} ${styles.toothPending}`}
-                                    aria-hidden
-                                />
-                                Pendente
-                            </span>
-                            <span className={styles.legendItem}>
-                                <span
-                                    className={`${styles.legendSwatch} ${styles.toothCompleted}`}
-                                    aria-hidden
-                                />
-                                Concluido
-                            </span>
-                            <span className={styles.legendItem}>
-                                <span
-                                    className={`${styles.legendSwatch} ${styles.toothCanceled}`}
-                                    aria-hidden
-                                />
-                                Cancelado
-                            </span>
-                            <span className={styles.legendItem}>
-                                <span
-                                    className={`${styles.legendSwatch} ${styles.toothEmpty}`}
-                                    aria-hidden
-                                />
-                                Sem procedimento
-                            </span>
-                        </div>
+
+                        <div className={styles.composerDivider} />
+
+                        {formOpen && (
+                            <div className={styles.inlineComposer}>
+                                <div className={styles.composerHeader}>
+                                    <h3 className={styles.sectionTitle}>
+                                        {formMode === 'create'
+                                            ? 'Adicionar procedimento'
+                                            : 'Editar procedimento'}
+                                    </h3>
+                                    <div className={styles.typeToggle}>
+                                        <label
+                                            className={`${styles.typeOption} ${
+                                                inlineForm.kind === 'tooth'
+                                                    ? styles.typeOptionActive
+                                                    : ''
+                                            }`}
+                                        >
+                                            <input
+                                                type='radio'
+                                                name='procedure-kind'
+                                                value='tooth'
+                                                checked={inlineForm.kind === 'tooth'}
+                                                onChange={() =>
+                                                    setInlineForm(prev => ({
+                                                        ...prev,
+                                                        kind: 'tooth',
+                                                        toothId:
+                                                            prev.toothId ||
+                                                            (selectedToothId
+                                                                ? String(selectedToothId)
+                                                                : ''),
+                                                    }))
+                                                }
+                                                disabled={savingForm}
+                                            />
+                                            Por dente
+                                        </label>
+                                        <label
+                                            className={`${styles.typeOption} ${
+                                                inlineForm.kind === 'general'
+                                                    ? styles.typeOptionActive
+                                                    : ''
+                                            }`}
+                                        >
+                                            <input
+                                                type='radio'
+                                                name='procedure-kind'
+                                                value='general'
+                                                checked={inlineForm.kind === 'general'}
+                                                onChange={() =>
+                                                    setInlineForm(prev => ({
+                                                        ...prev,
+                                                        kind: 'general',
+                                                        toothId: '',
+                                                        faces_raw: '',
+                                                    }))
+                                                }
+                                                disabled={savingForm}
+                                            />
+                                            Geral
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {formError && <p className={styles.modalError}>{formError}</p>}
+
+                                <div className={styles.formGrid}>
+                                    {inlineForm.kind === 'tooth' && (
+                                        <label className={styles.formLabel}>
+                                            Dente
+                                            <select
+                                                value={inlineForm.toothId}
+                                                onChange={event =>
+                                                    setInlineForm(prev => ({
+                                                        ...prev,
+                                                        toothId: event.target.value,
+                                                    }))
+                                                }
+                                                className={styles.input}
+                                                disabled={savingForm}
+                                            >
+                                                <option value=''>Selecione um dente</option>
+                                                {orderedTeeth.map(tooth => (
+                                                    <option key={tooth.id} value={tooth.id}>
+                                                        Dente {tooth.international_number}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                    )}
+
+                                    <label className={styles.formLabel}>
+                                        Nome do procedimento *
+                                        <input
+                                            value={inlineForm.name}
+                                            list='inline-procedure-suggestions'
+                                            onChange={event =>
+                                                setInlineForm(prev => ({
+                                                    ...prev,
+                                                    name: event.target.value,
+                                                }))
+                                            }
+                                            className={styles.input}
+                                            placeholder='Ex.: Restauracao em resina'
+                                            disabled={savingForm}
+                                        />
+                                        <datalist id='inline-procedure-suggestions'>
+                                            {standardProcedureSuggestions.map(name => (
+                                                <option key={name} value={name} />
+                                            ))}
+                                        </datalist>
+                                    </label>
+
+                                    {inlineForm.kind === 'tooth' && (
+                                        <label className={styles.formLabel}>
+                                            Face (opcional)
+                                            <select
+                                                value={inlineForm.faces_raw}
+                                                onChange={event =>
+                                                    setInlineForm(prev => ({
+                                                        ...prev,
+                                                        faces_raw: event.target.value,
+                                                    }))
+                                                }
+                                                className={styles.input}
+                                                disabled={savingForm}
+                                            >
+                                                <option value=''>- Nenhuma face -</option>
+                                                <option value='O'>O - Oclusal</option>
+                                                <option value='V'>V - Vestibular</option>
+                                                <option value='P'>P - Palatina / Lingual</option>
+                                                <option value='M'>M - Mesial</option>
+                                                <option value='D'>D - Distal</option>
+                                                <option value='MO'>MO - Mesial / Oclusal</option>
+                                                <option value='DO'>DO - Distal / Oclusal</option>
+                                                <option value='VO'>VO - Vestibular / Oclusal</option>
+                                                <option value='PO'>PO - Palatina / Oclusal</option>
+                                                <option value='MDO'>MDO - Mesial / Distal / Oclusal</option>
+                                            </select>
+                                        </label>
+                                    )}
+
+                                    <label className={styles.formLabel}>
+                                        Data
+                                        <input
+                                            type='date'
+                                            value={inlineForm.date}
+                                            min={formMode === 'create' ? todayISODate() : undefined}
+                                            onChange={event =>
+                                                setInlineForm(prev => ({
+                                                    ...prev,
+                                                    date: event.target.value,
+                                                }))
+                                            }
+                                            className={styles.input}
+                                            disabled={savingForm}
+                                        />
+                                    </label>
+
+                                    <label className={styles.formLabel}>
+                                        Valor
+                                        <input
+                                            type='text'
+                                            inputMode='decimal'
+                                            value={inlineForm.patient_amount}
+                                            onChange={event =>
+                                                setInlineForm(prev => ({
+                                                    ...prev,
+                                                    patient_amount: event.target.value,
+                                                }))
+                                            }
+                                            className={styles.input}
+                                            placeholder='0,00'
+                                            disabled={savingForm}
+                                        />
+                                    </label>
+
+                                    <label className={styles.formLabel}>
+                                        Observacao
+                                        <textarea
+                                            value={inlineForm.notes}
+                                            onChange={event =>
+                                                setInlineForm(prev => ({
+                                                    ...prev,
+                                                    notes: event.target.value,
+                                                }))
+                                            }
+                                            className={styles.textarea}
+                                            rows={3}
+                                            placeholder='Anotacoes breves do atendimento'
+                                            disabled={savingForm}
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className={styles.modalActions}>
+                                    <button
+                                        type='button'
+                                        className={styles.btn}
+                                        onClick={() => setFormOpen(false)}
+                                        disabled={savingForm}
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.btnPrimary}
+                                        onClick={() => void saveInlineProcedure()}
+                                        disabled={savingForm}
+                                    >
+                                        {savingForm ? 'Salvando...' : 'Salvar'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </section>
 
                     <section className={styles.detailCard}>
                         <div className={styles.sectionHeaderWithAction}>
-                            <h2 className={styles.sectionTitle}>
-                                {selectedTooth
-                                    ? `Dente ${selectedTooth.international_number}`
-                                    : 'Detalhe do dente'}
-                            </h2>
-                            {selectedTooth && (
-                                <button
-                                    type='button'
-                                    className={styles.btnPrimary}
-                                    onClick={openToothModal}
-                                >
-                                    + Novo procedimento
-                                </button>
-                            )}
+                            <h2 className={styles.sectionTitle}>Procedimentos</h2>
                         </div>
-                        {selectedTooth ? (
-                            <>
-                                {selectedToothProcedures.length === 0 ? (
-                                    <p className={styles.textMuted}>
-                                        Nenhum procedimento neste dente ainda.
-                                    </p>
-                                ) : (
-                                    <ul className={styles.procList}>
-                                        {[...selectedToothProcedures]
-                                            .sort((a, b) => {
-                                                const ta = new Date(
-                                                    a.started_at || 0,
-                                                ).getTime();
-                                                const tb = new Date(
-                                                    b.started_at || 0,
-                                                ).getTime();
-                                                return tb - ta;
-                                            })
-                                            .map(proc => (
-                                                <li key={proc.id} className={styles.procItem}>
-                                                    <span className={styles.procName}>
-                                                        {proc.name}
-                                                        {proc.code
-                                                            ? ` (${proc.code})`
-                                                            : ''}
-                                                    </span>
-                                                    <span className={styles.procMeta}>
-                                                        {proc.faces_raw && (
-                                                            <span className={styles.faceBadge}>
-                                                                {proc.faces_raw}
-                                                            </span>
-                                                        )}
-                                                        <span
-                                                            className={`${styles.badge} ${
-                                                                proc.status === 'pending'
-                                                                    ? styles.badgePending
-                                                                    : proc.status === 'completed'
-                                                                      ? styles.badgeCompleted
-                                                                      : styles.badgeCanceled
-                                                            }`}
-                                                        >
-                                                            {labelStatus(proc.status)}
-                                                        </span>
-                                                        {formatDate(proc.started_at)}
-                                                    </span>
-                                                </li>
-                                            ))}
-                                    </ul>
-                                )}
-                            </>
-                        ) : (
-                            <p className={styles.textMuted}>
-                                Selecione um dente para visualizar os
-                                procedimentos vinculados.
+                        <details className={styles.faceLegend}>
+                            <summary>Legenda das faces (V, D, VO, DVMO...)</summary>
+                            <p>
+                                O: Oclusal, V: Vestibular, P: Palatina/Lingual, M: Mesial,
+                                D: Distal, MO: Mesial/Oclusal, DO: Distal/Oclusal, VO:
+                                Vestibular/Oclusal, PO: Palatina/Oclusal, MDO: Mesial/Distal/Oclusal.
                             </p>
-                        )}
-                    </section>
+                        </details>
 
-                    <section className={styles.generalCard}>
-                        <div className={styles.sectionHeaderWithAction}>
-                            <h2 className={styles.sectionTitle}>
-                                Procedimentos gerais (sem dente)
-                            </h2>
-                            <button
-                                type='button'
-                                className={styles.btnPrimary}
-                                onClick={openGeneralModal}
-                            >
-                                Novo geral
-                            </button>
-                        </div>
-                        {generalProcedures.length === 0 ? (
-                            <p className={styles.textMuted}>
-                                Nenhum procedimento geral cadastrado.
-                            </p>
+                        {procedureGroups.length === 0 ? (
+                            <p className={styles.textMuted}>Nenhum procedimento cadastrado.</p>
                         ) : (
-                            <ul className={styles.procList}>
-                                {generalProcedures.slice(0, 8).map(proc => (
-                                    <li key={proc.id} className={styles.procItem}>
-                                        <span>{proc.name}</span>
-                                        <span className={styles.procMeta}>
-                                            {labelStatus(proc.status)} -{' '}
-                                            {formatDate(
-                                                proc.completed_at || proc.started_at,
-                                            )}
-                                        </span>
-                                    </li>
+                            <div className={styles.groupList}>
+                                {procedureGroups.map(group => (
+                                    <div key={group.key} className={styles.groupCard}>
+                                        <div className={styles.groupHeader}>
+                                            <strong className={styles.groupTitle}>{group.label}</strong>
+                                        </div>
+                                        <ul className={styles.procList}>
+                                            {group.procedures.map(proc => {
+                                                const tooth = proc.tooth
+                                                    ? toothById.get(proc.tooth)
+                                                    : null;
+                                                return (
+                                                    <li key={proc.id} className={styles.procItem}>
+                                                        <span className={styles.procName}>
+                                                            {needsAttention(proc) && (
+                                                                <span
+                                                                    className={styles.attentionDot}
+                                                                    title='Atencao: verifique este dado'
+                                                                />
+                                                            )}
+                                                            <strong>
+                                                                {tooth
+                                                                    ? `Dente ${tooth.international_number}`
+                                                                    : 'Geral'}
+                                                            </strong>{' '}
+                                                            · {proc.name}
+                                                            {proc.faces_raw && (
+                                                                <span className={styles.faceBadge}>
+                                                                    {proc.faces_raw}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                        <span className={styles.procMeta}>
+                                                            <span className={styles.procValueWrap}>
+                                                                <span>{formatAmount(proc.patient_amount)}</span>
+                                                                {proc.paid_at && (
+                                                                    <>
+                                                                        <span className={styles.paidDateDesktop}>
+                                                                            {formatDate(proc.paid_at)}
+                                                                        </span>
+                                                                        <span className={styles.paidDateMobile}>
+                                                                            {formatDateShort(proc.paid_at)}
+                                                                        </span>
+                                                                    </>
+                                                                )}
+                                                            </span>
+                                                            <span className={styles.rowActions}>
+                                                                <button
+                                                                    type='button'
+                                                                    className={`${styles.iconBtn} ${
+                                                                        isProcedurePaid(proc)
+                                                                            ? styles.iconBtnPaidActive
+                                                                            : ''
+                                                                    }`}
+                                                                    onClick={() =>
+                                                                        void toggleProcedurePaid(proc)
+                                                                    }
+                                                                    aria-label={
+                                                                        isProcedurePaid(proc)
+                                                                            ? 'Marcar como pendente de pagamento'
+                                                                            : 'Marcar como pago'
+                                                                    }
+                                                                    title={
+                                                                        isProcedurePaid(proc)
+                                                                            ? `Pago em ${formatDate(proc.paid_at)}`
+                                                                            : 'Marcar como pago'
+                                                                    }
+                                                                >
+                                                                    <svg
+                                                                        viewBox='0 0 24 24'
+                                                                        aria-hidden='true'
+                                                                        className={styles.iconSvg}
+                                                                    >
+                                                                        <path
+                                                                            d='M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zm2 0v2h14V7H5zm7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'
+                                                                            fill='currentColor'
+                                                                        />
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    type='button'
+                                                                    className={styles.iconBtn}
+                                                                    onClick={() => openEditForm(proc)}
+                                                                    aria-label='Editar procedimento'
+                                                                    title='Editar procedimento'
+                                                                >
+                                                                    <svg
+                                                                        viewBox='0 0 24 24'
+                                                                        aria-hidden='true'
+                                                                        className={styles.iconSvg}
+                                                                    >
+                                                                        <path
+                                                                            d='M4 20h4l10-10-4-4L4 16v4zm13.7-11.3 1.6-1.6a1 1 0 0 0 0-1.4l-1.3-1.3a1 1 0 0 0-1.4 0L15 6l2.7 2.7z'
+                                                                            fill='currentColor'
+                                                                        />
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    type='button'
+                                                                    className={styles.iconBtnDanger}
+                                                                    onClick={() =>
+                                                                        void deleteProcedure(proc.id)
+                                                                    }
+                                                                    aria-label='Apagar procedimento'
+                                                                    title='Apagar procedimento'
+                                                                >
+                                                                    <svg
+                                                                        viewBox='0 0 24 24'
+                                                                        aria-hidden='true'
+                                                                        className={styles.iconSvg}
+                                                                    >
+                                                                        <path
+                                                                            d='M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9zm-1 11h12a2 2 0 0 0 2-2V7H4v11a2 2 0 0 0 2 2z'
+                                                                            fill='currentColor'
+                                                                        />
+                                                                    </svg>
+                                                                </button>
+                                                            </span>
+                                                        </span>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
                                 ))}
-                            </ul>
+                            </div>
                         )}
                     </section>
                 </>
             )}
-
-            <AppModal
-                open={generalModalOpen}
-                onClose={() => {
-                    if (savingGeneral) return;
-                    setGeneralModalOpen(false);
-                }}
-                closeOnEscape
-                showCloseButton
-            >
-                <div className={styles.modalBody}>
-                    <h3 className={styles.modalTitle}>Novo procedimento geral</h3>
-                    <p className={styles.textMuted}>
-                        Registro sem vinculo de dente/face.
-                    </p>
-
-                    {generalError && (
-                        <p className={styles.modalError}>{generalError}</p>
-                    )}
-
-                    <div className={styles.formGrid}>
-                        <label className={styles.formLabel}>
-                            Nome do procedimento *
-                            <input
-                                value={generalForm.name}
-                                onChange={event =>
-                                    setGeneralForm(prev => ({
-                                        ...prev,
-                                        name: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                placeholder='Ex.: Profilaxia'
-                                disabled={savingGeneral}
-                            />
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Codigo (opcional)
-                            <input
-                                value={generalForm.code}
-                                onChange={event =>
-                                    setGeneralForm(prev => ({
-                                        ...prev,
-                                        code: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                placeholder='Ex.: PRC-001'
-                                disabled={savingGeneral}
-                            />
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Status
-                            <select
-                                value={generalForm.status}
-                                onChange={event =>
-                                    setGeneralForm(prev => ({
-                                        ...prev,
-                                        status:
-                                            event.target
-                                                .value as ProcedureItem['status'],
-                                    }))
-                                }
-                                className={styles.input}
-                                disabled={savingGeneral}
-                            >
-                                <option value='pending'>Pendente</option>
-                                <option value='completed'>Concluido</option>
-                                <option value='canceled'>Cancelado</option>
-                            </select>
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Data
-                            <input
-                                type='date'
-                                value={generalForm.started_at}
-                                onChange={event =>
-                                    setGeneralForm(prev => ({
-                                        ...prev,
-                                        started_at: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                disabled={savingGeneral}
-                            />
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Valor
-                            <input
-                                type='text'
-                                inputMode='decimal'
-                                value={generalForm.patient_amount}
-                                onChange={event =>
-                                    setGeneralForm(prev => ({
-                                        ...prev,
-                                        patient_amount: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                placeholder='0,00'
-                                disabled={savingGeneral}
-                            />
-                        </label>
-
-                        <label className={styles.checkboxRow}>
-                            <input
-                                type='checkbox'
-                                checked={generalForm.paid}
-                                onChange={event =>
-                                    setGeneralForm(prev => ({
-                                        ...prev,
-                                        paid: event.target.checked,
-                                    }))
-                                }
-                                disabled={savingGeneral}
-                            />
-                            Marcar como pago
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Observacao
-                            <textarea
-                                value={generalForm.notes}
-                                onChange={event =>
-                                    setGeneralForm(prev => ({
-                                        ...prev,
-                                        notes: event.target.value,
-                                    }))
-                                }
-                                className={styles.textarea}
-                                rows={3}
-                                placeholder='Anotacoes breves do atendimento'
-                                disabled={savingGeneral}
-                            />
-                        </label>
-                    </div>
-
-                    <div className={styles.modalActions}>
-                        <button
-                            type='button'
-                            className={styles.btn}
-                            onClick={() => setGeneralModalOpen(false)}
-                            disabled={savingGeneral}
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type='button'
-                            className={styles.btnPrimary}
-                            onClick={() => void saveGeneralProcedure()}
-                            disabled={savingGeneral}
-                        >
-                            {savingGeneral ? 'Salvando...' : 'Salvar'}
-                        </button>
-                    </div>
-                </div>
-            </AppModal>
-
-            <AppModal
-                open={toothModalOpen}
-                onClose={() => {
-                    if (savingTooth) return;
-                    setToothModalOpen(false);
-                }}
-                closeOnEscape
-                showCloseButton
-            >
-                <div className={styles.modalBody}>
-                    <h3 className={styles.modalTitle}>
-                        Novo procedimento
-                        {selectedTooth
-                            ? ` — Dente ${selectedTooth.international_number}`
-                            : ''}
-                    </h3>
-
-                    {toothError && (
-                        <p className={styles.modalError}>{toothError}</p>
-                    )}
-
-                    <div className={styles.formGrid}>
-                        <label className={styles.formLabel}>
-                            Nome do procedimento *
-                            <input
-                                value={toothForm.name}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        name: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                placeholder='Ex.: Restauracao em resina'
-                                disabled={savingTooth}
-                            />
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Face (opcional)
-                            <select
-                                value={toothForm.faces_raw}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        faces_raw: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                disabled={savingTooth}
-                            >
-                                <option value=''>— Nenhuma face —</option>
-                                <option value='O'>O – Oclusal</option>
-                                <option value='V'>V – Vestibular</option>
-                                <option value='P'>P – Palatina / Lingual</option>
-                                <option value='M'>M – Mesial</option>
-                                <option value='D'>D – Distal</option>
-                                <option value='MO'>MO – Mesial / Oclusal</option>
-                                <option value='DO'>DO – Distal / Oclusal</option>
-                                <option value='VO'>VO – Vestibular / Oclusal</option>
-                                <option value='PO'>PO – Palatina / Oclusal</option>
-                                <option value='MDO'>MDO – Mesial / Distal / Oclusal</option>
-                            </select>
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Codigo (opcional)
-                            <input
-                                value={toothForm.code}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        code: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                placeholder='Ex.: PRC-001'
-                                disabled={savingTooth}
-                            />
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Status
-                            <select
-                                value={toothForm.status}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        status:
-                                            event.target
-                                                .value as ProcedureItem['status'],
-                                    }))
-                                }
-                                className={styles.input}
-                                disabled={savingTooth}
-                            >
-                                <option value='pending'>Pendente</option>
-                                <option value='completed'>Concluido</option>
-                                <option value='canceled'>Cancelado</option>
-                            </select>
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Data
-                            <input
-                                type='date'
-                                value={toothForm.started_at}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        started_at: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                disabled={savingTooth}
-                            />
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Valor
-                            <input
-                                type='text'
-                                inputMode='decimal'
-                                value={toothForm.patient_amount}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        patient_amount: event.target.value,
-                                    }))
-                                }
-                                className={styles.input}
-                                placeholder='0,00'
-                                disabled={savingTooth}
-                            />
-                        </label>
-
-                        <label className={styles.checkboxRow}>
-                            <input
-                                type='checkbox'
-                                checked={toothForm.paid}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        paid: event.target.checked,
-                                    }))
-                                }
-                                disabled={savingTooth}
-                            />
-                            Marcar como pago
-                        </label>
-
-                        <label className={styles.formLabel}>
-                            Observacao
-                            <textarea
-                                value={toothForm.notes}
-                                onChange={event =>
-                                    setToothForm(prev => ({
-                                        ...prev,
-                                        notes: event.target.value,
-                                    }))
-                                }
-                                className={styles.textarea}
-                                rows={3}
-                                placeholder='Anotacoes breves do atendimento'
-                                disabled={savingTooth}
-                            />
-                        </label>
-                    </div>
-
-                    <div className={styles.modalActions}>
-                        <button
-                            type='button'
-                            className={styles.btn}
-                            onClick={() => setToothModalOpen(false)}
-                            disabled={savingTooth}
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type='button'
-                            className={styles.btnPrimary}
-                            onClick={() => void saveToothProcedure()}
-                            disabled={savingTooth}
-                        >
-                            {savingTooth ? 'Salvando...' : 'Salvar'}
-                        </button>
-                    </div>
-                </div>
-            </AppModal>
         </div>
     );
 }

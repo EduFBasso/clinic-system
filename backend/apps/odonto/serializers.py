@@ -22,6 +22,7 @@ class ProcedureSerializer(serializers.ModelSerializer):
             'completed_at',
             'patient_amount',
             'paid_amount',
+            'paid_at',
             'duration_minutes',
             'notes',
             'is_active',
@@ -39,13 +40,13 @@ class ProcedureSerializer(serializers.ModelSerializer):
         surface = attrs.get('surface', getattr(instance, 'surface', None))
 
         if tooth is not None and arcade is not None:
-            if tooth.arcade_id != arcade.id:
+            if tooth.arcade_id != arcade.id:  # pyright: ignore[reportAttributeAccessIssue]
                 raise serializers.ValidationError(
                     {'tooth': 'O dente nao pertence a arcada informada.'}
                 )
 
         if surface is not None and tooth is not None:
-            if surface.tooth_id != tooth.id:
+            if surface.tooth_id != tooth.id:  # pyright: ignore[reportAttributeAccessIssue]
                 raise serializers.ValidationError(
                     {'surface': 'A face nao pertence ao dente informado.'}
                 )
@@ -109,10 +110,10 @@ class DentalArcadeListSerializer(serializers.ModelSerializer):
         ]
 
     def get_pending_procedures(self, obj: DentalArcade) -> int:
-        return obj.procedures.filter(status=Procedure.Status.PENDING).count()
+        return obj.procedures.filter(status=Procedure.Status.PENDING).count()  # pyright: ignore[reportAttributeAccessIssue]
 
     def get_completed_procedures(self, obj: DentalArcade) -> int:
-        return obj.procedures.filter(status=Procedure.Status.COMPLETED).count()
+        return obj.procedures.filter(status=Procedure.Status.COMPLETED).count()  # pyright: ignore[reportAttributeAccessIssue]
 
 
 class DentalArcadeDetailSerializer(serializers.ModelSerializer):
@@ -154,7 +155,7 @@ class DentalArcadeWriteSerializer(serializers.ModelSerializer):
     def validate_client(self, value: Client) -> Client:
         request = self.context.get('request')
         user = getattr(request, 'user', None)
-        if not user or value.professional_id != user.id:
+        if not user or value.professional_id != user.id:  # pyright: ignore[reportAttributeAccessIssue]
             raise serializers.ValidationError(
                 'Cliente nao pertence ao profissional autenticado.',
             )
