@@ -271,47 +271,9 @@ export function useQuickScheduleSave({
                                     : null;
                                 if (pending) {
                                     try {
-                                        const a = pending as Appointment;
-                                        const anyAppt = a as unknown as Record<
-                                            string,
-                                            unknown
-                                        >;
-                                        const clientName = (():
-                                            | string
-                                            | undefined => {
-                                            if (
-                                                typeof anyAppt.client_name ===
-                                                'string'
-                                            )
-                                                return anyAppt.client_name as string;
-                                            const c = anyAppt.client as unknown;
-                                            if (
-                                                c &&
-                                                typeof c === 'object' &&
-                                                'name' in
-                                                    (c as Record<
-                                                        string,
-                                                        unknown
-                                                    >)
-                                            ) {
-                                                const n = (
-                                                    c as { name?: unknown }
-                                                ).name;
-                                                if (typeof n === 'string')
-                                                    return n;
-                                            }
-                                            return undefined;
-                                        })();
-                                        const clientField = ((): unknown => {
-                                            const c = anyAppt.client as unknown;
-                                            if (
-                                                typeof c === 'number' ||
-                                                typeof c === 'object'
-                                            )
-                                                return c;
-                                            return undefined;
-                                        })();
-                                        openPendingActionsForAppointment(a);
+                                        openPendingActionsForAppointment(
+                                            pending as Appointment,
+                                        );
                                     } catch {
                                         /* noop */
                                     }

@@ -496,10 +496,8 @@ const MainContent: React.FC<MainContentProps> = ({
     }, [clients, tomorrowClientIds, sortByPeriodThenTime]);
 
     // Clientes com compromisso pendente.
-    // A lista é derivada de consultas globais da agenda:
-    // - status='pending' (persistido)
-    // - status='scheduled' com end_at <= now (vencido, ainda não finalizado)
-    // Isso evita divergência entre status visual dos cards e o toggle no topo.
+    // Fonte de verdade: backend (status='pending' + resumo no payload de clientes).
+    // A lista scheduled abaixo é usada somente para o bloco de "amanhã".
     React.useEffect(() => {
         let cancelled = false;
 
@@ -514,7 +512,6 @@ const MainContent: React.FC<MainContentProps> = ({
                 return;
             }
 
-            const nowMs = Date.now();
             const headers = { Authorization: `Bearer ${token}` };
             const pendingUrl = `${API_BASE}/agenda/appointments/?status=pending&ordering=-end_at&limit=300&ts=${Date.now()}`;
             const scheduledUrl = `${API_BASE}/agenda/appointments/?status=scheduled&ordering=-end_at&limit=300&ts=${Date.now()}`;
@@ -548,6 +545,21 @@ const MainContent: React.FC<MainContentProps> = ({
                     if (clientId != null) ids.add(clientId);
                 });
 
+                // Complemento via resumo de clientes para consistência com cartões
+                clients.forEach(c => {
+                    const anyClient = c as unknown as Record<string, unknown>;
+                    if (anyClient.has_pending_appointment === true) {
+                        ids.add(c.id);
+                        return;
+                    }
+                    if (
+                        c.next_appointment_status === 'pending' ||
+                        c.last_appointment_status === 'pending'
+                    ) {
+                        ids.add(c.id);
+                    }
+                });
+
                 // Ordena agendados por start_at para garantir que o primeiro de amanhã seja o mais cedo
                 const sortedScheduled = [...scheduledData].sort((a, b) => {
                     const ta = a.start_at ? new Date(a.start_at).getTime() : 0;
@@ -558,14 +570,6 @@ const MainContent: React.FC<MainContentProps> = ({
                 sortedScheduled.forEach(appt => {
                     const clientId = resolveAppointmentClientId(appt);
                     if (clientId == null) return;
-
-                    // Vencidos (end_at <= now) → pendentes
-                    const endMs = appt.end_at
-                        ? new Date(appt.end_at).getTime()
-                        : NaN;
-                    if (Number.isFinite(endMs) && endMs <= nowMs) {
-                        ids.add(clientId);
-                    }
 
                     // Agendados para amanhã (qualquer horário do dia)
                     const startMs = appt.start_at

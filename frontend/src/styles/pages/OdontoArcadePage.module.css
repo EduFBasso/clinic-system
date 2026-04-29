@@ -90,9 +90,9 @@
 }
 
 .badgeCanceled {
-    background: #fee2e2;
-    color: #b91c1c;
-    border-color: color-mix(in oklab, #b91c1c 24%, #ffffff);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    border-color: color-mix(in oklab, var(--color-danger) 24%, #ffffff);
 }
 
 .btn {
@@ -210,23 +210,23 @@
 }
 
 .toothEmpty {
-    fill: #f3f4f6;
-    stroke: #d1d5db;
+    fill: var(--color-bg);
+    stroke: var(--color-border);
 }
 
 .toothPending {
-    fill: #fef3c7;
-    stroke: #d97706;
+    fill: var(--color-warning-bg);
+    stroke: var(--color-warning-dark);
 }
 
 .toothCompleted {
-    fill: #dcfce7;
-    stroke: #047857;
+    fill: var(--color-success-bg);
+    stroke: var(--color-success);
 }
 
 .toothCanceled {
-    fill: #fee2e2;
-    stroke: #b91c1c;
+    fill: var(--color-danger-bg);
+    stroke: var(--color-danger);
 }
 
 .toothNumber {

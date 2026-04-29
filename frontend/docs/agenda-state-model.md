@@ -123,7 +123,7 @@ Caracteristicas:
 ## Tabela de estados
 
 | Estado | Natureza | Significado | Edita data/hora | Pode cancelar | Pode concluir | Pode voltar a futuro |
-|---|---|---|---:|---:|---:|---:|
+| --- | --- | --- | ---: | ---: | ---: | ---: |
 | `scheduled` | persistido | compromisso ativo programado | Sim | Sim | Indiretamente, via `pending` | Sim |
 | `ongoing` | operacional | janela de atendimento em curso | Sim, conforme regra operacional atual | Sim | Indiretamente, via `pending` | Nao |
 | `pending` | persistido transitorio | compromisso aguardando resolucao final | Nao | Sim | Sim | Nao |
@@ -207,7 +207,7 @@ Ao seguir para `canceled`:
 
 ## Regras de edicao por estado
 
-### Scheduled
+### Scheduled (regra temporal)
 
 Permitido:
 
@@ -216,7 +216,7 @@ Permitido:
 - cancelar
 - ajustar atributos do agendamento conforme regra atual
 
-### Ongoing
+### Ongoing (regra temporal)
 
 Condicao confirmada:
 
@@ -228,7 +228,7 @@ Leitura importante:
 - isso nao significa que `ongoing` e um novo status persistido
 - significa apenas que o compromisso ainda esta na fase ativa do fluxo
 
-### Pending
+### Pending (regra temporal)
 
 Nao permitido:
 
@@ -335,6 +335,26 @@ Esta modelagem aponta para um frontend mais simples:
 3. tratar `ongoing` apenas como condicao visual ou operacional
 4. impedir edicao de data/hora a partir de `pending`
 5. separar claramente agenda de resolucao e agenda de financeiro
+
+### Estado atual da migracao (2026-04-28)
+
+- O frontend ja prioriza dados vindos do backend para pendencia no card e no
+  topo da Home (`status='pending'`, `next_appointment_status`,
+  `last_appointment_status`, `has_pending_appointment`).
+- Inferencia local de pendencia por "scheduled vencido" deixou de ser regra
+  principal para listagem da Home.
+- Ainda existe fallback pontual no servico de pendencia para resiliencia de
+  compatibilidade durante a transicao (`services/pending.ts`), usado quando um
+  fluxo precisa abrir o resolvedor imediatamente.
+
+### Cadencia de sincronizacao (2026-04-28)
+
+- O tick de UI (relógio local) pode ser frequente para atualizacao visual, mas
+  nao deve gerar consulta HTTP por card.
+- Ping global da Home para refresh de agenda: 60 segundos, apenas com aba
+  visivel.
+- Atualizacoes imediatas seguem orientadas a evento (`appointments:changed`,
+  `updateClients`) apos acoes de criar/editar/finalizar/cancelar.
 
 ## Regras que devem guiar a estabilizacao
 

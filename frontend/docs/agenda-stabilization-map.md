@@ -317,6 +317,20 @@ Ganho:
 
 - menor probabilidade de voltar para Home com interface visivel, mas ainda bloqueada por lock residual
 
+### 7. Ownership de pendencia mais proximo do backend
+
+O frontend deixou de usar inferencia difusa como regra principal para pendencia
+na Home.
+
+Diretriz atual:
+
+- backend e a fonte de verdade de pendencia
+- frontend consome resumo (`next_appointment_status`,
+  `last_appointment_status`, `has_pending_appointment`) e lista persistida
+  (`status='pending'`)
+- fallbacks locais devem existir apenas como camada de compatibilidade de
+  transicao, nao como regra central
+
 ## Fragilidades que ainda existem
 
 ### 1. `AppModal` segue sendo infraestrutura sensivel
@@ -347,6 +361,11 @@ Leitura pratica:
 
 - eventos continuam uteis como ponte
 - mas quando viram motor principal de sincronizacao, a previsibilidade cai
+
+Observacao operacional:
+
+- polling global deve permanecer conservador (60s, somente aba visivel), com
+  prioridade para refresh orientado por eventos de dominio.
 
 ### 3. `QuickSchedule` concentra responsabilidade demais
 

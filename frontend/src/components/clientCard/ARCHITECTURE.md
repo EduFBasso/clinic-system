@@ -20,18 +20,22 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 ## Responsabilidades Atuais
 
-| Área                    | Descrição                                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| Dados básicos           | Renderização direta de props `client`                                                            |
-| Pending                 | Determinação e ação via `useClientPendingState`                                                  |
-| Ongoing                 | Heurística robusta via `useClientOngoingState` (snapshot + sweep + probe + latch + hysterese)    |
-| Futuros                 | Fetch incremental a partir do próximo compromisso (ainda inline)                                 |
-| Edição / QuickSchedule  | Modal controlado localmente (`showQuick`, `editingAppt`)                                         |
-| Agenda Mensal / Semanal | Modais `MonthlyAgendaModal` e `WeeklyAgendaModal`                                                |
-| Ações +                 | Botão de criação adaptativo (pendente, limite atingido, ongoing)                                 |
-| Finalização             | Encapsulada por `useFinalizeAppointment` + callback `afterFinalizeSuccess` vindo do hook ongoing |
-| Estilo                  | Centralizado em `useClientCardStyle` (cores, bordas, supressões)                                 |
-| Scroll / Foco           | Efeito que responde a evento `scrollToClientCard` para auto-scroll suave                         |
+- Dados básicos: renderização direta de props `client`.
+- Pending: determinação e ação via `useClientPendingState`.
+- Ongoing: heurística robusta via `useClientOngoingState` (snapshot + sweep +
+    probe + latch + hysterese).
+- Futuros: fetch incremental encapsulado em `useClientFutureAppointments`.
+- Edição / QuickSchedule: modal controlado localmente (`showQuick`,
+    `editingAppt`).
+- Agenda Mensal / Semanal: modais `MonthlyAgendaModal` e `WeeklyAgendaModal`.
+- Ações +: botão de criação adaptativo (pendente, limite atingido, ongoing).
+- Odonto (arcada): ícone de dente (`FaTooth`) condicional por especialidade e
+    navegação para `/odonto/arcada/:id`.
+- Finalização: encapsulada por `useFinalizeAppointment` + callback
+    `afterFinalizeSuccess` vindo do hook ongoing.
+- Estilo: centralizado em `useClientCardStyle` (cores, bordas, supressões).
+- Scroll / Foco: efeito que responde a evento `scrollToClientCard` para
+    auto-scroll suave.
 
 ## Hooks Utilizados
 
@@ -63,10 +67,22 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 - Gerencia estado de finalização (`finishing`) e executa chamada ao backend.
 
-### (A extrair) `useClientFutureAppointments`
+### 5. `useClientFutureAppointments`
 
-- Objetivo: encapsular fetch de futuros agendamentos e mensagens de limite.
-- Situação Atual: lógica inline dentro de um `useEffect` em `ClientCard`.
+- Entrada: `{ client, isScheduled }`
+- Saída: `futureAppointments`, `loadingFuture`, `dynLimit`, `totalScheduled`,
+    `limitReached`, `refetch()`.
+- Responsabilidade: encapsular fetch de futuros agendamentos e aviso de limite
+    via `systemMessage`.
+
+### 6. Odonto Arcade Access (ClientCard)
+
+- Leitura de `loggedProfessional` (localStorage) para identificar especialidade.
+- Liberação do ícone de dente quando especialidade indica contexto odontológico
+    (`odonto`, `dent`, `ortodont`).
+- Clique no ícone navega para `/odonto/arcada/:clientId`.
+- Observação: como a checagem é memoizada na montagem do card, alterações de
+    especialidade no mesmo ciclo de sessão podem exigir refresh para refletir.
 
 ### (A extrair) `useClientCreateAction`
 
@@ -109,7 +125,7 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 1. (DONE) Extrair pending logic → `useClientPendingState`.
 2. (DONE) Extrair ongoing logic → `useClientOngoingState`.
-3. Extrair futuro: criar `useClientFutureAppointments`.
+3. (DONE) Extrair futuro: `useClientFutureAppointments`.
 4. Unificar botão +: criar `useClientCreateAction` (ou
    `useClientScheduleAction`).
 5. Ajustar bordas de seleção (1px normal / 2px selecionado) direto no
@@ -124,15 +140,10 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 ## Próximos Passos Técnicos Imediatos
 
-- Criar hook `useClientFutureAppointments` encapsulando:
-- Estado: `futureAppointments`, `loadingFuture`.
-- Efeitos: fetch inicial e em `appointments:changed`.
-- Mensagem de limite de compromissos (disparo de `systemMessage`).
-- Dependências: `client.id`, `client.next_appointment_start_at`,
-        `client.next_appointment_id`, `isScheduled`.
-- Substituir bloco inline no `ClientCard` pelo hook.
-- Introduzir tipo retornado:
-    `{ futureAppointments, loadingFuture, limitReached, totalScheduled, dynLimit, refetch }`.
+- Revisar memo de permissão odontológica para reagir a mudanças de sessão sem
+    depender de reload (opcional, baixo risco).
+- Consolidar critérios de disponibilidade do botão + em um hook único
+    (`useClientScheduleAction`) para reduzir ramificações no JSX.
 
 ## Considerações de Performance
 
@@ -165,4 +176,4 @@ O objetivo da refatoração é reduzir o acoplamento, simplificar a leitura
 
 ---
 
-Última atualização: 2025-10-07
+Última atualização: 2026-04-28

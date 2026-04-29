@@ -104,6 +104,7 @@ export default function OdontoArcadePage() {
     const canAccess = React.useMemo(() => hasOdontoAccess(), []);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
+    const [clientName, setClientName] = React.useState<string | null>(null);
     const [arcade, setArcade] = React.useState<ArcadeListItem | null>(null);
     const [teeth, setTeeth] = React.useState<ToothItem[]>([]);
     const [procedures, setProcedures] = React.useState<ProcedureItem[]>([]);
@@ -146,9 +147,17 @@ export default function OdontoArcadePage() {
         setLoading(true);
         setError(null);
         try {
-            const arcadesRes = await apiFetch(
-                `/odonto/arcades/?client=${numericClientId}`,
-            );
+            const [arcadesRes, clientRes] = await Promise.all([
+                apiFetch(`/odonto/arcades/?client=${numericClientId}`),
+                apiFetch(`/register/clients/${numericClientId}/`).catch(() => null),
+            ]);
+
+            if (clientRes && typeof clientRes === 'object') {
+                const c = clientRes as { first_name?: string; last_name?: string };
+                const fullName = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim();
+                if (fullName) setClientName(fullName);
+            }
+
             const arcades = asList<ArcadeListItem>(arcadesRes);
 
             const currentArcade = [...arcades].sort((a, b) => {
@@ -405,7 +414,9 @@ export default function OdontoArcadePage() {
             <header className={styles.headerCard}>
                 <div>
                     <h1 className={styles.title}>Arcada odontologica</h1>
-                    <p className={styles.text}>Cliente #{clientId}</p>
+                    <p className={styles.text}>
+                        {clientName ?? `Cliente #${clientId}`}
+                    </p>
                 </div>
                 <div className={styles.headerActions}>
                     <span

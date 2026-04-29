@@ -89,10 +89,7 @@ interface ThemeContextValue {
     setTheme: (theme: AppTheme) => void;
 }
 
-const ThemeContext = createContext<ThemeContextValue>({
-    theme: DEFAULT_THEME,
-    setTheme: () => {},
-});
+const ThemeContextStrict = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const [theme, setThemeState] = useState<AppTheme>(() => {
@@ -128,12 +125,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <ThemeContext.Provider value={{ theme, setTheme }}>
+        <ThemeContextStrict.Provider value={{ theme, setTheme }}>
             {children}
-        </ThemeContext.Provider>
+        </ThemeContextStrict.Provider>
     );
 }
 
 export function useTheme(): ThemeContextValue {
-    return useContext(ThemeContext);
+    const ctx = useContext(ThemeContextStrict);
+    if (!ctx) {
+        throw new Error('useTheme must be used within ThemeProvider');
+    }
+    return ctx;
 }

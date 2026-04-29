@@ -98,9 +98,9 @@ export default function Home() {
         autoCloseMs?: number;
     } | null>(null);
     const version = useAppVersionWatcher();
-    // Live ping: simple heuristic — enable while the page is open.
-    // We can refine to enable only when there may be ongoing appointments by inspecting clients in future.
-    useAppointmentsLivePing({ enabled: true, pollIntervalMs: 30000 });
+    // Live ping: keep a conservative refresh cadence while page is visible.
+    // 60s is enough after moving pending/ongoing truth to backend-driven fields/events.
+    useAppointmentsLivePing({ enabled: true, pollIntervalMs: 60000 });
     const {
         pendingActionsOpen,
         pendingAppt,
