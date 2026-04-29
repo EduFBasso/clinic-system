@@ -14,6 +14,14 @@ from apps.odonto.models import DentalArcade, Tooth, Surface, Procedure
 
 class Command(BaseCommand):
     help = 'Import dental arcade data from Bruna CSV exports into odonto models.'
+    LEGACY_CHAR_MAP = {
+        '\x87': 'á',
+        '\x8d': 'ç',
+        '\x8b': 'ã',
+        '\x99': 'ô',
+        '\x97': 'ó',
+        '\x8e': 'é',
+    }
     INTERNATIONAL_NUMBER_BY_SEQUENCE = {
         1: 18, 2: 17, 3: 16, 4: 15, 5: 14, 6: 13, 7: 12, 8: 11,
         9: 21, 10: 22, 11: 23, 12: 24, 13: 25, 14: 26, 15: 27, 16: 28,
@@ -230,7 +238,9 @@ class Command(BaseCommand):
                             'tooth': tooth,
                             'surface': surface,
                             'code': proc_row.get('CD_TAB_PRC_ITEM', ''),
-                            'name': proc_row.get('TX_NOME_PRC_ITEM', 'Procedimento'),
+                            'name': self._normalize_legacy_text(
+                                proc_row.get('TX_NOME_PRC_ITEM', 'Procedimento')
+                            ),
                             'status': 'completed' if proc_row.get('CD_STATUS') == 'FI' else 'pending',
                             'region_raw': region,
                             'faces_raw': faces,
@@ -413,14 +423,49 @@ class Command(BaseCommand):
         text = (value or '').strip()
         if not text:
             return text
+
+        if not self._looks_like_mojibake(text):
+            return text
+
         try:
-            repaired = text.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore').strip()
-            # Return only if we still have something meaningful.
-            if repaired and any(ch.isalpha() for ch in repaired):
-                return repaired
+            for source_encoding in ('cp1252', 'latin-1'):
+                try:
+                    repaired = text.encode(source_encoding).decode('utf-8').strip()
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    continue
+
+                if repaired and any(ch.isalpha() for ch in repaired):
+                    return repaired
         except Exception:
             return text
         return text
+
+    def _looks_like_mojibake(self, value):
+        text = (value or '')
+        markers = (
+            'Ã',
+            'Â',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '�',
+        )
+        return any(marker in text for marker in markers)
+
+    def _normalize_legacy_text(self, value):
+        text = (value or '').strip()
+        if not text:
+            return text
+
+        # First normalize known legacy control-byte substitutions.
+        for bad_char, good_char in self.LEGACY_CHAR_MAP.items():
+            text = text.replace(bad_char, good_char)
+
+        fixed = self._fix_mojibake(text)
+        # Keep text canonically composed for stable display/search.
+        return unicodedata.normalize('NFC', fixed)
 
     def _normalize_name(self, value):
         normalized = unicodedata.normalize('NFKD', (value or '').strip().lower())
