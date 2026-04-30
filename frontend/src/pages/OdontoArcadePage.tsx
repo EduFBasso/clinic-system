@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../utils/apiFetch';
 import { getNow } from '../utils/now';
+import { parseAmount, formatBRLCurrency, validateAmount } from '../utils/currency';
 import styles from '../styles/pages/OdontoArcadePage.module.css';
 
 type ArcadeListItem = {
@@ -108,25 +109,7 @@ function formatDateShort(dateIso?: string | null): string {
 
 function formatMoney(value?: number | null): string {
     if (value == null) return '-';
-    return value.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-    });
-}
-
-function toNumber(value?: number | string | null): number | null {
-    if (value == null) return null;
-    if (typeof value === 'number') return Number.isNaN(value) ? null : value;
-    const normalized = value.replace(',', '.').trim();
-    if (!normalized) return null;
-    const parsed = Number(normalized);
-    return Number.isNaN(parsed) ? null : parsed;
-}
-
-function formatAmount(value?: number | string | null): string {
-    const numeric = toNumber(value);
-    if (numeric == null) return '-';
-    return formatMoney(numeric);
+    return formatBRLCurrency(value);
 }
 
 function eventDateISO(proc: ProcedureItem): string | null {
@@ -426,14 +409,14 @@ export default function OdontoArcadePage() {
         }
 
         let amount: number | null = null;
-        const amountRaw = inlineForm.patient_amount.replace(',', '.').trim();
+        const amountRaw = inlineForm.patient_amount.trim();
         if (amountRaw) {
-            const parsed = Number(amountRaw);
-            if (Number.isNaN(parsed) || parsed < 0) {
-                setFormError('Valor invalido. Use um numero maior ou igual a zero.');
+            const validation = validateAmount(amountRaw);
+            if (!validation.valid) {
+                setFormError(validation.message || 'Valor inválido.');
                 return;
             }
-            amount = parsed;
+            amount = validation.numericValue!;
         }
 
         setSavingForm(true);
@@ -586,7 +569,7 @@ export default function OdontoArcadePage() {
         try {
             const today = todayISODate();
             const hasDate = !!(proc.started_at || proc.completed_at);
-            const patientAmount = toNumber(proc.patient_amount);
+            const patientAmount = parseAmount(proc.patient_amount);
             await apiFetch(`/odonto/procedures/${proc.id}/`, {
                 method: 'PATCH',
                 body: {
@@ -954,7 +937,7 @@ export default function OdontoArcadePage() {
                                                 }))
                                             }
                                             className={styles.input}
-                                            placeholder='0,00'
+                                            placeholder='0,00 ou 0.00'
                                             disabled={savingForm}
                                         />
                                     </label>
@@ -1089,7 +1072,7 @@ export default function OdontoArcadePage() {
                                                             <div className={styles.procFinanceGroup}>
                                                                 <div className={styles.procValueWrap}>
                                                                     <span className={styles.procValue}>
-                                                                        {formatAmount(proc.patient_amount)}
+                                                                        {formatMoney(proc.patient_amount as any)}
                                                                     </span>
                                                                     {proc.paid_at && (
                                                                         <>
@@ -1124,7 +1107,7 @@ export default function OdontoArcadePage() {
                                                                     }
                                                                 >
                                                                     <span className={styles.paymentSymbol}>
-                                                                        $
+                                                                        PG
                                                                     </span>
                                                                 </button>
                                                             </div>

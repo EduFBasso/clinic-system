@@ -515,9 +515,10 @@
 }
 
 .paymentSymbol {
-    font-size: 18px;
-    font-weight: 800;
+    font-size: 13px;
+    font-weight: 700;
     line-height: 1;
+    letter-spacing: 0.05em;
 }
 
 .iconSvg {

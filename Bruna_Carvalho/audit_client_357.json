@@ -1,0 +1,16 @@
+{
+  "audit_timestamp": "2026-04-30T23:35:51.614782",
+  "client": {
+    "id": 357,
+    "name": "Angelo Zambom Netto"
+  },
+  "arcades": [
+    {
+      "arcade_id": 2530,
+      "procedures_count": 1,
+      "status_dist": {
+        "pending": 1
+      }
+    }
+  ]
+}
