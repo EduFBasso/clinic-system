@@ -87,3 +87,5 @@ scripts/db/backups/**/*.json
 info/*
 frontend-lab/
 *.local
+
+docs/

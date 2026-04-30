@@ -33,7 +33,6 @@ type ProcedureItem = {
     is_active: boolean;
 };
 
-type ToothVisualState = 'empty' | 'pending' | 'completed' | 'canceled';
 type ProcedureFormKind = 'tooth' | 'general';
 
 type ProcedureGroup = {
@@ -125,16 +124,12 @@ function eventDateISO(proc: ProcedureItem): string | null {
     return proc.completed_at || proc.started_at || null;
 }
 
-function isInconsistentStatus(proc: ProcedureItem): boolean {
-    return proc.status === 'pending' && !!proc.completed_at;
+function isProcedureCompleted(proc: ProcedureItem): boolean {
+    return !!proc.completed_at;
 }
 
-function getToothState(procs: ProcedureItem[]): ToothVisualState {
-    if (procs.length === 0) return 'empty';
-    if (procs.some(p => p.status === 'pending')) return 'pending';
-    if (procs.some(p => p.status === 'completed')) return 'completed';
-    if (procs.some(p => p.status === 'canceled')) return 'canceled';
-    return 'empty';
+function isInconsistentStatus(proc: ProcedureItem): boolean {
+    return proc.status === 'pending' && !!proc.completed_at;
 }
 
 function todayISODate(): string {
@@ -306,17 +301,6 @@ export default function OdontoArcadePage() {
         if (!activeDateKey) return [] as ProcedureItem[];
         return datedProcedures.filter(proc => eventDateISO(proc) === activeDateKey);
     }, [datedProcedures, activeDateKey]);
-
-    const activeDateProceduresByTooth = React.useMemo(() => {
-        const map = new Map<number, ProcedureItem[]>();
-        for (const proc of activeDateProcedures) {
-            if (proc.tooth == null) continue;
-            const list = map.get(proc.tooth) ?? [];
-            list.push(proc);
-            map.set(proc.tooth, list);
-        }
-        return map;
-    }, [activeDateProcedures]);
 
     const activeDateToothIds = React.useMemo(() => {
         const ids = new Set<number>();
@@ -696,20 +680,7 @@ export default function OdontoArcadePage() {
                                     const x = 20 + col * 90;
                                     const lowerOffset = row >= 2 ? 24 : 0;
                                     const y = 40 + row * 82 + lowerOffset;
-                                    const state = getToothState(
-                                        activeDateProceduresByTooth.get(tooth.id) ?? [],
-                                    );
                                     const selected = selectedToothId === tooth.id;
-                                    const inDateEvent = activeDateToothIds.has(tooth.id);
-
-                                    const stateClass =
-                                        state === 'pending'
-                                            ? styles.toothPending
-                                            : state === 'completed'
-                                              ? styles.toothCompleted
-                                              : state === 'canceled'
-                                                ? styles.toothCanceled
-                                                : styles.toothEmpty;
 
                                     return (
                                         <g
@@ -732,10 +703,8 @@ export default function OdontoArcadePage() {
                                                 width='72'
                                                 height='62'
                                                 rx='10'
-                                                className={`${styles.toothRect} ${stateClass} ${
+                                                className={`${styles.toothRect} ${styles.toothEmpty} ${
                                                     selected ? styles.toothSelected : ''
-                                                } ${
-                                                    inDateEvent ? styles.toothInDateEvent : ''
                                                 }`}
                                             />
                                             <text
@@ -972,6 +941,22 @@ export default function OdontoArcadePage() {
                     <section className={styles.detailCard}>
                         <div className={styles.sectionHeaderWithAction}>
                             <h2 className={styles.sectionTitle}>Procedimentos</h2>
+                            <div className={styles.procedureLegend}>
+                                <span className={styles.procedureLegendItem}>
+                                    <span
+                                        className={`${styles.statusDot} ${styles.statusDotPending}`}
+                                        aria-hidden='true'
+                                    />
+                                    Pendente
+                                </span>
+                                <span className={styles.procedureLegendItem}>
+                                    <span
+                                        className={`${styles.statusDot} ${styles.statusDotCompleted}`}
+                                        aria-hidden='true'
+                                    />
+                                    Concluido
+                                </span>
+                            </div>
                         </div>
                         <details className={styles.faceLegend}>
                             <summary>Legenda das faces (V, D, VO, DVMO...)</summary>
@@ -999,6 +984,18 @@ export default function OdontoArcadePage() {
                                                 return (
                                                     <li key={proc.id} className={styles.procItem}>
                                                         <span className={styles.procName}>
+                                                            <span
+                                                                className={`${styles.statusDot} ${
+                                                                    isProcedureCompleted(proc)
+                                                                        ? styles.statusDotCompleted
+                                                                        : styles.statusDotPending
+                                                                }`}
+                                                                title={
+                                                                    isProcedureCompleted(proc)
+                                                                        ? 'Procedimento concluido'
+                                                                        : 'Procedimento pendente'
+                                                                }
+                                                            />
                                                             {needsAttention(proc) && (
                                                                 <span
                                                                     className={styles.attentionDot}

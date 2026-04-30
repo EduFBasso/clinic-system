@@ -199,12 +199,7 @@
 
 .toothSelected {
     stroke: var(--color-primary);
-    stroke-width: 3;
-}
-
-.toothInDateEvent {
-    stroke: color-mix(in oklab, var(--color-primary) 72%, #111827);
-    stroke-width: 3;
+    stroke-width: 2;
 }
 
 .toothEmpty {
@@ -263,6 +258,22 @@
     justify-content: flex-end;
 }
 
+.procedureLegend {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.procedureLegendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
 .procName {
     flex: 1;
     min-width: 0;
@@ -277,6 +288,21 @@
     align-items: center;
     gap: 6px;
     white-space: nowrap;
+}
+
+.statusDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+}
+
+.statusDotPending {
+    background: #94a3b8;
+}
+
+.statusDotCompleted {
+    background: #2563eb;
 }
 
 .paidDateDesktop,
@@ -528,6 +554,11 @@
     .procMeta {
         width: 100%;
         justify-content: space-between;
+    }
+
+    .procedureLegend {
+        width: 100%;
+        justify-content: flex-start;
     }
 
     .paidDateDesktop {

@@ -1,0 +1,35 @@
+{
+  "folders": [
+    { "path": "backend" },
+    { "path": "frontend" },
+    { "path": "docs" },
+    { "path": "scripts" },
+  ],
+
+  "settings": {
+    // Git: detectar o repositório real na pasta pai do workspace multi-root
+    "git.openRepositoryInParentFolders": "always",
+
+    // Python: sempre usar o .venv do backend
+    "python.defaultInterpreterPath": "${workspaceFolder:backend}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+
+    // Terminal sempre abre no backend
+    "terminal.integrated.cwd": "${workspaceFolder:backend}",
+
+    // Ocultar arquivos que só poluem
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.venv": false,
+    },
+
+    // ESLint só no frontend
+    "eslint.workingDirectories": [
+      { "directory": "frontend", "changeProcessCWD": true },
+    ],
+
+    // Formatação
+    "editor.formatOnSave": true,
+  },
+}
