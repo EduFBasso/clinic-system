@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../utils/apiFetch';
+import { getNow } from '../utils/now';
 import styles from '../styles/pages/OdontoArcadePage.module.css';
 
 type ArcadeListItem = {
@@ -79,17 +80,25 @@ function hasOdontoAccess(): boolean {
     }
 }
 
+/** Parse YYYY-MM-DD as local date (avoids UTC-midnight shift in UTC-3 Brazil). */
+function parseDateLocal(dateIso: string): Date | null {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateIso);
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function formatDate(dateIso?: string | null): string {
     if (!dateIso) return '-';
-    const d = new Date(dateIso);
-    if (Number.isNaN(d.getTime())) return '-';
+    const d = parseDateLocal(dateIso);
+    if (!d) return '-';
     return d.toLocaleDateString('pt-BR');
 }
 
 function formatDateShort(dateIso?: string | null): string {
     if (!dateIso) return '-';
-    const d = new Date(dateIso);
-    if (Number.isNaN(d.getTime())) return '-';
+    const d = parseDateLocal(dateIso);
+    if (!d) return '-';
     return d.toLocaleDateString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
@@ -125,15 +134,13 @@ function eventDateISO(proc: ProcedureItem): string | null {
 }
 
 function isProcedureCompleted(proc: ProcedureItem): boolean {
-    return !!proc.completed_at;
+    return proc.status === 'completed' || !!proc.completed_at;
 }
 
-function isInconsistentStatus(proc: ProcedureItem): boolean {
-    return proc.status === 'pending' && !!proc.completed_at;
-}
-
+/** Returns today in YYYY-MM-DD using local timezone (avoids UTC-shift in Brazil at night). */
 function todayISODate(): string {
-    return new Date().toISOString().slice(0, 10);
+    const d = getNow();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export default function OdontoArcadePage() {
@@ -159,9 +166,6 @@ export default function OdontoArcadePage() {
     );
     const [savingForm, setSavingForm] = React.useState(false);
     const [formError, setFormError] = React.useState<string | null>(null);
-    const [validatedProcedureIds, setValidatedProcedureIds] = React.useState<
-        Set<number>
-    >(new Set());
     const [inlineForm, setInlineForm] = React.useState({
         kind: 'tooth' as ProcedureFormKind,
         toothId: '',
@@ -186,9 +190,9 @@ export default function OdontoArcadePage() {
 
     const numericClientId = React.useMemo(() => Number(clientId || 0), [clientId]);
 
-    const loadArcade = React.useCallback(async () => {
+    const loadArcade = React.useCallback(async (silent = false) => {
         if (!numericClientId || !canAccess) return;
-        setLoading(true);
+        if (!silent) setLoading(true);
         setError(null);
         try {
             const [arcadesRes, clientRes] = await Promise.all([
@@ -311,12 +315,27 @@ export default function OdontoArcadePage() {
     }, [activeDateProcedures]);
 
     React.useEffect(() => {
-        if (selectedToothId && toothById.has(selectedToothId)) return;
+        if (
+            selectedToothId != null &&
+            activeDateToothIds.size > 0 &&
+            activeDateToothIds.has(selectedToothId)
+        ) {
+            return;
+        }
+        if (
+            selectedToothId != null &&
+            activeDateToothIds.size === 0 &&
+            toothById.has(selectedToothId)
+        ) {
+            return;
+        }
+
         const firstToothId = Array.from(activeDateToothIds)[0] ?? null;
         if (firstToothId != null) {
             setSelectedToothId(firstToothId);
             return;
         }
+
         const fallbackToothId = teeth[0]?.id ?? null;
         if (fallbackToothId != null) setSelectedToothId(fallbackToothId);
     }, [activeDateToothIds, selectedToothId, toothById, teeth]);
@@ -334,12 +353,12 @@ export default function OdontoArcadePage() {
         const sorted = [...procedures].sort((a, b) => {
             const ad = eventDateISO(a);
             const bd = eventDateISO(b);
-            if (!ad && !bd) return b.id - a.id;
+            if (!ad && !bd) return a.id - b.id;
             if (!ad) return 1;
             if (!bd) return -1;
-            const t = new Date(bd).getTime() - new Date(ad).getTime();
+            const t = new Date(ad).getTime() - new Date(bd).getTime();
             if (t !== 0) return t;
-            return b.id - a.id;
+            return a.id - b.id;
         });
 
         const map = new Map<string, ProcedureItem[]>();
@@ -479,15 +498,10 @@ export default function OdontoArcadePage() {
                     },
                 });
 
-                setValidatedProcedureIds(prev => {
-                    const next = new Set(prev);
-                    next.add(original.id);
-                    return next;
-                });
             }
 
             setFormOpen(false);
-            await loadArcade();
+            await loadArcade(true);
         } catch (err) {
             const message =
                 err instanceof ApiError
@@ -503,7 +517,7 @@ export default function OdontoArcadePage() {
         if (!window.confirm('Deseja apagar este procedimento?')) return;
         try {
             await apiFetch(`/odonto/procedures/${procId}/`, { method: 'DELETE' });
-            await loadArcade();
+            await loadArcade(true);
         } catch (err) {
             const message =
                 err instanceof ApiError
@@ -517,6 +531,49 @@ export default function OdontoArcadePage() {
         return !!proc.paid_at;
     }
 
+    async function toggleProcedureCompleted(proc: ProcedureItem) {
+        const currentlyCompleted = isProcedureCompleted(proc);
+        if (currentlyCompleted) {
+            const confirmed = window.confirm(
+                'Este procedimento voltará para pendente. Deseja continuar?',
+            );
+            if (!confirmed) return;
+        }
+
+        try {
+            const today = todayISODate();
+            const hasDate = !!(proc.started_at || proc.completed_at);
+            const body = currentlyCompleted
+                ? {
+                      // revert to pending: clear completed_at but preserve date in started_at
+                      status: 'pending' as const,
+                      completed_at: null,
+                      started_at: proc.started_at || proc.completed_at || today,
+                  }
+                : {
+                      // mark completed: keep original completed_at only (historical migration date).
+                      // never carry started_at into completed_at — that causes stale dates on re-toggle.
+                      status: 'completed' as const,
+                      completed_at: proc.completed_at || today,
+                      ...(!hasDate ? { started_at: today } : {}),
+                  };
+            await apiFetch(`/odonto/procedures/${proc.id}/`, {
+                method: 'PATCH',
+                body,
+            });
+            await loadArcade(true);
+        } catch (err) {
+            const message =
+                err instanceof ApiError
+                    ? err.message
+                    : 'Nao foi possivel atualizar a conclusao do procedimento.';
+            setError(
+                message ||
+                    'Nao foi possivel atualizar a conclusao do procedimento.',
+            );
+        }
+    }
+
     async function toggleProcedurePaid(proc: ProcedureItem) {
         const currentlyPaid = isProcedurePaid(proc);
         if (currentlyPaid) {
@@ -527,15 +584,19 @@ export default function OdontoArcadePage() {
         }
 
         try {
+            const today = todayISODate();
+            const hasDate = !!(proc.started_at || proc.completed_at);
             const patientAmount = toNumber(proc.patient_amount);
             await apiFetch(`/odonto/procedures/${proc.id}/`, {
                 method: 'PATCH',
                 body: {
                     paid_amount: currentlyPaid ? null : patientAmount,
-                    paid_at: currentlyPaid ? null : todayISODate(),
+                    paid_at: currentlyPaid ? null : today,
+                    // if dateless legacy procedure, assign today on first interaction
+                    ...(!currentlyPaid && !hasDate ? { started_at: today } : {}),
                 },
             });
-            await loadArcade();
+            await loadArcade(true);
         } catch (err) {
             const message =
                 err instanceof ApiError
@@ -546,11 +607,6 @@ export default function OdontoArcadePage() {
                     'Nao foi possivel atualizar o pagamento do procedimento.',
             );
         }
-    }
-
-    function needsAttention(proc: ProcedureItem): boolean {
-        if (validatedProcedureIds.has(proc.id)) return false;
-        return isInconsistentStatus(proc) || (!proc.started_at && !proc.completed_at);
     }
 
     if (!canAccess) {
@@ -681,6 +737,7 @@ export default function OdontoArcadePage() {
                                     const lowerOffset = row >= 2 ? 24 : 0;
                                     const y = 40 + row * 82 + lowerOffset;
                                     const selected = selectedToothId === tooth.id;
+                                    const inDateEvent = activeDateToothIds.has(tooth.id);
 
                                     return (
                                         <g
@@ -703,8 +760,12 @@ export default function OdontoArcadePage() {
                                                 width='72'
                                                 height='62'
                                                 rx='10'
-                                                className={`${styles.toothRect} ${styles.toothEmpty} ${
-                                                    selected ? styles.toothSelected : ''
+                                                className={`${styles.toothRect} ${
+                                                    selected
+                                                        ? styles.toothSelected
+                                                        : inDateEvent
+                                                          ? styles.toothInDateEvent
+                                                          : styles.toothEmpty
                                                 }`}
                                             />
                                             <text
@@ -941,22 +1002,6 @@ export default function OdontoArcadePage() {
                     <section className={styles.detailCard}>
                         <div className={styles.sectionHeaderWithAction}>
                             <h2 className={styles.sectionTitle}>Procedimentos</h2>
-                            <div className={styles.procedureLegend}>
-                                <span className={styles.procedureLegendItem}>
-                                    <span
-                                        className={`${styles.statusDot} ${styles.statusDotPending}`}
-                                        aria-hidden='true'
-                                    />
-                                    Pendente
-                                </span>
-                                <span className={styles.procedureLegendItem}>
-                                    <span
-                                        className={`${styles.statusDot} ${styles.statusDotCompleted}`}
-                                        aria-hidden='true'
-                                    />
-                                    Concluido
-                                </span>
-                            </div>
                         </div>
                         <details className={styles.faceLegend}>
                             <summary>Legenda das faces (V, D, VO, DVMO...)</summary>
@@ -983,52 +1028,80 @@ export default function OdontoArcadePage() {
                                                     : null;
                                                 return (
                                                     <li key={proc.id} className={styles.procItem}>
-                                                        <span className={styles.procName}>
-                                                            <span
-                                                                className={`${styles.statusDot} ${
-                                                                    isProcedureCompleted(proc)
-                                                                        ? styles.statusDotCompleted
-                                                                        : styles.statusDotPending
-                                                                }`}
-                                                                title={
-                                                                    isProcedureCompleted(proc)
-                                                                        ? 'Procedimento concluido'
-                                                                        : 'Procedimento pendente'
-                                                                }
-                                                            />
-                                                            {needsAttention(proc) && (
-                                                                <span
-                                                                    className={styles.attentionDot}
-                                                                    title='Atencao: verifique este dado'
-                                                                />
-                                                            )}
-                                                            <strong>
-                                                                {tooth
-                                                                    ? `Dente ${tooth.international_number}`
-                                                                    : 'Geral'}
-                                                            </strong>{' '}
-                                                            · {proc.name}
-                                                            {proc.faces_raw && (
-                                                                <span className={styles.faceBadge}>
-                                                                    {proc.faces_raw}
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                        <span className={styles.procMeta}>
-                                                            <span className={styles.procValueWrap}>
-                                                                <span>{formatAmount(proc.patient_amount)}</span>
-                                                                {proc.paid_at && (
-                                                                    <>
-                                                                        <span className={styles.paidDateDesktop}>
-                                                                            {formatDate(proc.paid_at)}
+                                                        <div className={styles.procMain}>
+                                                            <div className={styles.procTextBlock}>
+                                                                <div className={styles.procLabelRow}>
+                                                                    <button
+                                                                        type='button'
+                                                                        className={styles.checkBtn}
+                                                                        onClick={() =>
+                                                                            void toggleProcedureCompleted(proc)
+                                                                        }
+                                                                        aria-label={
+                                                                            isProcedureCompleted(proc)
+                                                                                ? 'Marcar como pendente'
+                                                                                : 'Marcar como concluido'
+                                                                        }
+                                                                        title={
+                                                                            isProcedureCompleted(proc)
+                                                                                ? 'Marcar como pendente'
+                                                                                : 'Marcar como concluido'
+                                                                        }
+                                                                    >
+                                                                        <svg
+                                                                            viewBox='0 0 24 24'
+                                                                            aria-hidden='true'
+                                                                            className={`${styles.statusCheck} ${
+                                                                                isProcedureCompleted(proc)
+                                                                                    ? styles.statusCheckCompleted
+                                                                                    : styles.statusCheckPending
+                                                                            }`}
+                                                                        >
+                                                                            <path
+                                                                                d='M5 12.5 9.2 16.7 19 7.6'
+                                                                                fill='none'
+                                                                                stroke='currentColor'
+                                                                                strokeWidth='3.2'
+                                                                                strokeLinecap='round'
+                                                                                strokeLinejoin='round'
+                                                                            />
+                                                                        </svg>
+                                                                    </button>
+                                                                    <strong className={styles.procLabel}>
+                                                                        {tooth
+                                                                            ? `Dente ${tooth.international_number}`
+                                                                            : 'Geral'}
+                                                                    </strong>
+                                                                </div>
+                                                                <div className={styles.procDescriptionRow}>
+                                                                    <span className={styles.procDescription}>
+                                                                        {proc.name}
+                                                                    </span>
+                                                                    {proc.faces_raw && (
+                                                                        <span className={styles.faceBadge}>
+                                                                            {proc.faces_raw}
                                                                         </span>
-                                                                        <span className={styles.paidDateMobile}>
-                                                                            {formatDateShort(proc.paid_at)}
-                                                                        </span>
-                                                                    </>
-                                                                )}
-                                                            </span>
-                                                            <span className={styles.rowActions}>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className={styles.procAside}>
+                                                            <div className={styles.procFinanceGroup}>
+                                                                <div className={styles.procValueWrap}>
+                                                                    <span className={styles.procValue}>
+                                                                        {formatAmount(proc.patient_amount)}
+                                                                    </span>
+                                                                    {proc.paid_at && (
+                                                                        <>
+                                                                            <span className={styles.paidDateDesktop}>
+                                                                                {formatDate(proc.paid_at)}
+                                                                            </span>
+                                                                            <span className={styles.paidDateMobile}>
+                                                                                {formatDateShort(proc.paid_at)}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
                                                                 <button
                                                                     type='button'
                                                                     className={`${styles.iconBtn} ${
@@ -1050,17 +1123,12 @@ export default function OdontoArcadePage() {
                                                                             : 'Marcar como pago'
                                                                     }
                                                                 >
-                                                                    <svg
-                                                                        viewBox='0 0 24 24'
-                                                                        aria-hidden='true'
-                                                                        className={styles.iconSvg}
-                                                                    >
-                                                                        <path
-                                                                            d='M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zm2 0v2h14V7H5zm7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'
-                                                                            fill='currentColor'
-                                                                        />
-                                                                    </svg>
+                                                                    <span className={styles.paymentSymbol}>
+                                                                        $
+                                                                    </span>
                                                                 </button>
+                                                            </div>
+                                                            <div className={styles.procManageGroup}>
                                                                 <button
                                                                     type='button'
                                                                     className={styles.iconBtn}
@@ -1099,8 +1167,8 @@ export default function OdontoArcadePage() {
                                                                         />
                                                                     </svg>
                                                                 </button>
-                                                            </span>
-                                                        </span>
+                                                            </div>
+                                                        </div>
                                                     </li>
                                                 );
                                             })}

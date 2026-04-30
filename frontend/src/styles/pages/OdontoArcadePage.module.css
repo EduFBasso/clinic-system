@@ -198,7 +198,14 @@
 }
 
 .toothSelected {
-    stroke: var(--color-primary);
+    fill: var(--color-selected-bg, var(--color-primary-light));
+    stroke: var(--color-selected-border, var(--color-primary));
+    stroke-width: 2.4;
+}
+
+.toothInDateEvent {
+    fill: var(--color-selected-bg, var(--color-primary-light));
+    stroke: var(--color-selected-border, var(--color-primary));
     stroke-width: 2;
 }
 
@@ -207,20 +214,6 @@
     stroke: var(--color-text-main, var(--color-heading));
 }
 
-.toothPending {
-    fill: var(--color-warning-bg);
-    stroke: var(--color-warning-dark);
-}
-
-.toothCompleted {
-    fill: var(--color-success-bg);
-    stroke: var(--color-success);
-}
-
-.toothCanceled {
-    fill: var(--color-danger-bg);
-    stroke: var(--color-danger);
-}
 
 .toothNumber {
     text-anchor: middle;
@@ -240,7 +233,8 @@
 .procItem {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
+    align-items: center;
+    gap: 14px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg, 8px);
     padding: 8px 10px;
@@ -248,67 +242,122 @@
     color: var(--color-text);
 }
 
-.procMeta {
-    color: var(--color-text-muted);
-    font-size: 13px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-}
-
-.procedureLegend {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.procedureLegendItem {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--color-text-muted);
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.procName {
+.procMain {
     flex: 1;
     min-width: 0;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 6px;
+}
+
+.procTextBlock {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.procLabelRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.procLabel {
+    font-size: 13px;
+    color: var(--color-text-main, var(--color-heading));
+}
+
+.statusCheck {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+}
+
+.statusCheckPending {
+    color: var(--color-text-muted);
+}
+
+.statusCheckCompleted {
+    color: #16a34a;
+}
+
+.checkBtn {
+    border: none;
+    background: none;
+    padding: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: var(--radius-control, 8px);
+    flex: 0 0 auto;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    touch-action: manipulation;
+}
+
+.checkBtn:hover {
+    opacity: 0.72;
+}
+
+.checkBtn:focus-visible {
+    outline: 2px solid var(--color-selected-border, var(--color-primary));
+    outline-offset: 2px;
+}
+
+.procDescriptionRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     flex-wrap: wrap;
+}
+
+.procDescription {
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.procAside {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.procFinanceGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.procManageGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .procValueWrap {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 6px;
     white-space: nowrap;
 }
 
-.statusDot {
-    width: 10px;
-    height: 10px;
-    border-radius: 999px;
-    flex: 0 0 auto;
-}
-
-.statusDotPending {
-    background: #94a3b8;
-}
-
-.statusDotCompleted {
-    background: #2563eb;
+.procValue {
+    font-weight: 700;
+    color: var(--color-text-muted);
 }
 
 .paidDateDesktop,
 .paidDateMobile {
     color: var(--color-text-muted);
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: 700;
 }
 
 .paidDateMobile {
@@ -410,7 +459,8 @@
 
 .groupTitle {
     color: var(--color-text-main, var(--color-heading));
-    font-size: 15px;
+    font-size: 18px;
+    font-weight: 800;
     letter-spacing: 0.03em;
 }
 
@@ -420,48 +470,59 @@
     gap: 6px;
 }
 
-.attentionDot {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background: var(--color-warning-dark);
-    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-warning-bg) 90%, transparent);
-}
-
 .iconBtn,
 .iconBtnDanger {
-    border: 1px solid var(--color-border);
-    background: var(--color-input, var(--color-bg-section));
-    color: var(--color-text);
-    border-radius: 8px;
-    width: 32px;
-    height: 32px;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    width: 30px;
+    height: 30px;
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    border-radius: var(--radius-control, 8px);
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+    .iconBtn,
+    .iconBtnDanger {
+        width: 36px;
+        height: 36px;
+    }
 }
 
 .iconBtn:hover,
 .iconBtnDanger:hover {
-    filter: brightness(0.97);
+    opacity: 0.8;
+}
+
+.iconBtn:focus-visible,
+.iconBtnDanger:focus-visible {
+    outline: 2px solid var(--color-selected-border, var(--color-primary));
+    outline-offset: 2px;
 }
 
 .iconBtnDanger {
     color: var(--color-danger);
-    border-color: color-mix(in oklab, var(--color-danger) 35%, var(--color-border));
 }
 
 .iconBtnPaidActive {
-    color: var(--color-success-dark, var(--color-success));
-    border-color: color-mix(in oklab, var(--color-success) 35%, var(--color-border));
-    background: var(--color-success-bg);
+    color: #16a34a;
+}
+
+.paymentSymbol {
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
 }
 
 .iconSvg {
-    width: 15px;
-    height: 15px;
+    width: 18px;
+    height: 18px;
     display: block;
 }
 
@@ -551,14 +612,30 @@
         padding: 16px;
     }
 
-    .procMeta {
+    .procItem {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .procAside {
         width: 100%;
         justify-content: space-between;
     }
 
-    .procedureLegend {
-        width: 100%;
-        justify-content: flex-start;
+    .procFinanceGroup,
+    .procManageGroup {
+        min-width: 0;
+    }
+
+    .procValueWrap {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        white-space: normal;
+    }
+
+    .procManageGroup {
+        gap: 2px;
     }
 
     .paidDateDesktop {

@@ -1,9 +1,20 @@
 {
   "folders": [
-    { "path": "backend" },
-    { "path": "frontend" },
-    { "path": "docs" },
-    { "path": "scripts" },
+    {
+      "path": "backend",
+    },
+    {
+      "path": "frontend",
+    },
+    {
+      "path": "docs",
+    },
+    {
+      "path": "scripts",
+    },
+    {
+      "path": "Bruna_Carvalho",
+    },
   ],
 
   "settings": {
