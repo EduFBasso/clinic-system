@@ -629,10 +629,9 @@
     }
 
     .procValueWrap {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 2px;
-        white-space: normal;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
     }
 
     .procManageGroup {
