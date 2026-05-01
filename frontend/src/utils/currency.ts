@@ -46,6 +46,12 @@ export function formatInputAmount(value: string): string {
     return value;
 }
 
+/** Convert numeric amount to pt-BR input format (comma decimal). E.g., 12.54 → "12,54". */
+export function toInputAmount(value: number | string | null | undefined): string {
+    if (value == null) return '';
+    return String(value).replace('.', ',');
+}
+
 /** Validate amount string. Returns { valid, message, numericValue }. */
 export function validateAmount(value: string, fieldName = 'Valor'): {
     valid: boolean;

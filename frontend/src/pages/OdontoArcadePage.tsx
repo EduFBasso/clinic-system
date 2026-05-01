@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../utils/apiFetch';
 import { getNow } from '../utils/now';
-import { parseAmount, formatBRLCurrency, validateAmount } from '../utils/currency';
+import { parseAmount, formatBRLCurrency, validateAmount, toInputAmount } from '../utils/currency';
 import styles from '../styles/pages/OdontoArcadePage.module.css';
 
 type ArcadeListItem = {
@@ -385,8 +385,7 @@ export default function OdontoArcadePage() {
             name: proc.name,
             faces_raw: proc.faces_raw || '',
             date: eventDateISO(proc) || '',
-            patient_amount:
-                proc.patient_amount == null ? '' : String(proc.patient_amount),
+            patient_amount: toInputAmount(proc.patient_amount),
             notes: proc.notes || '',
         });
         setFormOpen(true);
