@@ -439,7 +439,7 @@ export default function OdontoArcadePage() {
                         arcade: arcade.id,
                         tooth: isTooth ? toothId : null,
                         surface: null,
-                        faces_raw: isTooth ? inlineForm.faces_raw || null : null,
+                        faces_raw: isTooth ? inlineForm.faces_raw.trim() : '',
                         code: '',
                         name,
                         status: 'pending',
@@ -472,7 +472,7 @@ export default function OdontoArcadePage() {
                     method: 'PATCH',
                     body: {
                         tooth: isTooth ? toothId : null,
-                        faces_raw: isTooth ? inlineForm.faces_raw || null : null,
+                        faces_raw: isTooth ? inlineForm.faces_raw.trim() : '',
                         name,
                         patient_amount: amount,
                         notes: inlineForm.notes.trim(),
