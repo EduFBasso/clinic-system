@@ -1,4 +1,5 @@
 import React from 'react';
+import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, apiFetch } from '../utils/apiFetch';
 import { getNow } from '../utils/now';
@@ -22,6 +23,8 @@ type ToothItem = {
 type ProcedureItem = {
     id: number;
     tooth: number | null;
+    parent_procedure: number | null;
+    is_product: boolean;
     status: 'pending' | 'completed' | 'canceled';
     name: string;
     code?: string;
@@ -33,6 +36,15 @@ type ProcedureItem = {
     completed_at?: string | null;
     notes?: string;
     is_active: boolean;
+};
+
+type EditProductItem = {
+    id?: number;
+    name: string;
+    value: string;
+    saveNameToList: boolean;
+    saveValueToList: boolean;
+    showDropdown: boolean;
 };
 
 type ProcedureFormKind = 'tooth' | 'general';
@@ -150,9 +162,11 @@ export default function OdontoArcadePage() {
     );
     const [savingForm, setSavingForm] = React.useState(false);
     const [formError, setFormError] = React.useState<string | null>(null);
+    const [procedureNames, setProcedureNames] = React.useState<string[]>([]);
+    const [showProcedureDropdown, setShowProcedureDropdown] = React.useState(false);
+    const [shouldSaveToList, setShouldSaveToList] = React.useState(false);
     const [inlineForm, setInlineForm] = React.useState({
         kind: 'tooth' as ProcedureFormKind,
-        toothId: '',
         name: '',
         faces_raw: '',
         date: todayISODate(),
@@ -160,16 +174,35 @@ export default function OdontoArcadePage() {
         notes: '',
     });
 
-    const standardProcedureSuggestions = React.useMemo(
-        () => [
-            'Restauracao em resina fotopolimerizavel 1 face',
-            'Restauracao em resina fotopolimerizavel 2 faces',
-            'Restauracao em resina fotopolimerizavel 4 faces',
-            'Tratamento endodontico multirradicular',
-            'Profilaxia: polimento coronario',
-            'Consulta odontologica inicial',
-        ],
-        [],
+    // Product catalog and edit-mode product list
+    const [productCatalog, setProductCatalog] = React.useState<{ name: string; last_value: string | null }[]>([]);
+    const [editProducts, setEditProducts] = React.useState<EditProductItem[]>([]);
+    const [deletedProductIds, setDeletedProductIds] = React.useState<number[]>([]);
+
+    const filteredProcedureNames = React.useMemo(() => {
+        if (!showProcedureDropdown || !inlineForm.name.trim()) {
+            return procedureNames;
+        }
+        
+        const searchTerm = inlineForm.name.toLowerCase().trim();
+        return procedureNames.filter(name =>
+            name.toLowerCase().includes(searchTerm)
+        );
+    }, [procedureNames, showProcedureDropdown, inlineForm.name]);
+
+    const isNameInList = React.useMemo(() => {
+        const normalized = inlineForm.name.toLowerCase().trim();
+        return procedureNames.some(name => name.toLowerCase() === normalized);
+    }, [procedureNames, inlineForm.name]);
+
+    const productNames = React.useMemo(
+        () => productCatalog.map(p => p.name),
+        [productCatalog],
+    );
+
+    const productValueMap = React.useMemo(
+        () => new Map(productCatalog.map(p => [p.name.toLowerCase(), p.last_value])),
+        [productCatalog],
     );
 
     const numericClientId = React.useMemo(() => Number(clientId || 0), [clientId]);
@@ -242,6 +275,51 @@ export default function OdontoArcadePage() {
         void loadArcade();
     }, [loadArcade]);
 
+    // Carrega nomes de procedimentos do backend
+    const loadProcedureNames = React.useCallback(async () => {
+        try {
+            const response = await apiFetch('/odonto/procedures/distinct-names/');
+            if (response && typeof response === 'object' && 'names' in response) {
+                const names = (response.names as string[]).sort();
+                setProcedureNames(names);
+            }
+        } catch (err) {
+            // silenciosamente falha se não conseguir carregar - usa array vazio
+            console.error('Erro ao carregar nomes de procedimentos:', err);
+        }
+    }, []);
+
+    // Carrega catálogo de produtos (nome + último valor) do backend
+    const loadProductNames = React.useCallback(async (arcadeId?: number) => {
+        try {
+            const url = arcadeId
+                ? `/odonto/procedures/products/distinct-names/?arcade=${arcadeId}`
+                : '/odonto/procedures/products/distinct-names/';
+            const response = await apiFetch(url);
+            if (response && typeof response === 'object' && 'catalog' in response) {
+                const catalog = (response.catalog as { name: string; last_value: string | null }[]).sort(
+                    (a, b) => a.name.localeCompare(b.name),
+                );
+                setProductCatalog(catalog);
+            }
+        } catch (err) {
+            console.error('Erro ao carregar catálogo de produtos:', err);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (canAccess) {
+            void loadProcedureNames();
+        }
+    }, [canAccess, loadProcedureNames]);
+
+    // Recarrega nomes de produtos quando arcade ID muda
+    React.useEffect(() => {
+        if (arcade?.id && canAccess) {
+            void loadProductNames(arcade.id);
+        }
+    }, [arcade?.id, canAccess, loadProductNames]);
+
     const toothById = React.useMemo(() => {
         const map = new Map<number, ToothItem>();
         for (const tooth of teeth) map.set(tooth.id, tooth);
@@ -299,6 +377,10 @@ export default function OdontoArcadePage() {
     }, [activeDateProcedures]);
 
     React.useEffect(() => {
+        if (formOpen) {
+            return;
+        }
+
         if (
             selectedToothId != null &&
             activeDateToothIds.size > 0 &&
@@ -322,7 +404,15 @@ export default function OdontoArcadePage() {
 
         const fallbackToothId = teeth[0]?.id ?? null;
         if (fallbackToothId != null) setSelectedToothId(fallbackToothId);
-    }, [activeDateToothIds, selectedToothId, toothById, teeth]);
+    }, [activeDateToothIds, formOpen, selectedToothId, toothById, teeth]);
+
+    React.useEffect(() => {
+        // Reseta o checkbox e o dropdown quando o formulário abre/fecha
+        if (!formOpen) {
+            setShouldSaveToList(false);
+            setShowProcedureDropdown(false);
+        }
+    }, [formOpen]);
 
     const orderedTeeth = React.useMemo(() => {
         if (teeth.length > 0) return teeth;
@@ -333,8 +423,22 @@ export default function OdontoArcadePage() {
         }));
     }, [teeth]);
 
+    const selectedTooth = React.useMemo(() => {
+        if (selectedToothId == null) return null;
+        return (
+            toothById.get(selectedToothId) ||
+            orderedTeeth.find(tooth => tooth.id === selectedToothId) ||
+            null
+        );
+    }, [orderedTeeth, selectedToothId, toothById]);
+
+    const isCreateMode = formOpen && formMode === 'create';
+    const suppressDateHighlights = isCreateMode && inlineForm.kind === 'tooth';
+
     const procedureGroups = React.useMemo(() => {
-        const sorted = [...procedures].sort((a, b) => {
+        const sorted = [...procedures]
+            .filter(p => !p.is_product)
+            .sort((a, b) => {
             const ad = eventDateISO(a);
             const bd = eventDateISO(b);
             if (!ad && !bd) return a.id - b.id;
@@ -360,19 +464,28 @@ export default function OdontoArcadePage() {
         }));
     }, [procedures]);
 
+    function selectToothFromGrid(toothId: number) {
+        setSelectedToothId(toothId);
+        if (formOpen && inlineForm.kind === 'tooth' && formError) {
+            setFormError(null);
+        }
+    }
+
     function openCreateForm() {
         setFormError(null);
         setFormMode('create');
         setEditingProcedureId(null);
+        setSelectedToothId(null);
         setInlineForm({
-            kind: selectedToothId ? 'tooth' : 'general',
-            toothId: selectedToothId ? String(selectedToothId) : '',
+            kind: 'tooth',
             name: '',
             faces_raw: '',
             date: todayISODate(),
             patient_amount: '',
             notes: '',
         });
+        setEditProducts([]);
+        setDeletedProductIds([]);
         setFormOpen(true);
     }
 
@@ -380,15 +493,29 @@ export default function OdontoArcadePage() {
         setFormError(null);
         setFormMode('edit');
         setEditingProcedureId(proc.id);
+        if (proc.tooth != null) {
+            setSelectedToothId(proc.tooth);
+        }
         setInlineForm({
             kind: proc.tooth == null ? 'general' : 'tooth',
-            toothId: proc.tooth == null ? '' : String(proc.tooth),
             name: proc.name,
             faces_raw: proc.faces_raw || '',
             date: eventDateISO(proc) || '',
             patient_amount: toInputAmount(proc.patient_amount),
             notes: proc.notes || '',
         });
+        const existing = procedures
+            .filter(p => p.is_product && p.parent_procedure === proc.id)
+            .map(p => ({
+                id: p.id,
+                name: p.name,
+                value: toInputAmount(p.patient_amount),
+                saveNameToList: false,
+                saveValueToList: false,
+                showDropdown: false,
+            }));
+        setEditProducts(existing);
+        setDeletedProductIds([]);
         setFormOpen(true);
     }
 
@@ -402,9 +529,9 @@ export default function OdontoArcadePage() {
         }
 
         const isTooth = inlineForm.kind === 'tooth';
-        const toothId = isTooth ? Number(inlineForm.toothId || 0) : null;
-        if (isTooth && !toothId) {
-            setFormError('Selecione o dente para salvar o procedimento.');
+        const toothId = isTooth ? selectedToothId : null;
+        if (isTooth && toothId == null) {
+            setFormError('Selecione o dente na grade para salvar o procedimento.');
             return;
         }
 
@@ -433,7 +560,7 @@ export default function OdontoArcadePage() {
                     return;
                 }
 
-                await apiFetch('/odonto/procedures/', {
+                const newProc = await apiFetch('/odonto/procedures/', {
                     method: 'POST',
                     body: {
                         arcade: arcade.id,
@@ -450,7 +577,69 @@ export default function OdontoArcadePage() {
                         notes: inlineForm.notes.trim(),
                         is_active: true,
                     },
-                });
+                }) as { id: number };
+
+                // Se marcou para salvar na lista e o nome é novo
+                if (shouldSaveToList && !isNameInList) {
+                    try {
+                        await apiFetch('/odonto/procedures/suggest-name/', {
+                            method: 'POST',
+                            body: {
+                                name: name.trim(),
+                                arcade_id: arcade.id,
+                            },
+                        });
+                    } catch (err) {
+                        // Silenciosamente falha se não conseguir adicionar à lista
+                        console.error('Erro ao salvar nome na lista:', err);
+                    }
+                }
+
+                // Salva produtos associados
+                if (newProc?.id) {
+                    for (const product of editProducts) {
+                        if (!product.name.trim()) continue;
+                        const valueValidation = product.value.trim()
+                            ? validateAmount(product.value)
+                            : { valid: true, numericValue: null };
+                        if (!valueValidation.valid) continue;
+                        const productAmount = valueValidation.numericValue ?? null;
+                        const isInProdList = productNames.some(
+                            n => n.toLowerCase() === product.name.toLowerCase().trim(),
+                        );
+                        try {
+                            await apiFetch('/odonto/procedures/', {
+                                method: 'POST',
+                                body: {
+                                    arcade: arcade.id,
+                                    name: product.name.trim(),
+                                    is_product: true,
+                                    parent_procedure: newProc.id,
+                                    patient_amount: productAmount,
+                                    started_at: dateToUse,
+                                    status: 'pending',
+                                    is_active: true,
+                                    tooth: null,
+                                    surface: null,
+                                    faces_raw: '',
+                                    code: '',
+                                },
+                            });
+                            if (product.saveNameToList && !isInProdList) {
+                                await apiFetch('/odonto/procedures/products/suggest-name/', {
+                                    method: 'POST',
+                                    body: {
+                                        name: product.name.trim(),
+                                        arcade_id: arcade.id,
+                                        value: productAmount,
+                                    },
+                                }).catch(() => null);
+                            }
+                        } catch (err) {
+                            console.error('Erro ao salvar produto:', err);
+                        }
+                    }
+                }
             } else {
                 const original = procedures.find(p => p.id === editingProcedureId);
                 if (!original) {
@@ -480,6 +669,96 @@ export default function OdontoArcadePage() {
                         completed_at: completedAt,
                     },
                 });
+
+                const dateToUse = startedAt || completedAt || todayISODate();
+
+                // Delete removed products
+                for (const pid of deletedProductIds) {
+                    try {
+                        await apiFetch(`/odonto/procedures/${pid}/`, { method: 'DELETE' });
+                    } catch (err) {
+                        console.error('Erro ao remover produto:', err);
+                    }
+                }
+
+                // Save / update products
+                for (const product of editProducts) {
+                    if (!product.name.trim()) continue;
+                    const valueValidation = product.value.trim()
+                        ? validateAmount(product.value)
+                        : { valid: true, numericValue: null };
+                    if (!valueValidation.valid) continue;
+                    const productAmount = valueValidation.numericValue ?? null;
+                    const isInList = productNames.some(
+                        n => n.toLowerCase() === product.name.toLowerCase().trim(),
+                    );
+                    const catalogVal = productValueMap.get(product.name.toLowerCase().trim());
+
+                    if (product.id !== undefined) {
+                        await apiFetch(`/odonto/procedures/${product.id}/`, {
+                            method: 'PATCH',
+                            body: {
+                                name: product.name.trim(),
+                                patient_amount: productAmount,
+                                started_at: dateToUse,
+                            },
+                        });
+                    } else {
+                        await apiFetch('/odonto/procedures/', {
+                            method: 'POST',
+                            body: {
+                                arcade: arcade.id,
+                                name: product.name.trim(),
+                                is_product: true,
+                                parent_procedure: original.id,
+                                patient_amount: productAmount,
+                                started_at: dateToUse,
+                                status: 'pending',
+                                is_active: true,
+                                tooth: null,
+                                surface: null,
+                                faces_raw: '',
+                                code: '',
+                            },
+                        });
+                    }
+
+                    // Persist name to catalog if new
+                    if (product.saveNameToList && !isInList) {
+                        try {
+                            await apiFetch('/odonto/procedures/products/suggest-name/', {
+                                method: 'POST',
+                                body: {
+                                    name: product.name.trim(),
+                                    arcade_id: arcade.id,
+                                    value: productAmount,
+                                },
+                            });
+                        } catch (err) {
+                            console.error('Erro ao salvar nome do produto no catálogo:', err);
+                        }
+                    }
+
+                    // Persist updated value to catalog if changed
+                    if (product.saveValueToList && isInList && productAmount !== null) {
+                        const currentCatalogValue =
+                            catalogVal != null ? parseAmount(catalogVal) : null;
+                        if (productAmount !== currentCatalogValue) {
+                            try {
+                                await apiFetch('/odonto/procedures/products/suggest-name/', {
+                                    method: 'POST',
+                                    body: {
+                                        name: product.name.trim(),
+                                        arcade_id: arcade.id,
+                                        value: productAmount,
+                                    },
+                                });
+                            } catch (err) {
+                                console.error('Erro ao atualizar valor do produto no catálogo:', err);
+                            }
+                        }
+                    }
+                }
 
             }
 
@@ -617,10 +896,12 @@ export default function OdontoArcadePage() {
                 </div>
                 <div className={styles.headerActions}>
                     <button type='button' onClick={openCreateForm} className={styles.btnPrimary}>
-                        + Novo procedimento
+                        <span className={styles.desktopOnly}>+ Novo procedimento</span>
+                        <span className={styles.mobileOnly}>+ Novo</span>
                     </button>
                     <button type='button' onClick={() => navigate('/')} className={styles.btn}>
-                        Voltar para clientes
+                        <span className={styles.desktopOnly}>Voltar para clientes</span>
+                        <span className={styles.mobileOnly}>Voltar</span>
                     </button>
                 </div>
             </header>
@@ -648,23 +929,29 @@ export default function OdontoArcadePage() {
                         <div className={styles.arcadeHeader}>
                             <div className={styles.timelineHeader}>
                                 <h2 className={styles.sectionTitle}>Mapa da arcada</h2>
-                                <div className={styles.timelineNav}>
+                                <div
+                                    className={`${styles.timelineNav} ${
+                                        isCreateMode ? styles.timelineNavHidden : ''
+                                    }`}
+                                    aria-hidden={isCreateMode}
+                                >
                                     <button
                                         type='button'
-                                        className={styles.btn}
+                                        className={styles.timelineArrowButton}
                                         onClick={() =>
                                             setActiveDateIndex(prev => Math.max(0, prev - 1))
                                         }
                                         disabled={activeDateIndex <= 0 || dateKeys.length === 0}
+                                        aria-label='Data anterior'
                                     >
-                                        {'<'}
+                                        <FaArrowLeft />
                                     </button>
                                     <span className={styles.timelineDateLabel}>
                                         {activeDateKey ? formatDate(activeDateKey) : 'Sem data'}
                                     </span>
                                     <button
                                         type='button'
-                                        className={styles.btn}
+                                        className={styles.timelineArrowButton}
                                         onClick={() =>
                                             setActiveDateIndex(prev =>
                                                 Math.min(dateKeys.length - 1, prev + 1),
@@ -674,8 +961,9 @@ export default function OdontoArcadePage() {
                                             activeDateIndex >= dateKeys.length - 1 ||
                                             dateKeys.length === 0
                                         }
+                                        aria-label='Próxima data'
                                     >
-                                        {'>'}
+                                        <FaArrowRight />
                                     </button>
                                 </div>
                             </div>
@@ -693,10 +981,10 @@ export default function OdontoArcadePage() {
                                 <text x='386' y='24' className={styles.quadrantLabel}>
                                     Q2 - SUPERIOR ESQUERDO
                                 </text>
-                                <text x='24' y='222' className={styles.quadrantLabel}>
+                                <text x='24' y='220' className={styles.quadrantLabel}>
                                     Q4 - INFERIOR DIREITO
                                 </text>
-                                <text x='386' y='222' className={styles.quadrantLabel}>
+                                <text x='386' y='220' className={styles.quadrantLabel}>
                                     Q3 - INFERIOR ESQUERDO
                                 </text>
                                 <line
@@ -708,33 +996,36 @@ export default function OdontoArcadePage() {
                                 />
                                 <line
                                     x1='20'
-                                    y1='200'
+                                    y1='206'
                                     x2='740'
-                                    y2='200'
+                                    y2='206'
                                     className={styles.quadrantGuide}
                                 />
                                 {orderedTeeth.map((tooth, index) => {
                                     const row = Math.floor(index / 8);
                                     const col = index % 8;
                                     const x = 20 + col * 90;
-                                    const lowerOffset = row >= 2 ? 24 : 0;
+                                    const lowerOffset = row >= 2 ? 32 : 0;
                                     const y = 40 + row * 82 + lowerOffset;
                                     const selected = selectedToothId === tooth.id;
-                                    const inDateEvent = activeDateToothIds.has(tooth.id);
+                                    const inDateEvent =
+                                        !suppressDateHighlights &&
+                                        activeDateToothIds.has(tooth.id);
 
                                     return (
                                         <g
                                             key={tooth.id}
                                             className={styles.toothGroup}
-                                            onClick={() => setSelectedToothId(tooth.id)}
+                                            onClick={() => selectToothFromGrid(tooth.id)}
                                             onKeyDown={event => {
                                                 if (event.key === 'Enter' || event.key === ' ') {
                                                     event.preventDefault();
-                                                    setSelectedToothId(tooth.id);
+                                                    selectToothFromGrid(tooth.id);
                                                 }
                                             }}
                                             role='button'
                                             tabIndex={0}
+                                            aria-pressed={selected}
                                             aria-label={`Dente ${tooth.international_number}`}
                                         >
                                             <rect
@@ -754,7 +1045,11 @@ export default function OdontoArcadePage() {
                                             <text
                                                 x={x + 36}
                                                 y={y + 34}
-                                                className={styles.toothNumber}
+                                                className={`${styles.toothNumber} ${
+                                                    selected || inDateEvent
+                                                        ? styles.toothNumberActive
+                                                        : ''
+                                                }`}
                                             >
                                                 {tooth.international_number}
                                             </text>
@@ -791,11 +1086,6 @@ export default function OdontoArcadePage() {
                                                     setInlineForm(prev => ({
                                                         ...prev,
                                                         kind: 'tooth',
-                                                        toothId:
-                                                            prev.toothId ||
-                                                            (selectedToothId
-                                                                ? String(selectedToothId)
-                                                                : ''),
                                                     }))
                                                 }
                                                 disabled={savingForm}
@@ -818,7 +1108,6 @@ export default function OdontoArcadePage() {
                                                     setInlineForm(prev => ({
                                                         ...prev,
                                                         kind: 'general',
-                                                        toothId: '',
                                                         faces_raw: '',
                                                     }))
                                                 }
@@ -833,50 +1122,130 @@ export default function OdontoArcadePage() {
 
                                 <div className={styles.formGrid}>
                                     {inlineForm.kind === 'tooth' && (
-                                        <label className={styles.formLabel}>
-                                            Dente
-                                            <select
-                                                value={inlineForm.toothId}
-                                                onChange={event =>
-                                                    setInlineForm(prev => ({
-                                                        ...prev,
-                                                        toothId: event.target.value,
-                                                    }))
-                                                }
-                                                className={styles.input}
-                                                disabled={savingForm}
-                                            >
-                                                <option value=''>Selecione um dente</option>
-                                                {orderedTeeth.map(tooth => (
-                                                    <option key={tooth.id} value={tooth.id}>
-                                                        Dente {tooth.international_number}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </label>
+                                        <div className={styles.formLabel}>
+                                            <span>Dente selecionado</span>
+                                            <div className={styles.selectedToothCard}>
+                                                <strong className={styles.selectedToothValue}>
+                                                    {selectedTooth
+                                                        ? `Dente ${selectedTooth.international_number}`
+                                                        : 'Nenhum dente selecionado'}
+                                                </strong>
+                                                <span className={styles.selectedToothHint}>
+                                                    Clique na grade acima para escolher o dente.
+                                                </span>
+                                            </div>
+                                        </div>
                                     )}
 
                                     <label className={styles.formLabel}>
                                         Nome do procedimento *
-                                        <input
-                                            value={inlineForm.name}
-                                            list='inline-procedure-suggestions'
-                                            onChange={event =>
-                                                setInlineForm(prev => ({
-                                                    ...prev,
-                                                    name: event.target.value,
-                                                }))
-                                            }
-                                            className={styles.input}
-                                            placeholder='Ex.: Restauracao em resina'
-                                            disabled={savingForm}
-                                        />
-                                        <datalist id='inline-procedure-suggestions'>
-                                            {standardProcedureSuggestions.map(name => (
-                                                <option key={name} value={name} />
-                                            ))}
-                                        </datalist>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                value={inlineForm.name}
+                                                onFocus={() => setShowProcedureDropdown(true)}
+                                                onBlur={() =>
+                                                    setTimeout(
+                                                        () => setShowProcedureDropdown(false),
+                                                        200,
+                                                    )
+                                                }
+                                                onChange={event =>
+                                                    setInlineForm(prev => ({
+                                                        ...prev,
+                                                        name: event.target.value,
+                                                    }))
+                                                }
+                                                onKeyDown={event => {
+                                                    if (event.key === 'Escape') {
+                                                        setShowProcedureDropdown(false);
+                                                    }
+                                                }}
+                                                className={styles.input}
+                                                placeholder='Ex.: Restauracao em resina'
+                                                disabled={savingForm}
+                                                autoComplete='off'
+                                            />
+                                            {showProcedureDropdown && filteredProcedureNames.length > 0 && (
+                                                <div
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '100%',
+                                                        left: 0,
+                                                        right: 0,
+                                                        backgroundColor: '#fff',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '4px',
+                                                        marginTop: '4px',
+                                                        maxHeight: '200px',
+                                                        overflowY: 'auto',
+                                                        zIndex: 10,
+                                                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                                    }}
+                                                >
+                                                    {filteredProcedureNames.map(name => (
+                                                        <div
+                                                            key={name}
+                                                            onMouseDown={e => e.preventDefault()}
+                                                            onClick={() => {
+                                                                setInlineForm(prev => ({
+                                                                    ...prev,
+                                                                    name,
+                                                                }));
+                                                                setShowProcedureDropdown(false);
+                                                                setShouldSaveToList(false);
+                                                            }}
+                                                            style={{
+                                                                padding: '8px 12px',
+                                                                cursor: 'pointer',
+                                                                borderBottom: '1px solid #f0f0f0',
+                                                                fontSize: '14px',
+                                                            }}
+                                                            onMouseEnter={e =>
+                                                                (e.currentTarget.style.backgroundColor =
+                                                                    '#f5f5f5')
+                                                            }
+                                                            onMouseLeave={e =>
+                                                                (e.currentTarget.style.backgroundColor =
+                                                                    '#fff')
+                                                            }
+                                                        >
+                                                            {name}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </label>
+
+                                    {!isNameInList && inlineForm.name.trim() && (
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                padding: '8px',
+                                                backgroundColor: '#f9f9f9',
+                                                borderRadius: '4px',
+                                                fontSize: '13px',
+                                            }}
+                                        >
+                                            <input
+                                                type='checkbox'
+                                                id='save-to-list-checkbox'
+                                                checked={shouldSaveToList}
+                                                onChange={e =>
+                                                    setShouldSaveToList(e.target.checked)
+                                                }
+                                                disabled={savingForm}
+                                            />
+                                            <label
+                                                htmlFor='save-to-list-checkbox'
+                                                style={{ cursor: 'pointer', margin: 0 }}
+                                            >
+                                                Salvar "{inlineForm.name}" na lista de sugestões
+                                            </label>
+                                        </div>
+                                    )}
 
                                     {inlineForm.kind === 'tooth' && (
                                         <label className={styles.formLabel}>
@@ -937,13 +1306,13 @@ export default function OdontoArcadePage() {
                                                 }))
                                             }
                                             className={styles.input}
-                                            placeholder='0,00 ou 0.00'
+                                            placeholder='0,00'
                                             disabled={savingForm}
                                         />
                                     </label>
 
                                     <label className={styles.formLabel}>
-                                        Observacao
+                                        Observação.
                                         <textarea
                                             value={inlineForm.notes}
                                             onChange={event =>
@@ -954,11 +1323,318 @@ export default function OdontoArcadePage() {
                                             }
                                             className={styles.textarea}
                                             rows={3}
-                                            placeholder='Anotacoes breves do atendimento'
+                                            placeholder='Anotações breves do atendimento.'
                                             disabled={savingForm}
                                         />
                                     </label>
                                 </div>
+
+                                <div className={styles.productSection}>
+                                        <div className={styles.productSectionHeader}>
+                                            <span className={styles.productSectionTitle}>
+                                                Produtos usados
+                                            </span>
+                                            <button
+                                                type='button'
+                                                className={styles.btnPrimary}
+                                                onClick={() =>
+                                                    setEditProducts(prev => [
+                                                        ...prev,
+                                                        {
+                                                            name: '',
+                                                            value: '',
+                                                            saveNameToList: false,
+                                                            saveValueToList: false,
+                                                            showDropdown: false,
+                                                        },
+                                                    ])
+                                                }
+                                                disabled={savingForm}
+                                            >
+                                                + Produto
+                                            </button>
+                                        </div>
+
+                                        {editProducts.length === 0 && (
+                                            <p className={styles.textMuted} style={{ fontSize: '13px', margin: 0 }}>
+                                                Nenhum produto adicionado.
+                                            </p>
+                                        )}
+
+                                        {editProducts.map((product, idx) => {
+                                            const isInList = productNames.some(
+                                                n =>
+                                                    n.toLowerCase() ===
+                                                    product.name.toLowerCase().trim(),
+                                            );
+                                            const catalogVal = productValueMap.get(
+                                                product.name.toLowerCase().trim(),
+                                            );
+                                            const valueChanged =
+                                                isInList &&
+                                                catalogVal != null &&
+                                                product.value.trim() !== '' &&
+                                                product.value !== catalogVal;
+                                            const filteredNames = product.name.trim()
+                                                ? productNames.filter(n =>
+                                                      n
+                                                          .toLowerCase()
+                                                          .includes(
+                                                              product.name.toLowerCase().trim(),
+                                                          ),
+                                                  )
+                                                : productNames;
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={styles.productFormGroup}
+                                                >
+                                                    <div className={styles.productFormRow}>
+                                                        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                                                            <input
+                                                                type='text'
+                                                                placeholder='Nome do produto'
+                                                                value={product.name}
+                                                                className={styles.input}
+                                                                disabled={savingForm}
+                                                                autoComplete='off'
+                                                                onFocus={() =>
+                                                                    setEditProducts(prev =>
+                                                                        prev.map((p, i) =>
+                                                                            i === idx
+                                                                                ? { ...p, showDropdown: true }
+                                                                                : p,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                                onBlur={() =>
+                                                                    setTimeout(
+                                                                        () =>
+                                                                            setEditProducts(prev =>
+                                                                                prev.map((p, i) =>
+                                                                                    i === idx
+                                                                                        ? {
+                                                                                              ...p,
+                                                                                              showDropdown: false,
+                                                                                          }
+                                                                                        : p,
+                                                                                ),
+                                                                            ),
+                                                                        200,
+                                                                    )
+                                                                }
+                                                                onChange={e => {
+                                                                    const newName = e.target.value;
+                                                                    setEditProducts(prev =>
+                                                                        prev.map((p, i) => {
+                                                                            if (i !== idx) return p;
+                                                                            const inList = productNames.some(
+                                                                                n =>
+                                                                                    n.toLowerCase() ===
+                                                                                    newName.toLowerCase().trim(),
+                                                                            );
+                                                                            const catVal = productValueMap.get(
+                                                                                newName.toLowerCase().trim(),
+                                                                            );
+                                                                            return {
+                                                                                ...p,
+                                                                                name: newName,
+                                                                                value:
+                                                                                    inList &&
+                                                                                    catVal != null &&
+                                                                                    !p.value.trim()
+                                                                                        ? catVal
+                                                                                        : p.value,
+                                                                                showDropdown: true,
+                                                                            };
+                                                                        }),
+                                                                    );
+                                                                }}
+                                                            />
+                                                            {product.showDropdown &&
+                                                                filteredNames.length > 0 && (
+                                                                    <div
+                                                                        style={{
+                                                                            position: 'absolute',
+                                                                            top: '100%',
+                                                                            left: 0,
+                                                                            right: 0,
+                                                                            backgroundColor: '#fff',
+                                                                            border: '1px solid #ccc',
+                                                                            borderRadius: '4px',
+                                                                            marginTop: '4px',
+                                                                            maxHeight: '180px',
+                                                                            overflowY: 'auto',
+                                                                            zIndex: 20,
+                                                                            boxShadow:
+                                                                                '0 2px 8px rgba(0,0,0,0.1)',
+                                                                        }}
+                                                                    >
+                                                                        {filteredNames.map(
+                                                                            (name, ni) => (
+                                                                                <div
+                                                                                    key={ni}
+                                                                                    onMouseDown={e =>
+                                                                                        e.preventDefault()
+                                                                                    }
+                                                                                    onClick={() => {
+                                                                                        const catVal =
+                                                                                            productValueMap.get(
+                                                                                                name.toLowerCase(),
+                                                                                            );
+                                                                                        setEditProducts(
+                                                                                            prev =>
+                                                                                                prev.map(
+                                                                                                    (p, i) =>
+                                                                                                        i === idx
+                                                                                                            ? {
+                                                                                                                  ...p,
+                                                                                                                  name,
+                                                                                                                  value:
+                                                                                                                      catVal ??
+                                                                                                                      p.value,
+                                                                                                                  showDropdown:
+                                                                                                                      false,
+                                                                                                              }
+                                                                                                            : p,
+                                                                                                ),
+                                                                                        );
+                                                                                    }}
+                                                                                    style={{
+                                                                                        padding: '8px 12px',
+                                                                                        cursor: 'pointer',
+                                                                                        borderBottom:
+                                                                                            '1px solid #f0f0f0',
+                                                                                        fontSize: '14px',
+                                                                                    }}
+                                                                                    onMouseEnter={e =>
+                                                                                        (e.currentTarget.style.backgroundColor =
+                                                                                            '#f5f5f5')
+                                                                                    }
+                                                                                    onMouseLeave={e =>
+                                                                                        (e.currentTarget.style.backgroundColor =
+                                                                                            '#fff')
+                                                                                    }
+                                                                                >
+                                                                                    {name}
+                                                                                </div>
+                                                                            ),
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                        </div>
+
+                                                        <input
+                                                            type='text'
+                                                            inputMode='decimal'
+                                                            placeholder='0,00'
+                                                            value={product.value}
+                                                            className={styles.input}
+                                                            style={{ width: '120px', flex: '0 0 120px' }}
+                                                            disabled={savingForm}
+                                                            onChange={e =>
+                                                                setEditProducts(prev =>
+                                                                    prev.map((p, i) =>
+                                                                        i === idx
+                                                                            ? { ...p, value: e.target.value }
+                                                                            : p,
+                                                                    ),
+                                                                )
+                                                            }
+                                                        />
+
+                                                        <button
+                                                            type='button'
+                                                            className={styles.iconBtnDanger}
+                                                            onClick={() => {
+                                                                if (product.id !== undefined) {
+                                                                    setDeletedProductIds(prev => [
+                                                                        ...prev,
+                                                                        product.id!,
+                                                                    ]);
+                                                                }
+                                                                setEditProducts(prev =>
+                                                                    prev.filter((_, i) => i !== idx),
+                                                                );
+                                                            }}
+                                                            disabled={savingForm}
+                                                            aria-label='Remover produto'
+                                                            title='Remover produto'
+                                                        >
+                                                            <svg
+                                                                viewBox='0 0 24 24'
+                                                                aria-hidden='true'
+                                                                className={styles.iconSvg}
+                                                            >
+                                                                <path
+                                                                    d='M18 6 6 18M6 6l12 12'
+                                                                    fill='none'
+                                                                    stroke='currentColor'
+                                                                    strokeWidth='2.5'
+                                                                    strokeLinecap='round'
+                                                                />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+
+                                                    {!isInList && product.name.trim() && (
+                                                        <div className={styles.productSaveCheckbox}>
+                                                            <input
+                                                                type='checkbox'
+                                                                id={`save-pname-${idx}`}
+                                                                checked={product.saveNameToList}
+                                                                onChange={e =>
+                                                                    setEditProducts(prev =>
+                                                                        prev.map((p, i) =>
+                                                                            i === idx
+                                                                                ? {
+                                                                                      ...p,
+                                                                                      saveNameToList:
+                                                                                          e.target.checked,
+                                                                                  }
+                                                                                : p,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                                disabled={savingForm}
+                                                            />
+                                                            <label htmlFor={`save-pname-${idx}`}>
+                                                                Salvar "{product.name}" no catálogo
+                                                            </label>
+                                                        </div>
+                                                    )}
+
+                                                    {valueChanged && (
+                                                        <div className={styles.productSaveCheckbox}>
+                                                            <input
+                                                                type='checkbox'
+                                                                id={`save-pval-${idx}`}
+                                                                checked={product.saveValueToList}
+                                                                onChange={e =>
+                                                                    setEditProducts(prev =>
+                                                                        prev.map((p, i) =>
+                                                                            i === idx
+                                                                                ? {
+                                                                                      ...p,
+                                                                                      saveValueToList:
+                                                                                          e.target.checked,
+                                                                                  }
+                                                                                : p,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                                disabled={savingForm}
+                                                            />
+                                                            <label htmlFor={`save-pval-${idx}`}>
+                                                                Salvar valor atualizado no catálogo
+                                                            </label>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
 
                                 <div className={styles.modalActions}>
                                     <button
@@ -1009,149 +1685,274 @@ export default function OdontoArcadePage() {
                                                 const tooth = proc.tooth
                                                     ? toothById.get(proc.tooth)
                                                     : null;
+                                                const linkedProducts = procedures.filter(
+                                                    p => p.is_product && p.parent_procedure === proc.id,
+                                                );
                                                 return (
                                                     <li key={proc.id} className={styles.procItem}>
-                                                        <div className={styles.procMain}>
-                                                            <div className={styles.procTextBlock}>
-                                                                <div className={styles.procLabelRow}>
+                                                        <div className={styles.procRow}>
+                                                            <div className={styles.procMain}>
+                                                                <div className={styles.procTextBlock}>
+                                                                    <div className={styles.procLabelRow}>
+                                                                        <button
+                                                                            type='button'
+                                                                            className={styles.checkBtn}
+                                                                            onClick={() =>
+                                                                                void toggleProcedureCompleted(proc)
+                                                                            }
+                                                                            aria-label={
+                                                                                isProcedureCompleted(proc)
+                                                                                    ? 'Marcar como pendente'
+                                                                                    : 'Marcar como concluido'
+                                                                            }
+                                                                            title={
+                                                                                isProcedureCompleted(proc)
+                                                                                    ? 'Marcar como pendente'
+                                                                                    : 'Marcar como concluido'
+                                                                            }
+                                                                        >
+                                                                            <svg
+                                                                                viewBox='0 0 24 24'
+                                                                                aria-hidden='true'
+                                                                                className={`${styles.statusCheck} ${
+                                                                                    isProcedureCompleted(proc)
+                                                                                        ? styles.statusCheckCompleted
+                                                                                        : styles.statusCheckPending
+                                                                                }`}
+                                                                            >
+                                                                                <path
+                                                                                    d='M5 12.5 9.2 16.7 19 7.6'
+                                                                                    fill='none'
+                                                                                    stroke='currentColor'
+                                                                                    strokeWidth='3.2'
+                                                                                    strokeLinecap='round'
+                                                                                    strokeLinejoin='round'
+                                                                                />
+                                                                            </svg>
+                                                                        </button>
+                                                                        <strong className={styles.procLabel}>
+                                                                            {tooth
+                                                                                ? `Dente ${tooth.international_number}`
+                                                                                : 'Geral'}
+                                                                        </strong>
+                                                                    </div>
+                                                                    <div className={styles.procDescriptionRow}>
+                                                                        <span className={styles.procDescription}>
+                                                                            {proc.name}
+                                                                        </span>
+                                                                        {proc.faces_raw && (
+                                                                            <span className={styles.faceBadge}>
+                                                                                {proc.faces_raw}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className={styles.procAside}>
+                                                                <div className={styles.procFinanceGroup}>
+                                                                    <div className={styles.procValueWrap}>
+                                                                        <span className={styles.procValue}>
+                                                                            {formatMoney(proc.patient_amount)}
+                                                                        </span>
+                                                                        {proc.paid_at && (
+                                                                            <>
+                                                                                <span className={styles.paidDateDesktop}>
+                                                                                    {formatDate(proc.paid_at)}
+                                                                                </span>
+                                                                                <span className={styles.paidDateMobile}>
+                                                                                    {formatDateShort(proc.paid_at)}
+                                                                                </span>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
                                                                     <button
                                                                         type='button'
-                                                                        className={styles.checkBtn}
+                                                                        className={`${styles.iconBtn} ${
+                                                                            isProcedurePaid(proc)
+                                                                                ? styles.iconBtnPaidActive
+                                                                                : ''
+                                                                        }`}
                                                                         onClick={() =>
-                                                                            void toggleProcedureCompleted(proc)
+                                                                            void toggleProcedurePaid(proc)
                                                                         }
                                                                         aria-label={
-                                                                            isProcedureCompleted(proc)
-                                                                                ? 'Marcar como pendente'
-                                                                                : 'Marcar como concluido'
+                                                                            isProcedurePaid(proc)
+                                                                                ? 'Marcar como pendente de pagamento'
+                                                                                : 'Marcar como pago'
                                                                         }
                                                                         title={
-                                                                            isProcedureCompleted(proc)
-                                                                                ? 'Marcar como pendente'
-                                                                                : 'Marcar como concluido'
+                                                                            isProcedurePaid(proc)
+                                                                                ? `Pago em ${formatDate(proc.paid_at)}`
+                                                                                : 'Marcar como pago'
                                                                         }
+                                                                    >
+                                                                        <span className={styles.paymentSymbol}>
+                                                                            PG
+                                                                        </span>
+                                                                    </button>
+                                                                </div>
+                                                                <div className={styles.procManageGroup}>
+                                                                    <button
+                                                                        type='button'
+                                                                        className={styles.iconBtn}
+                                                                        onClick={() => openEditForm(proc)}
+                                                                        aria-label='Editar procedimento'
+                                                                        title='Editar procedimento'
                                                                     >
                                                                         <svg
                                                                             viewBox='0 0 24 24'
                                                                             aria-hidden='true'
-                                                                            className={`${styles.statusCheck} ${
-                                                                                isProcedureCompleted(proc)
-                                                                                    ? styles.statusCheckCompleted
-                                                                                    : styles.statusCheckPending
-                                                                            }`}
+                                                                            className={styles.iconSvg}
                                                                         >
                                                                             <path
-                                                                                d='M5 12.5 9.2 16.7 19 7.6'
-                                                                                fill='none'
-                                                                                stroke='currentColor'
-                                                                                strokeWidth='3.2'
-                                                                                strokeLinecap='round'
-                                                                                strokeLinejoin='round'
+                                                                                d='M4 20h4l10-10-4-4L4 16v4zm13.7-11.3 1.6-1.6a1 1 0 0 0 0-1.4l-1.3-1.3a1 1 0 0 0-1.4 0L15 6l2.7 2.7z'
+                                                                                fill='currentColor'
                                                                             />
                                                                         </svg>
                                                                     </button>
-                                                                    <strong className={styles.procLabel}>
-                                                                        {tooth
-                                                                            ? `Dente ${tooth.international_number}`
-                                                                            : 'Geral'}
-                                                                    </strong>
+                                                                    <button
+                                                                        type='button'
+                                                                        className={styles.iconBtnDanger}
+                                                                        onClick={() =>
+                                                                            void deleteProcedure(proc.id)
+                                                                        }
+                                                                        aria-label='Apagar procedimento'
+                                                                        title='Apagar procedimento'
+                                                                    >
+                                                                        <svg
+                                                                            viewBox='0 0 24 24'
+                                                                            aria-hidden='true'
+                                                                            className={styles.iconSvg}
+                                                                        >
+                                                                            <path
+                                                                                d='M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9zm-1 11h12a2 2 0 0 0 2-2V7H4v11a2 2 0 0 0 2 2z'
+                                                                                fill='currentColor'
+                                                                            />
+                                                                        </svg>
+                                                                    </button>
                                                                 </div>
-                                                                <div className={styles.procDescriptionRow}>
-                                                                    <span className={styles.procDescription}>
-                                                                        {proc.name}
-                                                                    </span>
-                                                                    {proc.faces_raw && (
-                                                                        <span className={styles.faceBadge}>
-                                                                            {proc.faces_raw}
+                                                            </div>
+                                                        </div>
+                                                        {linkedProducts.length > 0 && (
+                                                            <div className={styles.procProductList}>
+                                                                {linkedProducts.map(product => (
+                                                                    <div
+                                                                        key={product.id}
+                                                                        className={styles.productSubRow}
+                                                                    >
+                                                                        <span className={styles.productSubRowName}>
+                                                                            {product.name}
                                                                         </span>
-                                                                    )}
-                                                                </div>
+                                                                        <div className={styles.procFinanceGroup}>
+                                                                            <div className={styles.procValueWrap}>
+                                                                                <span className={styles.procValue}>
+                                                                                    {formatMoney(
+                                                                                        product.patient_amount,
+                                                                                    )}
+                                                                                </span>
+                                                                                {product.paid_at && (
+                                                                                    <>
+                                                                                        <span
+                                                                                            className={
+                                                                                                styles.paidDateDesktop
+                                                                                            }
+                                                                                        >
+                                                                                            {formatDate(
+                                                                                                product.paid_at,
+                                                                                            )}
+                                                                                        </span>
+                                                                                        <span
+                                                                                            className={
+                                                                                                styles.paidDateMobile
+                                                                                            }
+                                                                                        >
+                                                                                            {formatDateShort(
+                                                                                                product.paid_at,
+                                                                                            )}
+                                                                                        </span>
+                                                                                    </>
+                                                                                )}
+                                                                            </div>
+                                                                            <button
+                                                                                type='button'
+                                                                                className={`${styles.iconBtn} ${
+                                                                                    isProcedurePaid(product)
+                                                                                        ? styles.iconBtnPaidActive
+                                                                                        : ''
+                                                                                }`}
+                                                                                onClick={() =>
+                                                                                    void toggleProcedurePaid(
+                                                                                        product,
+                                                                                    )
+                                                                                }
+                                                                                aria-label={
+                                                                                    isProcedurePaid(product)
+                                                                                        ? 'Marcar como pendente de pagamento'
+                                                                                        : 'Marcar como pago'
+                                                                                }
+                                                                                title={
+                                                                                    isProcedurePaid(product)
+                                                                                        ? `Pago em ${formatDate(product.paid_at)}`
+                                                                                        : 'Marcar produto como pago'
+                                                                                }
+                                                                            >
+                                                                                <span
+                                                                                    className={
+                                                                                        styles.paymentSymbol
+                                                                                    }
+                                                                                >
+                                                                                    PG
+                                                                                </span>
+                                                                            </button>
+                                                                        </div>
+                                                                        <div className={styles.procManageGroup}>
+                                                                            <button
+                                                                                type='button'
+                                                                                className={styles.iconBtn}
+                                                                                onClick={() =>
+                                                                                    openEditForm(proc)
+                                                                                }
+                                                                                aria-label='Editar procedimento'
+                                                                                title='Editar procedimento (abre o formulário do procedimento pai)'
+                                                                            >
+                                                                                <svg
+                                                                                    viewBox='0 0 24 24'
+                                                                                    aria-hidden='true'
+                                                                                    className={styles.iconSvg}
+                                                                                >
+                                                                                    <path
+                                                                                        d='M4 20h4l10-10-4-4L4 16v4zm13.7-11.3 1.6-1.6a1 1 0 0 0 0-1.4l-1.3-1.3a1 1 0 0 0-1.4 0L15 6l2.7 2.7z'
+                                                                                        fill='currentColor'
+                                                                                    />
+                                                                                </svg>
+                                                                            </button>
+                                                                            <button
+                                                                                type='button'
+                                                                                className={styles.iconBtnDanger}
+                                                                                onClick={() =>
+                                                                                    void deleteProcedure(
+                                                                                        product.id,
+                                                                                    )
+                                                                                }
+                                                                                aria-label='Apagar produto'
+                                                                                title='Apagar produto'
+                                                                            >
+                                                                                <svg
+                                                                                    viewBox='0 0 24 24'
+                                                                                    aria-hidden='true'
+                                                                                    className={styles.iconSvg}
+                                                                                >
+                                                                                    <path
+                                                                                        d='M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9zm-1 11h12a2 2 0 0 0 2-2V7H4v11a2 2 0 0 0 2 2z'
+                                                                                        fill='currentColor'
+                                                                                    />
+                                                                                </svg>
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
                                                             </div>
-                                                        </div>
-                                                        <div className={styles.procAside}>
-                                                            <div className={styles.procFinanceGroup}>
-                                                                <div className={styles.procValueWrap}>
-                                                                    <span className={styles.procValue}>
-                                                                        {formatMoney(proc.patient_amount)}
-                                                                    </span>
-                                                                    {proc.paid_at && (
-                                                                        <>
-                                                                            <span className={styles.paidDateDesktop}>
-                                                                                {formatDate(proc.paid_at)}
-                                                                            </span>
-                                                                            <span className={styles.paidDateMobile}>
-                                                                                {formatDateShort(proc.paid_at)}
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                                <button
-                                                                    type='button'
-                                                                    className={`${styles.iconBtn} ${
-                                                                        isProcedurePaid(proc)
-                                                                            ? styles.iconBtnPaidActive
-                                                                            : ''
-                                                                    }`}
-                                                                    onClick={() =>
-                                                                        void toggleProcedurePaid(proc)
-                                                                    }
-                                                                    aria-label={
-                                                                        isProcedurePaid(proc)
-                                                                            ? 'Marcar como pendente de pagamento'
-                                                                            : 'Marcar como pago'
-                                                                    }
-                                                                    title={
-                                                                        isProcedurePaid(proc)
-                                                                            ? `Pago em ${formatDate(proc.paid_at)}`
-                                                                            : 'Marcar como pago'
-                                                                    }
-                                                                >
-                                                                    <span className={styles.paymentSymbol}>
-                                                                        PG
-                                                                    </span>
-                                                                </button>
-                                                            </div>
-                                                            <div className={styles.procManageGroup}>
-                                                                <button
-                                                                    type='button'
-                                                                    className={styles.iconBtn}
-                                                                    onClick={() => openEditForm(proc)}
-                                                                    aria-label='Editar procedimento'
-                                                                    title='Editar procedimento'
-                                                                >
-                                                                    <svg
-                                                                        viewBox='0 0 24 24'
-                                                                        aria-hidden='true'
-                                                                        className={styles.iconSvg}
-                                                                    >
-                                                                        <path
-                                                                            d='M4 20h4l10-10-4-4L4 16v4zm13.7-11.3 1.6-1.6a1 1 0 0 0 0-1.4l-1.3-1.3a1 1 0 0 0-1.4 0L15 6l2.7 2.7z'
-                                                                            fill='currentColor'
-                                                                        />
-                                                                    </svg>
-                                                                </button>
-                                                                <button
-                                                                    type='button'
-                                                                    className={styles.iconBtnDanger}
-                                                                    onClick={() =>
-                                                                        void deleteProcedure(proc.id)
-                                                                    }
-                                                                    aria-label='Apagar procedimento'
-                                                                    title='Apagar procedimento'
-                                                                >
-                                                                    <svg
-                                                                        viewBox='0 0 24 24'
-                                                                        aria-hidden='true'
-                                                                        className={styles.iconSvg}
-                                                                    >
-                                                                        <path
-                                                                            d='M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9zm-1 11h12a2 2 0 0 0 2-2V7H4v11a2 2 0 0 0 2 2z'
-                                                                            fill='currentColor'
-                                                                        />
-                                                                    </svg>
-                                                                </button>
-                                                            </div>
-                                                        </div>
+                                                        )}
                                                     </li>
                                                 );
                                             })}
@@ -1161,6 +1962,7 @@ export default function OdontoArcadePage() {
                             </div>
                         )}
                     </section>
+
                 </>
             )}
         </div>
