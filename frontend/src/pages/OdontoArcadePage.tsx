@@ -107,9 +107,10 @@ function formatDateShort(dateIso?: string | null): string {
     });
 }
 
-function formatMoney(value?: number | null): string {
+function formatMoney(value?: number | string | null): string {
     if (value == null) return '-';
-    return formatBRLCurrency(value);
+    const numeric = typeof value === 'string' ? parseAmount(value) : value;
+    return formatBRLCurrency(numeric);
 }
 
 function eventDateISO(proc: ProcedureItem): string | null {
@@ -1071,7 +1072,7 @@ export default function OdontoArcadePage() {
                                                             <div className={styles.procFinanceGroup}>
                                                                 <div className={styles.procValueWrap}>
                                                                     <span className={styles.procValue}>
-                                                                        {formatMoney(proc.patient_amount as any)}
+                                                                        {formatMoney(proc.patient_amount)}
                                                                     </span>
                                                                     {proc.paid_at && (
                                                                         <>
