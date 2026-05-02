@@ -14,6 +14,7 @@ import type {
 export type SystemMessagePayload = {
     text: string;
     type: 'success' | 'error' | 'info' | 'warning';
+    autoCloseMs?: number;
 };
 export type OpenAppointmentDetailsPayload = {
     appointment: Appointment;

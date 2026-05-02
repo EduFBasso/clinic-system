@@ -179,32 +179,6 @@ export default function Home() {
         })();
     }, []);
 
-    // Listener global para mensagens do sistema
-    useEffect(() => {
-        function onSystemMessage(e: Event) {
-            const det = (e as CustomEvent).detail || {};
-            if (det && det.text) {
-                setSysMsg({
-                    text: String(det.text),
-                    type: det.type || 'info',
-                    autoCloseMs:
-                        typeof det.autoCloseMs === 'number'
-                            ? det.autoCloseMs
-                            : undefined,
-                });
-            }
-        }
-        window.addEventListener(
-            'systemMessage',
-            onSystemMessage as EventListener,
-        );
-        return () =>
-            window.removeEventListener(
-                'systemMessage',
-                onSystemMessage as EventListener,
-            );
-    }, []);
-
     useEffect(() => {
         function onPageFlashMessage(e: Event) {
             const det = (e as CustomEvent).detail || {};

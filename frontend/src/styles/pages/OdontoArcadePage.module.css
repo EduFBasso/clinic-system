@@ -101,10 +101,19 @@
     padding: 9px 13px;
     cursor: pointer;
     font-weight: 600;
+    transition:
+        filter 160ms ease,
+        transform 120ms ease,
+        box-shadow 160ms ease;
 }
 
 .btn:hover {
     filter: brightness(0.97);
+}
+
+.btn:active {
+    filter: brightness(0.94);
+    transform: translateY(1px);
 }
 
 .btnPrimary {
@@ -115,10 +124,20 @@
     padding: 9px 13px;
     cursor: pointer;
     font-weight: 700;
+    transition:
+        filter 160ms ease,
+        transform 120ms ease,
+        box-shadow 160ms ease;
 }
 
 .btnPrimary:hover {
-    filter: brightness(0.96);
+    filter: brightness(0.93);
+    box-shadow: 0 10px 20px color-mix(in oklab, var(--color-primary) 22%, transparent);
+}
+
+.btnPrimary:active {
+    filter: brightness(0.88);
+    transform: translateY(1px) scale(0.99);
 }
 
 .arcadeCard,
@@ -140,6 +159,28 @@
     justify-content: space-between;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+.timelineTitleRow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.arcadeVisibilityBtn {
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text-main, var(--color-text));
+    min-height: 34px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
 }
 
 .timelineNav {
@@ -189,6 +230,19 @@
     font-size: 18px;
     line-height: 1.1;
     color: var(--color-primary);
+}
+
+.timelineDateSelect {
+    min-width: 170px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control, 8px);
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-primary);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.1;
+    padding: 8px 10px;
+    text-align: center;
 }
 
 .svgWrap {
@@ -290,7 +344,7 @@
 .procRow {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
     gap: 14px;
 }
 
@@ -339,7 +393,7 @@
 .productSubRowActions {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: 10px;
     flex-wrap: wrap;
 }
@@ -465,7 +519,7 @@
 .procDescription {
     font-family: 'Roboto', sans-serif;
     min-width: 0;
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1.35;
     word-break: break-word;
 }
@@ -500,6 +554,7 @@
 
 .procValue {
     font-family: 'Roboto', sans-serif;
+    font-size: 18px;
     font-weight: 400;
     color: var(--color-text);
 }
@@ -508,7 +563,7 @@
 .paidDateMobile {
     font-family: 'Roboto', sans-serif;
     color: var(--color-text);
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 400;
 }
 
@@ -559,6 +614,154 @@
     padding: 20px;
     display: grid;
     gap: 16px;
+}
+
+.serviceFlowOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 95;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    background: color-mix(in oklab, #0f172a 56%, transparent);
+}
+.serviceFlowModal {
+    width: min(960px, 100%);
+    max-height: min(92dvh, 980px);
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl, 12px);
+    background: var(--color-panel, var(--color-bg));
+    box-shadow: var(--shadow-panel, var(--shadow-soft-sm));
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+}
+.serviceFlowHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.serviceFlowHeaderMain {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.serviceFlowBackBtn {
+    width: fit-content;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text-main, var(--color-text));
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.serviceFlowStepChoices {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+.serviceFlowChoiceBtn {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control, 8px);
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text-main, var(--color-text));
+    min-height: 44px;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+.serviceFlowChoiceBtnActive {
+    border-color: var(--color-accent-strong, var(--color-primary));
+    box-shadow: 0 0 0 4px
+        var(
+            --color-accent-ring,
+            color-mix(in oklab, var(--color-primary) 14%, transparent)
+        );
+}
+.serviceFlowBody {
+    display: grid;
+    gap: 12px;
+}
+.serviceFlowInfoRow {
+    display: grid;
+    gap: 8px;
+}
+.serviceFlowTag {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 28px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    background: var(--color-input, var(--color-bg-section));
+}
+.serviceFlowChipList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.serviceFlowChip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-primary) 10%, var(--color-bg-section));
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-text-main, var(--color-heading));
+}
+.serviceFlowGridWrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 10px);
+    background: var(--color-bg-section);
+    padding: 8px;
+}
+.serviceFlowRows {
+    display: grid;
+    gap: 10px;
+}
+
+.productFlowTopActions {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.serviceFlowRow {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 10px);
+    background: var(--color-bg-section);
+    padding: 10px;
+    display: grid;
+    gap: 10px;
+}
+.serviceFlowRowTooth {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: var(--color-text-main, var(--color-heading));
+}
+
+.productFlowRowHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
 }
 
 .composerHeader {
@@ -708,6 +911,7 @@
     font-size: 13px;
 }
 
+
 .formGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -755,6 +959,21 @@
     font-weight: 600;
 }
 
+.clearToothBtn {
+    background: none;
+    border: none;
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-danger, #d32f2f);
+    cursor: pointer;
+    border-radius: 4px;
+    line-height: 1;
+}
+.clearToothBtn:hover {
+    background: color-mix(in oklab, var(--color-danger, #d32f2f) 10%, transparent);
+}
+
 .input,
 .textarea {
     width: 100%;
@@ -775,7 +994,7 @@
 
 .input::placeholder,
 .textarea::placeholder {
-    color: var(--color-text);
+    color: var(--color-text-muted);
 }
 
 .input:hover,
@@ -886,6 +1105,16 @@
         gap: 14px;
     }
 
+    .timelineTitleRow {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .arcadeVisibilityBtn {
+        min-height: 40px;
+        font-size: 14px;
+    }
+
     .timelineNav {
         width: 100%;
         justify-content: space-between;
@@ -907,6 +1136,14 @@
         font-size: 18px;
         line-height: 1.05;
         color: var(--color-primary);
+    }
+
+    .timelineDateSelect {
+        min-width: 0;
+        flex: 1;
+        min-height: 52px;
+        font-size: 17px;
+        border-radius: 12px;
     }
 
     .svgWrap {
@@ -965,6 +1202,8 @@
         align-items: stretch;
         gap: 14px;
     }
+
+
 
     .procMain {
         align-items: flex-start;
@@ -1089,13 +1328,21 @@
     }
 
     .iconSvg {
-        width: 14px;
-        height: 14px;
+        width: 18px;
+        height: 18px;
     }
 
     .inlineComposer {
         padding: 18px 16px;
         gap: 18px;
+    }
+    .serviceFlowOverlay {
+        padding: 8px;
+    }
+    .serviceFlowModal {
+        max-height: 94dvh;
+        padding: 12px;
+        gap: 10px;
     }
 
     .composerHeader {
@@ -1212,10 +1459,6 @@
         gap: 2px;
     }
 
-    .productSubRowActions {
-        justify-content: flex-start;
-    }
-
     .paidDateDesktop {
         display: none;
     }
@@ -1239,6 +1482,9 @@
     .inlineComposer {
         padding: 26px 28px;
         gap: 22px;
+    }
+    .serviceFlowStepChoices {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .inlineComposer .sectionTitle {

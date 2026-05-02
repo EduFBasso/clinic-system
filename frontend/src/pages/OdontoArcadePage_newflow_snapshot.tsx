@@ -5,8 +5,6 @@ import { emit } from '../events/bus';
 import { ApiError, apiFetch } from '../utils/apiFetch';
 import { parseAmount, validateAmount, toInputAmount } from '../utils/currency';
 import { OdontoToothGrid } from '../components/OdontoToothGrid';
-import OdontoServiceFlowModal from '../components/odonto/OdontoServiceFlowModal';
-import OdontoProductFlowModal from '../components/odonto/OdontoProductFlowModal';
 import {
     asList, hasOdontoAccess, eventDateISO, isProcedureCompleted,
     formatDate, formatDateShort, formatMoney, todayISODate,
@@ -1021,31 +1019,491 @@ export default function OdontoArcadePage() {
 
             {!loading && !error && arcade && (
                 <>
-                    <OdontoServiceFlowModal
-                        open={serviceFlowOpen}
-                        saving={savingServiceFlow}
-                        flowType={serviceFlowType}
-                        rows={serviceRows}
-                        orderedTeeth={orderedTeeth}
-                        defaultToothId={selectedToothId ?? teeth[0]?.id ?? null}
-                        onClose={closeServiceFlowModal}
-                        onSave={() => {
-                            void saveServiceFlow();
-                        }}
-                        onFlowTypeChange={setServiceFlowType}
-                        onRowsChange={setServiceRows}
-                    />
+                    {serviceFlowOpen && (
+                        <div
+                            className={styles.serviceFlowOverlay}
+                            role='presentation'
+                            onClick={closeServiceFlowModal}
+                        >
+                            <div
+                                className={styles.serviceFlowModal}
+                                role='dialog'
+                                aria-modal='true'
+                                aria-label='Novo servico'
+                                onClick={event => event.stopPropagation()}
+                            >
+                                <div className={styles.serviceFlowHeader}>
+                                    <div className={styles.serviceFlowHeaderMain}>
+                                        <h3 className={styles.sectionTitle}>Novo servico</h3>
+                                        <div className={styles.serviceFlowStepChoices}>
+                                            <button
+                                                type='button'
+                                                className={`${styles.serviceFlowChoiceBtn} ${
+                                                    serviceFlowType === 'tooth'
+                                                        ? styles.serviceFlowChoiceBtnActive
+                                                        : ''
+                                                }`}
+                                                onClick={() =>
+                                                    setServiceFlowType('tooth')
+                                                }
+                                                disabled={savingServiceFlow}
+                                            >
+                                                Por dente
+                                            </button>
+                                            <button
+                                                type='button'
+                                                className={`${styles.serviceFlowChoiceBtn} ${
+                                                    serviceFlowType === 'arcade'
+                                                        ? styles.serviceFlowChoiceBtnActive
+                                                        : ''
+                                                }`}
+                                                onClick={() =>
+                                                    setServiceFlowType('arcade')
+                                                }
+                                                disabled={savingServiceFlow}
+                                            >
+                                                Arcada
+                                            </button>
+                                            <button
+                                                type='button'
+                                                className={`${styles.serviceFlowChoiceBtn} ${
+                                                    serviceFlowType === 'other'
+                                                        ? styles.serviceFlowChoiceBtnActive
+                                                        : ''
+                                                }`}
+                                                onClick={() =>
+                                                    setServiceFlowType('other')
+                                                }
+                                                disabled={savingServiceFlow}
+                                            >
+                                                Outro
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
 
-                    <OdontoProductFlowModal
-                        open={productFlowOpen}
-                        saving={savingProductFlow}
-                        rows={productRows}
-                        onClose={closeProductFlowModal}
-                        onSave={() => {
-                            void saveProductFlow();
-                        }}
-                        onRowsChange={setProductRows}
-                    />
+                                <div className={styles.serviceFlowBody}>
+                                    <div className={styles.productFlowTopActions}>
+                                        <button
+                                            type='button'
+                                            className={styles.btnPrimary}
+                                            onClick={() =>
+                                                setServiceRows(prev => [
+                                                    ...prev,
+                                                    {
+                                                        toothId:
+                                                            selectedToothId ??
+                                                            teeth[0]?.id ??
+                                                            null,
+                                                        name: '',
+                                                        value: '',
+                                                    },
+                                                ])
+                                            }
+                                            disabled={savingServiceFlow}
+                                        >
+                                            + Linha
+                                        </button>
+                                    </div>
+
+                                    <div className={styles.serviceFlowRows}>
+                                        {serviceRows.map((row, index) => (
+                                            <div
+                                                key={index}
+                                                className={styles.serviceFlowRow}
+                                            >
+                                                <div className={styles.productFlowRowHeader}>
+                                                    <strong>
+                                                        Linha {index + 1}
+                                                    </strong>
+                                                    <button
+                                                        type='button'
+                                                        className={styles.iconBtnDanger}
+                                                        onClick={() =>
+                                                            setServiceRows(prev =>
+                                                                prev.filter(
+                                                                    (_, i) =>
+                                                                        i !==
+                                                                        index,
+                                                                ),
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            savingServiceFlow ||
+                                                            serviceRows.length ===
+                                                                1
+                                                        }
+                                                        title='Remover linha'
+                                                        aria-label='Remover linha'
+                                                    >
+                                                        <svg
+                                                            viewBox='0 0 24 24'
+                                                            aria-hidden='true'
+                                                            className={styles.iconSvg}
+                                                        >
+                                                            <path
+                                                                d='M18 6 6 18M6 6l12 12'
+                                                                fill='none'
+                                                                stroke='currentColor'
+                                                                strokeWidth='2.5'
+                                                                strokeLinecap='round'
+                                                            />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+
+                                                {serviceFlowType === 'tooth' && (
+                                                    <label className={styles.formLabel}>
+                                                        Dente
+                                                        <select
+                                                            className={styles.input}
+                                                            value={
+                                                                row.toothId ?? ''
+                                                            }
+                                                            onChange={event =>
+                                                                setServiceRows(
+                                                                    prev =>
+                                                                        prev.map(
+                                                                            (
+                                                                                item,
+                                                                                i,
+                                                                            ) =>
+                                                                                i ===
+                                                                                index
+                                                                                    ? {
+                                                                                          ...item,
+                                                                                          toothId:
+                                                                                              event
+                                                                                                  .target
+                                                                                                  .value
+                                                                                                  ? Number(
+                                                                                                        event
+                                                                                                            .target
+                                                                                                            .value,
+                                                                                                    )
+                                                                                                  : null,
+                                                                                      }
+                                                                                    : item,
+                                                                        ),
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                savingServiceFlow
+                                                            }
+                                                        >
+                                                            <option value=''>
+                                                                Selecione
+                                                            </option>
+                                                            {orderedTeeth.map(
+                                                                tooth => (
+                                                                    <option
+                                                                        key={
+                                                                            tooth.id
+                                                                        }
+                                                                        value={
+                                                                            tooth.id
+                                                                        }
+                                                                    >
+                                                                        Dente{' '}
+                                                                        {
+                                                                            tooth.international_number
+                                                                        }
+                                                                    </option>
+                                                                ),
+                                                            )}
+                                                        </select>
+                                                    </label>
+                                                )}
+
+                                                <div className={styles.formGrid}>
+                                                    <label
+                                                        className={styles.formLabel}
+                                                    >
+                                                        Nome do procedimento *
+                                                        <input
+                                                            className={styles.input}
+                                                            value={row.name}
+                                                            onChange={event =>
+                                                                setServiceRows(
+                                                                    prev =>
+                                                                        prev.map(
+                                                                            (
+                                                                                item,
+                                                                                i,
+                                                                            ) =>
+                                                                                i ===
+                                                                                index
+                                                                                    ? {
+                                                                                          ...item,
+                                                                                          name: event
+                                                                                              .target
+                                                                                              .value,
+                                                                                      }
+                                                                                    : item,
+                                                                        ),
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                savingServiceFlow
+                                                            }
+                                                        />
+                                                    </label>
+
+                                                    <label
+                                                        className={styles.formLabel}
+                                                    >
+                                                        Valor
+                                                        <input
+                                                            type='text'
+                                                            inputMode='decimal'
+                                                            className={
+                                                                styles.input
+                                                            }
+                                                            value={row.value}
+                                                            placeholder='0,00'
+                                                            onChange={event =>
+                                                                setServiceRows(
+                                                                    prev =>
+                                                                        prev.map(
+                                                                            (
+                                                                                item,
+                                                                                i,
+                                                                            ) =>
+                                                                                i ===
+                                                                                index
+                                                                                    ? {
+                                                                                          ...item,
+                                                                                          value: event
+                                                                                              .target
+                                                                                              .value,
+                                                                                      }
+                                                                                    : item,
+                                                                        ),
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                savingServiceFlow
+                                                            }
+                                                        />
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className={styles.modalActions}>
+                                    <button
+                                        type='button'
+                                        className={styles.btn}
+                                        onClick={closeServiceFlowModal}
+                                        disabled={savingServiceFlow}
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.btnPrimary}
+                                        onClick={() => void saveServiceFlow()}
+                                        disabled={savingServiceFlow}
+                                    >
+                                        {savingServiceFlow
+                                            ? 'Salvando...'
+                                            : 'Salvar servicos'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {productFlowOpen && (
+                        <div
+                            className={styles.serviceFlowOverlay}
+                            role='presentation'
+                            onClick={closeProductFlowModal}
+                        >
+                            <div
+                                className={styles.serviceFlowModal}
+                                role='dialog'
+                                aria-modal='true'
+                                aria-label='Novo produto'
+                                onClick={event => event.stopPropagation()}
+                            >
+                                <div className={styles.serviceFlowHeader}>
+                                    <div className={styles.serviceFlowHeaderMain}>
+                                        <h3 className={styles.sectionTitle}>
+                                            Novo fluxo de produtos
+                                        </h3>
+                                    </div>
+                                </div>
+
+                                <div className={styles.productFlowTopActions}>
+                                    <button
+                                        type='button'
+                                        className={styles.btnPrimary}
+                                        onClick={() =>
+                                            setProductRows(prev => [
+                                                ...prev,
+                                                {
+                                                    name: '',
+                                                    value: '',
+                                                },
+                                            ])
+                                        }
+                                        disabled={savingProductFlow}
+                                    >
+                                        + Produto
+                                    </button>
+                                </div>
+
+                                <div className={styles.serviceFlowRows}>
+                                    {productRows.length === 0 && (
+                                        <p className={styles.textMuted}>
+                                            Nenhum produto adicionado.
+                                        </p>
+                                    )}
+                                    {productRows.map((row, index) => (
+                                        <div
+                                            key={index}
+                                            className={styles.serviceFlowRow}
+                                        >
+                                            <div
+                                                className={
+                                                    styles.productFlowRowHeader
+                                                }
+                                            >
+                                                <strong>
+                                                    Produto {index + 1}
+                                                </strong>
+                                                <button
+                                                    type='button'
+                                                    className={styles.iconBtnDanger}
+                                                    onClick={() =>
+                                                        setProductRows(prev =>
+                                                            prev.filter(
+                                                                (_, i) =>
+                                                                    i !== index,
+                                                            ),
+                                                        )
+                                                    }
+                                                    disabled={
+                                                        savingProductFlow
+                                                    }
+                                                    aria-label='Remover produto'
+                                                    title='Remover produto'
+                                                >
+                                                    <svg
+                                                        viewBox='0 0 24 24'
+                                                        aria-hidden='true'
+                                                        className={styles.iconSvg}
+                                                    >
+                                                        <path
+                                                            d='M18 6 6 18M6 6l12 12'
+                                                            fill='none'
+                                                            stroke='currentColor'
+                                                            strokeWidth='2.5'
+                                                            strokeLinecap='round'
+                                                        />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <div className={styles.formGrid}>
+                                                <label
+                                                    className={styles.formLabel}
+                                                >
+                                                    Nome *
+                                                    <input
+                                                        className={styles.input}
+                                                        value={row.name}
+                                                        onChange={event =>
+                                                            setProductRows(
+                                                                prev =>
+                                                                    prev.map(
+                                                                        (
+                                                                            item,
+                                                                            i,
+                                                                        ) =>
+                                                                            i ===
+                                                                            index
+                                                                                ? {
+                                                                                      ...item,
+                                                                                      name: event
+                                                                                          .target
+                                                                                          .value,
+                                                                                  }
+                                                                                : item,
+                                                                    ),
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            savingProductFlow
+                                                        }
+                                                    />
+                                                </label>
+
+                                                <label
+                                                    className={styles.formLabel}
+                                                >
+                                                    Valor
+                                                    <input
+                                                        type='text'
+                                                        inputMode='decimal'
+                                                        className={styles.input}
+                                                        placeholder='0,00'
+                                                        value={row.value}
+                                                        onChange={event =>
+                                                            setProductRows(
+                                                                prev =>
+                                                                    prev.map(
+                                                                        (
+                                                                            item,
+                                                                            i,
+                                                                        ) =>
+                                                                            i ===
+                                                                            index
+                                                                                ? {
+                                                                                      ...item,
+                                                                                      value: event
+                                                                                          .target
+                                                                                          .value,
+                                                                                  }
+                                                                                : item,
+                                                                    ),
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            savingProductFlow
+                                                        }
+                                                    />
+                                                </label>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className={styles.modalActions}>
+                                    <button
+                                        type='button'
+                                        className={styles.btn}
+                                        onClick={closeProductFlowModal}
+                                        disabled={savingProductFlow}
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={styles.btnPrimary}
+                                        onClick={() => void saveProductFlow()}
+                                        disabled={savingProductFlow}
+                                    >
+                                        {savingProductFlow
+                                            ? 'Salvando...'
+                                            : 'Salvar produtos'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <section className={styles.arcadeCard}>
                         <div className={styles.arcadeHeader}>
