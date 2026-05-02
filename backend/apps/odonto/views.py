@@ -8,7 +8,14 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from .models import DentalArcade, Tooth, Surface, Procedure
+from .models import (
+    DentalArcade,
+    Tooth,
+    Surface,
+    Procedure,
+    ProcedureNameSuggestion,
+    ProductCatalogItem,
+)
 from .serializers import (
     DentalArcadeDetailSerializer,
     DentalArcadeListSerializer,
@@ -197,12 +204,18 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
         Opcionalmente filtra por arcade_id via query param.
         Retorna: {"names": ["Nome 1", "Nome 2", ...]}
         """
-        qs = self.get_queryset().filter(
+        proc_qs = self.get_queryset().filter(
             name__isnull=False,
             name__gt='',  # apenas nomes não vazios
         ).values_list('name', flat=True).distinct().order_by('name')
 
-        names = list(qs)
+        suggestion_qs = ProcedureNameSuggestion.objects.filter(
+            professional=self.current_user(),
+            name__isnull=False,
+            name__gt='',
+        ).values_list('name', flat=True)
+
+        names = sorted(set(proc_qs).union(set(suggestion_qs)), key=str.lower)
         return Response({'names': names}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='suggest-name')
@@ -239,11 +252,17 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Verificar se o nome já existe (case-insensitive)
-        existing = Procedure.objects.filter(
+        # Verificar se o nome já existe (case-insensitive) em qualquer fonte
+        existing_proc = Procedure.objects.filter(
             arcade__professional=self.current_user(),
             name__iexact=name,
         ).first()
+        existing_suggestion = ProcedureNameSuggestion.objects.filter(
+            professional=self.current_user(),
+            name__iexact=name,
+        ).first()
+
+        existing = existing_suggestion or existing_proc
 
         if existing:
             return Response(
@@ -255,19 +274,17 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
-        # Criar procedimento vazio apenas com o nome
+        # Criar sugestao isolada de procedimento (sem poluir tabela Procedure)
         try:
-            proc = Procedure.objects.create(
-                arcade=arcade,
+            suggestion = ProcedureNameSuggestion.objects.create(
+                professional=self.current_user(),
                 name=name,
-                status=Procedure.Status.PENDING,
-                is_active=True,
             )
             return Response(
                 {
                     'message': f'Nome "{name}" adicionado à lista de sugestões.',
-                    'id': proc.id,
-                    'name': proc.name,
+                    'id': suggestion.id,
+                    'name': suggestion.name,
                 },
                 status=status.HTTP_201_CREATED,
             )
@@ -284,24 +301,36 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
         Opcionalmente filtra por arcade_id via query param.
         Retorna: {"catalog": [{"name": "Botox", "last_value": "150.00"}, ...]}
         """
-        qs = self.get_queryset().filter(
+        proc_qs = self.get_queryset().filter(
             is_product=True,
             name__isnull=False,
             name__gt='',
         )
 
-        distinct_names = list(
-            qs.values_list('name', flat=True).distinct().order_by('name')
+        proc_names = set(
+            proc_qs.values_list('name', flat=True).distinct().order_by('name')
         )
+        catalog_qs = ProductCatalogItem.objects.filter(
+            professional=self.current_user(),
+            name__isnull=False,
+            name__gt='',
+        )
+        catalog_names = set(catalog_qs.values_list('name', flat=True))
+
+        all_names = sorted(proc_names.union(catalog_names), key=str.lower)
 
         catalog = []
-        for name in distinct_names:
-            last_proc = qs.filter(name__iexact=name).order_by('-id').first()
-            last_value = (
-                str(last_proc.patient_amount)
-                if last_proc and last_proc.patient_amount is not None
-                else None
-            )
+        for name in all_names:
+            item = catalog_qs.filter(name__iexact=name).order_by('-id').first()
+            if item and item.last_value is not None:
+                last_value = str(item.last_value)
+            else:
+                last_proc = proc_qs.filter(name__iexact=name).order_by('-id').first()
+                last_value = (
+                    str(last_proc.patient_amount)
+                    if last_proc and last_proc.patient_amount is not None
+                    else None
+                )
             catalog.append({'name': name, 'last_value': last_value})
 
         return Response({'catalog': catalog})
@@ -349,17 +378,16 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
             except (InvalidOperation, ValueError):
                 pass
 
-        existing = Procedure.objects.filter(
-            arcade__professional=self.current_user(),
-            is_product=True,
+        existing = ProductCatalogItem.objects.filter(
+            professional=self.current_user(),
             name__iexact=name,
         ).order_by('-id').first()
 
         if existing:
             update_fields = []
             if patient_amount is not None:
-                existing.patient_amount = patient_amount
-                update_fields.append('patient_amount')
+                existing.last_value = patient_amount
+                update_fields.append('last_value')
             if update_fields:
                 existing.save(update_fields=update_fields)
             return Response(
@@ -372,13 +400,10 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
             )
 
         try:
-            prod = Procedure.objects.create(
-                arcade=arcade,
+            prod = ProductCatalogItem.objects.create(
+                professional=self.current_user(),
                 name=name,
-                is_product=True,
-                patient_amount=patient_amount,
-                status=Procedure.Status.PENDING,
-                is_active=True,
+                last_value=patient_amount,
             )
             return Response(
                 {

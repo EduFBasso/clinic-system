@@ -40,6 +40,11 @@ class ProcedureSerializer(serializers.ModelSerializer):
         arcade = attrs.get('arcade', getattr(instance, 'arcade', None))
         tooth = attrs.get('tooth', getattr(instance, 'tooth', None))
         surface = attrs.get('surface', getattr(instance, 'surface', None))
+        is_product = attrs.get('is_product', getattr(instance, 'is_product', False))
+        parent_procedure = attrs.get(
+            'parent_procedure',
+            getattr(instance, 'parent_procedure', None),
+        )
 
         if tooth is not None and arcade is not None:
             if tooth.arcade_id != arcade.id:  # pyright: ignore[reportAttributeAccessIssue]
@@ -52,6 +57,59 @@ class ProcedureSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'surface': 'A face nao pertence ao dente informado.'}
                 )
+
+        if parent_procedure is not None:
+            if arcade is not None and parent_procedure.arcade_id != arcade.id:
+                raise serializers.ValidationError(
+                    {
+                        'parent_procedure': (
+                            'O procedimento pai nao pertence a arcada informada.'
+                        )
+                    }
+                )
+            if parent_procedure.is_product:
+                raise serializers.ValidationError(
+                    {
+                        'parent_procedure': (
+                            'Produto nao pode ser vinculado a outro produto.'
+                        )
+                    }
+                )
+
+        if is_product:
+            if parent_procedure is None:
+                raise serializers.ValidationError(
+                    {
+                        'parent_procedure': (
+                            'Produto deve ser vinculado a um procedimento pai.'
+                        )
+                    }
+                )
+            if tooth is not None:
+                raise serializers.ValidationError(
+                    {
+                        'tooth': (
+                            'Produto nao pode ser salvo diretamente em um dente; '
+                            'vincule-o a um procedimento.'
+                        )
+                    }
+                )
+            if surface is not None:
+                raise serializers.ValidationError(
+                    {
+                        'surface': (
+                            'Produto nao pode ser salvo diretamente em uma face.'
+                        )
+                    }
+                )
+        elif parent_procedure is not None:
+            raise serializers.ValidationError(
+                {
+                    'parent_procedure': (
+                        'Apenas produtos podem ser vinculados a um procedimento pai.'
+                    )
+                }
+            )
 
         return attrs
 

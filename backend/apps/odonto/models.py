@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -203,3 +204,57 @@ class Procedure(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.status})'
+
+
+class ProcedureNameSuggestion(models.Model):
+    professional = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='odonto_procedure_name_suggestions',
+        verbose_name='Profissional',
+    )
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = 'odonto'
+        verbose_name = 'Sugestao de nome de procedimento'
+        verbose_name_plural = 'Sugestoes de nomes de procedimento'
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['professional', 'name']),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ProductCatalogItem(models.Model):
+    professional = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='odonto_product_catalog_items',
+        verbose_name='Profissional',
+    )
+    name = models.CharField(max_length=255)
+    last_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = 'odonto'
+        verbose_name = 'Item de catalogo de produto'
+        verbose_name_plural = 'Itens de catalogo de produto'
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['professional', 'name']),
+        ]
+
+    def __str__(self):
+        return self.name
