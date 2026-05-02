@@ -1,143 +1,20 @@
 import React from 'react';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import { useNavigate, useParams } from 'react-router-dom';
+import { emit } from '../events/bus';
 import { ApiError, apiFetch } from '../utils/apiFetch';
-import { getNow } from '../utils/now';
-import { parseAmount, formatBRLCurrency, validateAmount, toInputAmount } from '../utils/currency';
+import { parseAmount, validateAmount, toInputAmount } from '../utils/currency';
+import { OdontoToothGrid } from '../components/OdontoToothGrid';
+import {
+    asList, hasOdontoAccess, eventDateISO, isProcedureCompleted,
+    formatDate, formatDateShort, formatMoney, todayISODate,
+    INTERNATIONAL_NUMBERS,
+} from './odontoArcadeHelpers';
+import type {
+    ArcadeListItem, ToothItem, ProcedureItem, EditProductItem,
+    ProcedureFormKind, ProcedureGroup,
+} from './odontoArcadeHelpers';
 import styles from '../styles/pages/OdontoArcadePage.module.css';
-
-type ArcadeListItem = {
-    id: number;
-    status: 'pending' | 'completed';
-    updated_at?: string;
-    pending_procedures?: number;
-    completed_procedures?: number;
-};
-
-type ToothItem = {
-    id: number;
-    sequence: number;
-    international_number: number;
-};
-
-type ProcedureItem = {
-    id: number;
-    tooth: number | null;
-    parent_procedure: number | null;
-    is_product: boolean;
-    status: 'pending' | 'completed' | 'canceled';
-    name: string;
-    code?: string;
-    faces_raw?: string | null;
-    patient_amount?: number | string | null;
-    paid_amount?: number | string | null;
-    paid_at?: string | null;
-    started_at?: string | null;
-    completed_at?: string | null;
-    notes?: string;
-    is_active: boolean;
-};
-
-type EditProductItem = {
-    id?: number;
-    name: string;
-    value: string;
-    saveNameToList: boolean;
-    saveValueToList: boolean;
-    showDropdown: boolean;
-};
-
-type ProcedureFormKind = 'tooth' | 'general';
-
-type ProcedureGroup = {
-    key: string;
-    label: string;
-    procedures: ProcedureItem[];
-};
-
-const INTERNATIONAL_NUMBERS = [
-    18, 17, 16, 15, 14, 13, 12, 11,
-    21, 22, 23, 24, 25, 26, 27, 28,
-    48, 47, 46, 45, 44, 43, 42, 41,
-    31, 32, 33, 34, 35, 36, 37, 38,
-];
-
-function asList<T>(payload: unknown): T[] {
-    if (Array.isArray(payload)) return payload as T[];
-    if (
-        payload &&
-        typeof payload === 'object' &&
-        Array.isArray((payload as { results?: unknown[] }).results)
-    ) {
-        return (payload as { results: T[] }).results;
-    }
-    return [];
-}
-
-function hasOdontoAccess(): boolean {
-    try {
-        const stored = localStorage.getItem('loggedProfessional');
-        if (!stored) return false;
-        const professional = JSON.parse(stored) as { specialty?: string };
-        const specialty = (professional.specialty || '')
-            .toString()
-            .trim()
-            .toLowerCase();
-        return (
-            specialty.includes('odonto') ||
-            specialty.includes('dent') ||
-            specialty.includes('ortodont')
-        );
-    } catch {
-        return false;
-    }
-}
-
-/** Parse YYYY-MM-DD as local date (avoids UTC-midnight shift in UTC-3 Brazil). */
-function parseDateLocal(dateIso: string): Date | null {
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateIso);
-    if (!m) return null;
-    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function formatDate(dateIso?: string | null): string {
-    if (!dateIso) return '-';
-    const d = parseDateLocal(dateIso);
-    if (!d) return '-';
-    return d.toLocaleDateString('pt-BR');
-}
-
-function formatDateShort(dateIso?: string | null): string {
-    if (!dateIso) return '-';
-    const d = parseDateLocal(dateIso);
-    if (!d) return '-';
-    return d.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
-    });
-}
-
-function formatMoney(value?: number | string | null): string {
-    if (value == null) return '-';
-    const numeric = typeof value === 'string' ? parseAmount(value) : value;
-    return formatBRLCurrency(numeric);
-}
-
-function eventDateISO(proc: ProcedureItem): string | null {
-    return proc.completed_at || proc.started_at || null;
-}
-
-function isProcedureCompleted(proc: ProcedureItem): boolean {
-    return proc.status === 'completed' || !!proc.completed_at;
-}
-
-/** Returns today in YYYY-MM-DD using local timezone (avoids UTC-shift in Brazil at night). */
-function todayISODate(): string {
-    const d = getNow();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 export default function OdontoArcadePage() {
     const navigate = useNavigate();
@@ -153,7 +30,8 @@ export default function OdontoArcadePage() {
     const [selectedToothId, setSelectedToothId] = React.useState<number | null>(
         null,
     );
-    const [activeDateIndex, setActiveDateIndex] = React.useState(0);
+    // -1 means "not yet navigated by user" → useMemo below defaults to last (most recent) date
+    const [rawActiveDateIndex, setActiveDateIndex] = React.useState(-1);
 
     const [formOpen, setFormOpen] = React.useState(false);
     const [formMode, setFormMode] = React.useState<'create' | 'edit'>('create');
@@ -349,17 +227,12 @@ export default function OdontoArcadePage() {
         );
     }, [datedProcedures]);
 
-    React.useEffect(() => {
-        if (dateKeys.length === 0) {
-            setActiveDateIndex(0);
-            return;
-        }
-        setActiveDateIndex(prev => {
-            const clamped = Math.max(0, Math.min(prev, dateKeys.length - 1));
-            if (prev === 0) return dateKeys.length - 1;
-            return clamped;
-        });
-    }, [dateKeys]);
+    // Derived — no setState cascade. On first load shows most recent date; on updates clamps.
+    const activeDateIndex = React.useMemo(() => {
+        if (dateKeys.length === 0) return 0;
+        if (rawActiveDateIndex < 0) return dateKeys.length - 1;
+        return Math.min(rawActiveDateIndex, dateKeys.length - 1);
+    }, [rawActiveDateIndex, dateKeys.length]);
 
     const activeDateKey = dateKeys[activeDateIndex] ?? null;
 
@@ -375,36 +248,6 @@ export default function OdontoArcadePage() {
         }
         return ids;
     }, [activeDateProcedures]);
-
-    React.useEffect(() => {
-        if (formOpen) {
-            return;
-        }
-
-        if (
-            selectedToothId != null &&
-            activeDateToothIds.size > 0 &&
-            activeDateToothIds.has(selectedToothId)
-        ) {
-            return;
-        }
-        if (
-            selectedToothId != null &&
-            activeDateToothIds.size === 0 &&
-            toothById.has(selectedToothId)
-        ) {
-            return;
-        }
-
-        const firstToothId = Array.from(activeDateToothIds)[0] ?? null;
-        if (firstToothId != null) {
-            setSelectedToothId(firstToothId);
-            return;
-        }
-
-        const fallbackToothId = teeth[0]?.id ?? null;
-        if (fallbackToothId != null) setSelectedToothId(fallbackToothId);
-    }, [activeDateToothIds, formOpen, selectedToothId, toothById, teeth]);
 
     React.useEffect(() => {
         // Reseta o checkbox e o dropdown quando o formulário abre/fecha
@@ -525,6 +368,10 @@ export default function OdontoArcadePage() {
         const name = inlineForm.name.trim();
         if (!name) {
             setFormError('Informe o nome do procedimento.');
+            emit('systemMessage', {
+                text: 'Informe o nome do procedimento antes de salvar.',
+                type: 'warning',
+            });
             return;
         }
 
@@ -532,6 +379,10 @@ export default function OdontoArcadePage() {
         const toothId = isTooth ? selectedToothId : null;
         if (isTooth && toothId == null) {
             setFormError('Selecione o dente na grade para salvar o procedimento.');
+            emit('systemMessage', {
+                text: 'Selecione um dente na grade acima antes de salvar.',
+                type: 'warning',
+            });
             return;
         }
 
@@ -541,6 +392,10 @@ export default function OdontoArcadePage() {
             const validation = validateAmount(amountRaw);
             if (!validation.valid) {
                 setFormError(validation.message || 'Valor inválido.');
+                emit('systemMessage', {
+                    text: validation.message || 'Valor inválido.',
+                    type: 'warning',
+                });
                 return;
             }
             amount = validation.numericValue!;
@@ -556,6 +411,10 @@ export default function OdontoArcadePage() {
                     setFormError(
                         'Nao e permitido cadastrar novo procedimento com data retroativa.',
                     );
+                    emit('systemMessage', {
+                        text: 'Nao e permitido cadastrar novo procedimento com data retroativa.',
+                        type: 'warning',
+                    });
                     setSavingForm(false);
                     return;
                 }
@@ -644,6 +503,10 @@ export default function OdontoArcadePage() {
                 const original = procedures.find(p => p.id === editingProcedureId);
                 if (!original) {
                     setFormError('Procedimento nao encontrado para edicao.');
+                    emit('systemMessage', {
+                        text: 'Procedimento nao encontrado para edicao.',
+                        type: 'error',
+                    });
                     setSavingForm(false);
                     return;
                 }
@@ -763,7 +626,15 @@ export default function OdontoArcadePage() {
             }
 
             setFormOpen(false);
-            await loadArcade(true);
+            await Promise.all([
+                loadArcade(true),
+                loadProcedureNames(),
+                loadProductNames(arcade.id),
+            ]);
+            emit('systemMessage', {
+                text: 'Dados salvos com sucesso.',
+                type: 'success',
+            });
         } catch (err) {
             const message =
                 err instanceof ApiError
@@ -969,94 +840,13 @@ export default function OdontoArcadePage() {
                             </div>
                         </div>
                         <div className={styles.svgWrap}>
-                            <svg
-                                className={styles.arcadeSvg}
-                                viewBox='0 0 760 390'
-                                role='img'
-                                aria-label='Mapa da arcada com 32 dentes'
-                            >
-                                <text x='24' y='24' className={styles.quadrantLabel}>
-                                    Q1 - SUPERIOR DIREITO
-                                </text>
-                                <text x='386' y='24' className={styles.quadrantLabel}>
-                                    Q2 - SUPERIOR ESQUERDO
-                                </text>
-                                <text x='24' y='220' className={styles.quadrantLabel}>
-                                    Q4 - INFERIOR DIREITO
-                                </text>
-                                <text x='386' y='220' className={styles.quadrantLabel}>
-                                    Q3 - INFERIOR ESQUERDO
-                                </text>
-                                <line
-                                    x1='371'
-                                    y1='34'
-                                    x2='371'
-                                    y2='376'
-                                    className={styles.quadrantGuide}
-                                />
-                                <line
-                                    x1='20'
-                                    y1='206'
-                                    x2='740'
-                                    y2='206'
-                                    className={styles.quadrantGuide}
-                                />
-                                {orderedTeeth.map((tooth, index) => {
-                                    const row = Math.floor(index / 8);
-                                    const col = index % 8;
-                                    const x = 20 + col * 90;
-                                    const lowerOffset = row >= 2 ? 32 : 0;
-                                    const y = 40 + row * 82 + lowerOffset;
-                                    const selected = selectedToothId === tooth.id;
-                                    const inDateEvent =
-                                        !suppressDateHighlights &&
-                                        activeDateToothIds.has(tooth.id);
-
-                                    return (
-                                        <g
-                                            key={tooth.id}
-                                            className={styles.toothGroup}
-                                            onClick={() => selectToothFromGrid(tooth.id)}
-                                            onKeyDown={event => {
-                                                if (event.key === 'Enter' || event.key === ' ') {
-                                                    event.preventDefault();
-                                                    selectToothFromGrid(tooth.id);
-                                                }
-                                            }}
-                                            role='button'
-                                            tabIndex={0}
-                                            aria-pressed={selected}
-                                            aria-label={`Dente ${tooth.international_number}`}
-                                        >
-                                            <rect
-                                                x={x}
-                                                y={y}
-                                                width='72'
-                                                height='62'
-                                                rx='10'
-                                                className={`${styles.toothRect} ${
-                                                    selected
-                                                        ? styles.toothSelected
-                                                        : inDateEvent
-                                                          ? styles.toothInDateEvent
-                                                          : styles.toothEmpty
-                                                }`}
-                                            />
-                                            <text
-                                                x={x + 36}
-                                                y={y + 34}
-                                                className={`${styles.toothNumber} ${
-                                                    selected || inDateEvent
-                                                        ? styles.toothNumberActive
-                                                        : ''
-                                                }`}
-                                            >
-                                                {tooth.international_number}
-                                            </text>
-                                        </g>
-                                    );
-                                })}
-                            </svg>
+                            <OdontoToothGrid
+                                orderedTeeth={orderedTeeth}
+                                selectedToothId={selectedToothId}
+                                suppressDateHighlights={suppressDateHighlights}
+                                activeDateToothIds={activeDateToothIds}
+                                onToothClick={selectToothFromGrid}
+                            />
                         </div>
 
                         <div className={styles.composerDivider} />
@@ -1125,14 +915,16 @@ export default function OdontoArcadePage() {
                                         <div className={styles.formLabel}>
                                             <span>Dente selecionado</span>
                                             <div className={styles.selectedToothCard}>
-                                                <strong className={styles.selectedToothValue}>
-                                                    {selectedTooth
-                                                        ? `Dente ${selectedTooth.international_number}`
-                                                        : 'Nenhum dente selecionado'}
-                                                </strong>
-                                                <span className={styles.selectedToothHint}>
-                                                    Clique na grade acima para escolher o dente.
-                                                </span>
+                                                <div className={styles.selectedToothLine}>
+                                                    <strong className={styles.selectedToothValue}>
+                                                        {selectedTooth
+                                                            ? `Dente ${selectedTooth.international_number}`
+                                                            : 'Nenhum dente selecionado'}
+                                                    </strong>
+                                                    <span className={styles.selectedToothInlineHint}>
+                                                        (clique na grade acima para escolher o dente)
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -1374,7 +1166,8 @@ export default function OdontoArcadePage() {
                                                 isInList &&
                                                 catalogVal != null &&
                                                 product.value.trim() !== '' &&
-                                                product.value !== catalogVal;
+                                                parseAmount(product.value) !==
+                                                    parseAmount(catalogVal);
                                             const filteredNames = product.name.trim()
                                                 ? productNames.filter(n =>
                                                       n
@@ -1444,7 +1237,7 @@ export default function OdontoArcadePage() {
                                                                                     inList &&
                                                                                     catVal != null &&
                                                                                     !p.value.trim()
-                                                                                        ? catVal
+                                                                                        ? toInputAmount(catVal)
                                                                                         : p.value,
                                                                                 showDropdown: true,
                                                                             };
@@ -1492,7 +1285,11 @@ export default function OdontoArcadePage() {
                                                                                                                   ...p,
                                                                                                                   name,
                                                                                                                   value:
-                                                                                                                      catVal ??
+                                                                                                                      (catVal
+                                                                                                                          ? toInputAmount(
+                                                                                                                                catVal,
+                                                                                                                            )
+                                                                                                                          : null) ??
                                                                                                                       p.value,
                                                                                                                   showDropdown:
                                                                                                                       false,
@@ -1662,14 +1459,6 @@ export default function OdontoArcadePage() {
                         <div className={styles.sectionHeaderWithAction}>
                             <h2 className={styles.sectionTitle}>Procedimentos</h2>
                         </div>
-                        <details className={styles.faceLegend}>
-                            <summary>Legenda das faces (V, D, VO, DVMO...)</summary>
-                            <p>
-                                O: Oclusal, V: Vestibular, P: Palatina/Lingual, M: Mesial,
-                                D: Distal, MO: Mesial/Oclusal, DO: Distal/Oclusal, VO:
-                                Vestibular/Oclusal, PO: Palatina/Oclusal, MDO: Mesial/Distal/Oclusal.
-                            </p>
-                        </details>
 
                         {procedureGroups.length === 0 ? (
                             <p className={styles.textMuted}>Nenhum procedimento cadastrado.</p>
@@ -1835,119 +1624,126 @@ export default function OdontoArcadePage() {
                                                         </div>
                                                         {linkedProducts.length > 0 && (
                                                             <div className={styles.procProductList}>
+                                                                <div className={styles.procProductHeader}>
+                                                                    Produto
+                                                                </div>
                                                                 {linkedProducts.map(product => (
                                                                     <div
                                                                         key={product.id}
                                                                         className={styles.productSubRow}
                                                                     >
-                                                                        <span className={styles.productSubRowName}>
-                                                                            {product.name}
-                                                                        </span>
-                                                                        <div className={styles.procFinanceGroup}>
-                                                                            <div className={styles.procValueWrap}>
-                                                                                <span className={styles.procValue}>
-                                                                                    {formatMoney(
-                                                                                        product.patient_amount,
-                                                                                    )}
-                                                                                </span>
-                                                                                {product.paid_at && (
-                                                                                    <>
-                                                                                        <span
-                                                                                            className={
-                                                                                                styles.paidDateDesktop
-                                                                                            }
-                                                                                        >
-                                                                                            {formatDate(
-                                                                                                product.paid_at,
+                                                                        <div className={styles.productSubRowBody}>
+                                                                            <span className={styles.productSubRowName}>
+                                                                                {product.name}
+                                                                            </span>
+                                                                            <div className={styles.productSubRowActions}>
+                                                                                <div className={styles.procFinanceGroup}>
+                                                                                    <div className={styles.procValueWrap}>
+                                                                                        <span className={styles.procValue}>
+                                                                                            {formatMoney(
+                                                                                                product.patient_amount,
                                                                                             )}
                                                                                         </span>
+                                                                                        {product.paid_at && (
+                                                                                            <>
+                                                                                                <span
+                                                                                                    className={
+                                                                                                        styles.productPaidDateDesktop
+                                                                                                    }
+                                                                                                >
+                                                                                                    {`Pago em ${formatDate(product.paid_at)}`}
+                                                                                                </span>
+                                                                                                <span
+                                                                                                    className={
+                                                                                                        styles.paidDateMobile
+                                                                                                    }
+                                                                                                >
+                                                                                                    {formatDateShort(
+                                                                                                        product.paid_at,
+                                                                                                    )}
+                                                                                                </span>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <button
+                                                                                        type='button'
+                                                                                        className={`${styles.iconBtn} ${
+                                                                                            isProcedurePaid(product)
+                                                                                                ? styles.iconBtnPaidActive
+                                                                                                : ''
+                                                                                        }`}
+                                                                                        onClick={() =>
+                                                                                            void toggleProcedurePaid(
+                                                                                                product,
+                                                                                            )
+                                                                                        }
+                                                                                        aria-label={
+                                                                                            isProcedurePaid(product)
+                                                                                                ? 'Marcar como pendente de pagamento'
+                                                                                                : 'Marcar como pago'
+                                                                                        }
+                                                                                        title={
+                                                                                            isProcedurePaid(product)
+                                                                                                ? `Pago em ${formatDate(product.paid_at)}`
+                                                                                                : 'Marcar produto como pago'
+                                                                                        }
+                                                                                    >
                                                                                         <span
                                                                                             className={
-                                                                                                styles.paidDateMobile
+                                                                                                styles.paymentSymbol
                                                                                             }
                                                                                         >
-                                                                                            {formatDateShort(
-                                                                                                product.paid_at,
-                                                                                            )}
+                                                                                            {isProcedurePaid(product)
+                                                                                                ? 'PAGO'
+                                                                                                : 'PG'}
                                                                                         </span>
-                                                                                    </>
-                                                                                )}
+                                                                                    </button>
+                                                                                </div>
+                                                                                <div className={styles.procManageGroup}>
+                                                                                    <button
+                                                                                        type='button'
+                                                                                        className={styles.iconBtn}
+                                                                                        onClick={() =>
+                                                                                            openEditForm(proc)
+                                                                                        }
+                                                                                        aria-label='Editar procedimento'
+                                                                                        title='Editar procedimento (abre o formulário do procedimento pai)'
+                                                                                    >
+                                                                                        <svg
+                                                                                            viewBox='0 0 24 24'
+                                                                                            aria-hidden='true'
+                                                                                            className={styles.iconSvg}
+                                                                                        >
+                                                                                            <path
+                                                                                                d='M4 20h4l10-10-4-4L4 16v4zm13.7-11.3 1.6-1.6a1 1 0 0 0 0-1.4l-1.3-1.3a1 1 0 0 0-1.4 0L15 6l2.7 2.7z'
+                                                                                                fill='currentColor'
+                                                                                            />
+                                                                                        </svg>
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type='button'
+                                                                                        className={styles.iconBtnDanger}
+                                                                                        onClick={() =>
+                                                                                            void deleteProcedure(
+                                                                                                product.id,
+                                                                                            )
+                                                                                        }
+                                                                                        aria-label='Apagar produto'
+                                                                                        title='Apagar produto'
+                                                                                    >
+                                                                                        <svg
+                                                                                            viewBox='0 0 24 24'
+                                                                                            aria-hidden='true'
+                                                                                            className={styles.iconSvg}
+                                                                                        >
+                                                                                            <path
+                                                                                                d='M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9zm-1 11h12a2 2 0 0 0 2-2V7H4v11a2 2 0 0 0 2 2z'
+                                                                                                fill='currentColor'
+                                                                                            />
+                                                                                        </svg>
+                                                                                    </button>
+                                                                                </div>
                                                                             </div>
-                                                                            <button
-                                                                                type='button'
-                                                                                className={`${styles.iconBtn} ${
-                                                                                    isProcedurePaid(product)
-                                                                                        ? styles.iconBtnPaidActive
-                                                                                        : ''
-                                                                                }`}
-                                                                                onClick={() =>
-                                                                                    void toggleProcedurePaid(
-                                                                                        product,
-                                                                                    )
-                                                                                }
-                                                                                aria-label={
-                                                                                    isProcedurePaid(product)
-                                                                                        ? 'Marcar como pendente de pagamento'
-                                                                                        : 'Marcar como pago'
-                                                                                }
-                                                                                title={
-                                                                                    isProcedurePaid(product)
-                                                                                        ? `Pago em ${formatDate(product.paid_at)}`
-                                                                                        : 'Marcar produto como pago'
-                                                                                }
-                                                                            >
-                                                                                <span
-                                                                                    className={
-                                                                                        styles.paymentSymbol
-                                                                                    }
-                                                                                >
-                                                                                    PG
-                                                                                </span>
-                                                                            </button>
-                                                                        </div>
-                                                                        <div className={styles.procManageGroup}>
-                                                                            <button
-                                                                                type='button'
-                                                                                className={styles.iconBtn}
-                                                                                onClick={() =>
-                                                                                    openEditForm(proc)
-                                                                                }
-                                                                                aria-label='Editar procedimento'
-                                                                                title='Editar procedimento (abre o formulário do procedimento pai)'
-                                                                            >
-                                                                                <svg
-                                                                                    viewBox='0 0 24 24'
-                                                                                    aria-hidden='true'
-                                                                                    className={styles.iconSvg}
-                                                                                >
-                                                                                    <path
-                                                                                        d='M4 20h4l10-10-4-4L4 16v4zm13.7-11.3 1.6-1.6a1 1 0 0 0 0-1.4l-1.3-1.3a1 1 0 0 0-1.4 0L15 6l2.7 2.7z'
-                                                                                        fill='currentColor'
-                                                                                    />
-                                                                                </svg>
-                                                                            </button>
-                                                                            <button
-                                                                                type='button'
-                                                                                className={styles.iconBtnDanger}
-                                                                                onClick={() =>
-                                                                                    void deleteProcedure(
-                                                                                        product.id,
-                                                                                    )
-                                                                                }
-                                                                                aria-label='Apagar produto'
-                                                                                title='Apagar produto'
-                                                                            >
-                                                                                <svg
-                                                                                    viewBox='0 0 24 24'
-                                                                                    aria-hidden='true'
-                                                                                    className={styles.iconSvg}
-                                                                                >
-                                                                                    <path
-                                                                                        d='M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9zm-1 11h12a2 2 0 0 0 2-2V7H4v11a2 2 0 0 0 2 2z'
-                                                                                        fill='currentColor'
-                                                                                    />
-                                                                                </svg>
-                                                                            </button>
                                                                         </div>
                                                                     </div>
                                                                 ))}
@@ -1961,6 +1757,17 @@ export default function OdontoArcadePage() {
                                 ))}
                             </div>
                         )}
+
+                        <div className={styles.legendPanel}>
+                            <details className={styles.faceLegend}>
+                                <summary>Legenda das faces (V, D, VO, DVMO...)</summary>
+                                <p>
+                                    O: Oclusal, V: Vestibular, P: Palatina/Lingual, M: Mesial,
+                                    D: Distal, MO: Mesial/Oclusal, DO: Distal/Oclusal, VO:
+                                    Vestibular/Oclusal, PO: Palatina/Oclusal, MDO: Mesial/Distal/Oclusal.
+                                </p>
+                            </details>
+                        </div>
                     </section>
 
                 </>

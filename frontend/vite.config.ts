@@ -96,6 +96,25 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
+            '/odonto': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                secure: false,
+                bypass(req) {
+                    // Proxy only real API calls (/odonto/procedures/, /odonto/arcades/, etc.)
+                    // React route /odonto/... → serve index.html
+                    const url = req.url ?? '';
+                    if (
+                        url.startsWith('/odonto/procedures/') ||
+                        url.startsWith('/odonto/arcades/') ||
+                        url.startsWith('/odonto/teeth/') ||
+                        url.startsWith('/odonto/surfaces/')
+                    ) {
+                        return null; // proxy
+                    }
+                    return '/index.html'; // SPA fallback
+                },
+            },
         },
     },
 });

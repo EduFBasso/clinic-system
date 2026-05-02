@@ -26,6 +26,8 @@ class ProcedureSerializer(serializers.ModelSerializer):
             'duration_minutes',
             'notes',
             'is_active',
+            'is_product',
+            'parent_procedure',
             'created_at',
             'updated_at',
         ]

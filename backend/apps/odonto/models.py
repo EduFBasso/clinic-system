@@ -177,6 +177,15 @@ class Procedure(models.Model):
     duration_minutes = models.PositiveSmallIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True, default='')
     is_active = models.BooleanField(default=True)
+    is_product = models.BooleanField(default=False, help_text='Se True, é um produto/material; se False, é um procedimento')
+    parent_procedure = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='products',
+        help_text='Procedimento pai ao qual este produto esta vinculado.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

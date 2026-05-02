@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -189,6 +189,210 @@ class ProcedureViewSet(ProfessionalScopedMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer: BaseSerializer) -> None:
         instance = serializer.save()
         _refresh_arcade_status(instance.arcade)
+
+    @action(detail=False, methods=['get'], url_path='distinct-names')
+    def distinct_names(self, request):
+        """
+        Retorna lista de nomes únicos de procedimentos do usuário autenticado.
+        Opcionalmente filtra por arcade_id via query param.
+        Retorna: {"names": ["Nome 1", "Nome 2", ...]}
+        """
+        qs = self.get_queryset().filter(
+            name__isnull=False,
+            name__gt='',  # apenas nomes não vazios
+        ).values_list('name', flat=True).distinct().order_by('name')
+
+        names = list(qs)
+        return Response({'names': names}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='suggest-name')
+    def suggest_name(self, request):
+        """
+        Salva um novo nome de procedimento na lista de sugestões.
+        Cria um procedimento vazio (apenas com nome) para registrar a sugestão.
+        
+        Body: {"name": "Novo Procedimento", "arcade_id": 123}
+        Retorna: {"id": procedure_id, "name": "Novo Procedimento", "message": "..."}
+        """
+        payload = request.data
+        name = payload.get('name', '').strip() if payload else ''
+        arcade_id = payload.get('arcade_id')
+
+        if not name:
+            return Response(
+                {'error': 'Nome do procedimento é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validar se o arcade pertence ao usuário
+        if arcade_id:
+            try:
+                arcade = DentalArcade.objects.get(
+                    id=arcade_id,
+                    professional=self.current_user(),
+                )
+            except DentalArcade.DoesNotExist:
+                raise PermissionDenied('Arcada nao pertence ao profissional autenticado.')
+        else:
+            return Response(
+                {'error': 'arcade_id é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verificar se o nome já existe (case-insensitive)
+        existing = Procedure.objects.filter(
+            arcade__professional=self.current_user(),
+            name__iexact=name,
+        ).first()
+
+        if existing:
+            return Response(
+                {
+                    'message': 'Este nome já existe na lista.',
+                    'id': existing.id,
+                    'name': existing.name,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Criar procedimento vazio apenas com o nome
+        try:
+            proc = Procedure.objects.create(
+                arcade=arcade,
+                name=name,
+                status=Procedure.Status.PENDING,
+                is_active=True,
+            )
+            return Response(
+                {
+                    'message': f'Nome "{name}" adicionado à lista de sugestões.',
+                    'id': proc.id,
+                    'name': proc.name,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Erro ao salvar sugestão: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=False, methods=['get'], url_path='products/distinct-names')
+    def products_distinct_names(self, request):
+        """
+        Retorna catalogo de produtos: nome + ultimo valor utilizado.
+        Opcionalmente filtra por arcade_id via query param.
+        Retorna: {"catalog": [{"name": "Botox", "last_value": "150.00"}, ...]}
+        """
+        qs = self.get_queryset().filter(
+            is_product=True,
+            name__isnull=False,
+            name__gt='',
+        )
+
+        distinct_names = list(
+            qs.values_list('name', flat=True).distinct().order_by('name')
+        )
+
+        catalog = []
+        for name in distinct_names:
+            last_proc = qs.filter(name__iexact=name).order_by('-id').first()
+            last_value = (
+                str(last_proc.patient_amount)
+                if last_proc and last_proc.patient_amount is not None
+                else None
+            )
+            catalog.append({'name': name, 'last_value': last_value})
+
+        return Response({'catalog': catalog})
+
+    @action(detail=False, methods=['post'], url_path='products/suggest-name')
+    def products_suggest_name(self, request):
+        """
+        Salva ou atualiza um produto na lista de sugestões (catalogo).
+        Aceita valor opcional para persistir o ultimo preco utilizado.
+
+        Body: {"name": "Botox", "arcade_id": 123, "value": "150.00"}
+        Retorna: {"id": ..., "name": ..., "message": "..."}
+        """
+        from decimal import Decimal, InvalidOperation
+
+        payload = request.data
+        name = payload.get('name', '').strip() if payload else ''
+        arcade_id = payload.get('arcade_id')
+        raw_value = payload.get('value')
+
+        if not name:
+            return Response(
+                {'error': 'Nome do produto é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if arcade_id:
+            try:
+                arcade = DentalArcade.objects.get(
+                    id=arcade_id,
+                    professional=self.current_user(),
+                )
+            except DentalArcade.DoesNotExist:
+                raise PermissionDenied('Arcada nao pertence ao profissional autenticado.')
+        else:
+            return Response(
+                {'error': 'arcade_id é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        patient_amount = None
+        if raw_value is not None:
+            try:
+                patient_amount = Decimal(str(raw_value).replace(',', '.'))
+            except (InvalidOperation, ValueError):
+                pass
+
+        existing = Procedure.objects.filter(
+            arcade__professional=self.current_user(),
+            is_product=True,
+            name__iexact=name,
+        ).order_by('-id').first()
+
+        if existing:
+            update_fields = []
+            if patient_amount is not None:
+                existing.patient_amount = patient_amount
+                update_fields.append('patient_amount')
+            if update_fields:
+                existing.save(update_fields=update_fields)
+            return Response(
+                {
+                    'message': 'Catalogo de produto atualizado.',
+                    'id': existing.id,
+                    'name': existing.name,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        try:
+            prod = Procedure.objects.create(
+                arcade=arcade,
+                name=name,
+                is_product=True,
+                patient_amount=patient_amount,
+                status=Procedure.Status.PENDING,
+                is_active=True,
+            )
+            return Response(
+                {
+                    'message': f'Produto "{name}" adicionado ao catálogo.',
+                    'id': prod.id,
+                    'name': prod.name,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Erro ao salvar produto: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=False, methods=['post'], url_path='bulk-status')
     def bulk_status(self, request):
