@@ -41,6 +41,14 @@
     color: var(--color-text-main, var(--color-heading));
 }
 
+.sectionHeaderRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
 .text {
     margin: 0;
     color: var(--color-text);
@@ -67,6 +75,48 @@
     border: 1px solid var(--color-border);
     cursor: pointer;
     font-weight: 700;
+}
+
+.viewBtn {
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid
+        color-mix(in oklab, var(--color-primary) 42%, var(--color-border));
+    background: color-mix(
+        in oklab,
+        var(--color-primary) 12%,
+        var(--color-bg-section)
+    );
+    color: var(--color-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.viewBtn:hover {
+    background: color-mix(
+        in oklab,
+        var(--color-primary) 16%,
+        var(--color-bg-section)
+    );
+}
+
+.viewBtn:active {
+    background: color-mix(
+        in oklab,
+        var(--color-primary) 20%,
+        var(--color-bg-section)
+    );
+}
+
+.viewIcon {
+    width: 19px;
+    height: 19px;
+    display: block;
 }
 
 .btn {
@@ -197,6 +247,15 @@
     gap: 10px;
 }
 
+.modalToothSelector {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-bg-section);
+    padding: 8px;
+}
+
 .modalRow {
     border: 1px solid var(--color-border);
     border-radius: 10px;
@@ -209,7 +268,18 @@
 .modalRowHeader {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.phaseInlineLabel {
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-main, var(--color-heading));
+    min-width: 150px;
 }
 
 .formGrid {
@@ -226,6 +296,15 @@
     color: var(--color-text-main, var(--color-heading));
 }
 
+.labelWide {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text-main, var(--color-heading));
+}
+
 .input {
     width: 100%;
     min-height: 40px;
@@ -235,6 +314,18 @@
     color: var(--color-text-main, var(--color-text));
     padding: 0 10px;
     box-sizing: border-box;
+}
+
+.textarea {
+    width: 100%;
+    min-height: 86px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text-main, var(--color-text));
+    padding: 10px;
+    box-sizing: border-box;
+    resize: vertical;
 }
 
 .modalActions {
@@ -256,6 +347,11 @@
     .formGrid,
     .typeTabs {
         grid-template-columns: 1fr;
+    }
+
+    .phaseInlineLabel {
+        min-width: 0;
+        width: 100%;
     }
 
     .procMain,

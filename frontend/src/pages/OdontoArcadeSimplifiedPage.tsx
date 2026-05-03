@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { OdontoToothGrid } from '../components/OdontoToothGrid';
 import { emit } from '../events/bus';
 import { ApiError, apiFetch } from '../utils/apiFetch';
-import { parseAmount, validateAmount } from '../utils/currency';
+import { parseAmount, toInputAmount, validateAmount } from '../utils/currency';
 import {
     asList,
     eventDateISO,
@@ -20,8 +20,10 @@ type ServiceFlowType = 'tooth' | 'arcade' | 'other';
 
 type ServiceRow = {
     toothId: number | null;
-    name: string;
+    phase: string;
+    treatment: string;
     value: string;
+    notes: string;
 };
 
 type ProductRow = {
@@ -35,6 +37,26 @@ function dateKeyFromProcedure(proc: ProcedureItem): string {
     const createdAt = (proc as ProcedureItem & { created_at?: string }).created_at;
     if (createdAt && createdAt.length >= 10) return createdAt.slice(0, 10);
     return todayISODate();
+}
+
+const PHASE_OPTIONS = [
+    '',
+    'O',
+    'V',
+    'P',
+    'M',
+    'D',
+    'MO',
+    'DO',
+    'VO',
+    'PO',
+    'MDO',
+];
+
+function normalizeMoneyInput(value: string): string {
+    const parsed = parseAmount(value);
+    if (parsed == null) return value;
+    return toInputAmount(parsed.toFixed(2));
 }
 
 export default function OdontoArcadeSimplifiedPage() {
@@ -52,8 +74,7 @@ export default function OdontoArcadeSimplifiedPage() {
     const [teeth, setTeeth] = React.useState<ToothItem[]>([]);
     const [procedures, setProcedures] = React.useState<ProcedureItem[]>([]);
     const [selectedToothId, setSelectedToothId] = React.useState<number | null>(null);
-
-    const [creatingArcade, setCreatingArcade] = React.useState(false);
+    const [mapVisible, setMapVisible] = React.useState(false);
 
     const [serviceFlowOpen, setServiceFlowOpen] = React.useState(false);
     const [productFlowOpen, setProductFlowOpen] = React.useState(false);
@@ -168,51 +189,38 @@ export default function OdontoArcadeSimplifiedPage() {
         void loadArcade();
     }, [loadArcade]);
 
-    const createArcadeStructure = React.useCallback(async () => {
-        if (!numericClientId) return;
-
-        setCreatingArcade(true);
-        setError(null);
-        try {
-            const created = (await apiFetch('/odonto/arcades/', {
-                method: 'POST',
-                body: {
-                    client: numericClientId,
-                    status: 'pending',
-                },
-            })) as { id: number };
-
-            await apiFetch(`/odonto/arcades/${created.id}/initialize-default-structure/`, {
-                method: 'POST',
-            });
-
-            await loadArcade();
-            emit('systemMessage', {
-                text: 'Arcada criada com sucesso.',
-                type: 'success',
-            });
-        } catch (err) {
-            const message =
-                err instanceof ApiError
-                    ? err.message
-                    : 'Nao foi possivel criar a arcada.';
-            setError(message || 'Nao foi possivel criar a arcada.');
-        } finally {
-            setCreatingArcade(false);
-        }
-    }, [loadArcade, numericClientId]);
-
     function openServiceFlowModal() {
         const defaultToothId = selectedToothId ?? teeth[0]?.id ?? null;
         setServiceFlowType('tooth');
         setServiceRows([
             {
                 toothId: defaultToothId,
-                name: '',
+                phase: '',
+                treatment: '',
                 value: '',
+                notes: '',
             },
         ]);
         setServiceFlowOpen(true);
+    }
+
+    function toggleToothServiceRow(toothId: number) {
+        setServiceRows(prev => {
+            const exists = prev.some(row => row.toothId === toothId);
+            if (exists) {
+                return prev.filter(row => row.toothId !== toothId);
+            }
+            return [
+                ...prev,
+                {
+                    toothId,
+                    phase: '',
+                    treatment: '',
+                    value: '',
+                    notes: '',
+                },
+            ];
+        });
     }
 
     function openProductFlowModal() {
@@ -232,9 +240,9 @@ export default function OdontoArcadeSimplifiedPage() {
         if (!arcade || serviceRows.length === 0) return;
 
         for (const row of serviceRows) {
-            if (!row.name.trim()) {
+            if (!row.treatment.trim()) {
                 emit('systemMessage', {
-                    text: 'Preencha o nome em todas as linhas de servico.',
+                    text: 'Preencha o tratamento em todas as linhas de servico.',
                     type: 'warning',
                 });
                 return;
@@ -268,15 +276,15 @@ export default function OdontoArcadeSimplifiedPage() {
                         arcade: arcade.id,
                         tooth: serviceFlowType === 'tooth' ? row.toothId : null,
                         surface: null,
-                        faces_raw: '',
+                        faces_raw: row.phase,
                         code: '',
-                        name: row.name.trim(),
+                        name: row.treatment.trim(),
                         status: 'pending',
                         started_at: todayISODate(),
                         completed_at: null,
                         patient_amount: amount,
                         paid_amount: null,
-                        notes: '',
+                        notes: row.notes.trim(),
                         is_active: true,
                         is_product: false,
                     },
@@ -463,33 +471,51 @@ export default function OdontoArcadeSimplifiedPage() {
             {!loading && !error && !arcade && (
                 <div className={styles.emptyCard}>
                     <p className={styles.text}>Este cliente ainda nao possui arcada cadastrada.</p>
-                    <button
-                        type='button'
-                        className={styles.btnPrimary}
-                        onClick={() => void createArcadeStructure()}
-                        disabled={creatingArcade}
-                    >
-                        {creatingArcade ? 'Criando arcada...' : 'Criar arcada'}
-                    </button>
                 </div>
             )}
 
             {!loading && !error && arcade && (
                 <>
                     <section className={styles.card}>
-                        <h2 className={styles.sectionTitle}>Mapa da arcada</h2>
-                        <div className={styles.gridWrap}>
-                            <OdontoToothGrid
-                                orderedTeeth={orderedTeeth}
-                                selectedToothId={selectedToothId}
-                                suppressDateHighlights={false}
-                                activeDateToothIds={activeToothIds}
-                                onToothClick={setSelectedToothId}
-                            />
+                        <div className={styles.sectionHeaderRow}>
+                            <h2 className={styles.sectionTitle}>Mapa da arcada</h2>
+                            <button
+                                type='button'
+                                className={styles.viewBtn}
+                                onClick={() => setMapVisible(prev => !prev)}
+                                aria-label={mapVisible ? 'Ocultar mapa da arcada' : 'Ver mapa da arcada'}
+                                title={mapVisible ? 'Ocultar mapa da arcada' : 'Ver mapa da arcada'}
+                            >
+                                <svg viewBox='0 0 24 24' aria-hidden='true' className={styles.viewIcon}>
+                                    <path
+                                        d='M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z'
+                                        fill='none'
+                                        stroke='currentColor'
+                                        strokeWidth='1.8'
+                                        strokeLinecap='round'
+                                        strokeLinejoin='round'
+                                    />
+                                    <circle cx='12' cy='12' r='3.2' fill='none' stroke='currentColor' strokeWidth='1.8' />
+                                </svg>
+                                {mapVisible ? 'Ocultar' : 'Ver'}
+                            </button>
                         </div>
-                        <p className={styles.textMuted}>
-                            Toque em um dente para marcar visualmente a selecao.
-                        </p>
+                        {mapVisible && (
+                            <>
+                                <div className={styles.gridWrap}>
+                                    <OdontoToothGrid
+                                        orderedTeeth={orderedTeeth}
+                                        selectedToothId={selectedToothId}
+                                        suppressDateHighlights={false}
+                                        activeDateToothIds={activeToothIds}
+                                        onToothClick={setSelectedToothId}
+                                    />
+                                </div>
+                                <p className={styles.textMuted}>
+                                    Toque em um dente para marcar visualmente a selecao.
+                                </p>
+                            </>
+                        )}
                     </section>
 
                     <section className={styles.card}>
@@ -596,66 +622,63 @@ export default function OdontoArcadeSimplifiedPage() {
                             </button>
                         </div>
 
+                        {serviceFlowType === 'tooth' && (
+                            <div className={styles.modalToothSelector}>
+                                <OdontoToothGrid
+                                    orderedTeeth={orderedTeeth}
+                                    selectedToothId={null}
+                                    suppressDateHighlights={false}
+                                    activeDateToothIds={new Set(serviceRows.map(row => row.toothId).filter((id): id is number => id != null))}
+                                    onToothClick={toggleToothServiceRow}
+                                />
+                            </div>
+                        )}
+
                         <div className={styles.modalRows}>
                             {serviceRows.map((row, index) => (
                                 <div key={index} className={styles.modalRow}>
                                     <div className={styles.modalRowHeader}>
-                                        <strong>Linha {index + 1}</strong>
-                                        <button
-                                            type='button'
-                                            className={styles.iconBtnDanger}
-                                            onClick={() =>
-                                                setServiceRows(prev => prev.filter((_, i) => i !== index))
-                                            }
-                                            disabled={savingServiceFlow || serviceRows.length === 1}
-                                        >
-                                            Remover
-                                        </button>
-                                    </div>
-
-                                    {serviceFlowType === 'tooth' && (
-                                        <label className={styles.label}>
-                                            Dente
+                                        <strong>
+                                            {row.toothId != null
+                                                ? `Dente ${toothById.get(row.toothId)?.international_number ?? row.toothId}`
+                                                : `Linha ${index + 1}`}
+                                        </strong>
+                                        <label className={styles.phaseInlineLabel}>
+                                            Fases
                                             <select
                                                 className={styles.input}
-                                                value={row.toothId ?? ''}
+                                                value={row.phase}
                                                 onChange={event =>
                                                     setServiceRows(prev =>
                                                         prev.map((item, i) =>
                                                             i === index
-                                                                ? {
-                                                                      ...item,
-                                                                      toothId: event.target.value
-                                                                          ? Number(event.target.value)
-                                                                          : null,
-                                                                  }
+                                                                ? { ...item, phase: event.target.value }
                                                                 : item,
                                                         ),
                                                     )
                                                 }
                                                 disabled={savingServiceFlow}
                                             >
-                                                <option value=''>Selecione</option>
-                                                {orderedTeeth.map(tooth => (
-                                                    <option key={tooth.id} value={tooth.id}>
-                                                        Dente {tooth.international_number}
+                                                {PHASE_OPTIONS.map(option => (
+                                                    <option key={option || 'empty'} value={option}>
+                                                        {option || 'Opcional'}
                                                     </option>
                                                 ))}
                                             </select>
                                         </label>
-                                    )}
+                                    </div>
 
                                     <div className={styles.formGrid}>
                                         <label className={styles.label}>
-                                            Nome
+                                            Tratamento
                                             <input
                                                 className={styles.input}
-                                                value={row.name}
+                                                value={row.treatment}
                                                 onChange={event =>
                                                     setServiceRows(prev =>
                                                         prev.map((item, i) =>
                                                             i === index
-                                                                ? { ...item, name: event.target.value }
+                                                                ? { ...item, treatment: event.target.value }
                                                                 : item,
                                                         ),
                                                     )
@@ -665,7 +688,7 @@ export default function OdontoArcadeSimplifiedPage() {
                                         </label>
 
                                         <label className={styles.label}>
-                                            Valor
+                                            Valor (R$)
                                             <input
                                                 className={styles.input}
                                                 inputMode='decimal'
@@ -676,6 +699,37 @@ export default function OdontoArcadeSimplifiedPage() {
                                                         prev.map((item, i) =>
                                                             i === index
                                                                 ? { ...item, value: event.target.value }
+                                                                : item,
+                                                        ),
+                                                    )
+                                                }
+                                                onBlur={event =>
+                                                    setServiceRows(prev =>
+                                                        prev.map((item, i) =>
+                                                            i === index
+                                                                ? {
+                                                                      ...item,
+                                                                      value: normalizeMoneyInput(event.target.value),
+                                                                  }
+                                                                : item,
+                                                        ),
+                                                    )
+                                                }
+                                                disabled={savingServiceFlow}
+                                            />
+                                        </label>
+
+                                        <label className={styles.labelWide}>
+                                            Observacoes
+                                            <textarea
+                                                className={styles.textarea}
+                                                rows={3}
+                                                value={row.notes}
+                                                onChange={event =>
+                                                    setServiceRows(prev =>
+                                                        prev.map((item, i) =>
+                                                            i === index
+                                                                ? { ...item, notes: event.target.value }
                                                                 : item,
                                                         ),
                                                     )
@@ -696,13 +750,15 @@ export default function OdontoArcadeSimplifiedPage() {
                                     setServiceRows(prev => [
                                         ...prev,
                                         {
-                                            toothId: selectedToothId ?? teeth[0]?.id ?? null,
-                                            name: '',
+                                            toothId: serviceFlowType === 'tooth' ? null : selectedToothId ?? teeth[0]?.id ?? null,
+                                            phase: '',
+                                            treatment: '',
                                             value: '',
+                                            notes: '',
                                         },
                                     ])
                                 }
-                                disabled={savingServiceFlow}
+                                disabled={savingServiceFlow || serviceFlowType === 'tooth'}
                             >
                                 + Linha
                             </button>
