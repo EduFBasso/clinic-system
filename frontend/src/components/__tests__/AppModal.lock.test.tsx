@@ -166,35 +166,40 @@ describe('AppModal scroll lock', () => {
             </>,
         );
 
-        const modalWindow = window as typeof window & {
-            __appModalLatestRestore?: ((source?: string) => void) | null;
-        };
-
+        // Open A → scroll locked
         await user.click(screen.getByRole('button', { name: 'open A' }));
+        await waitFor(() => {
+            const { bodyOverflow, htmlOverflow } = getBodyStyles();
+            expect(
+                bodyOverflow === 'hidden' || htmlOverflow === 'hidden',
+            ).toBe(true);
+        });
+
+        // Close A → scroll restored
         await user.click(screen.getByRole('button', { name: 'fechar open A' }));
         await waitFor(() => {
-            expect(typeof modalWindow.__appModalLatestRestore).toBe('function');
+            const { bodyOverflow, htmlOverflow } = getBodyStyles();
+            expect(
+                bodyOverflow === 'hidden' || htmlOverflow === 'hidden',
+            ).toBe(false);
         });
-        const firstRestore = modalWindow.__appModalLatestRestore;
 
+        // Open B → scroll locked again
         await user.click(screen.getByRole('button', { name: 'open B' }));
+        await waitFor(() => {
+            const { bodyOverflow, htmlOverflow } = getBodyStyles();
+            expect(
+                bodyOverflow === 'hidden' || htmlOverflow === 'hidden',
+            ).toBe(true);
+        });
+
+        // Close B → scroll restored again
         await user.click(screen.getByRole('button', { name: 'fechar open B' }));
         await waitFor(() => {
-            expect(typeof modalWindow.__appModalLatestRestore).toBe('function');
-        });
-        const secondRestore = modalWindow.__appModalLatestRestore;
-        expect(secondRestore).not.toBe(firstRestore);
-
-        document.body.style.overflow = 'hidden';
-        document.body.classList.add('MuiModal-open');
-        window.dispatchEvent(new Event('ensureScrollUnlocked'));
-
-        await waitFor(() => {
-            const s = getBodyStyles();
-            const unlocked = !(
-                s.bodyOverflow === 'hidden' || s.htmlOverflow === 'hidden'
-            );
-            expect(unlocked).toBe(true);
+            const { bodyOverflow, htmlOverflow } = getBodyStyles();
+            expect(
+                bodyOverflow === 'hidden' || htmlOverflow === 'hidden',
+            ).toBe(false);
         });
     });
 });

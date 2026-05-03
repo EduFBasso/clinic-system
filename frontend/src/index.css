@@ -241,10 +241,12 @@ button:not(:disabled):focus-visible {
 html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-    overflow-x: visible;
+    overflow-x: clip; /* clip sem criar BFC — não quebra sticky vertical; previne page wider than viewport no iOS */
+    max-width: 100%;
 }
 body {
     overflow-x: hidden;
+    max-width: 100%;
 }
 
 /* Evita que o iOS "encolha" a área visível e desloque o conteúdo de forma abrupta */

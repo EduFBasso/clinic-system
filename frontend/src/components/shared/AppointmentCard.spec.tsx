@@ -3,6 +3,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AppointmentCard, { type SharedAppointmentLike } from './AppointmentCard';
 
+// openPendingActions dispatches a CustomEvent which succeeds (returns true) in jsdom,
+// causing requestFinalizeAppointment to return early and never call proceed().
+// We mock it to return false so the normal finalize flow executes in tests.
+vi.mock('../../utils/appointments/openPendingActions', () => ({
+    openPendingActions: vi.fn(() => false),
+}));
+
 function makeAppt(
     partial: Partial<SharedAppointmentLike>,
 ): SharedAppointmentLike {

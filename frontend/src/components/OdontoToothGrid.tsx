@@ -1,13 +1,14 @@
 import React from 'react';
 import type { ToothItem } from '../pages/odontoArcadeHelpers';
-import styles from '../styles/pages/OdontoArcadePage.module.css';
+import styles from '../styles/components/OdontoToothGrid.module.css';
 
 interface OdontoToothGridProps {
     orderedTeeth: ToothItem[];
     selectedToothId: number | null;
     suppressDateHighlights: boolean;
     activeDateToothIds: Set<number>;
-    onToothClick: (toothId: number) => void;
+    onToothClick?: (toothId: number) => void;
+    readOnly?: boolean;
 }
 
 export const OdontoToothGrid = React.memo(function OdontoToothGrid({
@@ -16,6 +17,7 @@ export const OdontoToothGrid = React.memo(function OdontoToothGrid({
     suppressDateHighlights,
     activeDateToothIds,
     onToothClick,
+    readOnly = false,
 }: OdontoToothGridProps) {
     return (
         <svg
@@ -52,21 +54,34 @@ export const OdontoToothGrid = React.memo(function OdontoToothGrid({
                 const selected = selectedToothId === tooth.id;
                 const inDateEvent =
                     !suppressDateHighlights && activeDateToothIds.has(tooth.id);
+                const interactive = !readOnly && typeof onToothClick === 'function';
 
                 return (
                     <g
                         key={tooth.id}
-                        className={styles.toothGroup}
-                        onClick={() => onToothClick(tooth.id)}
-                        onKeyDown={event => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault();
-                                onToothClick(tooth.id);
-                            }
-                        }}
-                        role='button'
-                        tabIndex={0}
-                        aria-pressed={selected}
+                        className={`${styles.toothGroup} ${
+                            interactive ? '' : styles.toothGroupStatic
+                        }`}
+                        onClick={
+                            interactive
+                                ? () => {
+                                      onToothClick(tooth.id);
+                                  }
+                                : undefined
+                        }
+                        onKeyDown={
+                            interactive
+                                ? event => {
+                                      if (event.key === 'Enter' || event.key === ' ') {
+                                          event.preventDefault();
+                                          onToothClick(tooth.id);
+                                      }
+                                  }
+                                : undefined
+                        }
+                        role={interactive ? 'button' : undefined}
+                        tabIndex={interactive ? 0 : undefined}
+                        aria-pressed={interactive ? selected : undefined}
                         aria-label={`Dente ${tooth.international_number}`}
                     >
                         <rect

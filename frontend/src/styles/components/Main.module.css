@@ -46,8 +46,8 @@
     content: '';
     position: absolute;
     top: 0;
-    left: -100vw; /* estende muito à esquerda */
-    right: -100vw; /* estende muito à direita */
+    left: -2rem; /* cobre o padding de 1rem do .main com folga; -100vw criava elemento de 200vw+ que causava overflow no iOS */
+    right: -2rem;
     bottom: 0;
     background: var(--color-bg);
     z-index: 0; /* atrás do conteúdo do filtro */

@@ -1,7 +1,7 @@
 // Types and pure helpers shared by OdontoArcadePage and its sub-components.
 // Keep this file free of React imports and side-effects.
 
-import { parseAmount, formatBRLCurrency } from '../utils/currency';
+import { parseAmount, formatBRLCurrency, toInputAmount } from '../utils/currency';
 import { getNow } from '../utils/now';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -49,6 +49,27 @@ export type EditProductItem = {
 
 export type ProcedureFormKind = 'tooth' | 'general';
 
+export type ServiceFlowType = 'tooth' | 'arcade' | 'other';
+
+export type ServiceRow = {
+    toothId: number | null;
+    phase: string;
+    treatment: string;
+    value: string;
+    notes: string;
+};
+
+export type ProductRow = {
+    name: string;
+    value: string;
+    notes: string;
+};
+
+export type ProductCatalogItem = {
+    name: string;
+    last_value: string | null;
+};
+
 export type ProcedureGroup = {
     key: string;
     label: string;
@@ -62,6 +83,26 @@ export const INTERNATIONAL_NUMBERS = [
     21, 22, 23, 24, 25, 26, 27, 28,
     48, 47, 46, 45, 44, 43, 42, 41,
     31, 32, 33, 34, 35, 36, 37, 38,
+];
+
+export const PHASE_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: '', label: 'Opcional' },
+    { value: 'O', label: 'Oclusal' },
+    { value: 'V', label: 'Vestibular' },
+    { value: 'P', label: 'Palatino' },
+    { value: 'M', label: 'Mesial' },
+    { value: 'D', label: 'Distal' },
+    { value: 'MO', label: 'Mesio-oclusal' },
+    { value: 'DO', label: 'Disto-oclusal' },
+    { value: 'VO', label: 'Vestibulo-oclusal' },
+    { value: 'PO', label: 'Palatino-oclusal' },
+    { value: 'MDO', label: 'Mesio-disto-oclusal' },
+];
+
+export const ARCADE_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: 'SUPERIOR', label: 'Superior' },
+    { value: 'INFERIOR', label: 'Inferior' },
+    { value: 'AMBAS', label: 'Superior e Inferior' },
 ];
 
 // ─── Pure utilities ───────────────────────────────────────────────────────────
@@ -140,4 +181,18 @@ export function isProcedureCompleted(proc: ProcedureItem): boolean {
 export function todayISODate(): string {
     const d = getNow();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function normalizeMoneyInput(value: string): string {
+    const parsed = parseAmount(value);
+    if (parsed == null) return value;
+    return toInputAmount(parsed.toFixed(2));
+}
+
+export function normalizeSearchText(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
 }

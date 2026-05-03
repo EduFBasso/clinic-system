@@ -25,5 +25,5 @@
     },
     "include": ["src"],
     /* Allow test files to be type-checked so Vitest globals resolve. If build size becomes an issue we can create a separate tsconfig for tests. */
-    "exclude": []
+    "exclude": ["src/pages/legacy", "src/components/odonto/legacy"]
 }

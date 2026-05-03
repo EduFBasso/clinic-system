@@ -6,6 +6,9 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import AgendaSettingsModal from '../AgendaSettingsModal';
 import { resetAgendaSettings } from '../../utils/agendaSettings';
 
+const emitMock = vi.hoisted(() => vi.fn());
+vi.mock('../../events/bus', () => ({ emit: emitMock }));
+
 vi.mock('../Modal', () => ({
     default: ({
         open,
@@ -29,6 +32,7 @@ describe('AgendaSettingsModal', () => {
     beforeEach(() => {
         clearLS();
         resetAgendaSettings();
+        emitMock.mockClear();
         vi.restoreAllMocks();
         vi.stubGlobal('fetch', vi.fn());
     });
@@ -129,8 +133,9 @@ describe('AgendaSettingsModal', () => {
             '"default_visit_type":"consulta"',
         );
         await waitFor(() => {
-            expect(screen.getByRole('status')).toHaveTextContent(
-                /Configurações salvas/i,
+            expect(emitMock).toHaveBeenCalledWith(
+                'systemMessage',
+                expect.objectContaining({ text: 'Configurações salvas.' }),
             );
         });
     });

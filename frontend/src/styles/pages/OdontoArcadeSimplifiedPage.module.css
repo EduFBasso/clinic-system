@@ -22,6 +22,18 @@
     flex-wrap: wrap;
 }
 
+.headerInfo {
+    min-width: 0;
+    flex: 1;
+}
+
+.headerTitleRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
 .title {
     margin: 0;
     font-size: 32px;
@@ -62,8 +74,56 @@
 
 .headerActions {
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.headerActionsBottomRow {
+    display: flex;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.headerActionsBottomRow {
+    justify-content: flex-end;
+}
+
+.closeBtn {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-input, var(--color-bg-section));
+    color: var(--color-text-main, var(--color-heading));
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.closeBtn:hover {
+    background: color-mix(in oklab, var(--color-text-main, #111827) 6%, transparent);
+}
+
+@media (max-width: 680px) {
+    .headerActions {
+        width: 100%;
+        align-items: stretch;
+    }
+
+    .headerActionsBottomRow {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .headerTitleRow {
+        align-items: center;
+    }
 }
 
 .btn,
@@ -184,55 +244,73 @@
 
 .procInfoBlock {
     min-width: 0;
+    width: 100%;
     display: grid;
     gap: 2px;
 }
 
 .procTitleRow {
     display: flex;
+    width: 100%;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
-    flex-wrap: wrap;
 }
 
 .procActions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 12px;
     flex-wrap: wrap;
+    width: 100%;
 }
 
-.miniActionBtn {
+.procIconGroup {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.iconActionBtn {
+    width: 30px;
+    height: 30px;
     border-radius: 8px;
-    min-height: 30px;
-    padding: 0 10px;
-    border: 1px solid transparent;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 700;
+    border: none;
+    background: transparent;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
+    color: var(--icon-fg, var(--color-text-main, #1f2937));
 }
 
-.miniActionDetail {
-    background: color-mix(in oklab, var(--color-success-dark, #166534) 88%, black);
-    border-color: color-mix(in oklab, var(--color-success, #22c55e) 60%, black);
+.actionIcon {
+    width: 18px;
+    height: 18px;
+    display: block;
 }
 
-.miniActionEdit {
-    background: color-mix(in oklab, #6f4e37 84%, black);
-    border-color: color-mix(in oklab, #9c6f4f 60%, black);
+.iconDetail {
+    --icon-fg: var(--color-success, #22c55e);
 }
 
-.miniActionDelete {
-    background: color-mix(in oklab, var(--color-danger, #c62828) 84%, black);
-    border-color: color-mix(in oklab, var(--color-danger, #c62828) 60%, black);
+.iconEdit {
+    --icon-fg: var(--color-pending, #f59e0b);
 }
 
-.miniActionBtn:hover {
-    filter: brightness(1.08);
+.iconDelete {
+    --icon-fg: var(--color-danger, #ef4444);
 }
 
-.miniActionBtn:active {
+.iconActionBtn:hover {
+    background: color-mix(in oklab, var(--color-text-main, #111827) 6%, transparent);
+}
+
+.iconActionBtn:active {
     transform: translateY(1px);
 }
 
@@ -408,6 +486,13 @@
 .autocompleteItem:hover {
     background: color-mix(in oklab, var(--color-primary) 10%, var(--color-bg-section));
     border-color: color-mix(in oklab, var(--color-primary) 28%, var(--color-border));
+}
+
+.autocompleteHint {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--color-text-muted, var(--color-text));
+    opacity: 0.8;
 }
 
 .autocompleteEmpty {

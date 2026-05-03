@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '../../contexts/ThemeContext';
 import NavBar from '../../components/NavBar';
 // Mock clock hook to avoid alignment timers & network drift during test
 vi.mock('../../hooks/useUtcClock', () => ({
@@ -22,7 +23,9 @@ describe('NavBar login code flow', () => {
     function renderNavBar() {
         return render(
             <MemoryRouter>
-                <NavBar />
+                <ThemeProvider>
+                    <NavBar />
+                </ThemeProvider>
             </MemoryRouter>,
         );
     }

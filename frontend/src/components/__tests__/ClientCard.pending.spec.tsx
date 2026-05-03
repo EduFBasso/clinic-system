@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import ClientCard from '../ClientCard';
 import type { ClientBasic } from '../../types/ClientBasic';
 
@@ -82,14 +83,15 @@ describe('ClientCard pending state', () => {
 
     it('exibe bloco de pendência compacto (Status + texto) sem ícones de agendar quando pendente isolado', async () => {
         vi.useFakeTimers();
-        const client = makeClient();
+        // next_appointment_status: 'pending' triggers isPendingHeuristic in useClientPendingState
+        const client = makeClient({ next_appointment_status: 'pending' });
         const onView = vi.fn();
         const listener = vi.fn();
         window.addEventListener(
             'pendingActions:open',
             listener as EventListener,
         );
-        render(<ClientCard client={client} onView={onView} />);
+        render(<MemoryRouter><ClientCard client={client} onView={onView} /></MemoryRouter>);
         await act(async () => {
             vi.advanceTimersByTime(200); // surpass hysteresis 140ms
         });
@@ -125,7 +127,7 @@ describe('ClientCard pending state', () => {
             'pendingActions:open',
             listener as EventListener,
         );
-        render(<ClientCard client={client} onView={() => {}} />);
+        render(<MemoryRouter><ClientCard client={client} onView={() => {}} /></MemoryRouter>);
         await act(async () => {
             vi.advanceTimersByTime(200);
         });
@@ -153,7 +155,7 @@ describe('ClientCard pending state', () => {
                 Date.now() + 60 * 60 * 1000,
             ).toISOString(),
         });
-        render(<ClientCard client={client} onView={() => {}} />);
+        render(<MemoryRouter><ClientCard client={client} onView={() => {}} /></MemoryRouter>);
         expect(screen.queryByText('Compromisso pendente')).toBeNull();
     });
     // Botão específico de resolver foi removido; a ação agora está no +

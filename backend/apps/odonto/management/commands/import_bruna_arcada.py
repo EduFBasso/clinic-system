@@ -237,7 +237,9 @@ class Command(BaseCommand):
                         defaults={
                             'tooth': tooth,
                             'surface': surface,
-                            'code': proc_row.get('CD_TAB_PRC_ITEM', ''),
+                            # code (CD_TAB_PRC_ITEM), paid_amount (VL_PAG) e duration_minutes
+                            # (VL_TEMPO) são dados financeiros do ERP legado — não usados no
+                            # sistema atual e ignorados para reduzir custo de armazenamento.
                             'name': self._normalize_legacy_text(
                                 proc_row.get('TX_NOME_PRC_ITEM', 'Procedimento')
                             ),
@@ -247,8 +249,6 @@ class Command(BaseCommand):
                             'started_at': self._parse_date(proc_row.get('DT_INICIO')),
                             'completed_at': self._parse_date(proc_row.get('DT_FINALIZACAO')),
                             'patient_amount': self._parse_decimal(proc_row.get('VL_PAC')),
-                            'paid_amount': self._parse_decimal(proc_row.get('VL_PAG')),
-                            'duration_minutes': self._parse_int(proc_row.get('VL_TEMPO')),
                         },
                     )
                     if proc_created:

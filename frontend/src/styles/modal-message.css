@@ -30,5 +30,5 @@
     transition: background 0.2s;
 }
 .modal-message button:hover {
-    background: var(--color-secondary);
+    background: color-mix(in oklab, var(--color-primary) 82%, #000);
 }

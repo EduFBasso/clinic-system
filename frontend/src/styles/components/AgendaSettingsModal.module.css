@@ -33,7 +33,7 @@
 
 .divider {
     width: 100%;
-    background: #e5e7eb;
+    background: var(--color-border);
     border-radius: 1px;
 }
 
@@ -69,7 +69,7 @@
 
 .label {
     font-size: 0.95rem;
-    color: #6b7280;
+    color: var(--color-text-muted, var(--color-text));
     font-weight: 500;
     white-space: nowrap; /* keep (min) on the same line */
 }
@@ -78,9 +78,10 @@
 .select {
     width: 100%;
     padding: 0.5rem 0.625rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-border);
     border-radius: 0.5rem;
-    background: #fff;
+    background: var(--color-input, var(--color-bg));
+    color: var(--color-text);
     font: inherit;
     line-height: 1.25rem;
     transition: border-color 0.15s, box-shadow 0.15s;
@@ -89,17 +90,17 @@
 .input:focus,
 .select:focus {
     outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 30%, transparent);
 }
 
 .timeInputWrapper {
     position: relative;
     display: flex;
     align-items: center;
-    border: 1px solid #d1d5db; /* ensure visible right border */
+    border: 1px solid var(--color-border);
     border-radius: 0.5rem;
-    background: #fff;
+    background: var(--color-input, var(--color-bg));
 }
 
 /* Remove inner border of time input to avoid double border when wrapped */
@@ -111,8 +112,8 @@
 
 /* Focus ring on wrapper when input inside is focused */
 .timeInputWrapper:focus-within {
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 30%, transparent);
 }
 
 .caret {
@@ -120,7 +121,7 @@
     right: 0.5rem;
     top: 50%;
     transform: translateY(-50%);
-    color: #9ca3af;
+    color: var(--color-text-muted, var(--color-text));
     font-size: 1.25rem;
     line-height: 1;
     pointer-events: none;
@@ -145,10 +146,10 @@
 }
 
 .statusSuccess {
-    color: #065f46;
+    color: var(--color-success, #065f46);
 }
 .statusError {
-    color: #991b1b;
+    color: var(--color-danger, #991b1b);
 }
 
 .buttonBar {
@@ -173,48 +174,50 @@
 }
 
 .primary {
-    background: #2563eb;
-    color: #fff;
+    background: var(--btn-theme-bg, var(--color-primary));
+    border-color: var(--btn-theme-border, var(--color-primary));
+    color: var(--btn-theme-text, #fff);
 }
 .primary:hover {
-    background: #1d4ed8;
+    filter: brightness(0.9);
 }
 .primary:active {
-    background: #1e40af;
+    filter: brightness(0.82);
 }
 .primary:disabled {
-    background: #93c5fd;
+    opacity: 0.5;
     cursor: not-allowed;
 }
 
 .secondary {
-    background: #f3f4f6;
-    color: #374151;
+    background: var(--btn-neutral-bg, var(--color-bg-section));
+    border-color: var(--btn-neutral-border, var(--color-border));
+    color: var(--btn-neutral-text, var(--color-text));
 }
 .secondary:hover {
-    background: #e5e7eb;
+    filter: brightness(0.95);
 }
 .secondary:active {
-    background: #d1d5db;
+    filter: brightness(0.9);
 }
 .secondary:disabled {
-    background: #f3f4f6;
     opacity: 0.5;
     cursor: not-allowed;
 }
 
 .danger {
-    background: #dc2626;
-    color: #fff;
+    background: var(--btn-danger-bg, var(--color-danger, #dc2626));
+    border-color: var(--btn-danger-border, transparent);
+    color: var(--btn-danger-text, #fff);
 }
 .danger:hover {
-    background: #b91c1c;
+    filter: brightness(0.88);
 }
 .danger:active {
-    background: #991b1b;
+    filter: brightness(0.8);
 }
 
 .smallNote {
     font-size: 0.7rem;
-    color: #9ca3af;
+    color: var(--color-text-muted, var(--color-text));
 }
