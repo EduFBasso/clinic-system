@@ -39,24 +39,38 @@ function dateKeyFromProcedure(proc: ProcedureItem): string {
     return todayISODate();
 }
 
-const PHASE_OPTIONS = [
-    '',
-    'O',
-    'V',
-    'P',
-    'M',
-    'D',
-    'MO',
-    'DO',
-    'VO',
-    'PO',
-    'MDO',
+const PHASE_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: '', label: 'Opcional' },
+    { value: 'O', label: 'Oclusal' },
+    { value: 'V', label: 'Vestibular' },
+    { value: 'P', label: 'Palatino' },
+    { value: 'M', label: 'Mesial' },
+    { value: 'D', label: 'Distal' },
+    { value: 'MO', label: 'Mesio-oclusal' },
+    { value: 'DO', label: 'Disto-oclusal' },
+    { value: 'VO', label: 'Vestibulo-oclusal' },
+    { value: 'PO', label: 'Palatino-oclusal' },
+    { value: 'MDO', label: 'Mesio-disto-oclusal' },
+];
+
+const ARCADE_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: 'SUPERIOR', label: 'Superior' },
+    { value: 'INFERIOR', label: 'Inferior' },
+    { value: 'AMBAS', label: 'Ambas' },
 ];
 
 function normalizeMoneyInput(value: string): string {
     const parsed = parseAmount(value);
     if (parsed == null) return value;
     return toInputAmount(parsed.toFixed(2));
+}
+
+function normalizeSearchText(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
 }
 
 export default function OdontoArcadeSimplifiedPage() {
@@ -80,10 +94,27 @@ export default function OdontoArcadeSimplifiedPage() {
     const [productFlowOpen, setProductFlowOpen] = React.useState(false);
     const [savingServiceFlow, setSavingServiceFlow] = React.useState(false);
     const [savingProductFlow, setSavingProductFlow] = React.useState(false);
+    const [expandedProcedureIds, setExpandedProcedureIds] = React.useState<Set<number>>(
+        new Set(),
+    );
+    const [editingProcedure, setEditingProcedure] = React.useState<ProcedureItem | null>(null);
+    const [editingProcedureName, setEditingProcedureName] = React.useState('');
+    const [editingProcedureValue, setEditingProcedureValue] = React.useState('');
+    const [editingProcedureNotes, setEditingProcedureNotes] = React.useState('');
+    const [savingEditProcedure, setSavingEditProcedure] = React.useState(false);
 
     const [serviceFlowType, setServiceFlowType] = React.useState<ServiceFlowType>('tooth');
     const [serviceRows, setServiceRows] = React.useState<ServiceRow[]>([]);
     const [productRows, setProductRows] = React.useState<ProductRow[]>([]);
+    const [procedureNames, setProcedureNames] = React.useState<string[]>([]);
+    const [openTreatmentDropdownIndex, setOpenTreatmentDropdownIndex] = React.useState<number | null>(null);
+    const [savingSuggestionIndex, setSavingSuggestionIndex] = React.useState<number | null>(null);
+
+    const arcadeLabelByValue = React.useMemo(
+        () =>
+            new Map(ARCADE_OPTIONS.map(option => [option.value, option.label])),
+        [],
+    );
 
     const orderedTeeth = React.useMemo(() => {
         if (teeth.length > 0) return teeth;
@@ -189,19 +220,69 @@ export default function OdontoArcadeSimplifiedPage() {
         void loadArcade();
     }, [loadArcade]);
 
+    const loadProcedureNames = React.useCallback(async () => {
+        try {
+            const response = await apiFetch('/odonto/procedures/distinct-names/');
+            if (response && typeof response === 'object' && 'names' in response) {
+                const names = Array.isArray(response.names)
+                    ? (response.names as string[])
+                          .map(name => String(name))
+                          .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+                    : [];
+                setProcedureNames(names);
+            }
+        } catch {
+            // Keep UX functional with empty suggestions if fetch fails.
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (!serviceFlowOpen) return;
+        void loadProcedureNames();
+    }, [serviceFlowOpen, loadProcedureNames]);
+
     function openServiceFlowModal() {
-        const defaultToothId = selectedToothId ?? teeth[0]?.id ?? null;
         setServiceFlowType('tooth');
-        setServiceRows([
-            {
-                toothId: defaultToothId,
-                phase: '',
-                treatment: '',
-                value: '',
-                notes: '',
-            },
-        ]);
+        setServiceRows([]);
+        setOpenTreatmentDropdownIndex(null);
         setServiceFlowOpen(true);
+    }
+
+    function buildEmptyServiceRow(flowType: ServiceFlowType): ServiceRow {
+        return {
+            toothId: null,
+            phase: flowType === 'arcade' ? 'AMBAS' : '',
+            treatment: '',
+            value: '',
+            notes: '',
+        };
+    }
+
+    function changeServiceFlowType(nextType: ServiceFlowType) {
+        if (nextType === serviceFlowType) return;
+
+        setServiceFlowType(nextType);
+        setOpenTreatmentDropdownIndex(null);
+
+        setServiceRows(prev => {
+            if (nextType === 'tooth') {
+                return [];
+            }
+
+            if (serviceFlowType === 'tooth') {
+                return [buildEmptyServiceRow(nextType)];
+            }
+
+            if (prev.length === 0) {
+                return [buildEmptyServiceRow(nextType)];
+            }
+
+            return prev.map(item => ({
+                ...item,
+                toothId: null,
+                phase: nextType === 'arcade' ? item.phase || 'AMBAS' : '',
+            }));
+        });
     }
 
     function toggleToothServiceRow(toothId: number) {
@@ -229,7 +310,10 @@ export default function OdontoArcadeSimplifiedPage() {
     }
 
     function closeServiceFlowModal() {
-        if (!savingServiceFlow) setServiceFlowOpen(false);
+        if (!savingServiceFlow) {
+            setServiceFlowOpen(false);
+            setOpenTreatmentDropdownIndex(null);
+        }
     }
 
     function closeProductFlowModal() {
@@ -237,19 +321,33 @@ export default function OdontoArcadeSimplifiedPage() {
     }
 
     async function saveServiceFlow() {
-        if (!arcade || serviceRows.length === 0) return;
+        if (!arcade) return;
+        if (serviceRows.length === 0) {
+            emit('systemMessage', {
+                text: 'Selecione ao menos um dente no mapa para criar o servico.',
+                type: 'warning',
+            });
+            return;
+        }
 
         for (const row of serviceRows) {
             if (!row.treatment.trim()) {
                 emit('systemMessage', {
-                    text: 'Preencha o tratamento em todas as linhas de servico.',
+                    text: 'Preencha o tratamento em todos os itens de servico.',
                     type: 'warning',
                 });
                 return;
             }
             if (serviceFlowType === 'tooth' && row.toothId == null) {
                 emit('systemMessage', {
-                    text: 'Selecione o dente em todas as linhas por dente.',
+                    text: 'Selecione o dente em todos os itens por dente.',
+                    type: 'warning',
+                });
+                return;
+            }
+            if (serviceFlowType === 'arcade' && !row.phase) {
+                emit('systemMessage', {
+                    text: 'Selecione Superior, Inferior ou Ambas em todos os itens.',
                     type: 'warning',
                 });
                 return;
@@ -308,6 +406,73 @@ export default function OdontoArcadeSimplifiedPage() {
             });
         } finally {
             setSavingServiceFlow(false);
+        }
+    }
+
+    function updateServiceRow(index: number, patch: Partial<ServiceRow>) {
+        setServiceRows(prev =>
+            prev.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+        );
+    }
+
+    function filteredProcedureNames(searchRaw: string): string[] {
+        const sortedNames = [...procedureNames].sort((a, b) =>
+            a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }),
+        );
+        const search = normalizeSearchText(searchRaw);
+        if (!search) return sortedNames.slice(0, 24);
+
+        return sortedNames
+            .filter(name => normalizeSearchText(name).includes(search))
+            .sort((a, b) => {
+                const aNormalized = normalizeSearchText(a);
+                const bNormalized = normalizeSearchText(b);
+                const aStarts = aNormalized.startsWith(search) ? 0 : 1;
+                const bStarts = bNormalized.startsWith(search) ? 0 : 1;
+                if (aStarts !== bStarts) return aStarts - bStarts;
+
+                const aIndex = aNormalized.indexOf(search);
+                const bIndex = bNormalized.indexOf(search);
+                if (aIndex !== bIndex) return aIndex - bIndex;
+
+                return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
+            })
+            .slice(0, 24);
+    }
+
+    function treatmentExistsInSuggestions(treatmentRaw: string): boolean {
+        const normalized = treatmentRaw.trim().toLowerCase();
+        if (!normalized) return false;
+        return procedureNames.some(name => name.trim().toLowerCase() === normalized);
+    }
+
+    async function saveTreatmentSuggestion(index: number) {
+        const row = serviceRows[index];
+        if (!row || !arcade) return;
+        const name = row.treatment.trim();
+        if (!name || treatmentExistsInSuggestions(name)) return;
+
+        setSavingSuggestionIndex(index);
+        try {
+            await apiFetch('/odonto/procedures/suggest-name/', {
+                method: 'POST',
+                body: {
+                    name,
+                    arcade_id: arcade.id,
+                },
+            });
+            await loadProcedureNames();
+            emit('systemMessage', {
+                text: `Tratamento "${name}" salvo na lista.`,
+                type: 'success',
+            });
+        } catch {
+            emit('systemMessage', {
+                text: 'Nao foi possivel salvar o tratamento na lista.',
+                type: 'error',
+            });
+        } finally {
+            setSavingSuggestionIndex(null);
         }
     }
 
@@ -417,6 +582,86 @@ export default function OdontoArcadeSimplifiedPage() {
                 text: message || 'Nao foi possivel apagar o item.',
                 type: 'error',
             });
+        }
+    }
+
+    function toggleProcedureDetails(procId: number) {
+        setExpandedProcedureIds(prev => {
+            const next = new Set(prev);
+            if (next.has(procId)) {
+                next.delete(procId);
+            } else {
+                next.add(procId);
+            }
+            return next;
+        });
+    }
+
+    function openEditProcedure(proc: ProcedureItem) {
+        setEditingProcedure(proc);
+        setEditingProcedureName(proc.name || '');
+        setEditingProcedureValue(toInputAmount(proc.patient_amount ?? ''));
+        setEditingProcedureNotes(proc.notes || '');
+    }
+
+    function closeEditProcedureModal() {
+        if (!savingEditProcedure) {
+            setEditingProcedure(null);
+        }
+    }
+
+    async function saveEditedProcedure() {
+        if (!editingProcedure) return;
+        const name = editingProcedureName.trim();
+        if (!name) {
+            emit('systemMessage', {
+                text: 'Informe o nome do tratamento.',
+                type: 'warning',
+            });
+            return;
+        }
+
+        if (editingProcedureValue.trim()) {
+            const validation = validateAmount(editingProcedureValue, 'Valor');
+            if (!validation.valid) {
+                emit('systemMessage', {
+                    text: validation.message || 'Valor invalido.',
+                    type: 'warning',
+                });
+                return;
+            }
+        }
+
+        setSavingEditProcedure(true);
+        try {
+            await apiFetch(`/odonto/procedures/${editingProcedure.id}/`, {
+                method: 'PATCH',
+                body: {
+                    name,
+                    patient_amount: editingProcedureValue.trim()
+                        ? parseAmount(editingProcedureValue)
+                        : null,
+                    notes: editingProcedureNotes.trim(),
+                },
+            });
+
+            closeEditProcedureModal();
+            await loadArcade();
+            emit('systemMessage', {
+                text: 'Item atualizado com sucesso.',
+                type: 'success',
+            });
+        } catch (err) {
+            const message =
+                err instanceof ApiError
+                    ? err.message
+                    : 'Nao foi possivel atualizar o item.';
+            emit('systemMessage', {
+                text: message || 'Nao foi possivel atualizar o item.',
+                type: 'error',
+            });
+        } finally {
+            setSavingEditProcedure(false);
         }
     }
 
@@ -532,12 +777,26 @@ export default function OdontoArcadeSimplifiedPage() {
                                             const products = procedures.filter(
                                                 item => item.is_product && item.parent_procedure === proc.id,
                                             );
+                                            const isExpanded = expandedProcedureIds.has(proc.id);
+                                            const isArcadeItem = !proc.tooth && proc.faces_raw;
+                                            const phaseLabel = isArcadeItem
+                                                ? arcadeLabelByValue.get(proc.faces_raw || '') || proc.faces_raw
+                                                : proc.faces_raw || '-';
 
                                             return (
                                                 <div key={proc.id} className={styles.procItem}>
                                                     <div className={styles.procMain}>
-                                                        <div>
-                                                            <strong>{proc.name}</strong>
+                                                        <div className={styles.procInfoBlock}>
+                                                            <div className={styles.procTitleRow}>
+                                                                <strong>{proc.name}</strong>
+                                                                <button
+                                                                    type='button'
+                                                                    className={`${styles.miniActionBtn} ${styles.miniActionDetail}`}
+                                                                    onClick={() => toggleProcedureDetails(proc.id)}
+                                                                >
+                                                                    {isExpanded ? 'Ocultar' : 'Detalhes'}
+                                                                </button>
+                                                            </div>
                                                             <p className={styles.textMuted}>
                                                                 {tooth
                                                                     ? `Dente ${tooth.international_number}`
@@ -550,13 +809,38 @@ export default function OdontoArcadeSimplifiedPage() {
                                                             </span>
                                                             <button
                                                                 type='button'
-                                                                className={styles.iconBtnDanger}
+                                                                className={`${styles.miniActionBtn} ${styles.miniActionEdit}`}
+                                                                onClick={() => openEditProcedure(proc)}
+                                                            >
+                                                                Editar
+                                                            </button>
+                                                            <button
+                                                                type='button'
+                                                                className={`${styles.miniActionBtn} ${styles.miniActionDelete}`}
                                                                 onClick={() => void deleteProcedure(proc.id)}
                                                             >
                                                                 Apagar
                                                             </button>
                                                         </div>
                                                     </div>
+
+                                                    {isExpanded && (
+                                                        <div className={styles.procDetailsBox}>
+                                                            <p className={styles.textMuted}>
+                                                                <strong>Tipo:</strong>{' '}
+                                                                {tooth ? 'Por dente' : isArcadeItem ? 'Arcada' : 'Outros'}
+                                                            </p>
+                                                            <p className={styles.textMuted}>
+                                                                <strong>{isArcadeItem ? 'Arcada:' : 'Fases:'}</strong>{' '}
+                                                                {phaseLabel}
+                                                            </p>
+                                                            {proc.notes && (
+                                                                <p className={styles.textMuted}>
+                                                                    <strong>Observações:</strong> {proc.notes}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    )}
 
                                                     {products.length > 0 && (
                                                         <div className={styles.productsBlock}>
@@ -569,7 +853,14 @@ export default function OdontoArcadeSimplifiedPage() {
                                                                         </span>
                                                                         <button
                                                                             type='button'
-                                                                            className={styles.iconBtnDanger}
+                                                                            className={`${styles.miniActionBtn} ${styles.miniActionEdit}`}
+                                                                            onClick={() => openEditProcedure(product)}
+                                                                        >
+                                                                            Editar
+                                                                        </button>
+                                                                        <button
+                                                                            type='button'
+                                                                            className={`${styles.miniActionBtn} ${styles.miniActionDelete}`}
                                                                             onClick={() => void deleteProcedure(product.id)}
                                                                         >
                                                                             Apagar
@@ -598,7 +889,7 @@ export default function OdontoArcadeSimplifiedPage() {
                         <div className={styles.typeTabs}>
                             <button
                                 type='button'
-                                onClick={() => setServiceFlowType('tooth')}
+                                onClick={() => changeServiceFlowType('tooth')}
                                 className={`${styles.tabBtn} ${serviceFlowType === 'tooth' ? styles.tabActive : ''}`}
                                 disabled={savingServiceFlow}
                             >
@@ -606,7 +897,7 @@ export default function OdontoArcadeSimplifiedPage() {
                             </button>
                             <button
                                 type='button'
-                                onClick={() => setServiceFlowType('arcade')}
+                                onClick={() => changeServiceFlowType('arcade')}
                                 className={`${styles.tabBtn} ${serviceFlowType === 'arcade' ? styles.tabActive : ''}`}
                                 disabled={savingServiceFlow}
                             >
@@ -614,7 +905,7 @@ export default function OdontoArcadeSimplifiedPage() {
                             </button>
                             <button
                                 type='button'
-                                onClick={() => setServiceFlowType('other')}
+                                onClick={() => changeServiceFlowType('other')}
                                 className={`${styles.tabBtn} ${serviceFlowType === 'other' ? styles.tabActive : ''}`}
                                 disabled={savingServiceFlow}
                             >
@@ -634,57 +925,121 @@ export default function OdontoArcadeSimplifiedPage() {
                             </div>
                         )}
 
+                        {serviceFlowType === 'tooth' && serviceRows.length === 0 && (
+                            <p className={styles.textMuted}>
+                                Toque nos dentes do mapa para adicionar os containers do servico.
+                            </p>
+                        )}
+
                         <div className={styles.modalRows}>
-                            {serviceRows.map((row, index) => (
-                                <div key={index} className={styles.modalRow}>
+                            {serviceRows.map((row, index) => {
+                                const treatmentSuggestions = filteredProcedureNames(row.treatment);
+
+                                return <div key={index} className={styles.modalRow}>
                                     <div className={styles.modalRowHeader}>
                                         <strong>
                                             {row.toothId != null
                                                 ? `Dente ${toothById.get(row.toothId)?.international_number ?? row.toothId}`
-                                                : `Linha ${index + 1}`}
+                                                : `Item ${index + 1}`}
                                         </strong>
-                                        <label className={styles.phaseInlineLabel}>
-                                            Fases
-                                            <select
-                                                className={styles.input}
-                                                value={row.phase}
-                                                onChange={event =>
-                                                    setServiceRows(prev =>
-                                                        prev.map((item, i) =>
-                                                            i === index
-                                                                ? { ...item, phase: event.target.value }
-                                                                : item,
-                                                        ),
-                                                    )
-                                                }
-                                                disabled={savingServiceFlow}
-                                            >
-                                                {PHASE_OPTIONS.map(option => (
-                                                    <option key={option || 'empty'} value={option}>
-                                                        {option || 'Opcional'}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </label>
+                                        {(serviceFlowType === 'tooth' || serviceFlowType === 'arcade') && (
+                                            <label className={styles.phaseInlineLabel}>
+                                                {serviceFlowType === 'arcade'
+                                                    ? 'Arcada'
+                                                    : 'Fases (opcional)'}
+                                                <select
+                                                    className={`${styles.input} ${styles.phaseSelect}`}
+                                                    value={row.phase}
+                                                    onChange={event =>
+                                                        updateServiceRow(index, {
+                                                            phase: event.target.value,
+                                                        })
+                                                    }
+                                                    disabled={savingServiceFlow}
+                                                >
+                                                    {(serviceFlowType === 'arcade'
+                                                        ? ARCADE_OPTIONS
+                                                        : PHASE_OPTIONS
+                                                    ).map(option => (
+                                                        <option
+                                                            key={option.value || 'empty'}
+                                                            value={option.value}
+                                                        >
+                                                            {serviceFlowType === 'arcade'
+                                                                ? option.label
+                                                                : option.value
+                                                                  ? `${option.value} - ${option.label}`
+                                                                  : option.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                        )}
                                     </div>
 
                                     <div className={styles.formGrid}>
                                         <label className={styles.label}>
                                             Tratamento
-                                            <input
-                                                className={styles.input}
-                                                value={row.treatment}
-                                                onChange={event =>
-                                                    setServiceRows(prev =>
-                                                        prev.map((item, i) =>
-                                                            i === index
-                                                                ? { ...item, treatment: event.target.value }
-                                                                : item,
-                                                        ),
-                                                    )
-                                                }
-                                                disabled={savingServiceFlow}
-                                            />
+                                            <div className={styles.autocompleteWrap}>
+                                                <input
+                                                    className={styles.input}
+                                                    value={row.treatment}
+                                                    onFocus={() => setOpenTreatmentDropdownIndex(index)}
+                                                    onBlur={() =>
+                                                        window.setTimeout(() => {
+                                                            setOpenTreatmentDropdownIndex(current =>
+                                                                current === index ? null : current,
+                                                            );
+                                                        }, 160)
+                                                    }
+                                                    onChange={event => {
+                                                        updateServiceRow(index, { treatment: event.target.value });
+                                                        setOpenTreatmentDropdownIndex(index);
+                                                    }}
+                                                    disabled={savingServiceFlow}
+                                                    autoComplete='off'
+                                                    placeholder='Ex.: Restauracao em resina'
+                                                />
+
+                                                {openTreatmentDropdownIndex === index && (
+                                                    <div className={styles.autocompleteList}>
+                                                        {treatmentSuggestions.length === 0 ? (
+                                                            <div className={styles.autocompleteEmpty}>
+                                                                Nenhuma sugestao encontrada.
+                                                            </div>
+                                                        ) : (
+                                                            treatmentSuggestions.map(name => (
+                                                                <button
+                                                                    key={name}
+                                                                    type='button'
+                                                                    className={styles.autocompleteItem}
+                                                                    onMouseDown={event => event.preventDefault()}
+                                                                    onClick={() => {
+                                                                        updateServiceRow(index, { treatment: name });
+                                                                        setOpenTreatmentDropdownIndex(null);
+                                                                    }}
+                                                                >
+                                                                    {name}
+                                                                </button>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {!treatmentExistsInSuggestions(row.treatment) && row.treatment.trim() && (
+                                                <button
+                                                    type='button'
+                                                    className={styles.saveSuggestionBtn}
+                                                    onMouseDown={event => event.preventDefault()}
+                                                    onClick={() => void saveTreatmentSuggestion(index)}
+                                                    disabled={savingServiceFlow || savingSuggestionIndex === index}
+                                                >
+                                                    {savingSuggestionIndex === index
+                                                        ? 'Salvando...'
+                                                        : `✓ Salvar "${row.treatment.trim()}" na lista`}
+                                                </button>
+                                            )}
                                         </label>
 
                                         <label className={styles.label}>
@@ -695,73 +1050,50 @@ export default function OdontoArcadeSimplifiedPage() {
                                                 value={row.value}
                                                 placeholder='0,00'
                                                 onChange={event =>
-                                                    setServiceRows(prev =>
-                                                        prev.map((item, i) =>
-                                                            i === index
-                                                                ? { ...item, value: event.target.value }
-                                                                : item,
-                                                        ),
-                                                    )
+                                                    updateServiceRow(index, { value: event.target.value })
                                                 }
                                                 onBlur={event =>
-                                                    setServiceRows(prev =>
-                                                        prev.map((item, i) =>
-                                                            i === index
-                                                                ? {
-                                                                      ...item,
-                                                                      value: normalizeMoneyInput(event.target.value),
-                                                                  }
-                                                                : item,
-                                                        ),
-                                                    )
+                                                    updateServiceRow(index, {
+                                                        value: normalizeMoneyInput(event.target.value),
+                                                    })
                                                 }
                                                 disabled={savingServiceFlow}
                                             />
                                         </label>
 
                                         <label className={styles.labelWide}>
-                                            Observacoes
+                                            Observações
                                             <textarea
                                                 className={styles.textarea}
                                                 rows={3}
                                                 value={row.notes}
                                                 onChange={event =>
-                                                    setServiceRows(prev =>
-                                                        prev.map((item, i) =>
-                                                            i === index
-                                                                ? { ...item, notes: event.target.value }
-                                                                : item,
-                                                        ),
-                                                    )
+                                                    updateServiceRow(index, { notes: event.target.value })
                                                 }
                                                 disabled={savingServiceFlow}
                                             />
                                         </label>
                                     </div>
-                                </div>
-                            ))}
+                                </div>;
+                            })}
                         </div>
 
                         <div className={styles.modalActions}>
-                            <button
-                                type='button'
-                                className={styles.btn}
-                                onClick={() =>
-                                    setServiceRows(prev => [
-                                        ...prev,
-                                        {
-                                            toothId: serviceFlowType === 'tooth' ? null : selectedToothId ?? teeth[0]?.id ?? null,
-                                            phase: '',
-                                            treatment: '',
-                                            value: '',
-                                            notes: '',
-                                        },
-                                    ])
-                                }
-                                disabled={savingServiceFlow || serviceFlowType === 'tooth'}
-                            >
-                                + Linha
-                            </button>
+                            {serviceFlowType !== 'tooth' && (
+                                <button
+                                    type='button'
+                                    className={styles.btn}
+                                    onClick={() =>
+                                        setServiceRows(prev => [
+                                            ...prev,
+                                            buildEmptyServiceRow(serviceFlowType),
+                                        ])
+                                    }
+                                    disabled={savingServiceFlow}
+                                >
+                                    + Item
+                                </button>
+                            )}
                             <button type='button' className={styles.btn} onClick={closeServiceFlowModal}>
                                 Cancelar
                             </button>
@@ -861,6 +1193,67 @@ export default function OdontoArcadeSimplifiedPage() {
                                 disabled={savingProductFlow}
                             >
                                 {savingProductFlow ? 'Salvando...' : 'Salvar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {editingProcedure && (
+                <div className={styles.modalOverlay} role='presentation' onClick={closeEditProcedureModal}>
+                    <div className={styles.modalCard} role='dialog' onClick={event => event.stopPropagation()}>
+                        <h3 className={styles.sectionTitle}>Editar item</h3>
+                        <div className={styles.formGrid}>
+                            <label className={styles.labelWide}>
+                                Tratamento
+                                <input
+                                    className={styles.input}
+                                    value={editingProcedureName}
+                                    onChange={event => setEditingProcedureName(event.target.value)}
+                                    disabled={savingEditProcedure}
+                                />
+                            </label>
+                            <label className={styles.label}>
+                                Valor (R$)
+                                <input
+                                    className={styles.input}
+                                    inputMode='decimal'
+                                    value={editingProcedureValue}
+                                    onChange={event => setEditingProcedureValue(event.target.value)}
+                                    onBlur={event =>
+                                        setEditingProcedureValue(normalizeMoneyInput(event.target.value))
+                                    }
+                                    disabled={savingEditProcedure}
+                                />
+                            </label>
+                            <label className={styles.labelWide}>
+                                Observações
+                                <textarea
+                                    className={styles.textarea}
+                                    rows={3}
+                                    value={editingProcedureNotes}
+                                    onChange={event => setEditingProcedureNotes(event.target.value)}
+                                    disabled={savingEditProcedure}
+                                />
+                            </label>
+                        </div>
+
+                        <div className={styles.modalActions}>
+                            <button
+                                type='button'
+                                className={styles.btn}
+                                onClick={closeEditProcedureModal}
+                                disabled={savingEditProcedure}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type='button'
+                                className={styles.btnPrimary}
+                                onClick={() => void saveEditedProcedure()}
+                                disabled={savingEditProcedure}
+                            >
+                                {savingEditProcedure ? 'Salvando...' : 'Salvar alterações'}
                             </button>
                         </div>
                     </div>

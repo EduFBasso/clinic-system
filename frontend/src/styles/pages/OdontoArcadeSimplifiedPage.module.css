@@ -182,10 +182,67 @@
     gap: 10px;
 }
 
+.procInfoBlock {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.procTitleRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .procActions {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+}
+
+.miniActionBtn {
+    border-radius: 8px;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.miniActionDetail {
+    background: color-mix(in oklab, var(--color-success-dark, #166534) 88%, black);
+    border-color: color-mix(in oklab, var(--color-success, #22c55e) 60%, black);
+}
+
+.miniActionEdit {
+    background: color-mix(in oklab, #6f4e37 84%, black);
+    border-color: color-mix(in oklab, #9c6f4f 60%, black);
+}
+
+.miniActionDelete {
+    background: color-mix(in oklab, var(--color-danger, #c62828) 84%, black);
+    border-color: color-mix(in oklab, var(--color-danger, #c62828) 60%, black);
+}
+
+.miniActionBtn:hover {
+    filter: brightness(1.08);
+}
+
+.miniActionBtn:active {
+    transform: translateY(1px);
+}
+
+.procDetailsBox {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg-section);
+    padding: 8px;
+    display: grid;
+    gap: 4px;
 }
 
 .value {
@@ -276,10 +333,20 @@
 .phaseInlineLabel {
     display: grid;
     gap: 6px;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--color-text-main, var(--color-heading));
     min-width: 150px;
+}
+
+.phaseSelect {
+    font-size: 14px;
+    line-height: 1.2;
+    font-weight: 500;
+}
+
+.phaseSelect option {
+    font-size: 14px;
 }
 
 .formGrid {
@@ -303,6 +370,76 @@
     font-size: 14px;
     font-weight: 700;
     color: var(--color-text-main, var(--color-heading));
+}
+
+.autocompleteWrap {
+    position: relative;
+}
+
+.autocompleteList {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--color-bg-section);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 15;
+    padding: 6px;
+}
+
+.autocompleteItem {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-main, var(--color-text));
+    text-align: left;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 8px 10px;
+    cursor: pointer;
+}
+
+.autocompleteItem:hover {
+    background: color-mix(in oklab, var(--color-primary) 10%, var(--color-bg-section));
+    border-color: color-mix(in oklab, var(--color-primary) 28%, var(--color-border));
+}
+
+.autocompleteEmpty {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    color: var(--color-text-muted, var(--color-text));
+    font-size: 14px;
+    padding: 0 10px;
+}
+
+.saveSuggestionBtn {
+    margin-top: 8px;
+    width: fit-content;
+    min-height: 34px;
+    border: 1px solid color-mix(in oklab, var(--color-success, #22c55e) 36%, var(--color-border));
+    border-radius: 999px;
+    padding: 0 12px;
+    background: color-mix(in oklab, var(--color-success-bg, #f0faf4) 70%, var(--color-bg-section));
+    color: var(--color-success-dark, #15803d);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.saveSuggestionBtn:hover {
+    background: color-mix(in oklab, var(--color-success-bg, #f0faf4) 84%, var(--color-bg-section));
+}
+
+.saveSuggestionBtn:disabled {
+    opacity: 0.7;
+    cursor: default;
 }
 
 .input {
@@ -358,5 +495,9 @@
     .productRow {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .procActions {
+        width: 100%;
     }
 }
