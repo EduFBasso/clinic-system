@@ -780,14 +780,27 @@ export default function ClientCard({
                                         const profPart = profFirstName
                                             ? ` com ${profFirstName}`
                                             : '';
-                                        // Rótulo do dia: "amanhã, DD/MM" (filtro amanhã) ou "hoje, DD/MM" (demais casos)
+                                        // Rótulo do dia: compara data real do agendamento com hoje/amanhã
                                         const apptDate = sIso ? new Date(sIso) : null;
                                         const datePart = apptDate && !isNaN(apptDate.getTime())
                                             ? `, ${String(apptDate.getDate()).padStart(2, '0')}/${String(apptDate.getMonth() + 1).padStart(2, '0')}`
                                             : '';
-                                        const dayLabel = filterMode === 'tomorrow'
-                                            ? `amanhã${datePart}`
-                                            : `hoje${datePart}`;
+                                        let dayLabel: string;
+                                        if (apptDate && !isNaN(apptDate.getTime())) {
+                                            const _now = new Date();
+                                            const todayDay = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate());
+                                            const tomorrowDay = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() + 1);
+                                            const apptDay = new Date(apptDate.getFullYear(), apptDate.getMonth(), apptDate.getDate());
+                                            if (apptDay.getTime() === tomorrowDay.getTime()) {
+                                                dayLabel = `amanhã${datePart}`;
+                                            } else if (apptDay.getTime() === todayDay.getTime()) {
+                                                dayLabel = `hoje${datePart}`;
+                                            } else {
+                                                dayLabel = datePart.replace(/^, /, '');
+                                            }
+                                        } else {
+                                            dayLabel = 'hoje';
+                                        }
                                         const waText = `Olá ${client.first_name}, ${visitType} agendada para ${dayLabel} às ${time}${profPart}, confirma sua presença?`;
                                         const rawPhone = (
                                             client.phone || ''
