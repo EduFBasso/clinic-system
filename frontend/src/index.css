@@ -241,12 +241,12 @@ button:not(:disabled):focus-visible {
 html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-    overflow-x: clip; /* clip sem criar BFC — não quebra sticky vertical; previne page wider than viewport no iOS */
-    max-width: 100%;
+    /* overflow-x não definido aqui: definir clip/hidden no html causa flash de layout no iOS Safari
+       quando window.open() dispara animação da URL bar (recálculo de viewport). O overflow horizontal
+       é controlado pelo body e pelo fix do ::before em Main.module.css (left/right: -2rem). */
 }
 body {
     overflow-x: hidden;
-    max-width: 100%;
 }
 
 /* Evita que o iOS "encolha" a área visível e desloque o conteúdo de forma abrupta */
