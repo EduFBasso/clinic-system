@@ -143,7 +143,7 @@ export default function OdontoServiceModal({
                                     </strong>
                                     {(flowType === 'tooth' || flowType === 'arcade') && (
                                         <label className={styles.phaseInlineLabel}>
-                                            {flowType === 'arcade' ? 'Arcada' : 'Fases (opcional)'}
+                                            {flowType === 'arcade' ? 'Arcada' : 'Faces (opcional)'}
                                             <select
                                                 className={`${styles.input} ${styles.phaseSelect}`}
                                                 value={row.phase}

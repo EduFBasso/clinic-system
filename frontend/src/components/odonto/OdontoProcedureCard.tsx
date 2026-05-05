@@ -156,7 +156,7 @@ export default function OdontoProcedureCard({
                                 {tooth ? 'Por dente' : isArcadeItem ? 'Arcada' : 'Outros'}
                             </p>
                             <p className={styles.textMuted}>
-                                <strong>{isArcadeItem ? 'Arcada:' : 'Fases:'}</strong> {phaseLabel}
+                                <strong>{isArcadeItem ? 'Arcada:' : 'Faces:'}</strong> {phaseLabel}
                             </p>
                         </>
                     )}
