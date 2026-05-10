@@ -1,4 +1,5 @@
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 
 
@@ -25,3 +26,10 @@ def test_health_full_degraded(monkeypatch, client):
     body = r.json()
     assert body['status'] == 'degraded'
     assert body['database'] == 'error'
+
+
+@override_settings(ALLOWED_HOSTS=['*'])
+def test_health_full_accepts_private_network_host_when_allowed(client):
+    r = client.get('/health/full', HTTP_HOST='192.168.15.25:8000')
+    assert r.status_code == 200
+    assert r.json()['status'] in {'ok', 'degraded'}

@@ -11,6 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 
 DEBUG = config("DEBUG", default=False, cast=bool)
+DEV_ALLOW_LAN_HOSTS = config("DEV_ALLOW_LAN_HOSTS", default=DEBUG, cast=bool)
 APP_VERSION = config("APP_VERSION", default="dev")
 APPOINTMENT_REMINDERS_ENABLED = config(
     "APPOINTMENT_REMINDERS_ENABLED", default=True, cast=bool
@@ -38,6 +39,9 @@ ALLOWED_HOSTS = config(
     default="localhost,127.0.0.1",
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
+
+if DEV_ALLOW_LAN_HOSTS:
+    ALLOWED_HOSTS = list(dict.fromkeys([*ALLOWED_HOSTS, '*', '.local']))
 
 INSTALLED_APPS = [
     'rest_framework',
@@ -85,6 +89,14 @@ CORS_ALLOWED_ORIGIN_REGEXES = config(
     default="",
     cast=lambda v: [r.strip() for r in v.split(",") if r.strip()],
 )
+
+if DEV_ALLOW_LAN_HOSTS and not CORS_ALLOWED_ORIGIN_REGEXES:
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^https?://10(?:\.\d{1,3}){3}(?::\d+)?$",
+        r"^https?://192\.168(?:\.\d{1,3}){2}(?::\d+)?$",
+        r"^https?://172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}(?::\d+)?$",
+        r"^https?://[a-z0-9-]+\.local(?::\d+)?$",
+    ]
 
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)
 CORS_ALLOW_CREDENTIALS = config("CORS_ALLOW_CREDENTIALS", default=False, cast=bool)
