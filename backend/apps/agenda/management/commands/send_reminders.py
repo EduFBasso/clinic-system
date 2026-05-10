@@ -1,7 +1,7 @@
 """Management command: send Telegram reminders for upcoming appointments.
 
-Run this every minute via cron:
-    * * * * * /path/to/.venv/bin/python manage.py send_reminders
+Run this every 5 minutes via cron:
+    */5 * * * * /path/to/.venv/bin/python manage.py send_reminders
 
 This command is kept under agenda only as a stable entrypoint. Delivery logic
 now lives in apps.reminders.

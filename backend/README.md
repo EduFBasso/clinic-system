@@ -79,12 +79,14 @@ python manage.py runserver
 bash dev.sh
 ```
 
-Sobe o Django em `0.0.0.0:8000` e simultaneamente roda `send_reminders` a cada 60 s em background,
+Sobe o Django em `0.0.0.0:8000` e simultaneamente roda `send_reminders` a cada 5 minutos em background,
 simulando o cron job de produção. Prefixo `[reminders]` nos logs distingue as saídas.
 Se `APPOINTMENT_REMINDERS_ENABLED=false`, o comando fica em modo desativado e não envia nada.
 Encerre com **Ctrl+C** — ambos os processos são encerrados juntos.
 
-> **Produção**: não use `dev.sh`. Enquanto reminders estiverem desativados, remova ou pause o cron job do Render. Quando o recurso voltar, reative o job `* * * * * python manage.py send_reminders`.
+Use `REMINDERS_LOOP_INTERVAL_SECONDS` para override local do intervalo quando precisar depurar.
+
+> **Produção**: não use `dev.sh`. Enquanto reminders estiverem desativados, remova ou pause o cron job do Render. Quando o recurso voltar, reative o job `*/5 * * * * python manage.py send_reminders`.
 
 **LAN (testar em dispositivos na mesma rede)**
 
