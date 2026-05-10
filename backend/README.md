@@ -103,9 +103,12 @@ Detecta IPs privados automaticamente, configura DJANGO_ALLOWED_HOSTS e CORS.
 
 **Auth**
 
-- `POST /register/auth/request-code/` — enviar OTP via email
-- `POST /register/auth/verify-code/` — verificar código → JWT
+- `POST /register/auth/totp/verify/` — autenticar com email + TOTP → JWT
+- `POST /register/auth/webauthn/login-begin/` — iniciar login com passkey/WebAuthn
+- `POST /register/auth/webauthn/login-complete/` — concluir login com passkey/WebAuthn
 - `POST /register/auth/logout-device/` — logout + terminar sessão
+
+Observacao: o fluxo antigo por OTP enviado por email nao e mais o fluxo principal do sistema.
 
 **Clientes**
 

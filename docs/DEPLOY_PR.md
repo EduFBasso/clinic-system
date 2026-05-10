@@ -47,7 +47,7 @@ Migrações
 Checklist de Smoke Test
 
 - /healthz e /health/full ok; header X-App-Version presente
-- Login por código (request-code e verify-code)
+- Login atual por TOTP ou WebAuthn
 - Agendamento rápido (criar/editar)
 - Finalizar atendimento (inclui caminho “too early” + force-adjust)
 - Modais (Detalhes do atendimento, Client View) com foto e cabeçalho correto
