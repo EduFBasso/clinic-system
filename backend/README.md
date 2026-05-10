@@ -40,6 +40,24 @@ pip install -r requirements.txt
 docker-compose -f docker-compose.local.yml up -d db
 ```
 
+### 3.1) Reaproveitar uma base Docker ja populada (sem migrar dados)
+
+Se voce ja tiver um volume Docker com clientes reais de teste, nao recrie o banco.
+Suba o compose apontando para o volume existente:
+
+```bash
+DB_DOCKER_VOLUME_NAME=nome_do_volume_existente \
+DB_DOCKER_VOLUME_EXTERNAL=true \
+docker compose -f docker-compose.local.yml up -d db
+```
+
+Regras praticas:
+
+- nao rode `docker compose down -v`
+- mantenha `DB_NAME=clinic_local`, `DB_USER=clinic`, `DB_PASSWORD=clinicpass`
+- se o volume antigo usar outro nome de container, isso nao importa; o dado reaproveitado vem do volume
+- usuario operacional de teste local: `brunadentista@mail.com`
+
 ### 4) Migrações
 
 ```bash
@@ -124,6 +142,24 @@ DB_PASSWORD=clinicpass
 ```
 
 Para detalhes e opções avançadas, veja [.env](.env).
+
+### Arquivo `.env` para online protegido
+
+Quando quiser testar no servidor online sem permitir alteracoes destrutivas:
+
+```bash
+ONLINE_MUTATION_LOCK_ENABLED=True
+ONLINE_MUTATION_LOCK_METHODS=PUT,PATCH,DELETE
+SERVE_MEDIA_FILES=True
+```
+
+Efeito:
+
+- `POST` continua permitido para testes controlados
+- `PUT`, `PATCH` e `DELETE` retornam `423 Locked`
+- arquivos em `/media/` continuam roteados pelo backend
+
+Importante: para as fotos sobreviverem a restart/deploy no Render, use disco persistente ou storage externo.
 
 ## Testes
 

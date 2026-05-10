@@ -83,3 +83,9 @@ export default tseslint.config([
 1. Copie `.env.development.example` para `.env.development` e defina
    `VITE_API_BASE` (ex.: `http://localhost:8000`).
 2. Rode `npm install` e depois `npm run dev`.
+
+## Ambientes de trabalho
+
+- Local: use `VITE_API_BASE=http://localhost:8000` e backend Django apontando para o Postgres local em `127.0.0.1:55432`.
+- Online protegido: mantenha `VITE_API_BASE` apontando para o backend Render. Nesse modo, o backend pode bloquear `PUT/PATCH/DELETE` via `ONLINE_MUTATION_LOCK_ENABLED=True`, preservando os dados reais enquanto o frontend continua navegavel para login, leitura e criacao controlada.
+- Usuario foco de validacao funcional: `brunadentista@mail.com`.

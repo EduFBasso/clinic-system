@@ -15,6 +15,15 @@ APP_VERSION = config("APP_VERSION", default="dev")
 APPOINTMENT_REMINDERS_ENABLED = config(
     "APPOINTMENT_REMINDERS_ENABLED", default=True, cast=bool
 )
+ONLINE_MUTATION_LOCK_ENABLED = config(
+    "ONLINE_MUTATION_LOCK_ENABLED", default=False, cast=bool
+)
+ONLINE_MUTATION_LOCK_METHODS = config(
+    "ONLINE_MUTATION_LOCK_METHODS",
+    default="PUT,PATCH,DELETE",
+    cast=lambda v: [item.strip().upper() for item in v.split(",") if item.strip()],
+)
+SERVE_MEDIA_FILES = config("SERVE_MEDIA_FILES", default=True, cast=bool)
 
 TELEGRAM_BOT_TOKEN = config("TELEGRAM_BOT_TOKEN", default="")
 TELEGRAM_BOT_API_BASE = config(
@@ -55,6 +64,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'clinic_project.middleware.QueryTimingMiddleware',
+    'clinic_project.middleware.OnlineMutationLockMiddleware',
     'clinic_project.middleware.VersionHeaderMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

@@ -2,7 +2,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: clinic-local-db
+    container_name: ${DB_CONTAINER_NAME:-clinic-local-db}
     environment:
       POSTGRES_DB: clinic_local
       POSTGRES_USER: clinic
@@ -21,3 +21,5 @@ services:
       retries: 10
 volumes:
   db_data:
+    name: ${DB_DOCKER_VOLUME_NAME:-clinic-system_db_data}
+    external: ${DB_DOCKER_VOLUME_EXTERNAL:-false}

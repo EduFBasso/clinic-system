@@ -1,6 +1,7 @@
 import time
 import logging
 from django.conf import settings
+from django.http import JsonResponse
 
 logger = logging.getLogger('performance')
 
@@ -36,3 +37,42 @@ class VersionHeaderMiddleware:
         version = getattr(settings, 'APP_VERSION', 'dev')
         response.headers["X-App-Version"] = version
         return response
+
+
+class OnlineMutationLockMiddleware:
+    """Bloqueia mutações destrutivas em ambientes online quando ativado por env.
+
+    O objetivo é permitir criação para testes, preservando os dados reais ao
+    impedir PUT/PATCH/DELETE na API.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if getattr(settings, 'ONLINE_MUTATION_LOCK_ENABLED', False):
+            blocked_methods = set(getattr(settings, 'ONLINE_MUTATION_LOCK_METHODS', []))
+            if request.method.upper() in blocked_methods and self._is_api_path(request.path):
+                return JsonResponse(
+                    {
+                        'detail': (
+                            'Ambiente online protegido: atualizacoes e exclusoes estao '
+                            'temporariamente bloqueadas.'
+                        )
+                    },
+                    status=423,
+                )
+        return self.get_response(request)
+
+    @staticmethod
+    def _is_api_path(path: str) -> bool:
+        prefixes = (
+            '/register/',
+            '/agenda/',
+            '/inventory/',
+            '/anamnesis/',
+            '/odonto/',
+            '/sessions/',
+            '/token/',
+        )
+        return path.startswith(prefixes)

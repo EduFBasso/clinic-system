@@ -9,6 +9,8 @@ Resumo do release
 - Melhoria em CORS (headers permitidos e cache de preflight)
 - Middleware reordenado (Security → WhiteNoise → Session → CORS → Common → CSRF → Auth)
 - Migrações adicionais (não destrutivas; ajustes/índices)
+- Roteamento de `/media/` mantido ativo no backend para ambientes online
+- Bloqueio opcional de `PUT/PATCH/DELETE` para ambiente online protegido
 
 Ambientes
 
@@ -25,6 +27,9 @@ Variáveis de ambiente (backend/Render)
 - DB_ENGINE=django.db.backends.postgresql
 - DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 - APP_VERSION=v2025.10.09 (opcional)
+- SERVE_MEDIA_FILES=True
+- ONLINE_MUTATION_LOCK_ENABLED=True
+- ONLINE_MUTATION_LOCK_METHODS=PUT,PATCH,DELETE
 
 Variáveis de ambiente (frontend/Vercel)
 
@@ -52,6 +57,8 @@ Notas de segurança
 
 - Em produção (DEBUG=false): SSL redirect, HSTS e cookies seguros ativados automaticamente
 - CORS configurado para domínios específicos do Vercel/dominio próprio
+- Com `ONLINE_MUTATION_LOCK_ENABLED=True`, o servidor continua aceitando `POST`, mas responde `423 Locked` para `PUT/PATCH/DELETE` nas rotas de API
+- Para arquivos de foto persistirem no Render, o recomendado continua sendo disco persistente ou storage externo
 
 Monitoramento
 
