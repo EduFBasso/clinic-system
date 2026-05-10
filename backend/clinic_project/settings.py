@@ -275,6 +275,7 @@ LOGGING = {
 
 # === TOTP ===
 TOTP_ISSUER = config("TOTP_ISSUER", default="ClinicSystem")
+TOTP_VALID_WINDOW = config("TOTP_VALID_WINDOW", default=2, cast=int)
 
 # === WebAuthn / Passkeys ===
 # rpId: domain sem esquema/porta. localhost para dev; domínio real em produção.
