@@ -9,6 +9,7 @@ import AppModal from './Modal';
 import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
 import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
+import { apiFetch } from '../utils/apiFetch';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -512,22 +513,17 @@ const MainContent: React.FC<MainContentProps> = ({
                 return;
             }
 
-            const headers = { Authorization: `Bearer ${token}` };
             const pendingUrl = `${API_BASE}/agenda/appointments/?status=pending&ordering=-end_at&limit=300&ts=${Date.now()}`;
             const scheduledUrl = `${API_BASE}/agenda/appointments/?status=scheduled&ordering=-end_at&limit=300&ts=${Date.now()}`;
 
             try {
-                const [pendingRes, scheduledRes] = await Promise.all([
-                    fetch(pendingUrl, { headers, cache: 'no-store' }),
-                    fetch(scheduledUrl, { headers, cache: 'no-store' }),
+                const [pendingDataRaw, scheduledDataRaw] = await Promise.all([
+                    apiFetch(pendingUrl, { cache: 'no-store', timeoutMs: 12000 }),
+                    apiFetch(scheduledUrl, { cache: 'no-store', timeoutMs: 12000 }),
                 ]);
 
-                const pendingData = pendingRes.ok
-                    ? unwrapAppointmentsList(await pendingRes.json())
-                    : [];
-                const scheduledData = scheduledRes.ok
-                    ? unwrapAppointmentsList(await scheduledRes.json())
-                    : [];
+                const pendingData = unwrapAppointmentsList(pendingDataRaw);
+                const scheduledData = unwrapAppointmentsList(scheduledDataRaw);
 
                 const ids = new Set<number>();
                 const tomorrowIds = new Set<number>();

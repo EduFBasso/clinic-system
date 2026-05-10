@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { emit } from '../events/bus';
+import { apiFetch } from '../utils/apiFetch';
 import { isTokenExpired } from '../utils/jwt';
 import type { ClientBasic } from '../types/ClientBasic';
 
@@ -38,29 +39,22 @@ export function useClients() {
             if (isInitial) setLoading(true);
             const url = `${API_BASE}/register/clients-basic/`;
             console.debug('[useClients] API_BASE =', API_BASE, 'fetching', url);
-            fetch(url, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+            apiFetch('/register/clients-basic/', {
+                timeoutMs: 12000,
             })
-                .then(res => {
-                    if (res.status === 401)
-                        throw new Error(
-                            'Sessão expirada. É necessário fazer login novamente.',
-                        );
-                    if (!res.ok) throw new Error('Erro ao buscar clientes');
-                    return res.json();
-                })
                 .then(data => {
-                    setClients(data);
-                    clientsRef.current = data;
+                    const nextClients = Array.isArray(data)
+                        ? (data as ClientBasic[])
+                        : [];
+                    setClients(nextClients);
+                    clientsRef.current = nextClients;
                     setLoading(false); // hide big loading (initial)
                 })
                 .catch(err => {
                     const rawMessage =
                         err instanceof Error ? err.message : String(err);
                     const isNetworkError =
-                        /Failed to fetch|NetworkError|Load failed/i.test(
+                        /Failed to fetch|NetworkError|Load failed|Tempo limite/i.test(
                             rawMessage,
                         );
                     const hasCachedClients =
