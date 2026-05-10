@@ -13,9 +13,11 @@ export function useClients() {
     // Keep a ref for current clients length to decide initial vs background loading
     const clientsRef = useRef<ClientBasic[]>([]);
     const debounceRef = useRef<number | null>(null);
+    const lastFetchAtRef = useRef(0);
 
     useEffect(() => {
         const fetchClients = () => {
+            lastFetchAtRef.current = Date.now();
             const token = localStorage.getItem('accessToken');
             if (isTokenExpired(token)) {
                 const hadLoggedProfessional = !!localStorage.getItem(
@@ -104,6 +106,9 @@ export function useClients() {
         };
         // Handler para atualizar clientes ao focar na janela
         const handleFocus = () => {
+            if (Date.now() - lastFetchAtRef.current < 45_000) {
+                return;
+            }
             scheduleFetch();
         };
         window.addEventListener('clearClients', handleClearClients);

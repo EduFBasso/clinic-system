@@ -51,7 +51,7 @@ interface ClientCardProps {
     filterMode?: 'all' | 'pending' | 'today' | 'tomorrow';
 }
 
-export default function ClientCard({
+function ClientCard({
     client,
     onView,
     selected,
@@ -967,3 +967,23 @@ export default function ClientCard({
         </div>
     );
 }
+
+function sameNotifyAppt(
+    left?: ClientCardProps['notifyAppt'],
+    right?: ClientCardProps['notifyAppt'],
+) {
+    return (
+        left?.start_at === right?.start_at &&
+        left?.end_at === right?.end_at &&
+        left?.title === right?.title
+    );
+}
+
+export default React.memo(ClientCard, (prev, next) => {
+    return (
+        prev.client === next.client &&
+        prev.selected === next.selected &&
+        prev.filterMode === next.filterMode &&
+        sameNotifyAppt(prev.notifyAppt, next.notifyAppt)
+    );
+});

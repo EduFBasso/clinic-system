@@ -63,6 +63,11 @@ function resolveAppointmentClientId(appt: PendingAppointmentLike): number | null
     return null;
 }
 
+const MOBILE_INITIAL_CLIENT_CARDS = 40;
+const DESKTOP_INITIAL_CLIENT_CARDS = 80;
+const MOBILE_CLIENT_CARDS_STEP = 20;
+const DESKTOP_CLIENT_CARDS_STEP = 40;
+
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
     setSelectedClientId,
@@ -84,6 +89,11 @@ const MainContent: React.FC<MainContentProps> = ({
         () => new Map(),
     );
     const [noResultsOpen, setNoResultsOpen] = useState(false);
+    const [visibleClientCount, setVisibleClientCount] = useState(() =>
+        typeof window !== 'undefined' && window.innerWidth <= 768
+            ? MOBILE_INITIAL_CLIENT_CARDS
+            : DESKTOP_INITIAL_CLIENT_CARDS,
+    );
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
     const [returnUrl, setReturnUrl] = useState<string | null>(null);
@@ -91,6 +101,8 @@ const MainContent: React.FC<MainContentProps> = ({
     const [confirmClient, setConfirmClient] = useState<ClientBasic | null>(
         null,
     );
+    const detailCacheRef = React.useRef<Map<number, ClientData>>(new Map());
+    const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
     const lastNotifiedFilterRef = React.useRef<string>('');
     const mobileFiltersOpenedAtRef = React.useRef(0);
     const mobileFiltersButtonRef = React.useRef<HTMLButtonElement | null>(
@@ -189,9 +201,27 @@ const MainContent: React.FC<MainContentProps> = ({
         const handleClear = () => {
             setFilter('');
             setNoResultsOpen(false);
+            detailCacheRef.current.clear();
         };
         window.addEventListener('clearClients', handleClear);
         return () => window.removeEventListener('clearClients', handleClear);
+    }, []);
+
+    React.useEffect(() => {
+        const handleRefreshSignals = () => {
+            detailCacheRef.current.clear();
+        };
+
+        window.addEventListener('updateClients', handleRefreshSignals);
+        window.addEventListener('clients:forceRefresh', handleRefreshSignals);
+
+        return () => {
+            window.removeEventListener('updateClients', handleRefreshSignals);
+            window.removeEventListener(
+                'clients:forceRefresh',
+                handleRefreshSignals,
+            );
+        };
     }, []);
 
     // Pós-exclusão: se viermos da tela de edição após deletar, limpamos o filtro
@@ -647,6 +677,47 @@ const MainContent: React.FC<MainContentProps> = ({
         filteredClients,
     ]);
 
+    const deferredDisplayedClients = React.useDeferredValue(displayedClients);
+    const visibleClients = React.useMemo(
+        () => deferredDisplayedClients.slice(0, visibleClientCount),
+        [deferredDisplayedClients, visibleClientCount],
+    );
+
+    React.useEffect(() => {
+        const initialCount =
+            typeof window !== 'undefined' && window.innerWidth <= 768
+                ? MOBILE_INITIAL_CLIENT_CARDS
+                : DESKTOP_INITIAL_CLIENT_CARDS;
+        setVisibleClientCount(initialCount);
+    }, [deferredDisplayedClients, filterMode]);
+
+    React.useEffect(() => {
+        const target = loadMoreRef.current;
+        if (!target) return;
+        if (visibleClientCount >= deferredDisplayedClients.length) return;
+
+        const step =
+            typeof window !== 'undefined' && window.innerWidth <= 768
+                ? MOBILE_CLIENT_CARDS_STEP
+                : DESKTOP_CLIENT_CARDS_STEP;
+
+        const observer = new IntersectionObserver(
+            entries => {
+                const entry = entries[0];
+                if (!entry?.isIntersecting) return;
+                setVisibleClientCount(current =>
+                    Math.min(current + step, deferredDisplayedClients.length),
+                );
+            },
+            {
+                rootMargin: '600px 0px',
+            },
+        );
+
+        observer.observe(target);
+        return () => observer.disconnect();
+    }, [visibleClientCount, deferredDisplayedClients.length]);
+
     // Abre modal de "Nenhum cliente encontrado" quando não houver resultados.
     React.useEffect(() => {
         if (!filter) {
@@ -757,19 +828,22 @@ const MainContent: React.FC<MainContentProps> = ({
         if (!requireActiveSession()) {
             return;
         }
+        const cached = detailCacheRef.current.get(cliente.id);
+        if (cached) {
+            onClientViewData?.(cached);
+            return;
+        }
         // Solta qualquer foco ativo antes de abrir a visualização, evitando foco "grudado" caso o item seja removido depois
         try {
             (document.activeElement as HTMLElement | null)?.blur?.();
         } catch {
             /* noop */
         }
-        fetch(`${API_BASE}/register/clients/${cliente.id}/`, {
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-            },
+        apiFetch(`/register/clients/${cliente.id}/`, {
+            timeoutMs: 12000,
         })
-            .then(res => res.json())
             .then((data: ClientData) => {
+                detailCacheRef.current.set(cliente.id, data);
                 onClientViewData?.(data);
             })
             .catch(() => {
@@ -924,7 +998,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 </div>
             )}
             <div className={styles.cardsGrid}>
-                {displayedClients.map(client => (
+                {visibleClients.map(client => (
                     <div
                         key={client.id}
                         ref={el => {
@@ -959,6 +1033,21 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 ))}
             </div>
+            {visibleClientCount < deferredDisplayedClients.length && (
+                <div
+                    ref={loadMoreRef}
+                    style={{
+                        height: 1,
+                        width: '100%',
+                    }}
+                    aria-hidden='true'
+                />
+            )}
+            {deferredDisplayedClients.length > visibleClients.length && (
+                <div style={{ marginTop: 12, opacity: 0.72, fontSize: '0.92rem' }}>
+                    Exibindo {visibleClients.length} de {deferredDisplayedClients.length} clientes.
+                </div>
+            )}
 
             {/* Confirmation modal for Agenda selection */}
             <AppModal
