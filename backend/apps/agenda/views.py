@@ -25,6 +25,15 @@ class TypedRequestMixin:
     def query_param(self, key: str) -> str | None:
         return self.drf_request().query_params.get(key)
 
+    def query_param_int(self, key: str) -> int | None:
+        raw = self.query_param(key)
+        if raw in (None, ""):
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
     def base_queryset(self) -> QuerySet:
         queryset = getattr(self, "queryset", None)
         assert queryset is not None, f"{self.__class__.__name__} must define queryset"
@@ -63,6 +72,7 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     permission_classes = [IsProfessionalOrReadOnly]
     queryset = Appointment.objects.select_related("professional", "client")
+    ordering_fields = {"start_at", "end_at", "created_at", "updated_at"}
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -100,6 +110,18 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
             qs = qs.filter(client_id=client_id)
         if status_val:
             qs = qs.filter(status=status_val)
+
+        if getattr(self, "action", None) == "list":
+            ordering = self.query_param("ordering")
+            if ordering:
+                ordering_field = ordering.lstrip("-")
+                if ordering_field in self.ordering_fields:
+                    qs = qs.order_by(ordering)
+
+            limit = self.query_param_int("limit")
+            if limit is not None:
+                limit = max(1, min(limit, 500))
+                qs = qs[:limit]
         return qs
 
     def perform_create(self, serializer):
