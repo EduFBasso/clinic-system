@@ -63,7 +63,8 @@ function resolveAppointmentClientId(appt: PendingAppointmentLike): number | null
     return null;
 }
 
-const CLIENTS_PER_PAGE_OPTIONS = [40, 100, 200] as const;
+const CLIENTS_PER_PAGE_OPTIONS = [200, 300, 'all'] as const;
+type ClientsPerPageOption = (typeof CLIENTS_PER_PAGE_OPTIONS)[number];
 
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
@@ -86,7 +87,7 @@ const MainContent: React.FC<MainContentProps> = ({
         () => new Map(),
     );
     const [noResultsOpen, setNoResultsOpen] = useState(false);
-    const [clientsPerPage, setClientsPerPage] = useState<number>(40);
+    const [clientsPerPage, setClientsPerPage] = useState<ClientsPerPageOption>(200);
     const [currentPage, setCurrentPage] = useState(1);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
@@ -672,14 +673,18 @@ const MainContent: React.FC<MainContentProps> = ({
     ]);
 
     const deferredDisplayedClients = React.useDeferredValue(displayedClients);
+    const effectiveClientsPerPage =
+        clientsPerPage === 'all'
+            ? Math.max(1, deferredDisplayedClients.length || 1)
+            : clientsPerPage;
     const totalPages = Math.max(
         1,
-        Math.ceil(deferredDisplayedClients.length / clientsPerPage),
+        Math.ceil(deferredDisplayedClients.length / effectiveClientsPerPage),
     );
     const safeCurrentPage = Math.min(currentPage, totalPages);
-    const pageStartIndex = (safeCurrentPage - 1) * clientsPerPage;
+    const pageStartIndex = (safeCurrentPage - 1) * effectiveClientsPerPage;
     const pageEndIndex = Math.min(
-        pageStartIndex + clientsPerPage,
+        pageStartIndex + effectiveClientsPerPage,
         deferredDisplayedClients.length,
     );
     const visibleClients = React.useMemo(
@@ -1047,14 +1052,19 @@ const MainContent: React.FC<MainContentProps> = ({
                             className={styles.paginationPageSizeSelect}
                             value={clientsPerPage}
                             onChange={event => {
-                                const nextSize = Number(event.target.value);
+                                const rawValue = event.target.value;
+                                if (rawValue === 'all') {
+                                    setClientsPerPage('all');
+                                    return;
+                                }
+                                const nextSize = Number(rawValue);
                                 if (!Number.isFinite(nextSize)) return;
-                                setClientsPerPage(nextSize);
+                                setClientsPerPage(nextSize as ClientsPerPageOption);
                             }}
                         >
                             {CLIENTS_PER_PAGE_OPTIONS.map(option => (
                                 <option key={option} value={option}>
-                                    {option}
+                                    {option === 'all' ? 'Todos' : option}
                                 </option>
                             ))}
                         </select>
