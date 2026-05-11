@@ -264,7 +264,9 @@ export default function Home() {
 
     const closeClientView = React.useCallback(() => {
         setClientViewOpen(false);
-        setClientViewData(null);
+        // Keep clientViewData alive so content doesn't flash-disappear during the
+        // modal's close transition. Clear it after the animation completes.
+        setTimeout(() => setClientViewData(null), 300);
         try {
             if (
                 window.history.state &&
@@ -281,7 +283,7 @@ export default function Home() {
         function onPopState() {
             if (clientViewOpen) {
                 setClientViewOpen(false);
-                setClientViewData(null);
+                setTimeout(() => setClientViewData(null), 300);
             }
         }
         window.addEventListener('popstate', onPopState);

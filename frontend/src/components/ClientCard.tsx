@@ -38,10 +38,6 @@ import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
 import { useNowTick } from '../hooks/useNowTick';
 import { emit } from '../events/bus';
-import {
-    statusBackgroundColor,
-    statusStripeColor,
-} from '../utils/appointments/status';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -307,18 +303,6 @@ function ClientCard({
     const activeEndISO = isTomorrowFilter
         ? (notifyAppt?.end_at ?? null)
         : (displayEndISO || client.next_appointment_end_at || null);
-    const agendaStatus = React.useMemo(() => {
-        if (isPending) {
-            return { kind: 'past', label: 'Pendente' } as const;
-        }
-        if (effectiveOngoing) {
-            return { kind: 'ongoing', label: 'Em andamento' } as const;
-        }
-        if (isScheduled) {
-            return { kind: 'scheduled', label: 'Agendado' } as const;
-        }
-        return null;
-    }, [isPending, effectiveOngoing, isScheduled]);
     // Ocultar o bloco "Próximos compromissos" quando um filtro de dia específico está ativo
     const hideFutureList = filterMode === 'today' || filterMode === 'tomorrow';
     const cardClassNames = [styles.card, selected ? styles.cardSelected : '']
@@ -654,21 +638,6 @@ function ClientCard({
                                 return `${wd} ${dd}/${mm}, ${fs} - ${fe}`;
                             })()}
                         </span>
-                        {agendaStatus && (
-                            <span
-                                className={styles.statusChip}
-                                style={{
-                                    background: statusBackgroundColor(
-                                        agendaStatus.kind,
-                                    ),
-                                    color: statusStripeColor(
-                                        agendaStatus.kind,
-                                    ),
-                                }}
-                            >
-                                {agendaStatus.label}
-                            </span>
-                        )}
                         {client.next_appointment_id && !effectiveOngoing && (
                             <button
                                 className={styles.iconButton}

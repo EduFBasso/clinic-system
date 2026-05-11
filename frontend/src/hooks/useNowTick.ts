@@ -20,8 +20,11 @@ export function useNowTick(intervalMs = 30_000): Date {
         let t1: number | null = null;
         let t2: number | null = null;
         t1 = window.setTimeout(() => {
-            setNow(new Date());
-            t2 = window.setInterval(() => setNow(new Date()), intervalMs);
+            React.startTransition(() => setNow(new Date()));
+            t2 = window.setInterval(
+                () => React.startTransition(() => setNow(new Date())),
+                intervalMs,
+            );
         }, firstDelay);
         return () => {
             if (t1 != null) window.clearTimeout(t1);

@@ -1039,6 +1039,7 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 ))}
             </div>
+            {!loading && clients.length > 0 && (
             <div className={styles.paginationBar}>
                 <div className={styles.paginationSummary}>
                     {deferredDisplayedClients.length > 0
@@ -1092,8 +1093,8 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 </div>
             </div>
+            )}
 
-            {/* Confirmation modal for Agenda selection */}
             <AppModal
                 open={confirmOpen}
                 onClose={() => setConfirmOpen(false)}
