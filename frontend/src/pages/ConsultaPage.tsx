@@ -456,40 +456,43 @@ export default function ConsultaPage() {
     );
 
     async function handleRegister() {
-        if (selectedItems.length === 0 || saving) return;
+        if (saving) return;
         setSaving(true);
         setError(null);
         try {
-            const payload: Record<string, unknown> = {
-                client: apptState.clientId,
-                appointment: apptState.appointmentId ?? null,
-                charge_type: 'charge',
-                title: `Atendimento${apptState.clientName ? ' — ' + apptState.clientName : ''}`,
-                notes: notes || undefined,
-                items: selectedItems.map(i => ({
-                    item_type: i.kind === 'service' ? 'service' : 'product',
-                    service: i.kind === 'service' ? i.id : null,
-                    product: i.kind === 'product' ? i.id : null,
-                    description: i.name,
-                    quantity: String(i.quantity),
-                    unit_price: String(i.unit_price),
-                    paid: i.paid,
-                    paid_at:
-                        i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
-                })),
-            };
-            // Item-level paid flags remain consultation annotations; charge status is controlled separately.
-            if (apptState.chargeId) {
-                await apiFetch(
-                    `${API_BASE}/agenda/charges/${apptState.chargeId}/`,
-                    { method: 'PATCH', body: payload },
-                );
-            } else {
-                await apiFetch(`${API_BASE}/agenda/charges/`, {
-                    method: 'POST',
-                    body: payload,
-                });
+            if (selectedItems.length > 0) {
+                // Fluxo completo: cria/atualiza Charge com itens + conclui
+                const payload: Record<string, unknown> = {
+                    client: apptState.clientId,
+                    appointment: apptState.appointmentId ?? null,
+                    charge_type: 'charge',
+                    title: `Atendimento${apptState.clientName ? ' — ' + apptState.clientName : ''}`,
+                    notes: notes || undefined,
+                    items: selectedItems.map(i => ({
+                        item_type: i.kind === 'service' ? 'service' : 'product',
+                        service: i.kind === 'service' ? i.id : null,
+                        product: i.kind === 'product' ? i.id : null,
+                        description: i.name,
+                        quantity: String(i.quantity),
+                        unit_price: String(i.unit_price),
+                        paid: i.paid,
+                        paid_at:
+                            i.paid && i.paidAt ? `${i.paidAt}T12:00:00Z` : null,
+                    })),
+                };
+                if (apptState.chargeId) {
+                    await apiFetch(
+                        `${API_BASE}/agenda/charges/${apptState.chargeId}/`,
+                        { method: 'PATCH', body: payload },
+                    );
+                } else {
+                    await apiFetch(`${API_BASE}/agenda/charges/`, {
+                        method: 'POST',
+                        body: payload,
+                    });
+                }
             }
+            // Sempre conclui o agendamento (com ou sem itens financeiros)
             if (apptState.appointmentId) {
                 const markedDone = await postDone(apptState.appointmentId);
                 if (!markedDone) {
@@ -1070,7 +1073,7 @@ export default function ConsultaPage() {
                     <button
                         type='button'
                         onClick={handleRegister}
-                        disabled={selectedItems.length === 0 || saving}
+                        disabled={saving}
                         style={{
                             background: 'var(--color-primary)',
                             color: '#fff',
@@ -1078,15 +1081,11 @@ export default function ConsultaPage() {
                             borderRadius: 8,
                             padding: '10px 24px',
                             fontWeight: 700,
-                            cursor:
-                                selectedItems.length === 0 || saving
+                            cursor: saving
                                     ? 'not-allowed'
                                     : 'pointer',
                             fontSize: 16,
-                            opacity:
-                                selectedItems.length === 0 || saving
-                                    ? 0.55
-                                    : 1,
+                        opacity: saving ? 0.55 : 1,
                             transition: 'background 0.2s',
                         }}
                     >

@@ -313,15 +313,6 @@ Params): UseClientOngoingStateResult {
                     endAt: baseDisplayEndISO!,
                 });
             }
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('scrollToClientCard', {
-                        detail: { clientId: client.id },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
         }
         prevOngoingRef.current = isOngoing;
     }, [

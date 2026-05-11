@@ -178,8 +178,20 @@
     line-height: 1.2;
 }
 
+/* Fundo cinza escuro quando há pendentes e nenhum filtro ativo — consistente com o tom do cartão pendente */
+.filtersMenuButtonPending {
+    background: #374151;
+}
+
 .filtersMenuButtonActive {
     background: #dc2626;
+}
+
+.noResultsMessage {
+    padding: 1rem 0.25rem;
+    font-size: 0.95rem;
+    color: rgba(17, 24, 39, 0.6);
+    text-align: center;
 }
 
 .filtersMenuPanel {
@@ -240,7 +252,7 @@
 .paginationBar {
     margin-top: 14px;
     display: grid;
-    gap: 12px;
+    gap: 10px;
 }
 
 .paginationSummary {
@@ -248,9 +260,12 @@
     color: rgba(17, 24, 39, 0.82);
 }
 
-.paginationControls {
-    display: grid;
-    gap: 10px;
+/* Linha 2: Por página [select]  ←→  Página X de Y */
+.paginationRow2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
 }
 
 .paginationPageSizeLabel {
@@ -272,9 +287,16 @@
     font-size: 0.95rem;
 }
 
+.paginationPageIndicator {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--color-text, #1f2937);
+}
+
+/* Linha 3: botões Anterior | Próxima lado a lado */
 .paginationButtons {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
 }
 
@@ -291,14 +313,6 @@
 
 .paginationButton:disabled {
     opacity: 0.45;
-}
-
-.paginationPageIndicator {
-    text-align: center;
-    font-size: 0.92rem;
-    font-weight: 700;
-    color: var(--color-text, #1f2937);
-    padding: 0.2rem 0;
 }
 
 /* Smartphones (ex: iPhone 16 Plus) */
@@ -367,15 +381,7 @@
 }
 
 @media screen and (min-width: 640px) {
-    .paginationControls {
-        grid-template-columns: auto 1fr;
-        align-items: center;
-    }
-
-    .paginationButtons {
-        grid-template-columns: auto 1fr auto;
-        align-items: center;
-    }
+    /* layout já é flex row no paginationRow2 — nenhuma alteração necessária */
 }
 
 /* Desktop: limitar a largura máxima do input do filtro a 35% da página */
