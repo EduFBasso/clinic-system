@@ -63,10 +63,7 @@ function resolveAppointmentClientId(appt: PendingAppointmentLike): number | null
     return null;
 }
 
-const MOBILE_INITIAL_CLIENT_CARDS = 40;
-const DESKTOP_INITIAL_CLIENT_CARDS = 80;
-const MOBILE_CLIENT_CARDS_STEP = 20;
-const DESKTOP_CLIENT_CARDS_STEP = 40;
+const CLIENTS_PER_PAGE_OPTIONS = [40, 100, 200] as const;
 
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
@@ -89,11 +86,8 @@ const MainContent: React.FC<MainContentProps> = ({
         () => new Map(),
     );
     const [noResultsOpen, setNoResultsOpen] = useState(false);
-    const [visibleClientCount, setVisibleClientCount] = useState(() =>
-        typeof window !== 'undefined' && window.innerWidth <= 768
-            ? MOBILE_INITIAL_CLIENT_CARDS
-            : DESKTOP_INITIAL_CLIENT_CARDS,
-    );
+    const [clientsPerPage, setClientsPerPage] = useState<number>(40);
+    const [currentPage, setCurrentPage] = useState(1);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
     const [returnUrl, setReturnUrl] = useState<string | null>(null);
@@ -102,7 +96,7 @@ const MainContent: React.FC<MainContentProps> = ({
         null,
     );
     const detailCacheRef = React.useRef<Map<number, ClientData>>(new Map());
-    const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
+    const cardsGridRef = React.useRef<HTMLDivElement | null>(null);
     const lastNotifiedFilterRef = React.useRef<string>('');
     const mobileFiltersOpenedAtRef = React.useRef(0);
     const mobileFiltersButtonRef = React.useRef<HTMLButtonElement | null>(
@@ -678,45 +672,52 @@ const MainContent: React.FC<MainContentProps> = ({
     ]);
 
     const deferredDisplayedClients = React.useDeferredValue(displayedClients);
+    const totalPages = Math.max(
+        1,
+        Math.ceil(deferredDisplayedClients.length / clientsPerPage),
+    );
+    const safeCurrentPage = Math.min(currentPage, totalPages);
+    const pageStartIndex = (safeCurrentPage - 1) * clientsPerPage;
+    const pageEndIndex = Math.min(
+        pageStartIndex + clientsPerPage,
+        deferredDisplayedClients.length,
+    );
     const visibleClients = React.useMemo(
-        () => deferredDisplayedClients.slice(0, visibleClientCount),
-        [deferredDisplayedClients, visibleClientCount],
+        () => deferredDisplayedClients.slice(pageStartIndex, pageEndIndex),
+        [deferredDisplayedClients, pageEndIndex, pageStartIndex],
     );
 
     React.useEffect(() => {
-        const initialCount =
-            typeof window !== 'undefined' && window.innerWidth <= 768
-                ? MOBILE_INITIAL_CLIENT_CARDS
-                : DESKTOP_INITIAL_CLIENT_CARDS;
-        setVisibleClientCount(initialCount);
-    }, [deferredDisplayedClients, filterMode]);
+        setCurrentPage(1);
+    }, [filter, filterMode, clientsPerPage]);
 
     React.useEffect(() => {
-        const target = loadMoreRef.current;
-        if (!target) return;
-        if (visibleClientCount >= deferredDisplayedClients.length) return;
+        if (currentPage <= totalPages) {
+            return;
+        }
+        setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
 
-        const step =
-            typeof window !== 'undefined' && window.innerWidth <= 768
-                ? MOBILE_CLIENT_CARDS_STEP
-                : DESKTOP_CLIENT_CARDS_STEP;
+    const scrollCardsToTop = React.useCallback(() => {
+        cardsGridRef.current?.scrollIntoView({
+            block: 'start',
+            behavior: 'smooth',
+        });
+    }, []);
 
-        const observer = new IntersectionObserver(
-            entries => {
-                const entry = entries[0];
-                if (!entry?.isIntersecting) return;
-                setVisibleClientCount(current =>
-                    Math.min(current + step, deferredDisplayedClients.length),
-                );
-            },
-            {
-                rootMargin: '600px 0px',
-            },
-        );
-
-        observer.observe(target);
-        return () => observer.disconnect();
-    }, [visibleClientCount, deferredDisplayedClients.length]);
+    const goToPage = React.useCallback(
+        (nextPage: number) => {
+            const normalized = Math.max(1, Math.min(nextPage, totalPages));
+            if (normalized === safeCurrentPage) {
+                return;
+            }
+            React.startTransition(() => {
+                setCurrentPage(normalized);
+            });
+            scrollCardsToTop();
+        },
+        [safeCurrentPage, scrollCardsToTop, totalPages],
+    );
 
     // Abre modal de "Nenhum cliente encontrado" quando não houver resultados.
     React.useEffect(() => {
@@ -997,7 +998,7 @@ const MainContent: React.FC<MainContentProps> = ({
                     Selecione um cliente para agendar
                 </div>
             )}
-            <div className={styles.cardsGrid}>
+            <div ref={cardsGridRef} className={styles.cardsGrid}>
                 {visibleClients.map(client => (
                     <div
                         key={client.id}
@@ -1033,21 +1034,54 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 ))}
             </div>
-            {visibleClientCount < deferredDisplayedClients.length && (
-                <div
-                    ref={loadMoreRef}
-                    style={{
-                        height: 1,
-                        width: '100%',
-                    }}
-                    aria-hidden='true'
-                />
-            )}
-            {deferredDisplayedClients.length > visibleClients.length && (
-                <div style={{ marginTop: 12, opacity: 0.72, fontSize: '0.92rem' }}>
-                    Exibindo {visibleClients.length} de {deferredDisplayedClients.length} clientes.
+            <div className={styles.paginationBar}>
+                <div className={styles.paginationSummary}>
+                    {deferredDisplayedClients.length > 0
+                        ? `Exibindo ${pageStartIndex + 1} a ${pageEndIndex} de ${deferredDisplayedClients.length} clientes.`
+                        : 'Nenhum cliente para exibir.'}
                 </div>
-            )}
+                <div className={styles.paginationControls}>
+                    <label className={styles.paginationPageSizeLabel}>
+                        <span>Por página</span>
+                        <select
+                            className={styles.paginationPageSizeSelect}
+                            value={clientsPerPage}
+                            onChange={event => {
+                                const nextSize = Number(event.target.value);
+                                if (!Number.isFinite(nextSize)) return;
+                                setClientsPerPage(nextSize);
+                            }}
+                        >
+                            {CLIENTS_PER_PAGE_OPTIONS.map(option => (
+                                <option key={option} value={option}>
+                                    {option}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <div className={styles.paginationButtons}>
+                        <button
+                            type='button'
+                            className={styles.paginationButton}
+                            onClick={() => goToPage(safeCurrentPage - 1)}
+                            disabled={safeCurrentPage <= 1}
+                        >
+                            Anterior
+                        </button>
+                        <span className={styles.paginationPageIndicator}>
+                            Página {safeCurrentPage} de {totalPages}
+                        </span>
+                        <button
+                            type='button'
+                            className={styles.paginationButton}
+                            onClick={() => goToPage(safeCurrentPage + 1)}
+                            disabled={safeCurrentPage >= totalPages}
+                        >
+                            Próxima
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             {/* Confirmation modal for Agenda selection */}
             <AppModal

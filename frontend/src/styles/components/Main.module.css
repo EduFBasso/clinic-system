@@ -203,6 +203,70 @@
     );
 }
 
+.paginationBar {
+    margin-top: 14px;
+    display: grid;
+    gap: 12px;
+}
+
+.paginationSummary {
+    font-size: 0.98rem;
+    color: rgba(17, 24, 39, 0.82);
+}
+
+.paginationControls {
+    display: grid;
+    gap: 10px;
+}
+
+.paginationPageSizeLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--color-text, #1f2937);
+}
+
+.paginationPageSizeSelect {
+    min-width: 84px;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--color-text, #1f2937);
+    font-size: 0.95rem;
+}
+
+.paginationButtons {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+.paginationButton {
+    appearance: none;
+    border: 0;
+    border-radius: 12px;
+    padding: 0.8rem 1rem;
+    background: #0f172a;
+    color: #fff;
+    font-size: 0.96rem;
+    font-weight: 700;
+}
+
+.paginationButton:disabled {
+    opacity: 0.45;
+}
+
+.paginationPageIndicator {
+    text-align: center;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--color-text, #1f2937);
+    padding: 0.2rem 0;
+}
+
 /* Smartphones (ex: iPhone 16 Plus) */
 @media screen and (max-width: 430px) {
     .main {
@@ -249,6 +313,10 @@
     .filterActionsMobile {
         justify-self: end;
     }
+
+    .paginationBar {
+        padding-bottom: 8px;
+    }
 }
 
 /* Tablets (ex: iPad 10) — manter coluna única para evitar desalinhamento */
@@ -256,6 +324,18 @@
     .main {
         display: block; /* não usar grid em 2 colunas aqui */
         padding: 1.5rem;
+    }
+}
+
+@media screen and (min-width: 640px) {
+    .paginationControls {
+        grid-template-columns: auto 1fr;
+        align-items: center;
+    }
+
+    .paginationButtons {
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
     }
 }
 
