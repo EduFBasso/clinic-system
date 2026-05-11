@@ -103,6 +103,19 @@
     word-break: break-word;
 }
 
+.statusChip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.24rem 0.55rem;
+    font-size: 0.74rem;
+    font-weight: 800;
+    line-height: 1.1;
+    white-space: nowrap;
+    margin-left: 0.45rem;
+}
+
 .iconButton {
     background: none;
     border: none;
