@@ -364,7 +364,7 @@ function ClientCard({
                                 onView(client);
                                 return;
                             }
-                            openClientForm({ id: client.id });
+                            openClientForm({ id: client.id, navigate });
                         }}
                     >
                         <FaEdit color={iconColor} />
@@ -745,10 +745,14 @@ function ClientCard({
                                 <button
                                     type='button'
                                     className={`${styles.actionButton} ${styles.actionScheduled}`}
-                                    title='Enviar aviso de confirmação via WhatsApp'
-                                    style={{ fontWeight: 700 }}
+                                    title={client.phone ? 'Enviar aviso de confirmação via WhatsApp' : 'Telefone não cadastrado'}
+                                    style={{ fontWeight: 700, opacity: client.phone ? 1 : 0.45 }}
                                     onClick={e => {
                                         e.stopPropagation();
+                                        if (!client.phone) {
+                                            alert('Telefone não cadastrado para este cliente.');
+                                            return;
+                                        }
                                         // Prioridade: activeStartISO (já resolve tomorrow ou today corretamente)
                                         const sIso = activeStartISO;
                                         const time = sIso

@@ -8,7 +8,16 @@ import type { ClientBasic } from '../types/ClientBasic';
 
 export function useClients() {
     const [clients, setClients] = useState<ClientBasic[]>([]);
-    const [loading, setLoading] = useState(false);
+    // Inicia como `true` quando há token válido para evitar flash
+    // vazio → carregando durante a primeira montagem.
+    const [loading, setLoading] = useState<boolean>(() => {
+        try {
+            const t = localStorage.getItem('accessToken');
+            return !!t && !isTokenExpired(t);
+        } catch {
+            return false;
+        }
+    });
     const [error, setError] = useState<string | null>(null);
     // Keep a ref for current clients length to decide initial vs background loading
     const clientsRef = useRef<ClientBasic[]>([]);

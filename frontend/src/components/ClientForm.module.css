@@ -1,6 +1,6 @@
 .footer {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 10px;
     justify-content: flex-end;
     max-width: 680px;

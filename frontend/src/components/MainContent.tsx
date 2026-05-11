@@ -10,6 +10,8 @@ import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
 import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
 import { apiFetch } from '../utils/apiFetch';
+import { useNowTick } from '../hooks/useNowTick';
+import { useOngoingSweep } from '../hooks/useOngoingSweep';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -27,7 +29,7 @@ interface MainContentProps {
     // ...outros props se necessário...
 }
 
-type FilterMode = 'all' | 'pending' | 'today' | 'tomorrow';
+type FilterMode = 'all' | 'pending' | 'today' | 'tomorrow' | 'ongoing';
 
 interface PendingAppointmentLike {
     id: number;
@@ -63,8 +65,22 @@ function resolveAppointmentClientId(appt: PendingAppointmentLike): number | null
     return null;
 }
 
-const CLIENTS_PER_PAGE_OPTIONS = [200, 300, 'all'] as const;
+const CLIENTS_PER_PAGE_OPTIONS = [50, 200, 'all'] as const;
 type ClientsPerPageOption = (typeof CLIENTS_PER_PAGE_OPTIONS)[number];
+const PAGINATION_STORAGE_KEY = 'ui.clientsPerPage';
+const SCROLL_SESSION_KEY = 'home.scrollY';
+const FILTER_SESSION_KEY = 'home.filter';
+function readStoredClientsPerPage(): ClientsPerPageOption {
+    try {
+        const raw = localStorage.getItem(PAGINATION_STORAGE_KEY);
+        const n = Number(raw);
+        // 'all' never persisted; only restore numeric options
+        if (Number.isFinite(n) && n > 0 && (CLIENTS_PER_PAGE_OPTIONS as readonly (number | string)[]).includes(n)) {
+            return n as ClientsPerPageOption;
+        }
+    } catch { /* noop */ }
+    return 50;
+}
 
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
@@ -73,7 +89,11 @@ const MainContent: React.FC<MainContentProps> = ({
     // ...outros props...
 }) => {
     const { clients, loading, error, setError } = useClients();
-    const [filter, setFilter] = useState('');
+    const now = useNowTick(30_000);
+    const ongoingSweepMap = useOngoingSweep(now, 2 * 60 * 60 * 1000);
+    const [filter, setFilter] = useState<string>(() => {
+        try { return sessionStorage.getItem(FILTER_SESSION_KEY) ?? ''; } catch { return ''; }
+    });
     const [filterMode, setFilterMode] = useState<FilterMode>('all');
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [pendingClientIds, setPendingClientIds] = useState<Set<number>>(
@@ -87,7 +107,7 @@ const MainContent: React.FC<MainContentProps> = ({
         () => new Map(),
     );
     const [noResultsOpen, setNoResultsOpen] = useState(false);
-    const [clientsPerPage, setClientsPerPage] = useState<ClientsPerPageOption>(200);
+    const [clientsPerPage, setClientsPerPage] = useState<ClientsPerPageOption>(readStoredClientsPerPage);
     const [currentPage, setCurrentPage] = useState(1);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
@@ -331,6 +351,7 @@ const MainContent: React.FC<MainContentProps> = ({
     const cardRefs = React.useRef<{ [key: number]: HTMLDivElement | null }>({});
     const lastPrefixTargetRef = React.useRef<number | null>(null);
     const debounceRef = React.useRef<number | null>(null);
+    const hasRestoredScrollRef = React.useRef(false);
 
     // Helper: desfoca, remove lock e pede atualização da lista
     const refreshAndUnlock = React.useCallback(() => {
@@ -373,6 +394,52 @@ const MainContent: React.FC<MainContentProps> = ({
         const t = window.setTimeout(() => refreshAndUnlock(), 0);
         return () => window.clearTimeout(t);
     }, [refreshAndUnlock]);
+
+    // Persiste texto do filtro para sobreviver à navegação (editar e voltar).
+    React.useEffect(() => {
+        try { sessionStorage.setItem(FILTER_SESSION_KEY, filter); } catch { /* noop */ }
+    }, [filter]);
+
+    // Salva posição de scroll continuamente (debounce 200ms) e imediatamente ao sair da página.
+    // Permite restaurar exatamente onde o usuário estava ao voltar da edição/criação de clientes.
+    React.useEffect(() => {
+        let saveTimer: number | null = null;
+        const save = () => {
+            try {
+                sessionStorage.setItem(SCROLL_SESSION_KEY, String(Math.round(window.scrollY)));
+            } catch { /* noop */ }
+        };
+        const onScroll = () => {
+            if (saveTimer) window.clearTimeout(saveTimer);
+            saveTimer = window.setTimeout(save, 200);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('pagehide', save);
+        return () => {
+            if (saveTimer) window.clearTimeout(saveTimer);
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('pagehide', save);
+        };
+    }, []);
+
+    // Restaura posição de scroll após o carregamento inicial dos clientes.
+    // Só executa uma vez por montagem; ignora atualizações subsequentes.
+    React.useEffect(() => {
+        if (loading || clients.length === 0) return;
+        if (hasRestoredScrollRef.current) return;
+        hasRestoredScrollRef.current = true;
+        try {
+            const saved = sessionStorage.getItem(SCROLL_SESSION_KEY);
+            if (saved) {
+                const y = Number(saved);
+                if (Number.isFinite(y) && y > 0) {
+                    requestAnimationFrame(() => {
+                        window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior });
+                    });
+                }
+            }
+        } catch { /* noop */ }
+    }, [loading, clients.length]);
 
     // Modo seleção vindo da Agenda: se URL tiver selectClientFor=agenda, foca filtro e aplica retorno
     React.useEffect(() => {
@@ -456,13 +523,21 @@ const MainContent: React.FC<MainContentProps> = ({
         };
     }, [selectedClientId]);
 
-    // Filtra clientes por nome (acentos/maiúsculas ignorados)
+    // Filtra clientes por nome (acentos/maiúsculas ignorados) e ordena com colisão pt-BR
     const normalizedFilter = normalizeText(filter);
-    const filteredClients = clients.filter(client =>
-        normalizeText(`${client.first_name} ${client.last_name}`).includes(
-            normalizedFilter,
-        ),
-    );
+    const filteredClients = clients
+        .filter(client =>
+            normalizeText(`${client.first_name} ${client.last_name}`).includes(
+                normalizedFilter,
+            ),
+        )
+        .sort((a, b) =>
+            `${a.first_name} ${a.last_name}`.localeCompare(
+                `${b.first_name} ${b.last_name}`,
+                'pt-BR',
+                { sensitivity: 'base' },
+            ),
+        );
 
     const sortByPeriodThenTime = React.useCallback(
         (a: ClientBasic, b: ClientBasic) => {
@@ -652,6 +727,21 @@ const MainContent: React.FC<MainContentProps> = ({
     const todayCount = todayClients.length;
     const tomorrowCount = tomorrowClients.length;
 
+    // Clientes em atendimento agora: usa o sweep (mesma fonte que ClientCard) como sinal
+    // primário; complementa com a janela de tempo + 90s de grace (espelha a latch do ClientCard).
+    const ongoingClients = React.useMemo(() => {
+        const t = now.getTime();
+        const GRACE_MS = 90_000;
+        return clients.filter(c => {
+            if (ongoingSweepMap.has(c.id)) return true;
+            if (c.next_appointment_status !== 'scheduled') return false;
+            const s = c.next_appointment_start_at ? new Date(c.next_appointment_start_at).getTime() : NaN;
+            const e = c.next_appointment_end_at   ? new Date(c.next_appointment_end_at).getTime()   : NaN;
+            return Number.isFinite(s) && Number.isFinite(e) && s <= t && t < e + GRACE_MS;
+        });
+    }, [clients, ongoingSweepMap, now]);
+    const ongoingCount = ongoingClients.length;
+
     // Se o filtro de pendentes estiver ativo mas não houver mais pendentes, desativa
     React.useEffect(() => {
         if (filterMode === 'pending' && pendingCount === 0) {
@@ -659,16 +749,25 @@ const MainContent: React.FC<MainContentProps> = ({
         }
     }, [filterMode, pendingCount]);
 
+    // Se o filtro de em atendimento estiver ativo mas não houver mais, desativa
+    React.useEffect(() => {
+        if (filterMode === 'ongoing' && ongoingCount === 0) {
+            setFilterMode('all');
+        }
+    }, [filterMode, ongoingCount]);
+
     const displayedClients = React.useMemo(() => {
         if (filterMode === 'pending') return pendingClients;
         if (filterMode === 'today') return todayClients;
         if (filterMode === 'tomorrow') return tomorrowClients;
+        if (filterMode === 'ongoing') return ongoingClients;
         return filteredClients;
     }, [
         filterMode,
         pendingClients,
         todayClients,
         tomorrowClients,
+        ongoingClients,
         filteredClients,
     ]);
 
@@ -863,18 +962,42 @@ const MainContent: React.FC<MainContentProps> = ({
                 className={`${styles.filterContainer}${mobileFiltersOpen ? ` ${styles.filterContainerMenuOpen}` : ''}`}
             >
                 <div className={styles.filterRow}>
-                    <input
-                        id='client-filter'
-                        type='text'
-                        className={styles.filterInput}
-                        placeholder='Digite o nome do cliente...'
-                        value={filter}
-                        onChange={e => {
-                            setFilter(e.target.value);
-                            if (filterMode !== 'all') setFilterMode('all');
-                        }}
-                    />
+                    <div className={styles.filterInputWrapper}>
+                        <input
+                            id='client-filter'
+                            type='text'
+                            className={styles.filterInput}
+                            placeholder='Digite o nome do cliente...'
+                            value={filter}
+                            onChange={e => {
+                                setFilter(e.target.value);
+                                if (filterMode !== 'all') setFilterMode('all');
+                            }}
+                        />
+                        {filter && (
+                            <button
+                                type='button'
+                                className={styles.filterClearBtn}
+                                onClick={() => {
+                                    setFilter('');
+                                    document.getElementById('client-filter')?.focus();
+                                }}
+                                aria-label='Limpar filtro'
+                                tabIndex={-1}
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
                     <div className={styles.filterActionsDesktop}>
+                        <button
+                            className={`${styles.filterToggleBtn}${filterMode === 'ongoing' ? ' ' + styles.filterToggleBtnActive : ''}`}
+                            onClick={() => applyFilterMode('ongoing')}
+                            title='Filtrar clientes em atendimento agora'
+                            style={ongoingCount === 0 ? { opacity: 0.5 } : undefined}
+                        >
+                            Em atendimento {ongoingCount > 0 ? `(${ongoingCount})` : ''}
+                        </button>
                         <button
                             className={`${styles.filterToggleBtn}${filterMode === 'pending' ? ' ' + styles.filterToggleBtnActive : ''}`}
                             onClick={() => applyFilterMode('pending')}
@@ -943,6 +1066,13 @@ const MainContent: React.FC<MainContentProps> = ({
                                     role='menuitem'
                                 >
                                     Sem filtro
+                                </button>
+                                <button
+                                    className={`${styles.filtersMenuItem}${filterMode === 'ongoing' ? ' ' + styles.filtersMenuItemActive : ''}`}
+                                    onClick={() => applyFilterMode('ongoing')}
+                                    role='menuitem'
+                                >
+                                    Em atendimento ({ongoingCount})
                                 </button>
                                 <button
                                     className={`${styles.filtersMenuItem}${filterMode === 'pending' ? ' ' + styles.filtersMenuItemActive : ''}`}
@@ -1054,13 +1184,14 @@ const MainContent: React.FC<MainContentProps> = ({
                             value={clientsPerPage}
                             onChange={event => {
                                 const rawValue = event.target.value;
-                                if (rawValue === 'all') {
-                                    setClientsPerPage('all');
-                                    return;
+                                const next: ClientsPerPageOption =
+                                    rawValue === 'all' ? 'all' : (Number(rawValue) as ClientsPerPageOption);
+                                if (rawValue !== 'all' && !Number.isFinite(Number(rawValue))) return;
+                                // 'all' é uma preferência de sessão, não persistida no localStorage
+                                if (next !== 'all') {
+                                    try { localStorage.setItem(PAGINATION_STORAGE_KEY, String(next)); } catch { /* noop */ }
                                 }
-                                const nextSize = Number(rawValue);
-                                if (!Number.isFinite(nextSize)) return;
-                                setClientsPerPage(nextSize as ClientsPerPageOption);
+                                setClientsPerPage(next);
                             }}
                         >
                             {CLIENTS_PER_PAGE_OPTIONS.map(option => (

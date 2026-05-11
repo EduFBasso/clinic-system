@@ -862,11 +862,7 @@ export default function ClientForm({
         } catch {
             /* noop */
         }
-        try {
-            window.location.replace('/');
-        } catch {
-            navigate('/');
-        }
+        navigate('/');
     }
 
     function handleDelete() {
@@ -1132,16 +1128,6 @@ export default function ClientForm({
                             Salvar e novo
                         </button>
                     )}
-                    <button type='submit' className={styles.btnPrimary}>
-                        Salvar
-                    </button>
-                    <button
-                        type='button'
-                        className={styles.btnSecondary}
-                        onClick={handleCancel}
-                    >
-                        Cancelar
-                    </button>
                     {isEdit && (
                         <button
                             type='button'
@@ -1151,6 +1137,16 @@ export default function ClientForm({
                             Apagar
                         </button>
                     )}
+                    <button
+                        type='button'
+                        className={styles.btnSecondary}
+                        onClick={handleCancel}
+                    >
+                        Cancelar
+                    </button>
+                    <button type='submit' className={styles.btnPrimary}>
+                        Salvar
+                    </button>
                 </div>
             </form>
             {SuccessModal}
