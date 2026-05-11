@@ -96,16 +96,21 @@ const MainContent: React.FC<MainContentProps> = ({
     });
     const [filterMode, setFilterMode] = useState<FilterMode>('all');
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-    const [pendingClientIds, setPendingClientIds] = useState<Set<number>>(
-        () => new Set(),
-    );
-    const [tomorrowClientIds, setTomorrowClientIds] = useState<Set<number>>(
-        () => new Set(),
-    );
-    // Mapa clientId → primeiro agendamento de amanhã (para o botão Avisar com horário correto)
-    const [tomorrowClientAppts, setTomorrowClientAppts] = useState<Map<number, PendingAppointmentLike>>(
-        () => new Map(),
-    );
+    // Agrupado em único objeto para que a atualização destes 3 valores seja 1 render,
+    // não 3 renders separados (React 18 faz batch dentro do mesmo event loop, mas
+    // setState assíncrono ainda gera flushes independentes quando vêm de Promises).
+    const [apptSets, setApptSets] = useState<{
+        pendingIds: Set<number>;
+        tomorrowIds: Set<number>;
+        tomorrowAppts: Map<number, PendingAppointmentLike>;
+    }>(() => ({
+        pendingIds: new Set(),
+        tomorrowIds: new Set(),
+        tomorrowAppts: new Map(),
+    }));
+    const pendingClientIds  = apptSets.pendingIds;
+    const tomorrowClientIds = apptSets.tomorrowIds;
+    const tomorrowClientAppts = apptSets.tomorrowAppts;
     const [noResultsOpen, setNoResultsOpen] = useState(false);
     const [clientsPerPage, setClientsPerPage] = useState<ClientsPerPageOption>(readStoredClientsPerPage);
     const [currentPage, setCurrentPage] = useState(1);
@@ -523,21 +528,22 @@ const MainContent: React.FC<MainContentProps> = ({
         };
     }, [selectedClientId]);
 
-    // Filtra clientes por nome (acentos/maiúsculas ignorados) e ordena com colisão pt-BR
-    const normalizedFilter = normalizeText(filter);
-    const filteredClients = clients
-        .filter(client =>
-            normalizeText(`${client.first_name} ${client.last_name}`).includes(
-                normalizedFilter,
-            ),
-        )
-        .sort((a, b) =>
-            `${a.first_name} ${a.last_name}`.localeCompare(
-                `${b.first_name} ${b.last_name}`,
-                'pt-BR',
-                { sensitivity: 'base' },
-            ),
-        );
+    // Filtra clientes por nome (acentos/maiúsculas ignorados) e ordena com colisão pt-BR.
+    // Memoizado: só recalcula quando `clients` ou `filter` mudam — evita .sort() de 1235 itens a cada render.
+    const filteredClients = React.useMemo(() => {
+        const norm = normalizeText(filter);
+        return clients
+            .filter(client =>
+                normalizeText(`${client.first_name} ${client.last_name}`).includes(norm),
+            )
+            .sort((a, b) =>
+                `${a.first_name} ${a.last_name}`.localeCompare(
+                    `${b.first_name} ${b.last_name}`,
+                    'pt-BR',
+                    { sensitivity: 'base' },
+                ),
+            );
+    }, [clients, filter]);
 
     const sortByPeriodThenTime = React.useCallback(
         (a: ClientBasic, b: ClientBasic) => {
@@ -606,9 +612,7 @@ const MainContent: React.FC<MainContentProps> = ({
             const token = localStorage.getItem('accessToken');
             if (!token || clients.length === 0) {
                 if (!cancelled) {
-                    setPendingClientIds(new Set());
-                    setTomorrowClientIds(new Set());
-                    setTomorrowClientAppts(new Map());
+                    setApptSets({ pendingIds: new Set(), tomorrowIds: new Set(), tomorrowAppts: new Map() });
                 }
                 return;
             }
@@ -681,15 +685,11 @@ const MainContent: React.FC<MainContentProps> = ({
                 });
 
                 if (!cancelled) {
-                    setPendingClientIds(ids);
-                    setTomorrowClientIds(tomorrowIds);
-                    setTomorrowClientAppts(tomorrowAppts);
+                    setApptSets({ pendingIds: ids, tomorrowIds, tomorrowAppts });
                 }
             } catch {
                 if (!cancelled) {
-                    setPendingClientIds(new Set());
-                    setTomorrowClientIds(new Set());
-                    setTomorrowClientAppts(new Map());
+                    setApptSets({ pendingIds: new Set(), tomorrowIds: new Set(), tomorrowAppts: new Map() });
                 }
             }
         }
@@ -1169,8 +1169,12 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 ))}
             </div>
-            {!loading && clients.length > 0 && (
-            <div className={styles.paginationBar}>
+            {/* paginationBar: sempre renderizado para reservar espaço (sem layout shift).
+                Invisível durante carregamento, oculto quando não há clientes (ex: logout). */}
+            <div
+                className={styles.paginationBar}
+                style={loading || clients.length === 0 ? { visibility: 'hidden' } : undefined}
+            >
                 <div className={styles.paginationSummary}>
                     {deferredDisplayedClients.length > 0
                         ? `Exibindo ${pageStartIndex + 1} a ${pageEndIndex} de ${deferredDisplayedClients.length} clientes.`
@@ -1224,7 +1228,6 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 </div>
             </div>
-            )}
 
             <AppModal
                 open={confirmOpen}
