@@ -87,5 +87,6 @@ scripts/db/backups/**/*.json
 info/*
 frontend-lab/
 *.local
+Bruna_Carvalho/
 
 docs/
