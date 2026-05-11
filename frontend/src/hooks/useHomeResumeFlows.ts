@@ -8,6 +8,7 @@ import type {
 } from '../types/agendaFlow';
 import type { Appointment } from './useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
+import { getAccessToken } from '../utils/auth/session';
 
 type SysMsg = {
     text: string;
@@ -162,7 +163,7 @@ export function useHomeResumeFlows(params: {
         }
         if (!payload?.appointmentId) return;
 
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) return;
 
         fetch(`${API_BASE}/agenda/appointments/${payload.appointmentId}/`, {

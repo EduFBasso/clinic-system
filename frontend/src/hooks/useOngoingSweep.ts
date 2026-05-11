@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import type { Appointment } from './useAppointments';
+import { getAccessToken } from '../utils/auth/session';
 
 /**
  * Single-sweep ongoing detector: performs ONE fetch for a small time window around now
@@ -40,7 +41,7 @@ function getWindowHalf(defaultWindowMs: number) {
 
 async function runSweep(defaultWindowMs: number) {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         if (!token || isTokenExpired(token)) {
             sharedMap = new Map();
             subs.forEach(fn => fn());

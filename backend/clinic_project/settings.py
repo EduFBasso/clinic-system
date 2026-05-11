@@ -287,7 +287,12 @@ LOGGING = {
 
 # === TOTP ===
 TOTP_ISSUER = config("TOTP_ISSUER", default="ClinicSystem")
-TOTP_VALID_WINDOW = config("TOTP_VALID_WINDOW", default=2, cast=int)
+# valid_window=4 → accepts codes ±120s from server time.
+# Needed on mobile (iOS): user opens authenticator app, memorises code,
+# switches back to browser and types — easily 20-40s of elapsed time.
+# With a code near the end of its 30s window this can exceed ±60s (window=2).
+# 4 windows (±120s) is the safe mobile standard; still rejects replays outside that range.
+TOTP_VALID_WINDOW = config("TOTP_VALID_WINDOW", default=4, cast=int)
 
 # === WebAuthn / Passkeys ===
 # rpId: domain sem esquema/porta. localhost para dev; domínio real em produção.

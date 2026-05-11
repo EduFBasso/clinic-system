@@ -2,12 +2,13 @@ import { API_BASE } from '../config/api';
 import { getServerNowOnce } from './time';
 import ensureDeviceSession from './sessions';
 import { buildDeviceHeaders } from './device';
+import { getAccessToken } from '../utils/auth/session';
 
 export async function optionsFinalizeSupported(
     apptId: number,
 ): Promise<boolean> {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
         const url = `${API_BASE}/agenda/appointments/${apptId}/finalize/`;
@@ -20,7 +21,7 @@ export async function optionsFinalizeSupported(
 
 export async function postFinalize(apptId: number): Promise<boolean> {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
@@ -38,7 +39,7 @@ export async function postFinalize(apptId: number): Promise<boolean> {
 
 export async function postDone(apptId: number): Promise<boolean> {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
@@ -59,7 +60,7 @@ export async function patchStatus(
     status: 'pending' | 'done' | 'canceled' | 'scheduled',
 ): Promise<boolean> {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
@@ -98,7 +99,7 @@ export async function cancelAppointment(
         status: number;
         text?: string;
     }> {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
@@ -144,7 +145,7 @@ export async function cancelWithAdjust(
     // Helper para obter dados do compromisso
     async function getAppt() {
         try {
-            const token = localStorage.getItem('accessToken') || '';
+            const token = getAccessToken();
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
             const url = `${API_BASE}/agenda/appointments/${apptId}/?ts=${Date.now()}`;
@@ -199,7 +200,7 @@ export async function cancelWithAdjust(
         } else {
             patchBody = { status: 'canceled' };
         }
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
@@ -309,7 +310,7 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
     // Helper: fetch appointment details
     async function getAppt() {
         try {
-            const token = localStorage.getItem('accessToken') || '';
+            const token = getAccessToken();
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
             const url = `${API_BASE}/agenda/appointments/${apptId}/?ts=${Date.now()}`;
@@ -334,7 +335,7 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
             if (!appt) return false;
             // Only attempt adjustments for scheduled appointments
             if (appt.status !== 'scheduled') return true;
-            const token = localStorage.getItem('accessToken') || '';
+            const token = getAccessToken();
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
             };
@@ -388,7 +389,7 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
 
     // Try finalize; if "too early", perform force-adjust
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {};
         Object.assign(headers, buildDeviceHeaders(), {
             'X-Client-Now': new Date().toISOString(),
@@ -440,7 +441,7 @@ export async function fetchFutureAppointments(
         notes?: string;
     }>
 > {
-    const token = localStorage.getItem('accessToken') || '';
+    const token = getAccessToken();
     if (!token) return [];
     const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
         startRefISO,
@@ -464,7 +465,7 @@ export async function probeOngoingAroundNow(
     windowSeconds = 30,
 ): Promise<null | { id: number; start_at: string; end_at: string }> {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         if (!token) return null;
         const now = new Date();
         const start = new Date(now.getTime() - windowSeconds * 1000);

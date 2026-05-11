@@ -38,6 +38,7 @@ import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
 import { useNowTick } from '../hooks/useNowTick';
 import { emit } from '../events/bus';
+import { getAccessToken } from '../utils/auth/session';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -359,7 +360,7 @@ function ClientCard({
                         title='Editar cliente'
                         onClick={e => {
                             e.stopPropagation();
-                            const token = localStorage.getItem('accessToken');
+                            const token = getAccessToken();
                             if (!token) {
                                 onView(client);
                                 return;
@@ -645,7 +646,7 @@ function ClientCard({
                                 onClick={e => {
                                     e.stopPropagation();
                                     const token =
-                                        localStorage.getItem('accessToken');
+                                        getAccessToken();
                                     fetch(
                                         `${API_BASE}/agenda/appointments/${client.next_appointment_id}/`,
                                         {

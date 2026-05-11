@@ -8,6 +8,7 @@ import { getAppointmentOverride } from '../utils/appointments/overrides';
 import { useAppointmentCardState } from './useAppointmentCardState.ts';
 import { track } from '../utils/telemetry';
 import { API_BASE } from '../config/api';
+import { getAccessToken } from '../utils/auth/session';
 
 interface Params {
     client: ClientBasic;
@@ -122,7 +123,7 @@ Params): UseClientOngoingStateResult {
                 return;
             }
             try {
-                const token = localStorage.getItem('accessToken') || '';
+                const token = getAccessToken();
                 if (!token) return;
                 const nowMs = nowRef.current.getTime();
                 const start = new Date(nowMs - 120 * 60 * 1000);

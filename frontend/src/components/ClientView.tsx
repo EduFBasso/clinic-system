@@ -11,6 +11,7 @@ import { formatCpf, formatCnpj, formatRg, formatCep } from '../utils/formatCpf';
 import { API_BASE } from '../config/api';
 import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
 import { useTheme } from '../contexts/ThemeContext';
+import { getAccessToken } from '../utils/auth/session';
 
 interface ClientViewProps {
     client: ClientData & {
@@ -128,7 +129,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
 
     useEffect(() => {
         if (!client.id) return;
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) return;
         fetch(`${API_BASE}/anamnesis/responses/?client=${client.id}`, {
             headers: { Authorization: `Bearer ${token}` },

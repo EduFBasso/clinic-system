@@ -32,6 +32,7 @@ import { usePendingActionsListeners } from '../hooks/usePendingActionsListeners'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useHomeResumeFlows } from '../hooks/useHomeResumeFlows';
 import { unlockPageScroll } from '../utils/unlockPageScroll';
+import { getAccessToken } from '../utils/auth/session';
 
 export default function Home() {
     const navigate = useNavigate();
@@ -139,7 +140,7 @@ export default function Home() {
                     const clientBasic = await ensureClientBasic(Number(cid));
                     setRouteClient(clientBasic);
                     try {
-                        const token = localStorage.getItem('accessToken');
+                        const token = getAccessToken();
                         let appt: Appointment | null = null;
                         if (token) {
                             const res = await fetch(

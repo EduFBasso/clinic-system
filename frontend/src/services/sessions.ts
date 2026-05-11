@@ -3,6 +3,7 @@
 // Safe to call multiple times; internally debounced.
 
 import { apiFetch } from '../utils/apiFetch';
+import { getAccessToken } from '../utils/auth/session';
 
 let lastAttempt = 0;
 let inflight: Promise<void> | null = null;
@@ -17,7 +18,7 @@ export async function ensureDeviceSession(force = false): Promise<void> {
     // If no token, nothing to ensure
     const token =
         typeof window !== 'undefined'
-            ? localStorage.getItem('accessToken')
+            ? getAccessToken()
             : null;
     if (!token) return;
     inflight = (async () => {

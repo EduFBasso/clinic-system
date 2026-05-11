@@ -7,6 +7,7 @@ import StickyModalHeader from './shared/StickyModalHeader';
 import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
 import type { PendingReturnContext } from '../types/agendaFlow';
+import { getAccessToken } from '../utils/auth/session';
 
 type ChargeItem = {
     id: number;
@@ -148,7 +149,7 @@ export default function AppointmentDetailsModal({
                       ? (appt.client as { id?: number }).id
                       : undefined;
             if (!clientId) return;
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             fetch(`${API_BASE}/register/clients/${clientId}/`, {
                 headers: {
                     Authorization: token ? `Bearer ${token}` : '',

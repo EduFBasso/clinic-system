@@ -5,6 +5,7 @@ import { emit } from '../events/bus';
 import { apiFetch } from '../utils/apiFetch';
 import { isTokenExpired } from '../utils/jwt';
 import type { ClientBasic } from '../types/ClientBasic';
+import { getAccessToken } from '../utils/auth/session';
 
 export function useClients() {
     const [clients, setClients] = useState<ClientBasic[]>([]);
@@ -12,7 +13,7 @@ export function useClients() {
     // vazio → carregando durante a primeira montagem.
     const [loading, setLoading] = useState<boolean>(() => {
         try {
-            const t = localStorage.getItem('accessToken');
+            const t = getAccessToken();
             return !!t && !isTokenExpired(t);
         } catch {
             return false;
@@ -27,7 +28,7 @@ export function useClients() {
     useEffect(() => {
         const fetchClients = () => {
             lastFetchAtRef.current = Date.now();
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (isTokenExpired(token)) {
                 const hadLoggedProfessional = !!localStorage.getItem(
                     'loggedProfessional',

@@ -12,6 +12,7 @@ import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
 import type { AnamnesisResponse } from '../types/AnamnesisTypes';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
+import { getAccessToken } from '../utils/auth/session';
 
 export default function ClientForm({
     cliente,
@@ -246,7 +247,7 @@ export default function ClientForm({
     // Load existing responses when editing a client
     useEffect(() => {
         if (!cliente?.id) return;
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) return;
         fetch(`${API_BASE}/anamnesis/responses/?client=${cliente.id}`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -366,7 +367,7 @@ export default function ClientForm({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) {
             setFeedback({ type: 'error', message: 'Usuário não autenticado.' });
             return;
@@ -879,7 +880,7 @@ export default function ClientForm({
             /* noop */
         }
 
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) {
             setFeedback({
                 type: 'error',

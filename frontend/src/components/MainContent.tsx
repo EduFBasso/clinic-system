@@ -8,7 +8,7 @@ import type { ClientBasic } from '../types/ClientBasic';
 import AppModal from './Modal';
 import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
-import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
+import { dispatchLogout, hasActiveSession , getAccessToken } from '../utils/auth/session';
 import { apiFetch } from '../utils/apiFetch';
 import { useNowTick } from '../hooks/useNowTick';
 import { useOngoingSweep } from '../hooks/useOngoingSweep';
@@ -598,7 +598,7 @@ const MainContent: React.FC<MainContentProps> = ({
         let cancelled = false;
 
         async function loadPendingClientIds() {
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (!token || clients.length === 0) {
                 if (!cancelled) {
                     setApptSets({ pendingIds: new Set(), tomorrowIds: new Set(), tomorrowAppts: new Map() });
@@ -1203,9 +1203,10 @@ const PaginationBar = React.memo(function PaginationBar({
         apiFetch(`/register/clients/${cliente.id}/`, {
             timeoutMs: 12000,
         })
-            .then((data: ClientData) => {
-                detailCacheRef.current.set(cliente.id, data);
-                onClientViewData?.(data);
+            .then((data) => {
+                const clientData = data as unknown as ClientData;
+                detailCacheRef.current.set(cliente.id, clientData);
+                onClientViewData?.(clientData);
             })
             .catch(() => {
                 alert('Erro ao buscar dados completos do cliente');
@@ -1280,7 +1281,7 @@ const PaginationBar = React.memo(function PaginationBar({
                         <ClientCard
                             client={client}
                             selected={selectedClientId === client.id}
-                            filterMode={filterMode}
+                            filterMode={filterMode === 'ongoing' ? undefined : filterMode}
                             notifyAppt={filterMode === 'tomorrow' ? tomorrowClientAppts.get(client.id) : undefined}
                             onSelect={() => {
                                 if (!requireActiveSession()) {

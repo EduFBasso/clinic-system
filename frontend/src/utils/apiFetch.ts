@@ -132,7 +132,7 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}) {
     }
 
     const url = path.startsWith('http') ? path : `${API_BASE || ''}${path}`;
-    const requestSignal = createRequestSignal(signal, timeoutMs);
+    const requestSignal = createRequestSignal(signal ?? undefined, timeoutMs);
     let response: Response;
     // Ensure body type matches fetch signature (string, FormData, Blob, etc.)
     let fetchBody: BodyInit | null | undefined = rest.body as

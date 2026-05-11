@@ -29,6 +29,7 @@ import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
+import { getAccessToken } from '../utils/auth/session';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -141,7 +142,7 @@ export default function DesktopAgendaPage() {
             if (apptId) payload = { appointmentId: apptId };
         }
         if (!payload?.appointmentId) return;
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) return;
         fetch(`${API_BASE}/agenda/appointments/${payload.appointmentId}/`, {
             headers: { Authorization: `Bearer ${token}` },

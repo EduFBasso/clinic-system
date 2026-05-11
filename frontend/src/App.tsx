@@ -30,6 +30,7 @@ import {
     resetAgendaSettings,
 } from './utils/agendaSettings';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { getAccessToken } from './utils/auth/session';
 
 function App() {
     const [sysMsg, setSysMsg] = React.useState<{
@@ -41,7 +42,7 @@ function App() {
     useEffect(() => {
         // Pre-warm device session once app loads if token exists
         try {
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (token) {
                 ensureDeviceSession().catch(() => {});
                 hydrateAgendaSettings().catch(() => {});

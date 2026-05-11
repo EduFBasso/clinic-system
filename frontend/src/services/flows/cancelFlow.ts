@@ -4,6 +4,7 @@ import { buildDeviceHeaders } from '../device';
 import { getServerNowOnce } from '../time';
 import { setAppointmentOverride } from '../../utils/appointments/overrides';
 import { emit } from '../../events/bus';
+import { getAccessToken } from '../../utils/auth/session';
 
 export interface CancelFlowResult {
     ok: boolean;
@@ -22,7 +23,7 @@ function log(stage: string, payload: Record<string, unknown>) {
 
 async function fetchAppt(id: number) {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
         const r = await fetch(
@@ -60,7 +61,7 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
         /* noop */
     }
     await ensureDeviceSession().catch(() => {});
-    const token = localStorage.getItem('accessToken') || '';
+    const token = getAccessToken();
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     };

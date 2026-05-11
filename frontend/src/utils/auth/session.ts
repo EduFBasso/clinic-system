@@ -6,8 +6,13 @@ export type LogoutReason =
     | 'session_expired'
     | 'device_session_invalid';
 
+/** Centralised token accessor — always returns a string (empty when absent). */
+export function getAccessToken(): string {
+    return localStorage.getItem('accessToken') ?? '';
+}
+
 export function hasActiveSession() {
-    return !isTokenExpired(localStorage.getItem('accessToken'));
+    return !isTokenExpired(getAccessToken());
 }
 
 export function clearStoredAuth(options?: { clearNewClientId?: boolean }) {

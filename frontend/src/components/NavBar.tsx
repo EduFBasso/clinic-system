@@ -34,6 +34,7 @@ import {
     clearStoredAuth,
     dispatchLogout,
     hasActiveSession,
+    getAccessToken,
 } from '../utils/auth/session';
 import ProfessionalCreateModal from './ProfessionalCreateModal';
 import TotpAdminResetModal from './TotpAdminResetModal';
@@ -135,7 +136,7 @@ const NavBar: React.FC<NavBarProps> = ({
     }, []);
 
     useEffect(() => {
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (isTokenExpired(token)) {
             clearStoredAuth({ clearNewClientId: false });
             setLoggedProfessional(null);
@@ -291,7 +292,7 @@ const NavBar: React.FC<NavBarProps> = ({
     const handleRegisterBiometric = async () => {
         setBiometricLoading(true);
         try {
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             const email = (loggedProfessional?.email || loginEmail || '').trim();
             if (!token || !email) {
                 throw new Error('Entre na conta antes de ativar a biometria.');
@@ -648,6 +649,7 @@ const NavBar: React.FC<NavBarProps> = ({
                         <input
                             type='text'
                             inputMode='numeric'
+                            pattern='[0-9]*'
                             placeholder='Código (6 dígitos)'
                             className={styles.loginInput}
                             value={totpCode}
@@ -660,6 +662,9 @@ const NavBar: React.FC<NavBarProps> = ({
                             }
                             style={{ marginRight: 6, width: 120 }}
                             autoComplete='one-time-code'
+                            autoCorrect='off'
+                            autoCapitalize='off'
+                            spellCheck={false}
                             onKeyDown={e => {
                                 if (e.key === 'Enter')
                                     e.currentTarget
@@ -792,8 +797,9 @@ const NavBar: React.FC<NavBarProps> = ({
                                         );
                                         setModalOpen(true);
                                     }
-                                } catch {
-                                    setModalMessage('Erro ao validar código');
+                                } catch (err) {
+                                    const detail = err instanceof Error ? err.message : String(err);
+                                    setModalMessage(`Erro ao validar código: ${detail}`);
                                     setModalOpen(true);
                                 }
                                 setLoadingOtp(false);

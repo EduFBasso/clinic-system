@@ -1,5 +1,6 @@
 import React from 'react';
 import { API_BASE } from '../config/api';
+import { getAccessToken } from '../utils/auth/session';
 
 export interface FinalizeAudit {
     id: number;
@@ -40,7 +41,7 @@ export function useFinalizeAudits({
         setLoading(true);
         setError(null);
         try {
-            const token = localStorage.getItem('accessToken') || '';
+            const token = getAccessToken();
             if (!token) {
                 setAudits([]);
                 setLoading(false);

@@ -7,6 +7,7 @@ import type {
     PendingReturnContext,
 } from '../types/agendaFlow';
 import { on } from '../events/bus';
+import { getAccessToken } from '../utils/auth/session';
 
 export interface UsePendingActionsListenersReturn {
     pendingActionsOpen: boolean;
@@ -141,7 +142,7 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
             }
 
             try {
-                const token = localStorage.getItem('accessToken') || '';
+                const token = getAccessToken();
                 const headers: Record<string, string> = {};
                 if (token) headers['Authorization'] = `Bearer ${token}`;
                 const r = await fetch(

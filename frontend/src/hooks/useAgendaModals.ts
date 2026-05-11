@@ -10,6 +10,7 @@ import type { Appointment } from '../hooks/useAppointments';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import type { PendingReturnContext } from '../types/agendaFlow';
+import { getAccessToken } from '../utils/auth/session';
 
 // ---------------------------------------------------------------------------
 // Helper: resolve basic client info (cached in localStorage)
@@ -27,7 +28,7 @@ export async function ensureClientBasic(id: number): Promise<ClientBasic> {
             email: '',
         } as ClientBasic;
     }
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (isTokenExpired(token))
         return {
             id,

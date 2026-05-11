@@ -7,6 +7,7 @@ import { API_BASE } from '../config/api';
 import ProfessionalCreateModal from '../components/ProfessionalCreateModal';
 import AppModal from '../components/Modal';
 import '../styles/modal-message.css';
+import { getAccessToken } from '../utils/auth/session';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ const SPECIALTY_OPTIONS = [
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function authHeader() {
-    const token = localStorage.getItem('accessToken') ?? '';
+    const token = getAccessToken();
     return { Authorization: `Bearer ${token}` };
 }
 

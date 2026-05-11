@@ -1,12 +1,13 @@
 import { API_BASE } from '../config/api';
 import type { Appointment } from '../hooks/useAppointments';
 import type { SharedAppointmentLike } from '../components/shared/AppointmentCard';
+import { getAccessToken } from '../utils/auth/session';
 
 async function fetchAppointmentsForStatus(
     clientId: number,
     status: 'scheduled' | 'pending',
 ): Promise<Appointment[] | null> {
-    const token = localStorage.getItem('accessToken') || '';
+    const token = getAccessToken();
     if (!token) return null;
 
     const url = `${API_BASE}/agenda/appointments/?client=${clientId}&status=${status}&ordering=-end_at&limit=50&ts=${Date.now()}`;

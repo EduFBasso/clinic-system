@@ -1,4 +1,5 @@
 import { API_BASE } from '../config/api';
+import { getAccessToken } from './auth/session';
 
 export type WorkTimes = {
     startHour: number;
@@ -181,7 +182,7 @@ function replaceCurrentSettings(next: AgendaSettingsSnapshot): AgendaSettingsSna
 
 function readAccessToken(): string {
     try {
-        return localStorage.getItem('accessToken') || '';
+        return getAccessToken();
     } catch {
         return '';
     }

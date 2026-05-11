@@ -9,6 +9,7 @@ import {
 import { apiFetch, ApiError } from '../utils/apiFetch';
 import { API_BASE } from '../config/api';
 import { buildPixCopiaCola } from '../utils/pix';
+import { getAccessToken } from '../utils/auth/session';
 
 // no extra phone helpers here; we'll normalize inline when sending
 
@@ -109,7 +110,7 @@ export default function BudgetModal({
 
         (async () => {
             try {
-                const token = localStorage.getItem('accessToken');
+                const token = getAccessToken();
                 if (!token) return;
                 const res = await fetch(
                     `${API_BASE}/register/professionals/settings/`,

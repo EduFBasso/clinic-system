@@ -3,6 +3,7 @@ import ensureDeviceSession from '../sessions';
 import { buildDeviceHeaders } from '../device';
 import { getServerNowOnce } from '../time';
 import { setAppointmentOverride } from '../../utils/appointments/overrides';
+import { getAccessToken } from '../../utils/auth/session';
 
 export interface FinalizeFlowResult {
     ok: boolean;
@@ -20,7 +21,7 @@ function log(stage: string, payload: Record<string, unknown>) {
 
 async function fetchAppt(id: number) {
     try {
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
         const r = await fetch(
@@ -65,7 +66,7 @@ async function forceAdjust(apptId: number): Promise<boolean> {
     ) {
         body = { status: 'pending', end_at: new Date(nowMs).toISOString() };
     }
-    const token = localStorage.getItem('accessToken') || '';
+    const token = getAccessToken();
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     };
@@ -119,7 +120,7 @@ export async function finalizeFlow(
         /* noop */
     }
     await ensureDeviceSession().catch(() => {});
-    const token = localStorage.getItem('accessToken') || '';
+    const token = getAccessToken();
     const headers: Record<string, string> = {};
     Object.assign(headers, buildDeviceHeaders(), {
         'X-Client-Now': new Date().toISOString(),

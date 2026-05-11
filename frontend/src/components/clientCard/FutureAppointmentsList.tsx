@@ -3,6 +3,7 @@ import styles from '../../styles/components/ClientCard.module.css';
 import type { Appointment } from '../../hooks/useAppointments';
 import { API_BASE } from '../../config/api';
 import { FaEdit } from 'react-icons/fa';
+import { getAccessToken } from '../../utils/auth/session';
 
 type Props = {
     items: Appointment[];
@@ -98,7 +99,7 @@ export default function FutureAppointmentsList({
                                 onClick={e => {
                                     e.stopPropagation();
                                     const token =
-                                        localStorage.getItem('accessToken');
+                                        getAccessToken();
                                     fetch(
                                         `${API_BASE}/agenda/appointments/${f.id}/`,
                                         {

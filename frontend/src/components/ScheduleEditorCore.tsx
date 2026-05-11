@@ -12,6 +12,7 @@ import {
     getWorkTimesFromSnapshot,
 } from '../utils/agendaSettings';
 import { useAgendaSettings } from '../hooks/useAgendaSettings';
+import { getAccessToken } from '../utils/auth/session';
 
 type DurationOption = 30 | 60 | 90 | 120 | 150;
 
@@ -403,7 +404,7 @@ export default function ScheduleEditorCore({
 
     async function submitCreate(replacing = false) {
         setError(null);
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (isTokenExpired(token)) {
             setError('Sessão expirada. Faça login novamente.');
             return;
@@ -513,7 +514,7 @@ export default function ScheduleEditorCore({
     async function replaceConflictsAndCreate() {
         setOfferReplace(false);
         setError(null);
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (isTokenExpired(token)) {
             setError('Sessão expirada. Faça login novamente.');
             return;
