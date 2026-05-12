@@ -426,6 +426,12 @@ export default function MonthlyAgendaModal({
                                                                   )
                                                             : undefined
                                                     }
+                                                    onResolvePending={appt =>
+                                                        openPendingActionsForAppointment(
+                                                            appt as Appointment,
+                                                            buildReturnContext(),
+                                                        )
+                                                    }
                                                     onDetails={
                                                         a.status === 'done'
                                                             ? appt =>

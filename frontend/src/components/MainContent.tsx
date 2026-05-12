@@ -854,6 +854,9 @@ const MainContent: React.FC<MainContentProps> = ({
                 `.${styles.filterContainer}`,
             ) as HTMLElement | null;
             requestAnimationFrame(() => {
+                // Se o input de filtro ainda estiver focado (usuário digitando), não rola a página
+                // para evitar que o iOS dispense o teclado virtual ao detectar scroll programático.
+                if (document.activeElement === inputEl) return;
                 const targetRect = el.getBoundingClientRect();
                 const filterRect = filterEl?.getBoundingClientRect();
                 const desiredTop = (filterRect ? filterRect.bottom : 0) + 24; // respiro maior para não ficar sob o filtro
@@ -871,16 +874,6 @@ const MainContent: React.FC<MainContentProps> = ({
                     } else {
                         window.scrollBy({ top: delta, behavior: 'smooth' });
                     }
-                }
-                // Se o teclado estiver aberto, mantém o input visível
-                if (
-                    document.body.classList.contains('keyboardOpen') &&
-                    document.activeElement === inputEl
-                ) {
-                    inputEl?.scrollIntoView({
-                        block: 'start',
-                        behavior: 'instant' as ScrollBehavior,
-                    });
                 }
             });
         }, 140);

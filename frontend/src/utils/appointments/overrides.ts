@@ -130,6 +130,35 @@ export function subscribeOverrides(fn: Listener) {
     return () => listeners.delete(fn);
 }
 
+/**
+ * Called after each API fetch of appointments to discard overrides that are
+ * now confirmed (or overruled) by fresh server data.
+ *
+ * Rules:
+ * - API returned 'done' or 'canceled' → server has settled; remove any override.
+ * - API returned the same status as the override (e.g. both 'pending') → redundant; remove.
+ */
+export function syncOverridesWithApiData(
+    items: Array<{ id: number; status: string }>,
+) {
+    if (!store.size) return;
+    const removed: number[] = [];
+    for (const appt of items) {
+        const ov = store.get(appt.id);
+        if (!ov) continue;
+        const apiStatus = appt.status;
+        const shouldClear =
+            apiStatus === 'done' ||
+            apiStatus === 'canceled' ||
+            ov.status === apiStatus;
+        if (shouldClear) {
+            store.delete(appt.id);
+            removed.push(appt.id);
+        }
+    }
+    if (removed.length) notify(removed);
+}
+
 // Test-only utility (not used in production code) to clear all overrides between tests.
 // Exposed with a leading double underscore to discourage accidental app usage.
 export function __clearOverridesForTests() {
