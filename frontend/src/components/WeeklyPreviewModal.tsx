@@ -16,6 +16,7 @@ import { openPendingActionsForAppointment } from '../utils/appointments/openPend
 import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import { toISODate } from '../utils/date';
  
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -33,12 +34,6 @@ function startOfWeekMonday(d: Date) {
     const diff = (day + 6) % 7; // Mon-based offset
     x.setDate(x.getDate() - diff);
     return x;
-}
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
 }
 function groupByDay(items: Appointment[]) {
     const map: Record<string, Appointment[]> = {};

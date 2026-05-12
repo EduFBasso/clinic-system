@@ -13,12 +13,11 @@ import {
 } from '../utils/agendaSettings';
 import { useAgendaSettings } from '../hooks/useAgendaSettings';
 import { getAccessToken } from '../utils/auth/session';
+import { pad2 } from '../utils/hmTime';
+import { toISODate } from '../utils/date';
 
 type DurationOption = 30 | 60 | 90 | 120 | 150;
 
-function pad2(n: number) {
-    return String(n).padStart(2, '0');
-}
 function makeDayTime(day: string, h: number, m: number) {
     return new Date(`${day}T${pad2(h)}:${pad2(m)}:00`);
 }
@@ -31,12 +30,6 @@ function addDays(d: Date, n: number) {
     const x = new Date(d);
     x.setDate(x.getDate() + n);
     return x;
-}
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
 }
 function toHHMM(d: Date) {
     // Centraliza via util para consistência e futura UTC/locale troca

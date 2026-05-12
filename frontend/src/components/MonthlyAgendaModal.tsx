@@ -20,6 +20,7 @@ import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 import type { PendingReturnContext } from '../types/agendaFlow';
 import QuickScheduleModal from './QuickScheduleModal';
 import { makeClientBasic } from '../utils/appointments/agendaHelpers';
+import { toISODate } from '../utils/date';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -31,13 +32,6 @@ function endOfMonth(d: Date) {
     const x = startOfMonth(d);
     x.setMonth(x.getMonth() + 1);
     return x; // exclusive end
-}
-
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
 }
 
 function parseISODateLocal(iso: string) {

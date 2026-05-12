@@ -8,6 +8,7 @@ import DateControlsHeader from './shared/DateControlsHeader';
 // AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
 import ClientCardRow from './shared/ClientCardRow';
 import { deriveStatus } from '../utils/appointments/status';
+import { toISODate } from '../utils/date';
 import {
     useAppointmentsRange,
     type Appointment,
@@ -40,13 +41,6 @@ function startOfWeekMonday(d: Date) {
     const diff = (day + 6) % 7; // days since Monday
     x.setDate(x.getDate() - diff);
     return x;
-}
-
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
 }
 
 function groupByDay(items: Appointment[]) {

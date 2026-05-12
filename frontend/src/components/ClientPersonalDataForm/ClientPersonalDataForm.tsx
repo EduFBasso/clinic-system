@@ -5,6 +5,7 @@ import { formatPhone } from '../../utils/formatPhone';
 import { formatCpf, formatCnpj, formatRg } from '../../utils/formatCpf';
 import styles from './ClientPersonalDataForm.module.css';
 import { useTheme } from '../../contexts/ThemeContext';
+import { normalizeDOBForApi } from '../../utils/dateOfBirth';
 
 type ChangeHandler = (
     fieldOrEvent:
@@ -20,15 +21,6 @@ interface Props {
     handleChange: ChangeHandler;
     feedback?: { type: 'error'; message: string } | null;
     isEdit?: boolean;
-}
-
-/** Convert dd/mm/YYYY or YYYY-MM-DD to YYYY-MM-DD for <input type="date"> */
-function toInputDate(dob: string | undefined): string {
-    if (!dob) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) return dob;
-    const [d, m, y] = dob.split('/');
-    if (d && m && y) return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    return '';
 }
 
 export default function ClientPersonalDataForm({
@@ -114,7 +106,7 @@ export default function ClientPersonalDataForm({
                     <InputField
                         label='Nascimento'
                         name='date_of_birth'
-                        value={toInputDate(formData.date_of_birth)}
+                        value={normalizeDOBForApi(formData.date_of_birth) ?? ''}
                         onChange={e => {
                             const iso = e.target.value;
                             const [y, m, d] = iso.split('-');

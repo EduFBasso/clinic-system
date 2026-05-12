@@ -6,6 +6,7 @@ import QuickScheduleModal from '../components/QuickScheduleModal';
 // PendingActionsModal agora é gerenciado globalmente em Home via evento 'pendingActions:open'
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import type { Appointment } from '../hooks/useAppointments';
+import { toISODate } from '../utils/date';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import InlineAppointmentEditor from '../components/InlineAppointmentEditor';
@@ -40,13 +41,6 @@ function addDays(d: Date, n: number) {
     x.setDate(x.getDate() + n);
     return x;
 }
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 type RawClientField = ClientLike | number | undefined | null;
 type EnrichedAppt = Appointment & {

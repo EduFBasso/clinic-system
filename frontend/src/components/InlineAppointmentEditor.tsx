@@ -5,6 +5,7 @@ import TimePicker10 from './TimePicker10';
 import { API_BASE } from '../config/api';
 import type { Appointment } from '../hooks/useAppointments';
 import { getAccessToken } from '../utils/auth/session';
+import { pad2 } from '../utils/hmTime';
 
 export interface InlineAppointmentEditorProps {
     /** Preferred prop name */
@@ -13,10 +14,6 @@ export interface InlineAppointmentEditorProps {
     appointment?: Appointment;
     onCancel: () => void;
     onSaved: (updated: Appointment) => void;
-}
-
-function pad2(n: number) {
-    return String(n).padStart(2, '0');
 }
 
 function toISO(date: Date, hm: string) {

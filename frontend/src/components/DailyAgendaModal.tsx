@@ -5,6 +5,7 @@ import StickyModalHeader from './shared/StickyModalHeader';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import ClientCardRow from './shared/ClientCardRow';
 import { enrichList } from '../utils/appointments/status';
+import { toISODate } from '../utils/date';
 import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
@@ -43,13 +44,6 @@ function addDays(d: Date, n: number) {
     x.setDate(x.getDate() + n);
     return x;
 }
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 export default function DailyAgendaModal({
     open,
