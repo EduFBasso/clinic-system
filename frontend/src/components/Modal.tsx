@@ -611,7 +611,19 @@ export default function AppModal(props: AppModalProps) {
                     }
                 };
                 applyScroll();
-                requestAnimationFrame(() => applyScroll());
+                requestAnimationFrame(() => {
+                    applyScroll();
+                    // iOS Safari: position:sticky não re-avalia quando scrollTo(0,0) é no-op.
+                    // Forçar micro-scroll de 1px e voltar para disparar o engine de sticky.
+                    if (isIOS && targetY === 0) {
+                        try {
+                            window.scrollTo(0, 1);
+                            requestAnimationFrame(() => window.scrollTo(0, 0));
+                        } catch {
+                            /* noop */
+                        }
+                    }
+                });
                 setTimeout(() => applyScroll(), 50);
                 setTimeout(() => applyScroll(), 100);
 

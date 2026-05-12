@@ -53,6 +53,7 @@ class ClientViewSet(ModelViewSet):
 from django.db.models import Q, OuterRef, Subquery, DateTimeField, CharField, Case, When, IntegerField
 from django.utils import timezone
 from apps.agenda.models import Appointment
+from apps.agenda.state_utils import promote_scheduled_to_ongoing, promote_overdue_scheduled_to_pending
 
 class ClientBasicViewSet(ReadOnlyModelViewSet):
     serializer_class = ClientBasicSerializer
@@ -61,6 +62,11 @@ class ClientBasicViewSet(ReadOnlyModelViewSet):
     def get_queryset(self): # type: ignore
         nome = self.request.query_params.get('nome', '').strip() # type: ignore
         base_qs = Client.objects.filter(professional=self.request.user)
+
+        # Promoção oportunística: garante que o banco reflita o status real antes de anotar.
+        user_appts = Appointment.objects.filter(professional=self.request.user)
+        promote_scheduled_to_ongoing(base_qs=user_appts)
+        promote_overdue_scheduled_to_pending(base_qs=user_appts)
 
         # Enriquecimento: próximo compromisso (em andamento ou futuro), exclui cancelados.
         # 'ongoing' (start_at < now) tem prioridade sobre futuros (start_at >= now).

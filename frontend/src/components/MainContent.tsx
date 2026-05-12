@@ -11,7 +11,6 @@ import SessionExpiredModal from './SessionExpiredModal';
 import { dispatchLogout, hasActiveSession , getAccessToken } from '../utils/auth/session';
 import { apiFetch } from '../utils/apiFetch';
 import { useNowTick } from '../hooks/useNowTick';
-import { useOngoingSweep } from '../hooks/useOngoingSweep';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -90,7 +89,6 @@ const MainContent: React.FC<MainContentProps> = ({
 }) => {
     const { clients, loading, error, setError } = useClients();
     const now = useNowTick(30_000);
-    const ongoingSweepMap = useOngoingSweep(now, 2 * 60 * 60 * 1000);
     const [filter, setFilter] = useState<string>(() => {
         try { return sessionStorage.getItem(FILTER_SESSION_KEY) ?? ''; } catch { return ''; }
     });
@@ -705,19 +703,10 @@ const MainContent: React.FC<MainContentProps> = ({
     const todayCount = todayClients.length;
     const tomorrowCount = tomorrowClients.length;
 
-    // Clientes em atendimento agora: usa o sweep (mesma fonte que ClientCard) como sinal
-    // primário; complementa com a janela de tempo + 90s de grace (espelha a latch do ClientCard).
+    // Clientes em atendimento agora: status 'ongoing' vem do servidor.
     const ongoingClients = React.useMemo(() => {
-        const t = now.getTime();
-        const GRACE_MS = 90_000;
-        return clients.filter(c => {
-            if (ongoingSweepMap.has(c.id)) return true;
-            if (c.next_appointment_status !== 'scheduled') return false;
-            const s = c.next_appointment_start_at ? new Date(c.next_appointment_start_at).getTime() : NaN;
-            const e = c.next_appointment_end_at   ? new Date(c.next_appointment_end_at).getTime()   : NaN;
-            return Number.isFinite(s) && Number.isFinite(e) && s <= t && t < e + GRACE_MS;
-        });
-    }, [clients, ongoingSweepMap, now]);
+        return clients.filter(c => c.next_appointment_status === 'ongoing');
+    }, [clients]);
     const ongoingCount = ongoingClients.length;
 
     // Se o filtro de pendentes estiver ativo mas não houver mais pendentes, desativa

@@ -315,7 +315,11 @@ function ClientCard({
             ref={cardRef}
             className={cardClassNames}
             style={containerStyle}
-            onClick={() => onSelect?.()}
+            onClick={e => {
+                // Não disparar onSelect se o clique veio de um botão interno (ex.: Finalizar)
+                if ((e.target as HTMLElement).closest('button')) return;
+                onSelect?.();
+            }}
             onMouseDown={() => setPressed(true)}
             onMouseUp={() => setPressed(false)}
             onMouseLeave={() => setPressed(false)}

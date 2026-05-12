@@ -26,6 +26,7 @@ export interface ClientBasic {
     next_appointment_notes?: string | null;
     next_appointment_status?:
         | 'scheduled'
+        | 'ongoing'
         | 'pending'
         | 'done'
         | 'canceled'

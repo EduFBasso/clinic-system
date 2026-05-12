@@ -65,4 +65,4 @@ class ReminderDelivery(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.appointment_id} / {self.channel} / {self.status}"
+        return f"{self.appointment_id} / {self.channel} / {self.status}"  # type: ignore[attr-defined]

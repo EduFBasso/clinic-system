@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppModal from './Modal';
-import { clearOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
 import { dispatchers } from '../events/dispatchers';
 import { emit } from '../events/bus';
@@ -148,6 +147,7 @@ export default function PendingActionsModal({
         if (
             st &&
             st.toLowerCase() !== 'scheduled' &&
+            st.toLowerCase() !== 'ongoing' &&
             st.toLowerCase() !== 'pending'
         ) {
             try {
@@ -468,10 +468,6 @@ export default function PendingActionsModal({
             if (!res.ok) throw new Error(res.error || 'Falha ao finalizar');
             // Dispara eventos de atualização com pequeno backoff para evitar corrida
             try {
-                // Limpa snapshot local, caso exista (garante remoção do estilo de atendimento)
-                if (typeof apptClientId === 'number') {
-                    clearOngoingSnapshot(apptClientId);
-                }
                 // Coalesce refresh events to avoid bursts
                 dispatchers.appointmentsChanged();
                 dispatchers.updateClients();
@@ -601,9 +597,6 @@ export default function PendingActionsModal({
             if (!done) throw new Error('Falha ao concluir atendimento');
             // Atualiza estado local
             try {
-                if (typeof apptClientId === 'number') {
-                    clearOngoingSnapshot(apptClientId);
-                }
                 dispatchers.appointmentsChanged();
                 dispatchers.updateClients();
                 try {
