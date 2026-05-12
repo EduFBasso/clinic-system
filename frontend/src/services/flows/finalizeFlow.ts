@@ -1,7 +1,6 @@
 import { apiFetch, ApiError } from '../../utils/apiFetch';
 import ensureDeviceSession from '../sessions';
 import { getServerNowOnce } from '../time';
-import { setAppointmentOverride } from '../../utils/appointments/overrides';
 
 export interface FinalizeFlowResult {
     ok: boolean;
@@ -86,13 +85,6 @@ export async function finalizeFlow(
         }) as { end_at?: string; status?: string } | null;
         finalizeOk = true;
         finalizeStatus = 200;
-        const serverNow = await getServerNowOnce();
-        const nowIso = (serverNow ?? new Date()).toISOString();
-        setAppointmentOverride(apptId, {
-            status: 'pending',
-            end_at: data?.end_at || nowIso,
-            ...(originalEnd ? { original_end_at: originalEnd } : null),
-        });
         log('optimistic-pending', { apptId, status: finalizeStatus, data });
     } catch (e) {
         const err = e as ApiError | Error;
@@ -111,13 +103,6 @@ export async function finalizeFlow(
         log('too-early', { apptId });
         const forced = await forceAdjust(apptId);
         if (forced) {
-            const serverNow = await getServerNowOnce();
-            const nowIso = (serverNow ?? new Date()).toISOString();
-            setAppointmentOverride(apptId, {
-                status: 'pending',
-                end_at: nowIso,
-                ...(originalEnd ? { original_end_at: originalEnd } : null),
-            });
             return { ok: true, status: 200, adjusted: true };
         }
     }

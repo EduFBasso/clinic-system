@@ -10,11 +10,6 @@ import { finalizeFlow } from '../services/flows/finalizeFlow';
 import { formatTime } from '../utils/timeFormat';
 import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
-import {
-    setAppointmentOverride,
-    getAppointmentOverride,
-    subscribeOverrides,
-} from '../utils/appointments/overrides';
 import type { PendingReturnContext } from '../types/agendaFlow';
 import { step, debugLog, isStepEnabled } from '../debug/stepper';
 import { postDone } from '../services/appointments';
@@ -118,49 +113,6 @@ export default function PendingActionsModal({
 
     React.useEffect(() => {
         if (!appt) return undefined;
-        const unsub = subscribeOverrides(ids => {
-            if (ids && !ids.includes(appt.id)) return;
-            // Re-render to reflect override changes
-            forceRender(t => t + 1);
-            try {
-                const ov = getAppointmentOverride(appt.id);
-                // Auto-close when override indicates terminal status even if parent 'appt' prop still shows scheduled
-                if (
-                    ov &&
-                    (ov.status === 'done' || ov.status === 'canceled') &&
-                    open
-                ) {
-                    debugLog(
-                        'PendingActions: auto-close via override terminal status',
-                        { id: appt.id, ovStatus: ov.status },
-                    );
-                    // Prevent double-close loops
-                    setClosing(true);
-                    try {
-                        onClose();
-                    } catch {
-                        /* noop */
-                    }
-                    try {
-                        window.dispatchEvent(
-                            new Event('pendingActions:forceClose'),
-                        );
-                        window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                    } catch {
-                        /* noop */
-                    }
-                }
-            } catch {
-                /* noop */
-            }
-        });
-        return () => {
-            try {
-                unsub();
-            } catch {
-                /* ignore unsubscribe issues */
-            }
-        };
     }, [appt, open, onClose]);
 
     async function sleep(ms: number) {
@@ -268,26 +220,7 @@ export default function PendingActionsModal({
         return `${weekday} ${day}/${month}, ${sh} - ${eh}`;
     })();
 
-    // Real closed timestamp (override first, fallback to backend fields if appt has them when scheduled changed externally)
     let realClosedLine: string | null = null;
-    if (appt) {
-        const ov = getAppointmentOverride(appt.id);
-        const iso = ov?.real_closed_at;
-        const reason = ov?.real_closed_reason;
-        if (iso) {
-            try {
-                const d = new Date(iso);
-                if (!Number.isNaN(d.getTime())) {
-                    const hm = formatTime(d, { mode: 'local' });
-                    realClosedLine = `${
-                        reason === 'canceled' ? 'Cancelado' : 'Concluído'
-                    } às ${hm}`;
-                }
-            } catch {
-                /* ignore parse */
-            }
-        }
-    }
 
     async function doCancel() {
         if (busy) return;
@@ -339,15 +272,6 @@ export default function PendingActionsModal({
                         nowMs < endMs;
                     if (wasInProgress) {
                         const adjustedEndIso = new Date(nowMs).toISOString();
-                        try {
-                            // Grava override local com end_at encurtado para refletir imediatamente no Card compartilhado
-                            setAppointmentOverride(appt.id, {
-                                status: 'canceled',
-                                end_at: adjustedEndIso,
-                            });
-                        } catch {
-                            /* noop override set */
-                        }
                         window.dispatchEvent(
                             new CustomEvent('appointment:statusChanged', {
                                 detail: {

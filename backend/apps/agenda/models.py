@@ -29,6 +29,7 @@ class Appointment(models.Model):
 
     class Status(models.TextChoices):
         SCHEDULED = "scheduled", "Agendado"
+        ONGOING = "ongoing", "Em andamento"
         PENDING = "pending", "Pendente"
         DONE = "done", "Realizado"
         CANCELED = "canceled", "Cancelado"

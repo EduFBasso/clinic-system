@@ -6,7 +6,6 @@ import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import ClientCardRow from './shared/ClientCardRow';
 import { enrichList } from '../utils/appointments/status';
 import { toISODate } from '../utils/date';
-import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
     makeClientBasic,
@@ -232,8 +231,7 @@ export default function DailyAgendaModal({
     }, [open, enriched]);
 
     const filtered = enriched.filter(a => {
-        const ov = getAppointmentOverride(a.id)?.status;
-        return matchesStatusFilter(statusFilter, a, ov);
+        return matchesStatusFilter(statusFilter, a);
     });
 
     const sorted = filtered.slice().sort((a, b) => {

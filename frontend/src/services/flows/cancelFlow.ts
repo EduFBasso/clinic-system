@@ -1,7 +1,6 @@
 import { apiFetch, ApiError } from '../../utils/apiFetch';
 import ensureDeviceSession from '../sessions';
 import { getServerNowOnce } from '../time';
-import { setAppointmentOverride } from '../../utils/appointments/overrides';
 import { emit } from '../../events/bus';
 
 export interface CancelFlowResult {
@@ -65,19 +64,11 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
         return { ok: false, status, error: err.message || `HTTP ${status}` };
     }
 
-    // 2. Optimistic override
+    // 2. Dispatch event so UI refetches immediately
     const now = (await getServerNowOnce()) ?? new Date();
     const nowIso = now.toISOString();
-    try {
-        setAppointmentOverride(apptId, {
-            status: 'canceled',
-            real_closed_at: nowIso,
-            real_closed_reason: 'canceled',
-            ...(originalEnd ? { original_end_at: originalEnd } : null),
-        });
-        try { emit('pendingActions:forceClose', undefined); } catch { /* noop */ }
-    } catch { /* ignore override set failure */ }
-    log('optimistic-set', { apptId, nowIso });
+    try { emit('pendingActions:forceClose', undefined); } catch { /* noop */ }
+    log('cancel-dispatched', { apptId, nowIso });
 
     // 3. Attempt targeted end_at shortening only if in-progress
     let patchedEnd = false;
@@ -96,7 +87,6 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
                         body: { end_at: nowIso },
                     });
                     patchedEnd = true;
-                    setAppointmentOverride(apptId, { end_at: nowIso });
                     log('shorten-end-success', { apptId });
                 } catch (e) {
                     const err = e as ApiError | Error;

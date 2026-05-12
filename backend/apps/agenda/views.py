@@ -15,7 +15,7 @@ from .serializers import (
     EncounterSerializer,
     FinalizeAuditSerializer,
 )
-from .state_utils import promote_overdue_scheduled_to_pending
+from .state_utils import promote_overdue_scheduled_to_pending, promote_scheduled_to_ongoing
 
 
 class TypedRequestMixin:
@@ -89,6 +89,7 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
         # Promoção temporal oportunista: limitar a leituras de agenda.
         # Evita escritas implícitas desnecessárias em fluxos de update/destroy.
         if getattr(self, "action", None) in {"list", "next_for_client"}:
+            promote_scheduled_to_ongoing(qs)
             promote_overdue_scheduled_to_pending(qs)
         # filtros opcionais ?start=2025-09-01T00:00:00&end=2025-09-02T00:00:00&client=<id>
         start = self.query_param("start")
@@ -204,9 +205,8 @@ class AppointmentViewSet(TypedRequestMixin, viewsets.ModelViewSet):
 
         Regras:
         - Apenas o profissional dono pode finalizar.
-        - Só é permitido se o status atual for 'scheduled'.
-        - Permite finalização antecipada durante a janela em andamento (start_at <= now < end_at).
-          Não permite antes do início.
+        - Permitido se o status atual for 'scheduled' ou 'ongoing'.
+        - Não permite antes do início (too_early 422).
         - Ajusta o fim (end_at) SOMENTE se ainda em andamento (now < end_at) para refletir duração real.
           Se o compromisso já terminou (now >= end_at) mantemos o fim planejado.
         """

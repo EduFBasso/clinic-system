@@ -1,6 +1,5 @@
 import React from 'react';
 import type { SharedAppointmentLike } from '../components/shared/AppointmentCard';
-import { getAppointmentOverride } from '../utils/appointments/overrides';
 import { API_BASE } from '../config/api';
 import type {
     PendingActionsOpenDetail,
@@ -225,12 +224,12 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         return on('pendingActions:forceClose', onForceClose);
     }, []);
 
-    // Auto-close when override shows terminal status for the open appointment
+    // Auto-close when appointment data shows terminal status for the open appointment
     React.useEffect(() => {
         if (!pendingActionsOpen || !pendingAppt) return;
         try {
-            const ov = getAppointmentOverride(pendingAppt.id as number);
-            if (ov && (ov.status === 'done' || ov.status === 'canceled')) {
+            const st = pendingAppt.status as string | undefined;
+            if (st && (st === 'done' || st === 'canceled')) {
                 setPendingActionsOpen(false);
             }
         } catch {
@@ -252,18 +251,15 @@ export function usePendingActionsListeners(): UsePendingActionsListenersReturn {
         w.__dumpPendingActions = () => {
             try {
                 const id = pendingAppt?.id;
-                const ov = id ? getAppointmentOverride(id) : undefined;
                 console.debug('[PendingDebug] dump', {
                     pendingActionsOpen,
                     apptId: id,
                     apptStatus: pendingAppt?.status,
-                    override: ov,
                 });
                 return {
                     pendingActionsOpen,
                     id,
                     status: pendingAppt?.status,
-                    override: ov,
                 };
             } catch (e) {
                 console.warn('[PendingDebug] dump error', e);

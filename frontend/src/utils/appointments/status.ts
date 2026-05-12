@@ -26,8 +26,8 @@ export function deriveStatus(
     const end = new Date(appt.end_at);
     if (appt.status === 'canceled') return 'canceled';
     if (appt.status === 'done') return 'done';
+    if (appt.status === 'ongoing') return 'ongoing';
     if (appt.status === 'pending') return 'past';
-    if (start <= now && end > now) return 'ongoing';
     if (end < now && appt.status === 'scheduled') return 'past';
     return 'scheduled';
 }
@@ -72,8 +72,7 @@ export function enrichAppointment(
     const _start = new Date(appt.start_at);
     const _end = new Date(appt.end_at);
     const _isPast = _end < now;
-    const _isOngoing =
-        _start <= now && _end > now && appt.status === 'scheduled';
+    const _isOngoing = appt.status === 'ongoing';
     let _derivedStatus: EnrichedAppointment['_derivedStatus'] =
         appt.status === 'pending' ? 'past' : appt.status;
     if (_isOngoing) _derivedStatus = 'ongoing';

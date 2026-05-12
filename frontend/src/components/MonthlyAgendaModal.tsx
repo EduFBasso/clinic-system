@@ -6,7 +6,7 @@ import {
 } from '../hooks/useAppointments';
 import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
-import { getAppointmentOverride } from '../utils/appointments/overrides';
+import { matchesStatusFilter } from '../utils/appointments/agendaHelpers';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import { deriveStatus } from '../utils/appointments/status';
 import ClientCardRow from './shared/ClientCardRow';
@@ -110,31 +110,8 @@ export default function MonthlyAgendaModal({
     });
 
     const filteredItems = React.useMemo(() => {
-        const now = effectiveNowRef;
         return items.filter(a => {
-            const ov = getAppointmentOverride(a.id)?.status;
-            const status =
-                (ov as 'scheduled' | 'pending' | 'done' | 'canceled') ??
-                a.status;
-            const start = new Date(a.start_at);
-            const end = new Date(a.end_at);
-            switch (statusFilter) {
-                case 'all':
-                    return true;
-                case 'active':
-                    return status === 'scheduled' && end >= now;
-                case 'ongoing':
-                    return status === 'scheduled' && start <= now && end > now;
-                case 'past':
-                    return status === 'pending' ||
-                        (status === 'scheduled' && end < now);
-                case 'done':
-                    return status === 'done';
-                case 'canceled':
-                    return status === 'canceled';
-                default:
-                    return false;
-            }
+            return matchesStatusFilter(statusFilter, a);
         });
     }, [items, statusFilter, effectiveNowRef]);
 

@@ -8,10 +8,6 @@ import { FaEdit, FaBan, FaWhatsapp } from 'react-icons/fa';
 import { useAppointmentCardState } from '../../hooks/useAppointmentCardState.ts';
 import type { PendingReturnContext } from '../../types/agendaFlow';
 import {
-    getAppointmentOverride,
-    subscribeOverrides,
-} from '../../utils/appointments/overrides';
-import {
     statusStripeColor,
     statusBackgroundColor,
 } from '../../utils/appointments/status';
@@ -98,65 +94,14 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     style,
     now = new Date(),
 }: AppointmentCardProps<T>) {
-    // Apply ephemeral status override (e.g., optimistic 'done' after finalize)
-    // Versão simples: contador de mudanças para re-render quando qualquer override relevante mudar
-    const [overrideVersion, setOverrideVersion] = React.useState(0);
-    React.useEffect(() => {
-        const unsubscribe = subscribeOverrides(ids => {
-            if (!ids || ids.includes(appt.id)) {
-                setOverrideVersion(v => v + 1);
-            }
-        });
-        return () => {
-            try {
-                unsubscribe();
-            } catch {
-                /* noop */
-            }
-        };
-    }, [appt.id]);
-
-    const apptWithOverride = React.useMemo(() => {
-        // Coleta override completo (status + end_at opcional)
-        const ov = getAppointmentOverride(appt.id) as
-            | {
-                  status?: 'scheduled' | 'pending' | 'done' | 'canceled';
-                  end_at?: string;
-              }
-            | undefined;
-        if (!ov) return appt;
-        return {
-            ...appt,
-            ...(ov.status ? { status: ov.status } : null),
-            ...(ov.end_at ? { end_at: ov.end_at } : null),
-        } as typeof appt;
-        // Depend somente de appt.id/appt (override é consultado a cada render via getAppointmentOverride)
-        // overrideVersion força recomputar apptWithOverride quando overrides mudam
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [appt, overrideVersion]);
-
     const { status, canEdit, canCancel, isOngoing, start, end } =
-        useAppointmentCardState(apptWithOverride, now);
+        useAppointmentCardState(appt, now);
     const [actionPrompt, setActionPrompt] = React.useState<
         'scheduled' | 'ongoing' | null
     >(null);
     const deferredActionFrameRef = React.useRef<number | null>(null);
     const deferredActionTimeoutRef = React.useRef<number | null>(null);
-    // Se houve encurtamento de end_at após finalize/cancel, preservar faixa original para exibição
-    let displayEndForRange = appt.end_at; // original props (não override)
-    try {
-        if (
-            apptWithOverride.status === 'done' ||
-            apptWithOverride.status === 'canceled'
-        ) {
-            const ov = getAppointmentOverride(apptWithOverride.id) as
-                | { original_end_at?: string }
-                | undefined;
-            if (ov?.original_end_at) displayEndForRange = ov.original_end_at;
-        }
-    } catch {
-        /* noop */
-    }
+    const displayEndForRange = appt.end_at;
     let clientName: string | undefined = (appt as SharedAppointmentLike)
         .client_name;
     if (
@@ -171,49 +116,6 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     }
     // Left color stripe by status, akin to QuickSchedule visuals
     const stripeColor = statusStripeColor(status);
-    // Derivar horário real de fechamento (override -> fallback end_at)
-    let closedLabel: string | null = null;
-    if (
-        apptWithOverride.status === 'done' ||
-        apptWithOverride.status === 'canceled'
-    ) {
-        try {
-            const ov = getAppointmentOverride(apptWithOverride.id) as
-                | {
-                      real_closed_at?: string;
-                      real_closed_reason?: 'done' | 'canceled';
-                      original_end_at?: string;
-                  }
-                | undefined;
-            const realIso = ov?.real_closed_at;
-            if (realIso) {
-                const real = new Date(realIso);
-                // Usa original_end_at se disponível; evita considerar end encurtado como "planejado"
-                const scheduledEnd = new Date(
-                    ov?.original_end_at || appt.end_at,
-                );
-                if (
-                    !Number.isNaN(real.getTime()) &&
-                    !Number.isNaN(scheduledEnd.getTime())
-                ) {
-                    // margin 30s to avoid tiny clock skew noise
-                    const EARLY_MARGIN_MS = 30 * 1000;
-                    if (
-                        real.getTime() + EARLY_MARGIN_MS <
-                        scheduledEnd.getTime()
-                    ) {
-                        const hm = formatTime(realIso, { mode: 'local' });
-                        closedLabel =
-                            apptWithOverride.status === 'canceled'
-                                ? `Cancelado às ${hm}`
-                                : `Finalizado às ${hm}`;
-                    }
-                }
-            }
-        } catch {
-            /* noop */
-        }
-    }
 
     const isPending = status === 'past';
     const scheduledEditAction = canEdit && onEdit ? onEdit : null;
@@ -294,7 +196,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
     const clickable =
         // Pending with resolver or any of the click handlers present
         (isPending && !!onResolvePending) ||
-        (!!onDetails && apptWithOverride.status === 'done') ||
+        (!!onDetails && appt.status === 'done') ||
         ((!!onCancel || !!scheduledEditAction) &&
             status === 'scheduled' &&
             (canCancel || canEdit)) ||
@@ -319,7 +221,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
         gap: 4,
         fontFamily: 'var(--card-font-family)',
         cursor:
-            apptWithOverride.status === 'canceled'
+            appt.status === 'canceled'
                 ? 'default'
                 : clickable
                   ? 'pointer'
@@ -352,7 +254,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
             className={className}
             style={base}
             onClick={() => {
-                if (apptWithOverride.status === 'canceled') return;
+                if (appt.status === 'canceled') return;
                 if (isPending && onResolvePending) {
                     onResolvePending(appt);
                     return;
@@ -413,34 +315,6 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                         gap: 2,
                     }}
                 >
-                    {closedLabel && (
-                        <span
-                            style={{
-                                alignSelf: 'flex-start',
-                                fontSize: 10,
-                                lineHeight: 1.1,
-                                fontWeight: 600,
-                                letterSpacing: 0.2,
-                                padding: '2px 6px',
-                                borderRadius: 12,
-                                background:
-                                    apptWithOverride.status === 'canceled'
-                                        ? 'rgba(239,68,68,0.12)'
-                                        : 'rgba(16,185,129,0.14)',
-                                color:
-                                    apptWithOverride.status === 'canceled'
-                                        ? 'var(--color-canceled, #b91c1c)'
-                                        : 'var(--color-done, #047857)',
-                                whiteSpace: 'nowrap',
-                                maxWidth: '100%',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                            }}
-                            title={closedLabel}
-                        >
-                            {closedLabel}
-                        </span>
-                    )}
                     {!nameInFooter && (
                         <span
                             style={{

@@ -50,7 +50,7 @@ class ClientViewSet(ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-from django.db.models import Q, OuterRef, Subquery, DateTimeField, CharField
+from django.db.models import Q, OuterRef, Subquery, DateTimeField, CharField, Case, When, IntegerField
 from django.utils import timezone
 from apps.agenda.models import Appointment
 
@@ -62,8 +62,8 @@ class ClientBasicViewSet(ReadOnlyModelViewSet):
         nome = self.request.query_params.get('nome', '').strip() # type: ignore
         base_qs = Client.objects.filter(professional=self.request.user)
 
-        # Enriquecimento: próximo compromisso futuro (não inclui passado nem em andamento), exclui cancelados.
-        # Requisito de negócio: mini card mostra apenas compromissos ainda não iniciados.
+        # Enriquecimento: próximo compromisso (em andamento ou futuro), exclui cancelados.
+        # 'ongoing' (start_at < now) tem prioridade sobre futuros (start_at >= now).
         now = timezone.now()
         appt_qs = (
             Appointment.objects.filter(
@@ -71,8 +71,11 @@ class ClientBasicViewSet(ReadOnlyModelViewSet):
                 client_id=OuterRef('pk'),
             )
             .exclude(status=Appointment.Status.CANCELED)
-            .filter(start_at__gte=now)
-            .order_by('start_at')
+            .filter(Q(start_at__gte=now) | Q(status=Appointment.Status.ONGOING))
+            .order_by(
+                Case(When(status=Appointment.Status.ONGOING, then=0), default=1, output_field=IntegerField()),
+                'start_at',
+            )
         )
         last_appt_qs = (
             Appointment.objects.filter(

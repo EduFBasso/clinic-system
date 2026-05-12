@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { finalizeFlow } from '../services/flows/finalizeFlow';
-import {
-    getAppointmentOverride,
-    __clearOverridesForTests,
-} from '../utils/appointments/overrides';
 
 // Mock modules used inside finalizeFlow to isolate logic
 vi.mock('../services/sessions', () => ({ default: () => Promise.resolve() }));
@@ -74,10 +70,8 @@ describe('finalizeFlow', () => {
             },
         };
         localStorage.setItem('accessToken', 'tok');
-        __clearOverridesForTests();
     });
     afterEach(() => {
-        __clearOverridesForTests();
     });
 
     it('finaliza direto (POST /finalize/ 200)', async () => {
@@ -103,8 +97,6 @@ describe('finalizeFlow', () => {
         const res = await finalizeFlow(apptId);
         expect(res.ok).toBe(true);
         expect(res.status).toBe(200);
-        const ov = getAppointmentOverride(apptId);
-        expect(ov?.status).toBe('pending');
         expect(fetchSpy).toHaveBeenCalled();
     });
 
@@ -144,8 +136,6 @@ describe('finalizeFlow', () => {
         expect(res.ok).toBe(true);
         expect(res.adjusted).toBe(true);
         expect(forcePatched).toBe(true);
-        const ov = getAppointmentOverride(apptId);
-        expect(ov?.status).toBe('pending');
         expect(fetchSpy).toHaveBeenCalled();
     });
 });

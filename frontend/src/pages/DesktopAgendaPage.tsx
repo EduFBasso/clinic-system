@@ -12,7 +12,6 @@ import type { ClientBasic } from '../types/ClientBasic';
 import InlineAppointmentEditor from '../components/InlineAppointmentEditor';
 import TimeRangeLabel from '../components/shared/TimeRangeLabel';
 import { enrichList } from '../utils/appointments/status';
-import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
     makeClientBasic,
@@ -219,8 +218,7 @@ export default function DesktopAgendaPage() {
     }, [items, effectiveNowRef]);
 
     const filtered = enriched.filter(a => {
-        const ov = getAppointmentOverride(a.id)?.status;
-        return matchesStatusFilter(statusFilter, a, ov);
+        return matchesStatusFilter(statusFilter, a);
     });
 
     const sorted = filtered.slice().sort((a, b) => {

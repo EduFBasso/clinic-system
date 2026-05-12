@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
 import { getAccessToken } from '../utils/auth/session';
-import { syncOverridesWithApiData } from '../utils/appointments/overrides';
 
 export interface Appointment {
     id: number;
@@ -83,7 +82,6 @@ export function useAppointmentsRange(
             })
             .then(data => {
                 const appts = Array.isArray(data) ? data : [];
-                syncOverridesWithApiData(appts);
                 setItems(appts);
                 setLoading(false);
             })
