@@ -28,9 +28,13 @@ function mockResponse({
     text,
     headers = {},
 }: MockRespOpts): Response {
+    const combinedHeaders: Record<string, string> = {
+        ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...headers,
+    };
     return new Response(json ? JSON.stringify(json) : text || '', {
         status,
-        headers,
+        headers: combinedHeaders,
     });
 }
 

@@ -1,10 +1,8 @@
-import { API_BASE } from '../../config/api';
+import { apiFetch, ApiError } from '../../utils/apiFetch';
 import ensureDeviceSession from '../sessions';
-import { buildDeviceHeaders } from '../device';
 import { getServerNowOnce } from '../time';
 import { setAppointmentOverride } from '../../utils/appointments/overrides';
 import { emit } from '../../events/bus';
-import { getAccessToken } from '../../utils/auth/session';
 
 export interface CancelFlowResult {
     ok: boolean;
@@ -23,20 +21,10 @@ function log(stage: string, payload: Record<string, unknown>) {
 
 async function fetchAppt(id: number) {
     try {
-        const token = getAccessToken();
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const r = await fetch(
-            `${API_BASE}/agenda/appointments/${id}/?ts=${Date.now()}`,
-            { headers, cache: 'no-store' },
-        );
-        if (!r.ok) return null;
-        return (await r.json()) as {
-            id: number;
-            start_at: string;
-            end_at: string;
-            status: string;
-        };
+        return await apiFetch(
+            `/agenda/appointments/${id}/?ts=${Date.now()}`,
+            { cache: 'no-store' },
+        ) as { id: number; start_at: string; end_at: string; status: string };
     } catch {
         return null;
     }
@@ -46,9 +34,7 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
     const t0 = performance.now();
     let originalEnd: string | undefined;
     try {
-        const el = document.querySelector(
-            `[data-appt-id="${apptId}"]`,
-        ) as HTMLElement | null;
+        const el = document.querySelector(`[data-appt-id="${apptId}"]`) as HTMLElement | null;
         if (el) {
             const attr = el.getAttribute('data-original-end-at');
             if (attr) originalEnd = attr;
@@ -57,41 +43,28 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
                 if (legacy) originalEnd = legacy;
             }
         }
-    } catch {
-        /* noop */
-    }
+    } catch { /* noop */ }
     await ensureDeviceSession().catch(() => {});
-    const token = getAccessToken();
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-    };
-    Object.assign(headers, buildDeviceHeaders());
-    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     // 1. POST /cancel/
-    let postResp: Response | null = null;
+    let postStatus = 0;
     try {
-        postResp = await fetch(
-            `${API_BASE}/agenda/appointments/${apptId}/cancel/`,
-            {
-                method: 'POST',
-                headers,
-                cache: 'no-store',
-            },
-        );
+        await apiFetch(`/agenda/appointments/${apptId}/cancel/`, {
+            method: 'POST',
+            cache: 'no-store',
+        });
+        postStatus = 200;
     } catch (e) {
-        log('network-fail-post', { apptId, error: String(e) });
-        return { ok: false, status: 0, error: 'Network error' };
+        const err = e as ApiError | Error;
+        const status = (err as ApiError).status ?? 0;
+        if (status === 0) {
+            log('network-fail-post', { apptId, error: err.message });
+            return { ok: false, status: 0, error: 'Network error' };
+        }
+        log('post-fail', { apptId, status, text: err.message });
+        return { ok: false, status, error: err.message || `HTTP ${status}` };
     }
-    if (!postResp.ok) {
-        const text = await postResp.text().catch(() => '');
-        log('post-fail', { apptId, status: postResp.status, text });
-        return {
-            ok: false,
-            status: postResp.status,
-            error: text || `HTTP ${postResp.status}`,
-        };
-    }
+
     // 2. Optimistic override
     const now = (await getServerNowOnce()) ?? new Date();
     const nowIso = now.toISOString();
@@ -102,14 +75,8 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
             real_closed_reason: 'canceled',
             ...(originalEnd ? { original_end_at: originalEnd } : null),
         });
-        try {
-            emit('pendingActions:forceClose', undefined);
-        } catch {
-            /* noop */
-        }
-    } catch {
-        /* ignore override set failure */
-    }
+        try { emit('pendingActions:forceClose', undefined); } catch { /* noop */ }
+    } catch { /* ignore override set failure */ }
     log('optimistic-set', { apptId, nowIso });
 
     // 3. Attempt targeted end_at shortening only if in-progress
@@ -117,40 +84,23 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
     try {
         const appt = await fetchAppt(apptId);
         if (appt && appt.status === 'canceled') {
-            // Already canceled; nothing to shorten now
             log('fetch-after-cancel', { apptId, status: appt.status });
         } else if (appt && appt.status === 'scheduled') {
             const startMs = new Date(appt.start_at).getTime();
             const endMs = new Date(appt.end_at).getTime();
             const nowMs = now.getTime();
-            if (
-                !Number.isNaN(startMs) &&
-                !Number.isNaN(endMs) &&
-                startMs <= nowMs &&
-                nowMs < endMs
-            ) {
-                // Shorten end_at only; do NOT include status (already changed by POST)
-                const patchHeaders: Record<string, string> = {
-                    'Content-Type': 'application/json',
-                };
-                if (token) patchHeaders['Authorization'] = `Bearer ${token}`;
-                Object.assign(patchHeaders, buildDeviceHeaders());
-                const body = { end_at: nowIso };
-                const pr = await fetch(
-                    `${API_BASE}/agenda/appointments/${apptId}/`,
-                    {
+            if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs <= nowMs && nowMs < endMs) {
+                try {
+                    await apiFetch(`/agenda/appointments/${apptId}/`, {
                         method: 'PATCH',
-                        headers: patchHeaders,
-                        body: JSON.stringify(body),
-                    },
-                );
-                if (pr.ok) {
+                        body: { end_at: nowIso },
+                    });
                     patchedEnd = true;
                     setAppointmentOverride(apptId, { end_at: nowIso });
                     log('shorten-end-success', { apptId });
-                } else {
-                    const txt = await pr.text().catch(() => '');
-                    log('shorten-end-fail', { apptId, status: pr.status, txt });
+                } catch (e) {
+                    const err = e as ApiError | Error;
+                    log('shorten-end-fail', { apptId, status: (err as ApiError).status, txt: err.message });
                 }
             }
         }
@@ -160,5 +110,5 @@ export async function cancelFlow(apptId: number): Promise<CancelFlowResult> {
 
     const elapsed = Math.round(performance.now() - t0);
     log('done', { apptId, elapsed, patchedEnd });
-    return { ok: true, status: postResp.status, patchedEnd };
+    return { ok: true, status: postStatus, patchedEnd };
 }

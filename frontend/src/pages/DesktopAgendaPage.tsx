@@ -19,7 +19,7 @@ import {
     type ClientLike,
 } from '../utils/appointments/agendaHelpers';
 import { useNowTick } from '../hooks/useNowTick';
-import { API_BASE } from '../config/api';
+import { apiFetch } from '../utils/apiFetch';
 import { useLocation } from 'react-router-dom';
 import type {
     PendingReturnContext,
@@ -29,7 +29,6 @@ import { cancelAppointment } from '../services/appointments';
 import { dispatchers } from '../events/dispatchers';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
-import { getAccessToken } from '../utils/auth/session';
 
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -142,12 +141,7 @@ export default function DesktopAgendaPage() {
             if (apptId) payload = { appointmentId: apptId };
         }
         if (!payload?.appointmentId) return;
-        const token = getAccessToken();
-        if (!token) return;
-        fetch(`${API_BASE}/agenda/appointments/${payload.appointmentId}/`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then(r => (r.ok ? r.json() : null))
+        apiFetch(`/agenda/appointments/${payload.appointmentId}/`)
             .then(appt => {
                 if (appt) {
                     setDetailsReturnContext(payload?.returnContext ?? null);
@@ -155,9 +149,7 @@ export default function DesktopAgendaPage() {
                     setDetailsOpen(true);
                 }
             })
-            .catch(() => {
-                /* noop */
-            });
+            .catch(() => { /* noop */ });
     }, [location]);
 
     const dayStart = React.useMemo(

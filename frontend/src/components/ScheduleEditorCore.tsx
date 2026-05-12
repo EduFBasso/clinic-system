@@ -5,7 +5,7 @@ import { getNow } from '../utils/now';
 import type { ClientBasic } from '../types/ClientBasic';
 import { useAppointments } from '../hooks/useAppointments';
 import type { Appointment } from '../hooks/useAppointments';
-import { API_BASE } from '../config/api';
+import { apiFetch, ApiError } from '../utils/apiFetch';
 import { isTokenExpired } from '../utils/jwt';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import {
@@ -418,9 +418,9 @@ export default function ScheduleEditorCore({
         setSaving(true);
         try {
             const isEdit = !!editingId;
-            const url = isEdit
-                ? `${API_BASE}/agenda/appointments/${editingId}/`
-                : `${API_BASE}/agenda/appointments/`;
+            const path = isEdit
+                ? `/agenda/appointments/${editingId}/`
+                : `/agenda/appointments/`;
             const method = isEdit ? 'PATCH' : 'POST';
             if (!client) {
                 setError('Selecione um cliente antes de salvar.');
@@ -428,52 +428,22 @@ export default function ScheduleEditorCore({
                 return;
             }
             const payload = isEdit
-                ? {
-                      start_at: startISO,
-                      end_at: endISO,
-                      notes,
-                      visit_type: visitType,
-                  }
-                : {
-                      client: client.id,
-                      title: 'Consulta',
-                      visit_type: visitType,
-                      start_at: startISO,
-                      end_at: endISO,
-                      status: 'scheduled',
-                      notes,
-                  };
-            const r = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(payload),
-            });
-            if (!r.ok) {
-                const txt = await r.text();
-                if (
-                    !replacing &&
-                    (/Conflito|conflict/i.test(txt) || r.status === 400)
-                ) {
+                ? { start_at: startISO, end_at: endISO, notes, visit_type: visitType }
+                : { client: client.id, title: 'Consulta', visit_type: visitType, start_at: startISO, end_at: endISO, status: 'scheduled', notes };
+            try {
+                await apiFetch(path, { method, body: payload });
+            } catch (e) {
+                const err = e as ApiError | Error;
+                const txt = err.message || '';
+                if (!replacing && (/Conflito|conflict/i.test(txt) || (err as ApiError).status === 400)) {
                     setOfferReplace(true);
                     try {
-                        const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
-                            startISO,
-                        )}&end=${encodeURIComponent(endISO)}&status=scheduled`;
-                        const list: unknown = await fetch(url, {
-                            headers: { Authorization: `Bearer ${token}` },
-                        }).then(rr => rr.json());
-                        setConflicts(
-                            (Array.isArray(list) ? list : []) as Appointment[],
-                        );
-                    } catch (e) {
-                        void e;
-                    }
-                    setError(
-                        'Conflito detectado. Confirme se deseja substituir.',
-                    );
+                        const list = await apiFetch(
+                            `/agenda/appointments/?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}&status=scheduled`,
+                        ) as unknown;
+                        setConflicts((Array.isArray(list) ? list : []) as Appointment[]);
+                    } catch { /* ignore */ }
+                    setError('Conflito detectado. Confirme se deseja substituir.');
                     return;
                 }
                 throw new Error(txt || 'Falha ao agendar.');
@@ -527,33 +497,18 @@ export default function ScheduleEditorCore({
         ).toISOString();
         setSaving(true);
         try {
-            const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
-                startISO,
-            )}&end=${encodeURIComponent(endISO)}&status=scheduled`;
-            const list: unknown = await fetch(url, {
-                headers: { Authorization: `Bearer ${token}` },
-            }).then(r => r.json());
-            const conflictList = (Array.isArray(list) ? list : []) as Array<{
-                id: number;
-                status: string;
-            }>;
+            const list = await apiFetch(
+                `/agenda/appointments/?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}&status=scheduled`,
+            ) as unknown;
+            const conflictList = (Array.isArray(list) ? list : []) as Array<{ id: number; status: string }>;
             for (const c of conflictList) {
-                await fetch(`${API_BASE}/agenda/appointments/${c.id}/`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ status: 'canceled' }),
-                });
+                try {
+                    await apiFetch(`/agenda/appointments/${c.id}/`, { method: 'PATCH', body: { status: 'canceled' } });
+                } catch { /* ignore individual cancel errors */ }
             }
             await submitCreate(true);
         } catch (e: unknown) {
-            setError(
-                e instanceof Error
-                    ? e.message
-                    : 'Falha ao substituir conflitos.',
-            );
+            setError(e instanceof Error ? e.message : 'Falha ao substituir conflitos.');
         } finally {
             setSaving(false);
         }

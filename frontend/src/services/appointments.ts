@@ -1,19 +1,13 @@
-import { API_BASE } from '../config/api';
+import { apiFetch, ApiError } from '../utils/apiFetch';
 import { getServerNowOnce } from './time';
 import ensureDeviceSession from './sessions';
-import { buildDeviceHeaders } from './device';
-import { getAccessToken } from '../utils/auth/session';
 
 export async function optionsFinalizeSupported(
     apptId: number,
 ): Promise<boolean> {
     try {
-        const token = getAccessToken();
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const url = `${API_BASE}/agenda/appointments/${apptId}/finalize/`;
-        const r = await fetch(url, { method: 'OPTIONS', headers });
-        return r.ok;
+        await apiFetch(`/agenda/appointments/${apptId}/finalize/`, { method: 'OPTIONS' });
+        return true;
     } catch {
         return false;
     }
@@ -21,17 +15,11 @@ export async function optionsFinalizeSupported(
 
 export async function postFinalize(apptId: number): Promise<boolean> {
     try {
-        const token = getAccessToken();
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        Object.assign(headers, buildDeviceHeaders(), {
-            'x-client-now': new Date().toISOString(),
+        await apiFetch(`/agenda/appointments/${apptId}/finalize/`, {
+            method: 'POST',
+            headers: { 'x-client-now': new Date().toISOString() },
         });
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const url = `${API_BASE}/agenda/appointments/${apptId}/finalize/`;
-        const r = await fetch(url, { method: 'POST', headers });
-        return r.ok;
+        return true;
     } catch {
         return false;
     }
@@ -39,17 +27,11 @@ export async function postFinalize(apptId: number): Promise<boolean> {
 
 export async function postDone(apptId: number): Promise<boolean> {
     try {
-        const token = getAccessToken();
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        Object.assign(headers, buildDeviceHeaders(), {
-            'x-client-now': new Date().toISOString(),
+        await apiFetch(`/agenda/appointments/${apptId}/done/`, {
+            method: 'POST',
+            headers: { 'x-client-now': new Date().toISOString() },
         });
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const url = `${API_BASE}/agenda/appointments/${apptId}/done/`;
-        const r = await fetch(url, { method: 'POST', headers });
-        return r.ok;
+        return true;
     } catch {
         return false;
     }
@@ -60,21 +42,12 @@ export async function patchStatus(
     status: 'pending' | 'done' | 'canceled' | 'scheduled',
 ): Promise<boolean> {
     try {
-        const token = getAccessToken();
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        Object.assign(headers, buildDeviceHeaders(), {
-            'x-client-now': new Date().toISOString(),
-        });
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const url = `${API_BASE}/agenda/appointments/${apptId}/`;
-        const r = await fetch(url, {
+        await apiFetch(`/agenda/appointments/${apptId}/`, {
             method: 'PATCH',
-            headers,
-            body: JSON.stringify({ status }),
+            headers: { 'x-client-now': new Date().toISOString() },
+            body: { status },
         });
-        return r.ok;
+        return true;
     } catch {
         return false;
     }
@@ -99,27 +72,16 @@ export async function cancelAppointment(
         status: number;
         text?: string;
     }> {
-        const token = getAccessToken();
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        Object.assign(headers, buildDeviceHeaders());
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const url = `${API_BASE}/agenda/appointments/${apptId}/cancel/`;
         try {
-            const r = await fetch(url, {
+            await apiFetch(`/agenda/appointments/${apptId}/cancel/`, {
                 method: 'POST',
-                headers,
                 cache: 'no-store',
             });
-            const text = await r.text().catch(() => '');
-            return { ok: r.ok, status: r.status, text };
+            return { ok: true, status: 200 };
         } catch (e) {
-            return {
-                ok: false,
-                status: 0,
-                text: String((e as Error)?.message || e),
-            };
+            const err = e as ApiError | Error;
+            const status = (err as ApiError).status ?? 0;
+            return { ok: false, status, text: err.message };
         }
     }
     let res = await attempt();
@@ -145,19 +107,9 @@ export async function cancelWithAdjust(
     // Helper para obter dados do compromisso
     async function getAppt() {
         try {
-            const token = getAccessToken();
-            const headers: Record<string, string> = {};
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-            const url = `${API_BASE}/agenda/appointments/${apptId}/?ts=${Date.now()}`;
-            const r = await fetch(url, { headers, cache: 'no-store' });
-            if (!r.ok) return null;
-            const d = (await r.json()) as {
-                id: number;
-                start_at: string;
-                end_at: string;
-                status: 'scheduled' | 'pending' | 'done' | 'canceled';
-            };
-            return d;
+            return await apiFetch(`/agenda/appointments/${apptId}/?ts=${Date.now()}`, {
+                cache: 'no-store',
+            }) as { id: number; start_at: string; end_at: string; status: 'scheduled' | 'pending' | 'done' | 'canceled' };
         } catch {
             return null;
         }
@@ -200,99 +152,55 @@ export async function cancelWithAdjust(
         } else {
             patchBody = { status: 'canceled' };
         }
-        const token = getAccessToken();
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        Object.assign(headers, buildDeviceHeaders());
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const url = `${API_BASE}/agenda/appointments/${apptId}/`;
-        const patchResp = await fetch(url, {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify(patchBody),
-        });
-        let patchErrorBody: unknown = null;
-        if (!patchResp.ok) {
-            try {
-                const txt = await patchResp.text();
-                try {
-                    patchErrorBody = JSON.parse(txt);
-                } catch {
-                    patchErrorBody = txt;
-                }
-            } catch {
-                /* noop */
-            }
+        let patchOk = false;
+        let patchStatus = 0;
+        try {
+            await apiFetch(`/agenda/appointments/${apptId}/`, {
+                method: 'PATCH',
+                body: patchBody,
+            });
+            patchOk = true;
+        } catch (e) {
+            patchStatus = (e as ApiError).status ?? 0;
         }
         try {
             window.dispatchEvent(
                 new CustomEvent('debug:log', {
                     detail: {
                         label: 'cancelWithAdjust: patch sent',
-                        data: {
-                            ok: patchResp.ok,
-                            status: patchResp.status,
-                            body: patchBody,
-                            error: patchErrorBody,
-                        },
+                        data: { ok: patchOk, status: patchStatus, body: patchBody },
                         ts: Date.now(),
                     },
                 }),
             );
-        } catch {
-            /* noop */
-        }
-        // Fallback strategy: if PATCH 400 with both status + end_at provided, retry with only end_at (some backends reject redundant status update after /cancel/)
-        if (
-            !patchResp.ok &&
-            patchResp.status === 400 &&
-            patchBody &&
-            'end_at' in patchBody
-        ) {
+        } catch { /* noop */ }
+        // Fallback: if PATCH 400 with end_at, retry with only end_at
+        if (!patchOk && patchStatus === 400 && patchBody && 'end_at' in patchBody) {
             try {
-                const fallbackBody = {
-                    end_at: (patchBody as { end_at: string }).end_at,
-                };
-                const fallbackResp = await fetch(url, {
-                    method: 'PATCH',
-                    headers,
-                    body: JSON.stringify(fallbackBody),
-                });
-                let fbErr: unknown = null;
-                if (!fallbackResp.ok) {
-                    try {
-                        const t = await fallbackResp.text();
-                        try {
-                            fbErr = JSON.parse(t);
-                        } catch {
-                            fbErr = t;
-                        }
-                    } catch {
-                        /* noop */
-                    }
+                const fallbackBody = { end_at: (patchBody as { end_at: string }).end_at };
+                let fbOk = false;
+                let fbStatus = 0;
+                try {
+                    await apiFetch(`/agenda/appointments/${apptId}/`, {
+                        method: 'PATCH',
+                        body: fallbackBody,
+                    });
+                    fbOk = true;
+                } catch (e) {
+                    fbStatus = (e as ApiError).status ?? 0;
                 }
                 try {
                     window.dispatchEvent(
                         new CustomEvent('debug:log', {
                             detail: {
                                 label: 'cancelWithAdjust: fallback patch',
-                                data: {
-                                    ok: fallbackResp.ok,
-                                    status: fallbackResp.status,
-                                    body: fallbackBody,
-                                    error: fbErr,
-                                },
+                                data: { ok: fbOk, status: fbStatus, body: fallbackBody },
                                 ts: Date.now(),
                             },
                         }),
                     );
-                } catch {
-                    /* noop */
-                }
-            } catch {
-                /* noop fallback */
-            }
+                } catch { /* noop */ }
+            } catch { /* noop fallback */ }
         }
     } catch {
         // silenciar: o cancel já ocorreu
@@ -310,19 +218,7 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
     // Helper: fetch appointment details
     async function getAppt() {
         try {
-            const token = getAccessToken();
-            const headers: Record<string, string> = {};
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-            const url = `${API_BASE}/agenda/appointments/${apptId}/?ts=${Date.now()}`;
-            const r = await fetch(url, { headers, cache: 'no-store' });
-            if (!r.ok) return null;
-            const d = (await r.json()) as {
-                id: number;
-                start_at: string;
-                end_at: string;
-                status: 'scheduled' | 'done' | 'canceled';
-            };
-            return d;
+            return await apiFetch(`/agenda/appointments/${apptId}/?ts=${Date.now()}`, { cache: 'no-store' }) as { id: number; start_at: string; end_at: string; status: 'scheduled' | 'done' | 'canceled' };
         } catch {
             return null;
         }
@@ -333,55 +229,20 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
         try {
             const appt = await getAppt();
             if (!appt) return false;
-            // Only attempt adjustments for scheduled appointments
             if (appt.status !== 'scheduled') return true;
-            const token = getAccessToken();
-            const headers: Record<string, string> = {
-                'Content-Type': 'application/json',
-            };
-            Object.assign(headers, buildDeviceHeaders());
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-            // Use server-aligned now when available
             const serverNow = await getServerNowOnce();
             const now = serverNow ?? new Date();
-            const start = new Date(appt.start_at);
-            const end = new Date(appt.end_at);
             const nowMs = now.getTime();
-            const startMs = start.getTime();
-            const endMs = end.getTime();
-            // Build PATCH payload depending on relation between now/start/end
-            // Case A: now < start -> move start to now and end to now + 1s
-            // Case B: start <= now < end -> set end to now
-            // Case C: now >= end -> just mark pending
+            const startMs = new Date(appt.start_at).getTime();
+            const endMs = new Date(appt.end_at).getTime();
             let body: Record<string, unknown> = { status: 'pending' };
             if (!Number.isNaN(startMs) && nowMs < startMs) {
-                const newStart = new Date(nowMs);
-                const newEnd = new Date(nowMs + 1000); // ensure end > start
-                body = {
-                    ...body,
-                    start_at: newStart.toISOString(),
-                    end_at: newEnd.toISOString(),
-                };
-            } else if (
-                !Number.isNaN(startMs) &&
-                !Number.isNaN(endMs) &&
-                startMs <= nowMs &&
-                nowMs < endMs
-            ) {
-                const newEnd = new Date(nowMs);
-                // keep start_at; only shorten end
-                body = { ...body, end_at: newEnd.toISOString() };
-            } else {
-                // now >= end: only status is needed
-                body = { status: 'pending' };
+                body = { ...body, start_at: new Date(nowMs).toISOString(), end_at: new Date(nowMs + 1000).toISOString() };
+            } else if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs <= nowMs && nowMs < endMs) {
+                body = { ...body, end_at: new Date(nowMs).toISOString() };
             }
-            const url = `${API_BASE}/agenda/appointments/${apptId}/`;
-            const r = await fetch(url, {
-                method: 'PATCH',
-                headers,
-                body: JSON.stringify(body),
-            });
-            return r.ok;
+            await apiFetch(`/agenda/appointments/${apptId}/`, { method: 'PATCH', body });
+            return true;
         } catch {
             return false;
         }
@@ -389,37 +250,37 @@ export async function finalizeWithFallback(apptId: number): Promise<boolean> {
 
     // Try finalize; if "too early", perform force-adjust
     try {
-        const token = getAccessToken();
-        const headers: Record<string, string> = {};
-        Object.assign(headers, buildDeviceHeaders(), {
-            'X-Client-Now': new Date().toISOString(),
-        });
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const url = `${API_BASE}/agenda/appointments/${apptId}/finalize/`;
-        let r = await fetch(url, { method: 'POST', headers });
-        if (r.status === 401 || r.status === 403) {
-            try {
-                await ensureDeviceSession(true);
-            } catch {
-                /* ignore */
-            }
-            r = await fetch(url, { method: 'POST', headers });
-        }
-        if (r.ok) return true;
-        if (r.status === 422) {
-            try {
-                const data = await r.json();
-                if (data && data.code === 'too_early') {
-                    const forced = await finalizeForceAdjust();
-                    if (forced) return true;
-                }
-            } catch {
-                /* ignore */
+        let ok = false;
+        let status422 = false;
+        let tooEarlyCode = false;
+        try {
+            await apiFetch(`/agenda/appointments/${apptId}/finalize/`, {
+                method: 'POST',
+                headers: { 'X-Client-Now': new Date().toISOString() },
+            });
+            ok = true;
+        } catch (e) {
+            const err = e as ApiError;
+            if (err.status === 422) {
+                status422 = true;
+                tooEarlyCode = err.code === 'too_early';
+            } else if (err.status === 401 || err.status === 403) {
+                try { await ensureDeviceSession(true); } catch { /* ignore */ }
+                try {
+                    await apiFetch(`/agenda/appointments/${apptId}/finalize/`, {
+                        method: 'POST',
+                        headers: { 'X-Client-Now': new Date().toISOString() },
+                    });
+                    ok = true;
+                } catch { /* ignore retry */ }
             }
         }
-    } catch {
-        /* ignore */
-    }
+        if (ok) return true;
+        if (status422 && tooEarlyCode) {
+            const forced = await finalizeForceAdjust();
+            if (forced) return true;
+        }
+    } catch { /* ignore */ }
 
     // Final fallback: force-adjust via PATCH; if that fails, last attempt: status only
     if (await finalizeForceAdjust()) return true;
@@ -431,33 +292,18 @@ export async function fetchFutureAppointments(
     startRefISO: string,
     excludeAppointmentId?: number | null,
     limitOverfetch = 20,
-): Promise<
-    Array<{
-        id: number;
-        start_at: string;
-        end_at: string;
-        status: 'scheduled' | 'pending' | 'done' | 'canceled';
-        title?: string;
-        notes?: string;
-    }>
-> {
-    const token = getAccessToken();
-    if (!token) return [];
-    const url = `${API_BASE}/agenda/appointments/?start=${encodeURIComponent(
-        startRefISO,
-    )}&limit=${limitOverfetch}&ordering=start_at&client=${clientId}`;
-    const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!r.ok) return [];
-    const data = (await r.json()) as unknown;
-    const arr = Array.isArray(data) ? data : [];
-    const list = arr
-        .filter(a => a.status === 'scheduled')
-        .filter(a =>
-            excludeAppointmentId ? a.id !== excludeAppointmentId : true,
-        );
-    return list;
+): Promise<Array<{ id: number; start_at: string; end_at: string; status: 'scheduled' | 'pending' | 'done' | 'canceled'; title?: string; notes?: string; }>> {
+    try {
+        const data = await apiFetch(
+            `/agenda/appointments/?start=${encodeURIComponent(startRefISO)}&limit=${limitOverfetch}&ordering=start_at&client=${clientId}`,
+        ) as unknown[];
+        const arr = Array.isArray(data) ? data : [];
+        return arr
+            .filter((a: unknown) => (a as { status: string }).status === 'scheduled')
+            .filter((a: unknown) => excludeAppointmentId ? (a as { id: number }).id !== excludeAppointmentId : true) as typeof arr extends Array<infer T> ? T[] : never;
+    } catch {
+        return [];
+    }
 }
 
 export async function probeOngoingAroundNow(
@@ -465,24 +311,13 @@ export async function probeOngoingAroundNow(
     windowSeconds = 30,
 ): Promise<null | { id: number; start_at: string; end_at: string }> {
     try {
-        const token = getAccessToken();
-        if (!token) return null;
         const now = new Date();
         const start = new Date(now.getTime() - windowSeconds * 1000);
         const end = new Date(now.getTime() + windowSeconds * 1000);
-        const url = `${API_BASE}/agenda/appointments/?client=${clientId}&status=scheduled&start=${encodeURIComponent(
-            start.toISOString(),
-        )}&end=${encodeURIComponent(end.toISOString())}&ts=${Date.now()}`;
-        const r = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-            cache: 'no-store',
-        });
-        if (!r.ok) return null;
-        const data = (await r.json()) as Array<{
-            id: number;
-            start_at: string;
-            end_at: string;
-        }>;
+        const data = await apiFetch(
+            `/agenda/appointments/?client=${clientId}&status=scheduled&start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&ts=${Date.now()}`,
+            { cache: 'no-store' },
+        ) as Array<{ id: number; start_at: string; end_at: string }>;
         return Array.isArray(data) && data.length ? data[0] : null;
     } catch {
         return null;
