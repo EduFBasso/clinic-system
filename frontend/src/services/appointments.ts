@@ -296,11 +296,11 @@ export async function fetchFutureAppointments(
     try {
         const data = await apiFetch(
             `/agenda/appointments/?start=${encodeURIComponent(startRefISO)}&limit=${limitOverfetch}&ordering=start_at&client=${clientId}`,
-        ) as unknown[];
+        ) as unknown as unknown[];
         const arr = Array.isArray(data) ? data : [];
         return arr
             .filter((a: unknown) => (a as { status: string }).status === 'scheduled')
-            .filter((a: unknown) => excludeAppointmentId ? (a as { id: number }).id !== excludeAppointmentId : true) as typeof arr extends Array<infer T> ? T[] : never;
+            .filter((a: unknown) => excludeAppointmentId ? (a as { id: number }).id !== excludeAppointmentId : true) as unknown as Array<{ id: number; start_at: string; end_at: string; status: 'scheduled' | 'pending' | 'done' | 'canceled'; title?: string; notes?: string; }>;
     } catch {
         return [];
     }
@@ -317,7 +317,7 @@ export async function probeOngoingAroundNow(
         const data = await apiFetch(
             `/agenda/appointments/?client=${clientId}&status=scheduled&start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}&ts=${Date.now()}`,
             { cache: 'no-store' },
-        ) as Array<{ id: number; start_at: string; end_at: string }>;
+        ) as unknown as Array<{ id: number; start_at: string; end_at: string }>;
         return Array.isArray(data) && data.length ? data[0] : null;
     } catch {
         return null;

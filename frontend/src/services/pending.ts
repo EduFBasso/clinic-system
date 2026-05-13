@@ -10,7 +10,7 @@ async function fetchAppointmentsForStatus(
         const data = await apiFetch(
             `/agenda/appointments/?client=${clientId}&status=${status}&ordering=-end_at&limit=50&ts=${Date.now()}`,
             { cache: 'no-store' },
-        ) as Appointment[];
+        ) as unknown as Appointment[];
         return Array.isArray(data) ? data : null;
     } catch {
         return null;

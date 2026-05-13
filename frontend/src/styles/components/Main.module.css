@@ -169,7 +169,7 @@
 .filtersMenuButton {
     min-width: 92px;
     padding: 0.45rem 0.65rem;
-    background: #111827;
+    background: #4b5563;
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -178,9 +178,9 @@
     line-height: 1.2;
 }
 
-/* Fundo cinza escuro quando há pendentes e nenhum filtro ativo — consistente com o tom do cartão pendente */
+/* Vermelho quando há pendentes e nenhum filtro ativo — chama atenção para resolver */
 .filtersMenuButtonPending {
-    background: #374151;
+    background: #dc2626;
 }
 
 .filtersMenuButtonActive {
@@ -249,72 +249,6 @@
     );
 }
 
-.paginationBar {
-    margin-top: 14px;
-    display: grid;
-    gap: 10px;
-}
-
-.paginationSummary {
-    font-size: 0.98rem;
-    color: rgba(17, 24, 39, 0.82);
-}
-
-/* Linha 2: Por página [select]  ←→  Página X de Y */
-.paginationRow2 {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.paginationPageSizeLabel {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--color-text, #1f2937);
-}
-
-.paginationPageSizeSelect {
-    min-width: 84px;
-    padding: 0.45rem 0.55rem;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: #fff;
-    color: var(--color-text, #1f2937);
-    font-size: 0.95rem;
-}
-
-.paginationPageIndicator {
-    font-size: 0.92rem;
-    font-weight: 700;
-    color: var(--color-text, #1f2937);
-}
-
-/* Linha 3: botões Anterior | Próxima lado a lado */
-.paginationButtons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-
-.paginationButton {
-    appearance: none;
-    border: 0;
-    border-radius: 12px;
-    padding: 0.8rem 1rem;
-    background: #0f172a;
-    color: #fff;
-    font-size: 0.96rem;
-    font-weight: 700;
-}
-
-.paginationButton:disabled {
-    opacity: 0.45;
-}
-
 /* Smartphones (ex: iPhone 16 Plus) */
 @media screen and (max-width: 430px) {
     .main {
@@ -366,10 +300,6 @@
     .filterActionsMobile {
         justify-self: end;
     }
-
-    .paginationBar {
-        padding-bottom: 8px;
-    }
 }
 
 /* Tablets (ex: iPad 10) — manter coluna única para evitar desalinhamento */
@@ -378,10 +308,6 @@
         display: block; /* não usar grid em 2 colunas aqui */
         padding: 1.5rem;
     }
-}
-
-@media screen and (min-width: 640px) {
-    /* layout já é flex row no paginationRow2 — nenhuma alteração necessária */
 }
 
 /* Desktop: limitar a largura máxima do input do filtro a 35% da página */

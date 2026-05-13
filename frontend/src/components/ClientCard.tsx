@@ -48,6 +48,8 @@ interface ClientCardProps {
     /** Quando definido, o botão "Avisar" usa este agendamento em vez do next_appointment do cliente.
      *  Útil quando o filtro ativo é "Amanhã" e o cliente tem um agendamento amanhã distinto do next. */
     notifyAppt?: { start_at?: string; end_at?: string; title?: string };
+    /** Dados do compromisso pendente para exibir data/hora no card pending. */
+    pendingAppt?: { start_at?: string; end_at?: string };
     /** Modo de filtro ativo. Quando 'today' ou 'tomorrow', o card exibe apenas o dia filtrado. */
     filterMode?: 'all' | 'pending' | 'today' | 'tomorrow';
 }
@@ -58,6 +60,7 @@ function ClientCard({
     selected,
     onSelect,
     notifyAppt,
+    pendingAppt,
     filterMode = 'all',
 }: ClientCardProps) {
     const navigate = useNavigate();
@@ -169,8 +172,7 @@ function ClientCard({
     const effectiveOngoing = isOngoing && !isTomorrowFilter;
 
     const hasAgendaLine =
-        !isPending &&
-        (isScheduled || effectiveOngoing || futureAppointments.length > 0);
+        isScheduled || effectiveOngoing || futureAppointments.length > 0;
 
     // Ações unificadas (+) para agenda e fallback
     const createActionAgenda = useClientCreateAction({
@@ -879,43 +881,74 @@ function ClientCard({
                 </div>
             )}
 
-            {/* Bloco compacto de pendência substitui linha Data e ícones quando pendente (independente de scheduled). */}
+            {/* Bloco pendente: separador + linha Data + linha Status/Solucionar */}
             {isPending && !isOngoing && (
-                <div
-                    className={styles.infoRow}
-                    style={{ alignItems: 'center' }}
-                >
-                    <span
-                        className={styles.label}
-                        style={{ color: labelColor, fontWeight: 'bold' }}
-                    >
-                        Status:
-                    </span>
-                    <span
-                        className={styles.value}
+                <>
+                    <div
+                        aria-hidden
                         style={{
-                            color: 'var(--color-text-secondary, #6b7280)',
-                            fontStyle: 'italic',
-                        }}
-                    >
-                        Compromisso pendente
-                    </span>
-                    <SolveButton
-                        onSolve={async () => {
-                            try {
-                                onSelect?.();
-                            } catch {
-                                /* noop */
-                            }
-                            await tryOpenPendingElseQuick(() => {
-                                /* noop fallback */
-                            }, {
-                                kind: 'home',
-                                clientId: client.id,
-                            });
+                            height: 1,
+                            background: separatorColor,
+                            opacity: separatorOpacity,
+                            margin: '12px 0 12px',
+                            borderRadius: 1,
                         }}
                     />
-                </div>
+                    {(client.next_appointment_start_at || pendingAppt?.start_at) && (
+                        <div className={styles.infoRow}>
+                            <span className={styles.label} style={{ color: labelColor, fontWeight: 'bold' }}>Data:</span>
+                            <span className={styles.value} style={{ color: valueColor }}>
+                                {(() => {
+                                    const sIso = client.next_appointment_start_at || pendingAppt?.start_at!;
+                                    const eIso = client.next_appointment_end_at || pendingAppt?.end_at || null;
+                                    const s = new Date(sIso);
+                                    const wd = s.toLocaleDateString('pt-BR', { weekday: 'short' })
+                                        .replace('.', '').replace(/\b(\w)/, c => c.toUpperCase());
+                                    const dd = String(s.getDate()).padStart(2, '0');
+                                    const mm = String(s.getMonth() + 1).padStart(2, '0');
+                                    const fs = formatTime(sIso);
+                                    const fe = eIso ? formatTime(eIso) : '';
+                                    return `${wd} ${dd}/${mm}, ${fs}${fe ? ` - ${fe}` : ''}`;
+                                })()}
+                            </span>
+                        </div>
+                    )}
+                    <div
+                        className={styles.infoRow}
+                        style={{ alignItems: 'center' }}
+                    >
+                        <span
+                            className={styles.label}
+                            style={{ color: labelColor, fontWeight: 'bold' }}
+                        >
+                            Status:
+                        </span>
+                        <span
+                            className={styles.value}
+                            style={{
+                                color: 'var(--color-text-secondary, #6b7280)',
+                                fontStyle: 'italic',
+                            }}
+                        >
+                            Pendente
+                        </span>
+                        <SolveButton
+                            onSolve={async () => {
+                                try {
+                                    onSelect?.();
+                                } catch {
+                                    /* noop */
+                                }
+                                await tryOpenPendingElseQuick(() => {
+                                    /* noop fallback */
+                                }, {
+                                    kind: 'home',
+                                    clientId: client.id,
+                                });
+                            }}
+                        />
+                    </div>
+                </>
             )}
 
             {/* Notas do próximo agendamento removidas conforme solicitação */}

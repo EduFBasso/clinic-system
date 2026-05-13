@@ -138,7 +138,7 @@ export default function DesktopAgendaPage() {
             .then(appt => {
                 if (appt) {
                     setDetailsReturnContext(payload?.returnContext ?? null);
-                    setDetailsAppt(appt as Appointment);
+                    setDetailsAppt(appt as unknown as Appointment);
                     setDetailsOpen(true);
                 }
             })

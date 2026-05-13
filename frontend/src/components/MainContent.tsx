@@ -1,5 +1,4 @@
 // frontend\src\components\MainContent.tsx
-import { API_BASE } from '../config/api';
 import React, { useState } from 'react';
 import styles from '../styles/components/Main.module.css';
 import { useClients } from '../hooks/useClients';
@@ -8,9 +7,15 @@ import type { ClientBasic } from '../types/ClientBasic';
 import AppModal from './Modal';
 import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
-import { dispatchLogout, hasActiveSession , getAccessToken } from '../utils/auth/session';
+import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
 import { apiFetch } from '../utils/apiFetch';
 import { useNowTick } from '../hooks/useNowTick';
+import { useAppointmentSets } from '../hooks/useAppointmentSets';
+import type { PendingAppointmentLike } from '../hooks/useAppointmentSets';
+import { useScrollPersistence } from '../hooks/useScrollPersistence';
+import { useIosKeyboard } from '../hooks/useIosKeyboard';
+import FilterBar from './FilterBar';
+import type { FilterMode } from './FilterBar';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -28,58 +33,10 @@ interface MainContentProps {
     // ...outros props se necessário...
 }
 
-type FilterMode = 'all' | 'pending' | 'today' | 'tomorrow' | 'ongoing';
-
-interface PendingAppointmentLike {
-    id: number;
-    status: 'scheduled' | 'pending';
-    start_at?: string;
-    end_at?: string;
-    client?: number | { id?: number } | null;
-    title?: string;
-}
-
-function unwrapAppointmentsList(
-    payload: unknown,
-): PendingAppointmentLike[] {
-    if (Array.isArray(payload)) {
-        return payload as PendingAppointmentLike[];
-    }
-    if (
-        payload &&
-        typeof payload === 'object' &&
-        Array.isArray((payload as { results?: unknown[] }).results)
-    ) {
-        return (payload as { results: PendingAppointmentLike[] }).results;
-    }
-    return [];
-}
-
-function resolveAppointmentClientId(appt: PendingAppointmentLike): number | null {
-    if (typeof appt.client === 'number') return appt.client;
-    if (appt.client && typeof appt.client === 'object') {
-        const id = appt.client.id;
-        return typeof id === 'number' ? id : null;
-    }
-    return null;
-}
-
-const CLIENTS_PER_PAGE_OPTIONS = [50, 200, 'all'] as const;
-type ClientsPerPageOption = (typeof CLIENTS_PER_PAGE_OPTIONS)[number];
-const PAGINATION_STORAGE_KEY = 'ui.clientsPerPage';
-const SCROLL_SESSION_KEY = 'home.scrollY';
 const FILTER_SESSION_KEY = 'home.filter';
-function readStoredClientsPerPage(): ClientsPerPageOption {
-    try {
-        const raw = localStorage.getItem(PAGINATION_STORAGE_KEY);
-        const n = Number(raw);
-        // 'all' never persisted; only restore numeric options
-        if (Number.isFinite(n) && n > 0 && (CLIENTS_PER_PAGE_OPTIONS as readonly (number | string)[]).includes(n)) {
-            return n as ClientsPerPageOption;
-        }
-    } catch { /* noop */ }
-    return 50;
-}
+const LOAD_BATCH = 50;
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
@@ -94,23 +51,10 @@ const MainContent: React.FC<MainContentProps> = ({
     });
     const [filterMode, setFilterMode] = useState<FilterMode>('all');
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-    // Agrupado em único objeto para que a atualização destes 3 valores seja 1 render,
-    // não 3 renders separados (React 18 faz batch dentro do mesmo event loop, mas
-    // setState assíncrono ainda gera flushes independentes quando vêm de Promises).
-    const [apptSets, setApptSets] = useState<{
-        pendingIds: Set<number>;
-        tomorrowIds: Set<number>;
-        tomorrowAppts: Map<number, PendingAppointmentLike>;
-    }>(() => ({
-        pendingIds: new Set(),
-        tomorrowIds: new Set(),
-        tomorrowAppts: new Map(),
-    }));
-    const pendingClientIds  = apptSets.pendingIds;
-    const tomorrowClientIds = apptSets.tomorrowIds;
-    const tomorrowClientAppts = apptSets.tomorrowAppts;
-    const [clientsPerPage, setClientsPerPage] = useState<ClientsPerPageOption>(readStoredClientsPerPage);
-    const [currentPage, setCurrentPage] = useState(1);
+    const { pendingIds: pendingClientIds, pendingAppts: pendingClientAppts, tomorrowIds: tomorrowClientIds, tomorrowAppts: tomorrowClientAppts } =
+        useAppointmentSets(clients.length);
+    const [visibleCount, setVisibleCount] = useState(LOAD_BATCH);
+    const sentinelRef = React.useRef<HTMLDivElement | null>(null);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
     const [returnUrl, setReturnUrl] = useState<string | null>(null);
@@ -256,94 +200,11 @@ const MainContent: React.FC<MainContentProps> = ({
         }
     }, [setSelectedClientId]);
 
-    // Mantém o filtro visível quando o teclado virtual abre (iOS/Android)
-    React.useEffect(() => {
-        const isMobileUA = /iPhone|iPad|iPod|Android/i.test(
-            navigator.userAgent,
-        );
-        if (!isMobileUA) return;
+    useIosKeyboard(styles.filterContainer);
 
-        const input = document.getElementById('client-filter');
-        const filterEl = document.querySelector(
-            `.${styles.filterContainer}`,
-        ) as HTMLElement | null;
-        const add = () => document.body.classList.add('keyboardOpen');
-        const remove = () => document.body.classList.remove('keyboardOpen');
-        input?.addEventListener('focus', add);
-        input?.addEventListener('blur', remove);
-
-        // Apoio com VisualViewport: detecta redução de altura quando teclado aparece
-        const vv = window.visualViewport;
-        let baseline = vv?.height || window.innerHeight;
-        const onResize = () => {
-            if (!vv) return;
-            const activeEl = document.activeElement as HTMLElement | null;
-            const isInputFocused =
-                !!activeEl &&
-                (activeEl.tagName === 'INPUT' ||
-                    activeEl.tagName === 'TEXTAREA');
-            // Recalibra baseline quando nenhum input está focado (evita falso positivo por UI do Safari)
-            if (!isInputFocused) {
-                baseline = vv.height;
-            }
-            const delta = Math.max(0, baseline - vv.height);
-            const keyboardLikelyOpen = isInputFocused && delta > 150;
-            document.body.classList.toggle('keyboardOpen', keyboardLikelyOpen);
-            // Expõe altura do teclado como variável CSS para ajustes visuais
-            (document.documentElement as HTMLElement).style.setProperty(
-                '--kb-h',
-                keyboardLikelyOpen ? `${Math.round(delta)}px` : '0px',
-            );
-            // Atualiza a altura efetiva do filtro para o CSS calcular o painel
-            const fh = filterEl?.getBoundingClientRect().height || 120;
-            (document.documentElement as HTMLElement).style.setProperty(
-                '--filter-h',
-                `${Math.round(fh)}px`,
-            );
-            // Mantém input visível mesmo com reflows; força alinhamento do caret
-            if (keyboardLikelyOpen && document.activeElement === input) {
-                setTimeout(() => {
-                    input?.scrollIntoView({
-                        block: 'start',
-                        behavior: 'instant' as ScrollBehavior,
-                    });
-                }, 0);
-            }
-        };
-        vv?.addEventListener('resize', onResize);
-
-        return () => {
-            input?.removeEventListener('focus', add);
-            input?.removeEventListener('blur', remove);
-            vv?.removeEventListener('resize', onResize);
-            document.body.classList.remove('keyboardOpen');
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--kb-h',
-            );
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--filter-h',
-            );
-        };
-    }, []);
-
-    // Hard reset: garante que não iniciamos com o body travado no mobile
-    React.useEffect(() => {
-        document.body.classList.remove('keyboardOpen');
-        try {
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--kb-h',
-            );
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--filter-h',
-            );
-        } catch {
-            /* noop */
-        }
-    }, []);
     const cardRefs = React.useRef<{ [key: number]: HTMLDivElement | null }>({});
     const lastPrefixTargetRef = React.useRef<number | null>(null);
     const debounceRef = React.useRef<number | null>(null);
-    const hasRestoredScrollRef = React.useRef(false);
 
     // Helper: desfoca, remove lock e pede atualização da lista
     const refreshAndUnlock = React.useCallback(() => {
@@ -392,46 +253,8 @@ const MainContent: React.FC<MainContentProps> = ({
         try { sessionStorage.setItem(FILTER_SESSION_KEY, filter); } catch { /* noop */ }
     }, [filter]);
 
-    // Salva posição de scroll continuamente (debounce 200ms) e imediatamente ao sair da página.
-    // Permite restaurar exatamente onde o usuário estava ao voltar da edição/criação de clientes.
-    React.useEffect(() => {
-        let saveTimer: number | null = null;
-        const save = () => {
-            try {
-                sessionStorage.setItem(SCROLL_SESSION_KEY, String(Math.round(window.scrollY)));
-            } catch { /* noop */ }
-        };
-        const onScroll = () => {
-            if (saveTimer) window.clearTimeout(saveTimer);
-            saveTimer = window.setTimeout(save, 200);
-        };
-        window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('pagehide', save);
-        return () => {
-            if (saveTimer) window.clearTimeout(saveTimer);
-            window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('pagehide', save);
-        };
-    }, []);
-
-    // Restaura posição de scroll após o carregamento inicial dos clientes.
-    // Só executa uma vez por montagem; ignora atualizações subsequentes.
-    React.useEffect(() => {
-        if (loading || clients.length === 0) return;
-        if (hasRestoredScrollRef.current) return;
-        hasRestoredScrollRef.current = true;
-        try {
-            const saved = sessionStorage.getItem(SCROLL_SESSION_KEY);
-            if (saved) {
-                const y = Number(saved);
-                if (Number.isFinite(y) && y > 0) {
-                    requestAnimationFrame(() => {
-                        window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior });
-                    });
-                }
-            }
-        } catch { /* noop */ }
-    }, [loading, clients.length]);
+    // Salva posição de scroll e restaura após carregamento inicial.
+    useScrollPersistence(loading, clients.length);
 
     // Modo seleção vindo da Agenda: se URL tiver selectClientFor=agenda, foca filtro e aplica retorno
     React.useEffect(() => {
@@ -592,98 +415,6 @@ const MainContent: React.FC<MainContentProps> = ({
     // Clientes com compromisso pendente.
     // Fonte de verdade: backend (status='pending' + resumo no payload de clientes).
     // A lista scheduled abaixo é usada somente para o bloco de "amanhã".
-    React.useEffect(() => {
-        let cancelled = false;
-
-        async function loadPendingClientIds() {
-            const token = getAccessToken();
-            if (!token || clients.length === 0) {
-                if (!cancelled) {
-                    setApptSets({ pendingIds: new Set(), tomorrowIds: new Set(), tomorrowAppts: new Map() });
-                }
-                return;
-            }
-
-            const pendingUrl = `${API_BASE}/agenda/appointments/?status=pending&ordering=-end_at&limit=300&ts=${Date.now()}`;
-            const scheduledUrl = `${API_BASE}/agenda/appointments/?status=scheduled&ordering=-end_at&limit=300&ts=${Date.now()}`;
-
-            try {
-                const [pendingDataRaw, scheduledDataRaw] = await Promise.all([
-                    apiFetch(pendingUrl, { cache: 'no-store', timeoutMs: 12000 }),
-                    apiFetch(scheduledUrl, { cache: 'no-store', timeoutMs: 12000 }),
-                ]);
-
-                const pendingData = unwrapAppointmentsList(pendingDataRaw);
-                const scheduledData = unwrapAppointmentsList(scheduledDataRaw);
-
-                const ids = new Set<number>();
-                const tomorrowIds = new Set<number>();
-                // Primeiro agendamento de amanhã por cliente (horário mais cedo)
-                const tomorrowAppts = new Map<number, PendingAppointmentLike>();
-
-                // Calcula os limites do dia de amanhã em hora local
-                const tmw = new Date();
-                tmw.setDate(tmw.getDate() + 1);
-                const tmwStart = new Date(tmw.getFullYear(), tmw.getMonth(), tmw.getDate(), 0, 0, 0, 0).getTime();
-                const tmwEnd   = new Date(tmw.getFullYear(), tmw.getMonth(), tmw.getDate(), 23, 59, 59, 999).getTime();
-
-                // Fonte de verdade: apenas o retorno do endpoint /pending.
-                // NÃO suplementamos com campos do objeto client (next_appointment_status /
-                // last_appointment_status) porque esses campos são cache estático que só
-                // atualiza quando useClients refaz o fetch completo — causaria contador stale.
-                pendingData.forEach(appt => {
-                    const clientId = resolveAppointmentClientId(appt);
-                    if (clientId != null) ids.add(clientId);
-                });
-
-                // Ordena agendados por start_at para garantir que o primeiro de amanhã seja o mais cedo
-                const sortedScheduled = [...scheduledData].sort((a, b) => {
-                    const ta = a.start_at ? new Date(a.start_at).getTime() : 0;
-                    const tb = b.start_at ? new Date(b.start_at).getTime() : 0;
-                    return ta - tb;
-                });
-
-                sortedScheduled.forEach(appt => {
-                    const clientId = resolveAppointmentClientId(appt);
-                    if (clientId == null) return;
-
-                    // Agendados para amanhã (qualquer horário do dia)
-                    const startMs = appt.start_at
-                        ? new Date(appt.start_at).getTime()
-                        : NaN;
-                    if (Number.isFinite(startMs) && startMs >= tmwStart && startMs <= tmwEnd) {
-                        tomorrowIds.add(clientId);
-                        // Guarda apenas o mais cedo (lista já ordenada)
-                        if (!tomorrowAppts.has(clientId)) {
-                            tomorrowAppts.set(clientId, appt);
-                        }
-                    }
-                });
-
-                if (!cancelled) {
-                    setApptSets({ pendingIds: ids, tomorrowIds, tomorrowAppts });
-                }
-            } catch {
-                if (!cancelled) {
-                    setApptSets({ pendingIds: new Set(), tomorrowIds: new Set(), tomorrowAppts: new Map() });
-                }
-            }
-        }
-
-        void loadPendingClientIds();
-
-        const onUpdateClients = () => {
-            void loadPendingClientIds();
-        };
-        window.addEventListener('updateClients', onUpdateClients);
-        window.addEventListener('appointments:changed', onUpdateClients);
-
-        return () => {
-            cancelled = true;
-            window.removeEventListener('updateClients', onUpdateClients);
-            window.removeEventListener('appointments:changed', onUpdateClients);
-        };
-    }, [clients.length]);
 
     const pendingClients = React.useMemo(() => {
         return clients
@@ -739,56 +470,36 @@ const MainContent: React.FC<MainContentProps> = ({
     ]);
 
     const deferredDisplayedClients = React.useDeferredValue(displayedClients);
-    const effectiveClientsPerPage =
-        clientsPerPage === 'all'
-            ? Math.max(1, deferredDisplayedClients.length || 1)
-            : clientsPerPage;
-    const totalPages = Math.max(
-        1,
-        Math.ceil(deferredDisplayedClients.length / effectiveClientsPerPage),
-    );
-    const safeCurrentPage = Math.min(currentPage, totalPages);
-    const pageStartIndex = (safeCurrentPage - 1) * effectiveClientsPerPage;
-    const pageEndIndex = Math.min(
-        pageStartIndex + effectiveClientsPerPage,
-        deferredDisplayedClients.length,
-    );
+    const totalDisplayed = deferredDisplayedClients.length;
+    const hasMore = visibleCount < totalDisplayed;
     const visibleClients = React.useMemo(
-        () => deferredDisplayedClients.slice(pageStartIndex, pageEndIndex),
-        [deferredDisplayedClients, pageEndIndex, pageStartIndex],
+        () => deferredDisplayedClients.slice(0, visibleCount),
+        [deferredDisplayedClients, visibleCount],
     );
 
+    // Ao mudar filterMode: reseta contagem e volta ao topo
     React.useEffect(() => {
-        setCurrentPage(1);
-    }, [filter, filterMode, clientsPerPage]);
+        setVisibleCount(LOAD_BATCH);
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    }, [filterMode]);
 
+    // IntersectionObserver: carrega mais ao rolar até o sentinela
     React.useEffect(() => {
-        if (currentPage <= totalPages) {
-            return;
-        }
-        setCurrentPage(totalPages);
-    }, [currentPage, totalPages]);
-
-    const scrollCardsToTop = React.useCallback(() => {
-        cardsGridRef.current?.scrollIntoView({
-            block: 'start',
-            behavior: 'smooth',
-        });
-    }, []);
-
-    const goToPage = React.useCallback(
-        (nextPage: number) => {
-            const normalized = Math.max(1, Math.min(nextPage, totalPages));
-            if (normalized === safeCurrentPage) {
-                return;
-            }
-            React.startTransition(() => {
-                setCurrentPage(normalized);
-            });
-            scrollCardsToTop();
-        },
-        [safeCurrentPage, scrollCardsToTop, totalPages],
-    );
+        const sentinel = sentinelRef.current;
+        if (!sentinel) return;
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting && hasMore) {
+                    React.startTransition(() => {
+                        setVisibleCount(n => Math.min(n + LOAD_BATCH, totalDisplayed));
+                    });
+                }
+            },
+            { rootMargin: '200px' },
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, totalDisplayed]);
 
     // Reseta referência de notificação quando o filtro muda (não exibe modal — apenas tracking interno).
     React.useEffect(() => {
@@ -875,274 +586,6 @@ const MainContent: React.FC<MainContentProps> = ({
         };
     }, [filter, filteredClients, selectedClientId, setSelectedClientId]);
 
-// ─── FilterBar ────────────────────────────────────────────────────────────────
-// Memoizado: re-renderiza apenas quando filter/filterMode/counts ou callbacks mudam,
-// nunca quando visibleClients ou paginação mudam.
-
-interface FilterBarProps {
-    filter: string;
-    filterMode: FilterMode;
-    pendingCount: number;
-    todayCount: number;
-    tomorrowCount: number;
-    ongoingCount: number;
-    mobileFiltersOpen: boolean;
-    mobileFiltersMenuStyle: React.CSSProperties;
-    mobileFiltersButtonRef: React.RefObject<HTMLButtonElement | null>;
-    onFilterChange: (value: string) => void;
-    onFilterClear: () => void;
-    onApplyFilterMode: (mode: FilterMode) => void;
-    onOpenMobileFilters: (e: React.MouseEvent) => void;
-    onCloseMobileFilters: () => void;
-    onCloseMobileFiltersFromBackdrop: () => void;
-}
-
-const FilterBar = React.memo(function FilterBar({
-    filter,
-    filterMode,
-    pendingCount,
-    todayCount,
-    tomorrowCount,
-    ongoingCount,
-    mobileFiltersOpen,
-    mobileFiltersMenuStyle,
-    mobileFiltersButtonRef,
-    onFilterChange,
-    onFilterClear,
-    onApplyFilterMode,
-    onOpenMobileFilters,
-    onCloseMobileFilters,
-    onCloseMobileFiltersFromBackdrop,
-}: FilterBarProps) {
-    return (
-        <div
-            className={`${styles.filterContainer}${mobileFiltersOpen ? ` ${styles.filterContainerMenuOpen}` : ''}`}
-        >
-            <div className={styles.filterRow}>
-                <div className={styles.filterInputWrapper}>
-                    <input
-                        id='client-filter'
-                        type='text'
-                        className={styles.filterInput}
-                        placeholder='Digite o nome do cliente...'
-                        value={filter}
-                        onChange={e => onFilterChange(e.target.value)}
-                    />
-                    {filter && (
-                        <button
-                            type='button'
-                            className={styles.filterClearBtn}
-                            onClick={onFilterClear}
-                            aria-label='Limpar filtro'
-                            tabIndex={-1}
-                        >
-                            ×
-                        </button>
-                    )}
-                </div>
-                <div className={styles.filterActionsDesktop}>
-                    <button
-                        className={`${styles.filterToggleBtn}${filterMode === 'ongoing' ? ' ' + styles.filterToggleBtnActive : ''}`}
-                        onClick={() => onApplyFilterMode('ongoing')}
-                        title='Filtrar clientes em atendimento agora'
-                        style={ongoingCount === 0 ? { opacity: 0.5 } : undefined}
-                    >
-                        Em atendimento {ongoingCount > 0 ? `(${ongoingCount})` : ''}
-                    </button>
-                    <button
-                        className={`${styles.filterToggleBtn}${filterMode === 'pending' ? ' ' + styles.filterToggleBtnActive : ''}`}
-                        onClick={() => onApplyFilterMode('pending')}
-                        title='Filtrar por compromissos pendentes'
-                    >
-                        {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
-                    </button>
-                    <button
-                        className={`${styles.filterToggleBtn}${filterMode === 'today' ? ' ' + styles.filterToggleBtnActive : ''}`}
-                        onClick={() => onApplyFilterMode('today')}
-                        title='Filtrar compromissos de hoje'
-                    >
-                        Hoje {todayCount > 0 ? `(${todayCount})` : ''}
-                    </button>
-                    <button
-                        className={`${styles.filterToggleBtn}${filterMode === 'tomorrow' ? ' ' + styles.filterToggleBtnActive : ''}`}
-                        onClick={() => onApplyFilterMode('tomorrow')}
-                        title='Filtrar compromissos de amanhã'
-                    >
-                        Amanhã {tomorrowCount > 0 ? `(${tomorrowCount})` : ''}
-                    </button>
-                </div>
-
-                <div className={styles.filterActionsMobile}>
-                    <button
-                        ref={mobileFiltersButtonRef}
-                        className={`${styles.filtersMenuButton}${filterMode !== 'all' ? ' ' + styles.filtersMenuButtonActive : pendingCount > 0 ? ' ' + styles.filtersMenuButtonPending : ''}`}
-                        onClick={e => {
-                            e.stopPropagation();
-                            if (mobileFiltersOpen) {
-                                onCloseMobileFilters();
-                            } else {
-                                onOpenMobileFilters(e);
-                            }
-                        }}
-                        aria-expanded={mobileFiltersOpen}
-                        aria-haspopup='menu'
-                        title='Abrir filtros'
-                    >
-                        Filtros{pendingCount > 0 && filterMode !== 'pending' ? ` (${pendingCount})` : ''}
-                    </button>
-
-                    {mobileFiltersOpen && (
-                        <button
-                            type='button'
-                            className={styles.filtersMenuBackdrop}
-                            onClick={onCloseMobileFiltersFromBackdrop}
-                            aria-label='Fechar filtros'
-                        />
-                    )}
-
-                    {mobileFiltersOpen && (
-                        <div
-                            className={styles.filtersMenuPanel}
-                            style={mobileFiltersMenuStyle}
-                            role='menu'
-                            onClick={e => e.stopPropagation()}
-                        >
-                            <button
-                                className={`${styles.filtersMenuItem}${filterMode === 'all' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                onClick={() => {
-                                    onApplyFilterMode('all');
-                                }}
-                                role='menuitem'
-                            >
-                                Sem filtro
-                            </button>
-                            <button
-                                className={`${styles.filtersMenuItem}${filterMode === 'ongoing' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                onClick={() => onApplyFilterMode('ongoing')}
-                                role='menuitem'
-                            >
-                                Em atendimento ({ongoingCount})
-                            </button>
-                            <button
-                                className={`${styles.filtersMenuItem}${filterMode === 'pending' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                onClick={() => onApplyFilterMode('pending')}
-                                role='menuitem'
-                            >
-                                Pendentes ({pendingCount})
-                            </button>
-                            <button
-                                className={`${styles.filtersMenuItem}${filterMode === 'today' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                onClick={() => onApplyFilterMode('today')}
-                                role='menuitem'
-                            >
-                                Hoje ({todayCount})
-                            </button>
-                            <button
-                                className={`${styles.filtersMenuItem}${filterMode === 'tomorrow' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                onClick={() => onApplyFilterMode('tomorrow')}
-                                role='menuitem'
-                            >
-                                Amanhã ({tomorrowCount})
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-});
-
-// ─── PaginationBar ─────────────────────────────────────────────────────────────
-// Memoizado: re-renderiza apenas quando page/total/counts mudam,
-// nunca quando os cards (visibleClients) mudam.
-
-type ClientsPerPageOptionPag = 50 | 200 | 'all';
-const CLIENTS_PER_PAGE_OPTIONS_PAG = [50, 200, 'all'] as const;
-
-interface PaginationBarProps {
-    loading: boolean;
-    clientsLength: number;
-    displayedCount: number;
-    pageStartIndex: number;
-    pageEndIndex: number;
-    safeCurrentPage: number;
-    totalPages: number;
-    clientsPerPage: ClientsPerPageOptionPag;
-    onPageSizeChange: (next: ClientsPerPageOptionPag) => void;
-    onPrev: () => void;
-    onNext: () => void;
-}
-
-const PaginationBar = React.memo(function PaginationBar({
-    loading,
-    clientsLength,
-    displayedCount,
-    pageStartIndex,
-    pageEndIndex,
-    safeCurrentPage,
-    totalPages,
-    clientsPerPage,
-    onPageSizeChange,
-    onPrev,
-    onNext,
-}: PaginationBarProps) {
-    return (
-        <div
-            className={styles.paginationBar}
-            style={loading || clientsLength === 0 ? { visibility: 'hidden' } : undefined}
-        >
-            <div className={styles.paginationSummary}>
-                {displayedCount > 0
-                    ? `Exibindo ${pageStartIndex + 1} a ${pageEndIndex} de ${displayedCount} clientes.`
-                    : 'Nenhum cliente para exibir.'}
-            </div>
-            <div className={styles.paginationRow2}>
-                <label className={styles.paginationPageSizeLabel}>
-                    <span>Por página</span>
-                    <select
-                        className={styles.paginationPageSizeSelect}
-                        value={clientsPerPage}
-                        onChange={event => {
-                            const rawValue = event.target.value;
-                            const next: ClientsPerPageOptionPag =
-                                rawValue === 'all' ? 'all' : (Number(rawValue) as ClientsPerPageOptionPag);
-                            if (rawValue !== 'all' && !Number.isFinite(Number(rawValue))) return;
-                            onPageSizeChange(next);
-                        }}
-                    >
-                        {CLIENTS_PER_PAGE_OPTIONS_PAG.map(option => (
-                            <option key={option} value={option}>
-                                {option === 'all' ? 'Todos' : option}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <span className={styles.paginationPageIndicator}>
-                    Página {safeCurrentPage} de {totalPages}
-                </span>
-            </div>
-            <div className={styles.paginationButtons}>
-                <button
-                    type='button'
-                    className={styles.paginationButton}
-                    onClick={onPrev}
-                    disabled={safeCurrentPage <= 1}
-                >
-                    Anterior
-                </button>
-                <button
-                    type='button'
-                    className={styles.paginationButton}
-                    onClick={onNext}
-                    disabled={safeCurrentPage >= totalPages}
-                >
-                    Próxima
-                </button>
-            </div>
-        </div>
-    );
-});
-
     const handleFilterChange = React.useCallback((value: string) => {
         setFilter(value);
         if (filterMode !== 'all') setFilterMode('all');
@@ -1159,13 +602,6 @@ const PaginationBar = React.memo(function PaginationBar({
         mobileFiltersOpenedAtRef.current = Date.now();
         setMobileFiltersOpen(true);
     }, [updateMobileFiltersMenuPosition]);
-
-    const handlePageSizeChange = React.useCallback((next: ClientsPerPageOption) => {
-        if (next !== 'all') {
-            try { localStorage.setItem(PAGINATION_STORAGE_KEY, String(next)); } catch { /* noop */ }
-        }
-        setClientsPerPage(next);
-    }, []);
 
     function handleView(cliente: ClientBasic) {
         if (!requireActiveSession()) {
@@ -1265,6 +701,7 @@ const PaginationBar = React.memo(function PaginationBar({
                             selected={selectedClientId === client.id}
                             filterMode={filterMode === 'ongoing' ? undefined : filterMode}
                             notifyAppt={filterMode === 'tomorrow' ? tomorrowClientAppts.get(client.id) : undefined}
+                            pendingAppt={pendingClientIds.has(client.id) ? pendingClientAppts.get(client.id) : undefined}
                             onSelect={() => {
                                 if (!requireActiveSession()) {
                                     return;
@@ -1288,19 +725,8 @@ const PaginationBar = React.memo(function PaginationBar({
                     </div>
                 ))}
             </div>
-            <PaginationBar
-                loading={loading}
-                clientsLength={clients.length}
-                displayedCount={deferredDisplayedClients.length}
-                pageStartIndex={pageStartIndex}
-                pageEndIndex={pageEndIndex}
-                safeCurrentPage={safeCurrentPage}
-                totalPages={totalPages}
-                clientsPerPage={clientsPerPage as ClientsPerPageOptionPag}
-                onPageSizeChange={handlePageSizeChange as (next: ClientsPerPageOptionPag) => void}
-                onPrev={() => goToPage(safeCurrentPage - 1)}
-                onNext={() => goToPage(safeCurrentPage + 1)}
-            />
+            {/* sentinela: IntersectionObserver dispara quando chega ao fim da lista */}
+            <div ref={sentinelRef} aria-hidden='true' style={{ height: 1 }} />
 
             <AppModal
                 open={confirmOpen}

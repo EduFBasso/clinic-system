@@ -8,7 +8,7 @@ import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal'
 import type { ClientBasic } from '../types/ClientBasic';
 import { matchesStatusFilter } from '../utils/appointments/agendaHelpers';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
-import { deriveStatus } from '../utils/appointments/status';
+import { enrichList, deriveStatus } from '../utils/appointments/status';
 import ClientCardRow from './shared/ClientCardRow';
 // PendingActionsModal é global (Home)
 import StickyModalHeader from './shared/StickyModalHeader';
@@ -110,7 +110,7 @@ export default function MonthlyAgendaModal({
     });
 
     const filteredItems = React.useMemo(() => {
-        return items.filter(a => {
+        return enrichList(items, effectiveNowRef).filter(a => {
             return matchesStatusFilter(statusFilter, a);
         });
     }, [items, statusFilter, effectiveNowRef]);
