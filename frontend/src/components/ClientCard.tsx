@@ -172,7 +172,7 @@ function ClientCard({
     const effectiveOngoing = isOngoing && !isTomorrowFilter;
 
     const hasAgendaLine =
-        isScheduled || effectiveOngoing || (futureAppointments.length > 0 && !isPending);
+        (isScheduled || effectiveOngoing || futureAppointments.length > 0) && !isPending;
 
     // Ações unificadas (+) para agenda e fallback
     const createActionAgenda = useClientCreateAction({
