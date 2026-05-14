@@ -412,7 +412,7 @@ export default function AppModal(props: AppModalProps) {
                 /* noop */
             }
         };
-    }, [open, isIOS, updateVhVar]);
+    }, [open, isIOS, updateVhVar]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Telemetria de fase 'open' (executa após montagem / abertura)
     React.useEffect(() => {
@@ -674,7 +674,7 @@ export default function AppModal(props: AppModalProps) {
         return () => {
             timeouts.forEach(t => clearTimeout(t));
         };
-    }, [open, isCoarsePointerDevice]);
+    }, [open, isCoarsePointerDevice]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Restauração imediata no ciclo de desmontagem.
     // IMPORTANTE: não condicionar ao valor de 'open' — componentes pai podem

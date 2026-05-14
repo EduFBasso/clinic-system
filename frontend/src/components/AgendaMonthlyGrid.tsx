@@ -132,7 +132,7 @@ export default function AgendaMonthlyGrid() {
         if (statusFilter === 'canceled')
             return items.filter(a => a.status === 'canceled');
         return items;
-    }, [items, statusFilter, now]);
+    }, [items, statusFilter]);
 
     const grouped = React.useMemo(() => groupByDay(filtered), [filtered]);
 

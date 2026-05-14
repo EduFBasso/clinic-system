@@ -102,7 +102,7 @@ const NavBar: React.FC<NavBarProps> = ({
     const [biometricLoading, setBiometricLoading] = useState(false);
     const [platformAuthenticatorAvailable, setPlatformAuthenticatorAvailable] =
         useState(false);
-    const [biometricConfigured, setBiometricConfigured] = useState(false);
+    const [, setBiometricConfigured] = useState(false);
     const hasWebAuthn = !!loginEmail && platformAuthenticatorAvailable;
     // Estado para modal de sessão expirada
     const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);

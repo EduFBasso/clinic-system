@@ -158,7 +158,7 @@ function normalizeTimeString(value: string, fallback: string): string {
 function formatApiTime(
     hour: unknown,
     minute: unknown,
-    fallback: string,
+    _fallback: string,
 ): string {
     const parsedHour = clamp(Number(hour) || 0, 0, 24);
     const parsedMinute = clamp(Number(minute) || 0, 0, 59);

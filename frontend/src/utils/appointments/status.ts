@@ -22,7 +22,6 @@ export function deriveStatus(
     },
     now: Date,
 ): StatusKind {
-    const start = new Date(appt.start_at);
     const end = new Date(appt.end_at);
     if (appt.status === 'canceled') return 'canceled';
     if (appt.status === 'done') return 'done';

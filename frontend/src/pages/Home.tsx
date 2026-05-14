@@ -83,7 +83,6 @@ export default function Home() {
         setDetailsAppt,
         detailsReturnContext,
         setDetailsReturnContext,
-        openMonthly,
         openWeekly,
         openDaily,
         clearAgendaRouteFlags,
@@ -178,6 +177,7 @@ export default function Home() {
                 /* ignore */
             }
         })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {

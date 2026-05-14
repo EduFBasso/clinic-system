@@ -9,9 +9,8 @@ import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
 import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
 import { apiFetch } from '../utils/apiFetch';
-import { useNowTick } from '../hooks/useNowTick';
 import { useAppointmentSets } from '../hooks/useAppointmentSets';
-import type { PendingAppointmentLike } from '../hooks/useAppointmentSets';
+
 import { useScrollPersistence } from '../hooks/useScrollPersistence';
 import { useIosKeyboard } from '../hooks/useIosKeyboard';
 import FilterBar from './FilterBar';
@@ -45,7 +44,6 @@ const MainContent: React.FC<MainContentProps> = ({
     // ...outros props...
 }) => {
     const { clients, loading, error, setError } = useClients();
-    const now = useNowTick(30_000);
     const [filter, setFilter] = useState<string>(() => {
         try { return sessionStorage.getItem(FILTER_SESSION_KEY) ?? ''; } catch { return ''; }
     });

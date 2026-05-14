@@ -7,7 +7,7 @@ import StickyModalHeader from './shared/StickyModalHeader';
 import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
 import type { PendingReturnContext } from '../types/agendaFlow';
-import { getAccessToken } from '../utils/auth/session';
+
 
 type ChargeItem = {
     id: number;

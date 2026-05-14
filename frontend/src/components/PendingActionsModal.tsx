@@ -75,7 +75,6 @@ export default function PendingActionsModal({
     const [closing, setClosing] = React.useState(false);
     const [errorText, setErrorText] = React.useState<string | null>(null);
     const [hasPaidCharge, setHasPaidCharge] = React.useState(false);
-    const [, forceRender] = React.useState(0);
     React.useEffect(() => {
         if (!open || !appt) {
             setHasPaidCharge(false);
@@ -220,7 +219,7 @@ export default function PendingActionsModal({
         return `${weekday} ${day}/${month}, ${sh} - ${eh}`;
     })();
 
-    let realClosedLine: string | null = null;
+    const realClosedLine: string | null = null;
 
     async function doCancel() {
         if (busy) return;

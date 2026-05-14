@@ -229,7 +229,7 @@ export default function ScheduleEditorCore({
         offerReplace,
         conflicts,
         setError: _setError,
-        setOfferReplace,
+        setOfferReplace: _setOfferReplace,
         submitCreate,
         replaceConflictsAndCreate,
     } = useScheduleSave({

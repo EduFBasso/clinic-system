@@ -39,7 +39,6 @@ describe('WeeklyAgendaModal', () => {
         }
         // Stub IntersectionObserver to avoid auto-selection side effects in tests
         class IOStub {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             constructor(_cb: unknown, _opts?: unknown) {}
             observe() {}
             unobserve() {}
