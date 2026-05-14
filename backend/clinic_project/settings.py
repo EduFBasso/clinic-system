@@ -2,11 +2,15 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-from decouple import config
+from decouple import config, Csv
 from corsheaders.defaults import default_headers
 
 
+# === Caminhos do Projeto ===
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# === Configurações Gerais e Flags ===
 
 SECRET_KEY = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
 
@@ -19,12 +23,14 @@ APPOINTMENT_REMINDERS_ENABLED = config(
 ONLINE_MUTATION_LOCK_ENABLED = config(
     "ONLINE_MUTATION_LOCK_ENABLED", default=False, cast=bool
 )
-ONLINE_MUTATION_LOCK_METHODS = config(
+ONLINE_MUTATION_LOCK_METHODS: list[str] = config(
     "ONLINE_MUTATION_LOCK_METHODS",
     default="PUT,PATCH,DELETE",
     cast=lambda v: [item.strip().upper() for item in v.split(",") if item.strip()],
 )
 SERVE_MEDIA_FILES = config("SERVE_MEDIA_FILES", default=True, cast=bool)
+
+# === Integração Telegram ===
 
 TELEGRAM_BOT_TOKEN = config("TELEGRAM_BOT_TOKEN", default="")
 TELEGRAM_BOT_API_BASE = config(
@@ -34,14 +40,19 @@ TELEGRAM_BOT_TIMEOUT_SECONDS = config(
     "TELEGRAM_BOT_TIMEOUT_SECONDS", default=10, cast=int
 )
 
+# === Hosts Permitidos ===
+
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",
     default="localhost,127.0.0.1",
-    cast=lambda v: [s.strip() for s in v.split(",")],
+    cast=Csv(),
 )
+
 
 if DEV_ALLOW_LAN_HOSTS:
     ALLOWED_HOSTS = list(dict.fromkeys([*ALLOWED_HOSTS, '*', '.local']))
+
+# === Apps Instalados ===
 
 INSTALLED_APPS = [
     'rest_framework',
@@ -63,6 +74,8 @@ INSTALLED_APPS = [
 
 AUTH_USER_MODEL = 'register.Professional'
 
+# === Middleware ===
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -78,13 +91,15 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = config(
+# === CORS ===
+
+CORS_ALLOWED_ORIGINS: list[str] = config(
     "CORS_ALLOWED_ORIGINS",
     default="http://localhost:5173,http://127.0.0.1:5173",
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
-CORS_ALLOWED_ORIGIN_REGEXES = config(
+CORS_ALLOWED_ORIGIN_REGEXES: list[str] = config(
     "CORS_ALLOWED_ORIGIN_REGEXES",
     default="",
     cast=lambda v: [r.strip() for r in v.split(",") if r.strip()],
@@ -109,6 +124,8 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 
 CORS_PREFLIGHT_MAX_AGE = config("CORS_PREFLIGHT_MAX_AGE", default=600, cast=int)
 
+# === URLs, Templates e WSGI ===
+
 ROOT_URLCONF = 'clinic_project.urls'
 
 TEMPLATES = [
@@ -127,6 +144,8 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'clinic_project.wsgi.application'
+
+# === Banco de Dados ===
 
 _IN_CI = os.environ.get('GITHUB_ACTIONS') == 'true'
 _USE_SQLITE_FOR_TESTS = config('TEST_USE_SQLITE', default=False, cast=bool) or _IN_CI
@@ -165,12 +184,16 @@ if DEBUG and not ALLOW_REMOTE_DB_IN_DEBUG:
             "Defina ALLOW_REMOTE_DB_IN_DEBUG=True no .env apenas se tiver certeza." % _db_host
         )
 
+# === Validação de Senha ===
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
+# === Internacionalização ===
 
 LOCALE_PATHS = [os.path.join(BASE_DIR, 'locale')]
 LANGUAGE_CODE = 'pt-br'
@@ -182,8 +205,12 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# === Arquivos Estáticos e Media ===
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# === Django REST Framework ===
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -199,11 +226,15 @@ REST_FRAMEWORK = {
     ],
 }
 
-CSRF_TRUSTED_ORIGINS = config(
+# === CSRF ===
+
+CSRF_TRUSTED_ORIGINS: list[str] = config(
     "CSRF_TRUSTED_ORIGINS",
     default="",
     cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
 )
+
+# === JWT (SimpleJWT) ===
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=10),
@@ -213,10 +244,14 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+# === OTP e Sessões de Dispositivo ===
+
 ALLOW_OTP_FALLBACK = config("ALLOW_OTP_FALLBACK", default=False, cast=bool)
 OTP_FALLBACK_CODE = config("OTP_FALLBACK_CODE", default="")
 
 MAX_ACTIVE_DEVICE_SESSIONS = config("MAX_ACTIVE_DEVICE_SESSIONS", default=2, cast=int)
+
+# === E-mail ===
 
 _configured_email_backend = config("EMAIL_BACKEND", default="")
 USE_CONSOLE_EMAIL_IN_DEBUG = config("USE_CONSOLE_EMAIL_IN_DEBUG", default=True, cast=bool)
@@ -232,6 +267,8 @@ EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 
+# === Segurança HTTPS (Produção) ===
+
 if not DEBUG and not _IN_CI:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = True
@@ -240,6 +277,8 @@ if not DEBUG and not _IN_CI:
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+# === Logging ===
 
 LOG_LEVEL = 'DEBUG' if DEBUG else 'INFO'
 LOGGING = {
@@ -299,7 +338,7 @@ TOTP_VALID_WINDOW = config("TOTP_VALID_WINDOW", default=4, cast=int)
 WEBAUTHN_RP_ID = config("WEBAUTHN_RP_ID", default="localhost")
 WEBAUTHN_RP_NAME = config("WEBAUTHN_RP_NAME", default="ClinicSystem")
 # Origens aceitas separadas por vírgula (incluir http em dev, https em produção)
-WEBAUTHN_ORIGINS = config(
+WEBAUTHN_ORIGINS: list[str] = config(
     "WEBAUTHN_ORIGINS",
     default="http://localhost:5173",
     cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
