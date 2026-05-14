@@ -1,3 +1,7 @@
+from django.db.models import Q, OuterRef, Subquery, DateTimeField, CharField, Case, When, IntegerField
+from django.utils import timezone
+from apps.agenda.models import Appointment
+from apps.agenda.state_utils import promote_scheduled_to_ongoing, promote_overdue_scheduled_to_pending
 from rest_framework import filters
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -50,10 +54,6 @@ class ClientViewSet(ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-from django.db.models import Q, OuterRef, Subquery, DateTimeField, CharField, Case, When, IntegerField
-from django.utils import timezone
-from apps.agenda.models import Appointment
-from apps.agenda.state_utils import promote_scheduled_to_ongoing, promote_overdue_scheduled_to_pending
 
 class ClientBasicViewSet(ReadOnlyModelViewSet):
     serializer_class = ClientBasicSerializer

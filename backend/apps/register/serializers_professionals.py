@@ -39,8 +39,6 @@ class ProfessionalBasicSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'first_name', 'last_name', 'display_name', 'register_number']
 
 
-from rest_framework.permissions import BasePermission
-
 class CanManageProfessionals(BasePermission):
     def has_permission(self, request, view) -> bool: # type: ignore[override]
         return request.user.is_authenticated and bool(getattr(request.user, 'can_manage_professionals', False))
