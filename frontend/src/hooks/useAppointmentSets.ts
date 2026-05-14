@@ -57,6 +57,7 @@ const EMPTY: AppointmentSets = {
 export function useAppointmentSets(clientsLength: number): AppointmentSets {
     const [sets, setSets] = useState<AppointmentSets>(() => ({
         pendingIds: new Set(),
+        pendingAppts: new Map(),
         tomorrowIds: new Set(),
         tomorrowAppts: new Map(),
     }));

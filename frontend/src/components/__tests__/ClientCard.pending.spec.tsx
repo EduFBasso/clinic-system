@@ -64,7 +64,6 @@ describe('ClientCard pending state', () => {
             address: '',
             address_number: '',
             email: '',
-            photo: '',
             next_appointment_id: 10,
             next_appointment_title: 'Consulta',
             next_appointment_start_at: new Date(

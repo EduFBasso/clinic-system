@@ -172,7 +172,7 @@ function ClientCard({
     const effectiveOngoing = isOngoing && !isTomorrowFilter;
 
     const hasAgendaLine =
-        isScheduled || effectiveOngoing || futureAppointments.length > 0;
+        isScheduled || effectiveOngoing || (futureAppointments.length > 0 && !isPending);
 
     // Ações unificadas (+) para agenda e fallback
     const createActionAgenda = useClientCreateAction({
@@ -875,7 +875,7 @@ function ClientCard({
                             <span className={styles.label} style={{ color: labelColor, fontWeight: 'bold' }}>Data:</span>
                             <span className={styles.value} style={{ color: valueColor }}>
                                 {(() => {
-                                    const sIso = client.next_appointment_start_at || pendingAppt?.start_at;
+                                    const sIso = (client.next_appointment_start_at || pendingAppt?.start_at)!;
                                     const eIso = client.next_appointment_end_at || pendingAppt?.end_at || null;
                                     const s = new Date(sIso);
                                     const wd = s.toLocaleDateString('pt-BR', { weekday: 'short' })
