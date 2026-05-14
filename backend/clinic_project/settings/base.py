@@ -9,7 +9,7 @@ from ._helpers import APP_VERSION, BASE_DIR, DEBUG, DEV_ALLOW_LAN_HOSTS, _csv  #
 
 # === Segredo ===
 
-SECRET_KEY: str = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev")
+SECRET_KEY: str = config("DJANGO_SECRET_KEY", default="fallback-key-only-for-dev") # type: ignore
 
 # === Flags de funcionalidade ===
 
@@ -95,7 +95,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # === Internacionalização ===
 
-LOCALE_PATHS = [os.path.join(BASE_DIR, 'locale')]
+LOCALE_PATHS = [os.path.join(str(BASE_DIR), 'locale')]
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE: str = config("TIME_ZONE", default="America/Sao_Paulo")
 USE_I18N = True
@@ -105,8 +105,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # === Arquivos Estáticos e Media ===
 
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = os.path.join(str(BASE_DIR), 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.path.join(str(BASE_DIR), 'media')
