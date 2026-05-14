@@ -5,7 +5,7 @@ import os
 
 from decouple import config
 
-from ._helpers import APP_VERSION, BASE_DIR, DEBUG, DEV_ALLOW_LAN_HOSTS, _csv  # noqa: F401
+from ._helpers import APP_VERSION, BASE_DIR, DEBUG, DEV_ALLOW_LAN_HOSTS, _csv, _str  # noqa: F401
 
 # === Segredo ===
 
@@ -97,7 +97,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LOCALE_PATHS = [os.path.join(str(BASE_DIR), 'locale')]
 LANGUAGE_CODE = 'pt-br'
-TIME_ZONE: str = config("TIME_ZONE", default="America/Sao_Paulo")
+TIME_ZONE: str = _str("TIME_ZONE", default="America/Sao_Paulo")
 USE_I18N = True
 USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
