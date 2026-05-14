@@ -8,8 +8,11 @@ import ClientAddressForm from './ClientAddressForm/ClientAddressForm';
 import ClientAnamnesisForm from './ClientAnamnesisForm/ClientAnamnesisForm';
 import styles from './ClientForm.module.css';
 import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
-import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
-import type { AnamnesisResponse } from '../types/AnamnesisTypes';
+import { useClientAnamnesis } from '../hooks/useClientAnamnesis';
+import { useClientDelete } from '../hooks/useClientDelete';
+import { parseApiError } from '../utils/parseApiError';
+import InfoModal from './shared/InfoModal';
+import DeleteConfirmModal from './shared/DeleteConfirmModal';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { getAccessToken } from '../utils/auth/session';
@@ -20,100 +23,15 @@ export default function ClientForm({
     cliente?: Partial<ClientData>;
 }) {
     const { theme } = useTheme();
-    // Removido auto-timeout: fluxo agora depende de modal com botão OK
-    // Marca erros já tratados para não sobrescrever mensagens específicas em catch
+    const navigate = useNavigate();
+
+    // ── HandledError helper ──────────────────────────────────────────────────
     type HandledError = Error & { handled?: boolean };
     function isHandledError(e: unknown): e is HandledError {
         return typeof e === 'object' && e !== null && 'handled' in e;
     }
-    // Converte erros do DRF/DB em mensagens amigáveis
-    function parseApiError(errorData: unknown, status?: number): string {
-        if (status === 401) return 'Sessão expirada. Faça login novamente.';
 
-        // String direta (ex.: UNIQUE constraint)
-        if (typeof errorData === 'string') {
-            const s = errorData;
-            if (
-                /UNIQUE constraint failed|duplicate key value|violates unique constraint|unique|já\s*cadastr/i.test(
-                    s,
-                )
-            ) {
-                if (/email/i.test(s)) return 'E-mail já existe.';
-                if (
-                    /phone|telefone|register_client_phone|phone_digits/i.test(s)
-                )
-                    return 'Este telefone já cadastrado';
-                return 'Registro duplicado: valor já existe.';
-            }
-            if (/credenciais|credentials|autentica/i.test(s))
-                return 'Sessão expirada. Faça login novamente.';
-            return s;
-        }
-
-        // Objeto de erros do DRF
-        if (errorData && typeof errorData === 'object') {
-            const obj = errorData as Record<string, unknown>;
-            if (typeof obj.detail === 'string') {
-                const d = obj.detail;
-                if (
-                    /UNIQUE constraint failed|duplicate key value|violates unique constraint|unique|já\s*cadastr/i.test(
-                        d,
-                    )
-                ) {
-                    if (/email/i.test(d)) return 'E-mail já existe.';
-                    if (
-                        /phone|telefone|register_client_phone|phone_digits/i.test(
-                            d,
-                        )
-                    )
-                        return 'Este telefone já cadastrado';
-                    return 'Registro duplicado: valor já existe.';
-                }
-                if (/credenciais|credentials|autentica/i.test(d))
-                    return 'Sessão expirada. Faça login novamente.';
-                return d;
-            }
-
-            const messages: string[] = [];
-            for (const [field, val] of Object.entries(obj)) {
-                const label =
-                    field === 'email'
-                        ? 'E-mail'
-                        : field === 'phone'
-                          ? 'Telefone'
-                          : field === 'state'
-                            ? 'Estado'
-                            : field === 'city'
-                              ? 'Cidade'
-                              : field === 'postal_code'
-                                ? 'CEP'
-                                : field === 'profession'
-                                  ? 'Profissão'
-                                  : field.replace(/_/g, ' ');
-                const toText = (v: unknown) =>
-                    Array.isArray(v)
-                        ? v.map(x => String(x)).join(', ')
-                        : String(v ?? '');
-                const txt = toText(val);
-                if (
-                    /já existe|exists|unique|duplicate|violates unique constraint|já\s*cadastr/i.test(
-                        txt,
-                    )
-                ) {
-                    if (field === 'phone' || /phone|telefone/i.test(txt)) {
-                        messages.push('Este telefone já cadastrado');
-                    } else {
-                        messages.push(`${label} já existe.`);
-                    }
-                } else if (txt) {
-                    messages.push(`${label}: ${txt}`);
-                }
-            }
-            if (messages.length) return messages.join(' ');
-        }
-
-        return 'Erro ao processar solicitação.';
-    }
+    // ── Form state ───────────────────────────────────────────────────────────
     const [formData, setFormData] = useState<ClientData>({
         first_name: cliente?.first_name ?? '',
         last_name: cliente?.last_name ?? '',
@@ -142,10 +60,8 @@ export default function ClientForm({
         clinical_history: cliente?.clinical_history ?? '',
         plantar_view_left: cliente?.plantar_view_left ?? '',
         plantar_view_right: cliente?.plantar_view_right ?? '',
-        dermatological_pathologies_left:
-            cliente?.dermatological_pathologies_left ?? '',
-        dermatological_pathologies_right:
-            cliente?.dermatological_pathologies_right ?? '',
+        dermatological_pathologies_left: cliente?.dermatological_pathologies_left ?? '',
+        dermatological_pathologies_right: cliente?.dermatological_pathologies_right ?? '',
         nail_changes_left: cliente?.nail_changes_left ?? '',
         nail_changes_right: cliente?.nail_changes_right ?? '',
         deformities_left: cliente?.deformities_left ?? '',
@@ -154,653 +70,119 @@ export default function ClientForm({
         other_procedures: cliente?.other_procedures ?? '',
     });
 
-    // Modal de sucesso local removido (uso do SystemMessageModal global)
-    // "Salvar e novo" (entrada rápida): quando true, após criar não navega; reseta formulário e foca o primeiro campo
-    const quickModeRef = useRef(false);
-    const formRef = useRef<HTMLFormElement | null>(null);
-    const onQuickSubmit = () => {
-        quickModeRef.current = true; // será consumido em handleSubmit
+    const EMPTY_FORM: ClientData = {
+        first_name: '', last_name: '', email: '', phone: '', profession: '',
+        rg: '', document_type: '', document_number: '', sex: '',
+        marital_status: '', nationality: '', address: '', neighborhood: '',
+        city: 'Limeira', state: 'SP', postal_code: '', sport_activity: '',
+        academic_activity: '', footwear_used: '', sock_used: '',
+        takes_medication: 'Não', had_surgery: 'Não', is_pregnant: false,
+        pain_sensitivity: '', clinical_history: '', plantar_view_left: '',
+        plantar_view_right: '', dermatological_pathologies_left: '',
+        dermatological_pathologies_right: '', nail_changes_left: '',
+        nail_changes_right: '', deformities_left: '', deformities_right: '',
+        sensitivity_test: '', other_procedures: '',
     };
 
+    const quickModeRef = useRef(false);
+    const formRef = useRef<HTMLFormElement | null>(null);
+    const onQuickSubmit = () => { quickModeRef.current = true; };
+
+    // ── Dirty tracking ───────────────────────────────────────────────────────
+    const initialRef = useRef(JSON.stringify(formData));
+    const [dirty, setDirty] = useState(false);
+    useEffect(() => {
+        setDirty(JSON.stringify(formData) !== initialRef.current);
+    }, [formData]);
+    useUnsavedChangesGuard(dirty, 'Há alterações não salvas. Deseja sair?');
+
+    // ── Sync when cliente prop changes (edit mode) ───────────────────────────
     useEffect(() => {
         if (cliente) {
-            setFormData(prev => ({
-                ...prev,
+            const snapshot = {
+                ...formData,
                 ...cliente,
                 takes_medication: cliente.takes_medication ?? 'Não',
                 had_surgery: cliente.had_surgery ?? 'Não',
-            }));
-            // Após hidratar dados vindos do servidor, redefine baseline para evitar dirty falso
+            } as ClientData;
+            setFormData(snapshot);
             try {
-                const snapshot = {
-                    ...formData,
-                    ...cliente,
-                    takes_medication: cliente.takes_medication ?? 'Não',
-                    had_surgery: cliente.had_surgery ?? 'Não',
-                } as ClientData;
                 initialRef.current = JSON.stringify(snapshot);
                 setDirty(false);
-            } catch {
-                /* noop */
-            }
+            } catch { /* noop */ }
         } else {
-            // Novo cadastro: baseline = formulário atual (limpo)
             initialRef.current = JSON.stringify(formData);
             setDirty(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cliente?.id]);
 
+    // ── Feedback / modals ────────────────────────────────────────────────────
+    const [feedback, setFeedback] = useState<{ type: 'error'; message: string } | null>(null);
+    const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
+    // ── Sub-hooks ────────────────────────────────────────────────────────────
+    const {
+        anamnesisFields,
+        anamnesisValues,
+        setAnamnesisValues,
+        handleAnamnesisChange,
+        saveAnamnesis,
+    } = useClientAnamnesis(cliente?.id);
+
+    const { deleteModalOpen, handleDelete, confirmDelete, cancelDelete } =
+        useClientDelete({ cliente, setFeedback });
+
+    // ── handleChange ─────────────────────────────────────────────────────────
     function handleChange(
         fieldOrEvent:
             | keyof ClientData
-            | React.ChangeEvent<
-                  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-              >,
+            | React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
         value?: ClientData[keyof ClientData],
     ) {
         if (typeof fieldOrEvent === 'string') {
-            setFormData(prev => ({
-                ...prev,
-                [fieldOrEvent]: value ?? '',
-            }));
+            setFormData(prev => ({ ...prev, [fieldOrEvent]: value ?? '' }));
         } else {
             const { name, value } = fieldOrEvent.target;
-            setFormData(prev => ({
-                ...prev,
-                [name]: value ?? '',
-            }));
+            setFormData(prev => ({ ...prev, [name]: value ?? '' }));
         }
     }
 
-    // Armazena somente mensagens de erro agora (sucesso usa modal OK)
-    const [feedback, setFeedback] = useState<{
-        type: 'error';
-        message: string;
-    } | null>(null);
-    // Modal informativo (OK fecha e executa closeSuccessAndExit). Usado para sucesso e alguns erros (ex.: telefone duplicado)
-    const [infoModal, setInfoModal] = useState<{
-        title: string;
-        message: string;
-    } | null>(null);
-    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-    // Photo file selected in the mobile form (kept out of typed ClientData)
-    const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(
-        null,
-    );
-    // Track dirty state: any change vs initial values
-    const initialRef = useRef(JSON.stringify(formData));
-    const [dirty, setDirty] = useState(false);
-    useEffect(() => {
-        setDirty(JSON.stringify(formData) !== initialRef.current);
-    }, [formData]);
-    // Enable guard only when there are unsaved changes
-    useUnsavedChangesGuard(dirty, 'Há alterações não salvas. Deseja sair?');
-
-    // Anamnesis fields (loaded once for the authenticated professional)
-    const { fields: anamnesisFields } = useAnamnesisFields();
-    // fieldId → selected value
-    const [anamnesisValues, setAnamnesisValues] = useState<
-        Record<number, string>
-    >({});
-
-    // Load existing responses when editing a client
-    useEffect(() => {
-        if (!cliente?.id) return;
-        const token = getAccessToken();
-        if (!token) return;
-        fetch(`${API_BASE}/anamnesis/responses/?client=${cliente.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then(r => (r.ok ? r.json() : Promise.resolve([])))
-            .then((data: AnamnesisResponse[]) => {
-                const map: Record<number, string> = {};
-                data.forEach(r => {
-                    if (r.field !== null) map[r.field] = r.value;
-                });
-                setAnamnesisValues(map);
-            })
-            .catch(() => {
-                /* silent */
-            });
-    }, [cliente?.id]);
-
-    const uploadPhotoIfNeeded = async (clientId: number, token: string) => {
-        if (!selectedPhotoFile) return null;
-        const fd = new FormData();
-        fd.append('photo', selectedPhotoFile);
-        const res = await fetch(`${API_BASE}/register/clients/${clientId}/`, {
-            method: 'PATCH',
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            body: fd,
-        });
-        if (!res.ok) {
-            let errTxt = '';
-            try {
-                errTxt = await res.text();
-            } catch {
-                /* noop */
+    // ── Navigation helpers ───────────────────────────────────────────────────
+    const closeSuccessAndExit = () => {
+        try {
+            if (window.opener) {
+                window.opener.dispatchEvent(new Event('updateClients'));
+                window.opener.focus?.();
+            } else {
+                window.dispatchEvent(new Event('updateClients'));
             }
-            throw new Error(errTxt || 'Falha ao enviar foto');
-        }
-        return await res.json();
+        } catch { /* noop */ }
+        if (window.opener) { window.close(); }
+        else { navigate('/'); }
     };
 
-    const saveAnamnesis = async (
-        clientId: number,
-        token: string,
-    ): Promise<void> => {
-        const fieldById = new Map(anamnesisFields.map(field => [field.id, field]));
-
-        function isFieldVisible(fieldId: number): boolean {
-            const field = fieldById.get(fieldId);
-            if (!field) return false;
-            if (!field.depends_on) return true;
-
-            const parent = fieldById.get(field.depends_on);
-            if (!parent || !isFieldVisible(parent.id)) return false;
-
-            const parentValue = anamnesisValues[parent.id] ?? '';
-            if (field.show_when_value) {
-                return parentValue === field.show_when_value;
-            }
-
-            return parentValue !== '';
+    function handleCancel() {
+        if (dirty) {
+            const confirmExit = window.confirm('É possível que existam alterações não salvas. Deseja sair mesmo assim?');
+            if (!confirmExit) return;
         }
-
-        const entries = anamnesisFields
-            .filter(field => isFieldVisible(field.id))
-            .map(field => ({
-                field: field.id,
-                value: anamnesisValues[field.id] ?? '',
-            }));
-
-        await fetch(`${API_BASE}/anamnesis/responses/bulk_save/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ client: clientId, responses: entries }),
-        });
-    };
-
-    const handleAnamnesisChange = (fieldId: number, value: string) => {
-        const childrenByParent = new Map<number, number[]>();
-        anamnesisFields.forEach(field => {
-            if (!field.depends_on) return;
-            const children = childrenByParent.get(field.depends_on) ?? [];
-            children.push(field.id);
-            childrenByParent.set(field.depends_on, children);
-        });
-
-        const fieldById = new Map(anamnesisFields.map(field => [field.id, field]));
-
-        setAnamnesisValues(prev => {
-            const next = { ...prev, [fieldId]: value };
-
-            function clearHiddenDescendants(parentId: number) {
-                const childIds = childrenByParent.get(parentId) ?? [];
-                childIds.forEach(childId => {
-                    const childField = fieldById.get(childId);
-                    if (!childField) return;
-
-                    const parentValue = next[parentId] ?? '';
-                    const shouldShow = childField.show_when_value
-                        ? parentValue === childField.show_when_value
-                        : parentValue !== '';
-
-                    if (!shouldShow) {
-                        delete next[childId];
-                    }
-
-                    clearHiddenDescendants(childId);
-                });
-            }
-
-            clearHiddenDescendants(fieldId);
-            return next;
-        });
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        const token = getAccessToken();
-        if (!token) {
-            setFeedback({ type: 'error', message: 'Usuário não autenticado.' });
-            return;
+        try {
+            (window as Window & { onbeforeunload: typeof window.onbeforeunload }).onbeforeunload = null;
+        } catch { /* noop */ }
+        if (window.opener) {
+            try { window.close(); return; } catch { /* noop */ }
         }
+        try {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+            document.body.classList.remove('keyboardOpen');
+        } catch { /* noop */ }
+        navigate('/');
+    }
 
-        // Validação mínima: Nome, Sobrenome e Telefone são obrigatórios
-        let first = (formData.first_name || '').trim();
-        let last = (formData.last_name || '').trim();
-        // Se o usuário digitou nome completo em "Nome" e deixou "Sobrenome" vazio, divide automaticamente
-        if (!last && first.includes(' ')) {
-            const parts = first.split(/\s+/);
-            first = parts.shift() || '';
-            last = parts.join(' ');
-        }
-        const phone = (formData.phone || '').trim();
-        if (!first || !last || !phone) {
-            setFeedback({
-                type: 'error',
-                message: 'Nome, Sobrenome e Telefone são obrigatórios.',
-            });
-            return;
-        }
-
-        // Cadastro (POST)
-        if (!cliente?.id) {
-            // Garante que email, profession e phone sejam normalizados (trim) e null se vazios
-            const emailTrim = (formData.email || '').trim();
-            const professionTrim = (formData.profession || '').trim();
-            const phoneTrim = (formData.phone || '').trim();
-            // Normaliza para dígitos, mantendo compatível com backend
-            const phoneDigits = phoneTrim.replace(/\D/g, '');
-            // Normaliza address_number (somente dígitos ou null)
-            const addressNumberDigits = (formData.address_number || '')
-                .replace(/\D/g, '')
-                .slice(0, 16);
-            const address_number = addressNumberDigits || null;
-            // Normaliza date_of_birth usando util (aceita dd/mm/YYYY ou ISO)
-            const dob = normalizeDOBForApi(formData.date_of_birth || null);
-            const dataToSend = {
-                ...formData,
-                first_name: first,
-                last_name: last,
-                email: emailTrim ? emailTrim.toLowerCase() : null,
-                profession: professionTrim ? professionTrim : null,
-                phone: phoneDigits,
-                address_number,
-                date_of_birth: dob,
-            };
-            fetch(`${API_BASE}/register/clients/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(dataToSend),
-            })
-                .then(async res => {
-                    if (!res.ok) {
-                        // Tenta obter detalhes do erro para log/feedback
-                        let errorData: unknown = null;
-                        try {
-                            errorData = await res.json();
-                        } catch {
-                            try {
-                                errorData = await res.text();
-                            } catch {
-                                errorData = null;
-                            }
-                        }
-                        console.error('[ClientForm] create error', {
-                            status: res.status,
-                            error: errorData,
-                            payload: dataToSend,
-                        });
-                        const errorMsg = parseApiError(errorData, res.status);
-                        // Se for telefone duplicado, exibe modal que fecha a página
-                        if (
-                            /telefone|phone/i.test(errorMsg) &&
-                            /cadastr|existe|duplicad/i.test(errorMsg)
-                        ) {
-                            setInfoModal({
-                                title: 'Atenção',
-                                message: errorMsg,
-                            });
-                            const err: HandledError = new Error(
-                                errorMsg,
-                            ) as HandledError;
-                            err.handled = true;
-                            throw err;
-                        }
-                        // Demais erros: banner
-                        setFeedback({ type: 'error', message: errorMsg });
-                        const err: HandledError = new Error(
-                            errorMsg,
-                        ) as HandledError;
-                        err.handled = true;
-                        throw err;
-                    }
-                    return res.json();
-                })
-                .then(async createdClient => {
-                    setInfoModal({
-                        title: 'Sucesso',
-                        message: 'Cliente cadastrado com sucesso!',
-                    });
-                    // If a photo was selected, upload it now via multipart PATCH
-                    try {
-                        if (createdClient?.id) {
-                            await uploadPhotoIfNeeded(createdClient.id, token);
-                        }
-                    } catch (err) {
-                        console.warn(
-                            'Falha ao enviar foto (não bloqueante):',
-                            err,
-                        );
-                    }
-                    // Save anamnesis responses (non-blocking)
-                    try {
-                        if (createdClient?.id) {
-                            await saveAnamnesis(createdClient.id, token);
-                        }
-                    } catch (err) {
-                        console.warn(
-                            'Falha ao salvar anamnese (não bloqueante):',
-                            err,
-                        );
-                    }
-                    // Reset dirty baseline after successful create
-                    initialRef.current = JSON.stringify({
-                        ...formData,
-                        id: createdClient?.id,
-                    });
-                    setDirty(false);
-                    // Clear selected photo after successful create flow
-                    setSelectedPhotoFile(null);
-                    // Salva o id do novo cliente para seleção automática
-                    if (createdClient && createdClient.id) {
-                        localStorage.setItem(
-                            'newClientId',
-                            String(createdClient.id),
-                        );
-                    }
-                    // Atualiza lista e destaca novo cartão
-                    try {
-                        if (window.opener) {
-                            window.opener.dispatchEvent(
-                                new Event('updateClients'),
-                            );
-                            window.opener.focus?.();
-                        } else {
-                            window.dispatchEvent(new Event('updateClients'));
-                        }
-                    } catch {
-                        /* noop */
-                    }
-
-                    // Se for fluxo rápido (Salvar e novo), apenas limpa o formulário e mantém no cadastro
-                    if (quickModeRef.current) {
-                        quickModeRef.current = false;
-                        // Reseta campos para novo cadastro
-                        setFormData({
-                            first_name: '',
-                            last_name: '',
-                            email: '',
-                            phone: '',
-                            profession: '',
-                            rg: '',
-                            document_type: '',
-                            document_number: '',
-                            sex: '',
-                            marital_status: '',
-                            nationality: '',
-                            address: '',
-                            neighborhood: '',
-                            city: 'Limeira',
-                            state: 'SP',
-                            postal_code: '',
-                            sport_activity: '',
-                            academic_activity: '',
-                            footwear_used: '',
-                            sock_used: '',
-                            takes_medication: 'Não',
-                            had_surgery: 'Não',
-                            is_pregnant: false,
-                            pain_sensitivity: '',
-                            clinical_history: '',
-                            plantar_view_left: '',
-                            plantar_view_right: '',
-                            dermatological_pathologies_left: '',
-                            dermatological_pathologies_right: '',
-                            nail_changes_left: '',
-                            nail_changes_right: '',
-                            deformities_left: '',
-                            deformities_right: '',
-                            sensitivity_test: '',
-                            other_procedures: '',
-                        });
-                        // Foca no primeiro campo (Nome)
-                        setTimeout(() => {
-                            try {
-                                const first = formRef.current?.querySelector(
-                                    'input[name="first_name"]',
-                                ) as HTMLInputElement | null;
-                                first?.focus();
-                                first?.select?.();
-                            } catch {
-                                /* noop */
-                            }
-                        }, 0);
-                        // Reset dirty baseline for the fresh form
-                        initialRef.current = JSON.stringify({
-                            first_name: '',
-                            last_name: '',
-                            email: '',
-                            phone: '',
-                            profession: '',
-                            rg: '',
-                            document_type: '',
-                            document_number: '',
-                            sex: '',
-                            marital_status: '',
-                            nationality: '',
-                            address: '',
-                            neighborhood: '',
-                            city: 'Limeira',
-                            state: 'SP',
-                            postal_code: '',
-                            sport_activity: '',
-                            academic_activity: '',
-                            footwear_used: '',
-                            sock_used: '',
-                            takes_medication: 'Não',
-                            had_surgery: 'Não',
-                            is_pregnant: false,
-                            pain_sensitivity: '',
-                            clinical_history: '',
-                            plantar_view_left: '',
-                            plantar_view_right: '',
-                            dermatological_pathologies_left: '',
-                            dermatological_pathologies_right: '',
-                            nail_changes_left: '',
-                            nail_changes_right: '',
-                            deformities_left: '',
-                            deformities_right: '',
-                            sensitivity_test: '',
-                            other_procedures: '',
-                        });
-                        setDirty(false);
-                        setAnamnesisValues({});
-                        // Mantém na página, sem modal
-                        return;
-                    }
-
-                    // Fluxo normal: agora exibe modal de sucesso; fechamento só ao clicar OK
-                    setInfoModal({
-                        title: 'Sucesso',
-                        message: 'Cliente cadastrado com sucesso!',
-                    });
-                })
-                .catch(async err => {
-                    // Se já tratamos acima, não sobrescreve a mensagem específica
-                    if (isHandledError(err) && err.handled) return;
-                    setFeedback({
-                        type: 'error',
-                        message: 'Erro ao cadastrar: ' + (err?.message || ''),
-                    });
-                });
-            return;
-        }
-
-        // Edição (PATCH)
-        // Monta o payload apenas com campos alterados
-        const payload: Partial<ClientData> = {};
-        Object.keys(formData).forEach(key => {
-            if (
-                cliente &&
-                formData[key as keyof ClientData] !==
-                    cliente[key as keyof ClientData]
-            ) {
-                (payload as Partial<Record<string, unknown>>)[key] =
-                    formData[key as keyof ClientData];
-            }
-        });
-        // Garante que campos booleanos e string estejam corretos
-        if ('is_pregnant' in payload) {
-            payload.is_pregnant = !!formData.is_pregnant;
-        }
-        if ('takes_medication' in payload) {
-            payload.takes_medication = formData.takes_medication ?? '';
-        }
-        if ('had_surgery' in payload) {
-            payload.had_surgery = formData.had_surgery ?? '';
-        }
-
-        // Constrói o corpo com normalizações sem violar os tipos de payload
-        const body: Record<string, unknown> = { ...payload };
-        if ('first_name' in payload) {
-            body.first_name = (formData.first_name || '').trim();
-        }
-        if ('last_name' in payload) {
-            body.last_name = (formData.last_name || '').trim();
-        }
-        if ('email' in payload) {
-            const e = (formData.email || '').trim();
-            body.email = e ? e.toLowerCase() : null;
-        }
-        if ('profession' in payload) {
-            const p = (formData.profession || '').trim();
-            body.profession = p ? p : null;
-        }
-        if ('phone' in payload) {
-            const p = (formData.phone || '').trim();
-            body.phone = p ? p.replace(/\D/g, '') : null;
-        }
-        if ('address_number' in payload) {
-            const ad = (formData.address_number || '')
-                .replace(/\D/g, '')
-                .slice(0, 16);
-            body.address_number = ad || null;
-        }
-        if ('date_of_birth' in payload) {
-            body.date_of_birth = normalizeDOBForApi(
-                formData.date_of_birth || null,
-            );
-        }
-
-        fetch(`${API_BASE}/register/clients/${cliente.id}/`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(body),
-        })
-            .then(async res => {
-                if (!res.ok) {
-                    let errorData: unknown = null;
-                    try {
-                        errorData = await res.json();
-                    } catch {
-                        try {
-                            errorData = await res.text();
-                        } catch {
-                            errorData = null;
-                        }
-                    }
-                    const errorMsg = parseApiError(errorData, res.status);
-                    // Se for telefone duplicado, exibe modal que fecha a página
-                    if (
-                        /telefone|phone/i.test(errorMsg) &&
-                        /cadastr|existe|duplicad/i.test(errorMsg)
-                    ) {
-                        setInfoModal({ title: 'Atenção', message: errorMsg });
-                        const err: HandledError = new Error(
-                            errorMsg,
-                        ) as HandledError;
-                        err.handled = true;
-                        throw err;
-                    }
-                    // Demais erros: banner
-                    setFeedback({ type: 'error', message: errorMsg });
-                    const err: HandledError = new Error(
-                        errorMsg,
-                    ) as HandledError;
-                    err.handled = true;
-                    throw err;
-                }
-                return res.json();
-            })
-            .then(async () => {
-                setInfoModal({
-                    title: 'Sucesso',
-                    message: 'Cliente atualizado com sucesso!',
-                });
-                // If a new photo was selected, upload it now
-                try {
-                    if (cliente?.id) {
-                        await uploadPhotoIfNeeded(cliente.id, token);
-                    }
-                } catch (err) {
-                    console.warn('Falha ao enviar foto (não bloqueante):', err);
-                }
-                // Save anamnesis responses (non-blocking)
-                try {
-                    if (cliente?.id) {
-                        await saveAnamnesis(cliente.id, token);
-                    }
-                } catch (err) {
-                    console.warn(
-                        'Falha ao salvar anamnese (não bloqueante):',
-                        err,
-                    );
-                }
-                // Reset baseline after successful update
-                initialRef.current = JSON.stringify(formData);
-                setDirty(false);
-                // Clear selected photo after successful update
-                setSelectedPhotoFile(null);
-                // Dispara mensagem padrão e também persiste para consumo na Home
-                // Aguarda interação do usuário no modal de sucesso
-            })
-            .catch(async err => {
-                if (isHandledError(err) && err.handled) return;
-                if (
-                    typeof err === 'object' &&
-                    err !== null &&
-                    'response' in err
-                ) {
-                    const errorData = await (
-                        err as unknown as {
-                            response: { json: () => Promise<unknown> };
-                        }
-                    ).response.json();
-                    setFeedback({
-                        type: 'error',
-                        message: 'Erro ao salvar: ' + JSON.stringify(errorData),
-                    });
-                } else {
-                    setFeedback({
-                        type: 'error',
-                        message: 'Erro ao salvar: ' + err.message,
-                    });
-                }
-            });
-    };
-
-    const navigate = useNavigate();
-
-    // Atalho de teclado: Ctrl+Enter / Cmd+Enter para salvar e novo (desktop)
+    // ── Ctrl+Enter shortcut ──────────────────────────────────────────────────
     useEffect(() => {
         const h = (e: KeyboardEvent) => {
-            const ctrlOrCmd = e.ctrlKey || e.metaKey;
-            if (ctrlOrCmd && e.key === 'Enter') {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 onQuickSubmit();
                 formRef.current?.requestSubmit?.();
                 e.preventDefault();
@@ -810,289 +192,167 @@ export default function ClientForm({
         return () => window.removeEventListener('keydown', h);
     }, []);
 
-    // Fecha o modal de sucesso e retorna apropriado (fecha popup ou navega), notificando atualização
-    const closeSuccessAndExit = () => {
-        try {
-            if (window.opener) {
-                window.opener.dispatchEvent(new Event('updateClients'));
-                window.opener.focus?.();
-            } else {
-                window.dispatchEvent(new Event('updateClients'));
-            }
-        } catch {
-            // noop
-        }
-        if (window.opener) {
-            window.close();
-        } else {
-            // Home está em '/'
-            navigate('/');
-        }
-    };
-
-    function handleCancel() {
-        // Se houver alterações, confirmar.
-        if (dirty) {
-            const confirmExit = window.confirm(
-                'É possível que existam alterações não salvas. Deseja sair mesmo assim?',
-            );
-            if (!confirmExit) return;
-        }
-        // Limpa qualquer guard de unload
-        try {
-            // Remove listener de beforeunload sem usar 'any'
-            (
-                window as Window & {
-                    onbeforeunload: typeof window.onbeforeunload;
-                }
-            ).onbeforeunload = null;
-        } catch {
-            /* noop */
-        }
-        if (window.opener) {
-            try {
-                window.close();
-                return;
-            } catch {
-                /* noop */
-            }
-        }
-        try {
-            (document.activeElement as HTMLElement | null)?.blur?.();
-            document.body.classList.remove('keyboardOpen');
-        } catch {
-            /* noop */
-        }
-        navigate('/');
-    }
-
-    function handleDelete() {
-        setDeleteModalOpen(true);
-    }
-
-    function confirmDelete() {
-        setDeleteModalOpen(false);
-
-        try {
-            (document.activeElement as HTMLElement | null)?.blur?.();
-            document.body.classList.remove('keyboardOpen');
-        } catch {
-            /* noop */
-        }
-
+    // ── handleSubmit ─────────────────────────────────────────────────────────
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
         const token = getAccessToken();
         if (!token) {
-            setFeedback({
-                type: 'error',
-                message: 'Usuário não autenticado.',
-            });
+            setFeedback({ type: 'error', message: 'Usuário não autenticado.' });
             return;
         }
 
-        fetch(`${API_BASE}/register/clients/${cliente?.id}/`, {
-            method: 'DELETE',
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
+        let first = (formData.first_name || '').trim();
+        let last = (formData.last_name || '').trim();
+        if (!last && first.includes(' ')) {
+            const parts = first.split(/\s+/);
+            first = parts.shift() || '';
+            last = parts.join(' ');
+        }
+        const phone = (formData.phone || '').trim();
+        if (!first || !last || !phone) {
+            setFeedback({ type: 'error', message: 'Nome, Sobrenome e Telefone são obrigatórios.' });
+            return;
+        }
+
+        // ── CREATE (POST) ────────────────────────────────────────────────────
+        if (!cliente?.id) {
+            const emailTrim = (formData.email || '').trim();
+            const professionTrim = (formData.profession || '').trim();
+            const phoneDigits = phone.replace(/\D/g, '');
+            const addressNumberDigits = (formData.address_number || '').replace(/\D/g, '').slice(0, 16);
+            const dataToSend = {
+                ...formData,
+                first_name: first,
+                last_name: last,
+                email: emailTrim ? emailTrim.toLowerCase() : null,
+                profession: professionTrim || null,
+                phone: phoneDigits,
+                address_number: addressNumberDigits || null,
+                date_of_birth: normalizeDOBForApi(formData.date_of_birth || null),
+            };
+
+            fetch(`${API_BASE}/register/clients/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify(dataToSend),
+            })
+                .then(async res => {
+                    if (!res.ok) {
+                        let errorData: unknown = null;
+                        try { errorData = await res.json(); } catch {
+                            try { errorData = await res.text(); } catch { errorData = null; }
+                        }
+                        const errorMsg = parseApiError(errorData, res.status);
+                        if (/telefone|phone/i.test(errorMsg) && /cadastr|existe|duplicad/i.test(errorMsg)) {
+                            setInfoModal({ title: 'Atenção', message: errorMsg });
+                            const err = new Error(errorMsg) as HandledError;
+                            err.handled = true;
+                            throw err;
+                        }
+                        setFeedback({ type: 'error', message: errorMsg });
+                        const err = new Error(errorMsg) as HandledError;
+                        err.handled = true;
+                        throw err;
+                    }
+                    return res.json();
+                })
+                .then(async createdClient => {
+                    try { if (createdClient?.id) await saveAnamnesis(createdClient.id, token); }
+                    catch (err) { console.warn('Falha ao salvar anamnese (não bloqueante):', err); }
+
+                    initialRef.current = JSON.stringify({ ...formData, id: createdClient?.id });
+                    setDirty(false);
+                    if (createdClient?.id) localStorage.setItem('newClientId', String(createdClient.id));
+
+                    try {
+                        if (window.opener) { window.opener.dispatchEvent(new Event('updateClients')); window.opener.focus?.(); }
+                        else { window.dispatchEvent(new Event('updateClients')); }
+                    } catch { /* noop */ }
+
+                    if (quickModeRef.current) {
+                        quickModeRef.current = false;
+                        setFormData(EMPTY_FORM);
+                        setAnamnesisValues({});
+                        initialRef.current = JSON.stringify(EMPTY_FORM);
+                        setDirty(false);
+                        setTimeout(() => {
+                            try {
+                                const el = formRef.current?.querySelector('input[name="first_name"]') as HTMLInputElement | null;
+                                el?.focus(); el?.select?.();
+                            } catch { /* noop */ }
+                        }, 0);
+                        return;
+                    }
+                    setInfoModal({ title: 'Sucesso', message: 'Cliente cadastrado com sucesso!' });
+                })
+                .catch(err => {
+                    if (isHandledError(err) && err.handled) return;
+                    setFeedback({ type: 'error', message: 'Erro ao cadastrar: ' + (err?.message || '') });
+                });
+            return;
+        }
+
+        // ── UPDATE (PATCH) ───────────────────────────────────────────────────
+        const payload: Partial<ClientData> = {};
+        Object.keys(formData).forEach(key => {
+            if (cliente && formData[key as keyof ClientData] !== cliente[key as keyof ClientData]) {
+                (payload as Partial<Record<string, unknown>>)[key] = formData[key as keyof ClientData];
+            }
+        });
+        if ('is_pregnant' in payload) payload.is_pregnant = !!formData.is_pregnant;
+        if ('takes_medication' in payload) payload.takes_medication = formData.takes_medication ?? '';
+        if ('had_surgery' in payload) payload.had_surgery = formData.had_surgery ?? '';
+
+        const body: Record<string, unknown> = { ...payload };
+        if ('first_name' in payload) body.first_name = (formData.first_name || '').trim();
+        if ('last_name' in payload) body.last_name = (formData.last_name || '').trim();
+        if ('email' in payload) { const e = (formData.email || '').trim(); body.email = e ? e.toLowerCase() : null; }
+        if ('profession' in payload) { const p = (formData.profession || '').trim(); body.profession = p || null; }
+        if ('phone' in payload) { const p = (formData.phone || '').trim(); body.phone = p ? p.replace(/\D/g, '') : null; }
+        if ('address_number' in payload) { const ad = (formData.address_number || '').replace(/\D/g, '').slice(0, 16); body.address_number = ad || null; }
+        if ('date_of_birth' in payload) body.date_of_birth = normalizeDOBForApi(formData.date_of_birth || null);
+
+        fetch(`${API_BASE}/register/clients/${cliente.id}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body),
         })
-            .then(res => {
+            .then(async res => {
                 if (!res.ok) {
-                    setFeedback({
-                        type: 'error',
-                        message: 'Erro ao excluir cliente',
-                    });
-                    throw new Error('Erro ao excluir cliente');
+                    let errorData: unknown = null;
+                    try { errorData = await res.json(); } catch {
+                        try { errorData = await res.text(); } catch { errorData = null; }
+                    }
+                    const errorMsg = parseApiError(errorData, res.status);
+                    if (/telefone|phone/i.test(errorMsg) && /cadastr|existe|duplicad/i.test(errorMsg)) {
+                        setInfoModal({ title: 'Atenção', message: errorMsg });
+                        const err = new Error(errorMsg) as HandledError;
+                        err.handled = true;
+                        throw err;
+                    }
+                    setFeedback({ type: 'error', message: errorMsg });
+                    const err = new Error(errorMsg) as HandledError;
+                    err.handled = true;
+                    throw err;
                 }
-                try {
-                    localStorage.setItem('postDeleteAction', 'clearFilter');
-                } catch {
-                    /* noop: storage indisponível */
-                }
+                return res.json();
+            })
+            .then(async () => {
+                try { if (cliente?.id) await saveAnamnesis(cliente.id, token); }
+                catch (err) { console.warn('Falha ao salvar anamnese (não bloqueante):', err); }
 
-                try {
-                    if (window.opener) {
-                        window.opener.dispatchEvent(new Event('clearClients'));
-                        window.opener.dispatchEvent(new Event('updateClients'));
-                    } else {
-                        window.dispatchEvent(new Event('updateClients'));
-                    }
-                } catch {
-                    /* noop: sem suporte a eventos */
-                }
-
-                if (window.opener) {
-                    try {
-                        window.close();
-                    } catch {
-                        /* noop: janela já fechada */
-                    }
-                } else {
-                    try {
-                        document.body.classList.remove('keyboardOpen');
-                    } catch {
-                        /* noop */
-                    }
-                    try {
-                        window.dispatchEvent(new Event('clearClients'));
-                    } catch {
-                        /* noop */
-                    }
-                    window.location.assign('/');
-                }
+                initialRef.current = JSON.stringify(formData);
+                setDirty(false);
+                setInfoModal({ title: 'Sucesso', message: 'Cliente atualizado com sucesso!' });
             })
             .catch(err => {
-                setFeedback({
-                    type: 'error',
-                    message: 'Erro ao excluir cliente: ' + err.message,
-                });
+                if (isHandledError(err) && err.handled) return;
+                setFeedback({ type: 'error', message: 'Erro ao salvar: ' + (err?.message || '') });
             });
-    }
+    };
 
     const isEdit = !!cliente?.id;
-    const clientFullName = [cliente?.first_name, cliente?.last_name]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
-    const deleteModalTitle = clientFullName || 'Excluir cliente';
-
-    // Render modal de sucesso quando existir mensagem
-    const SuccessModal = infoModal ? (
-        <div
-            role='dialog'
-            aria-modal='true'
-            style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 9999,
-                padding: '1rem',
-            }}
-        >
-            <div
-                style={{
-                    background: '#fff',
-                    borderRadius: 8,
-                    padding: '1.25rem 1.5rem',
-                    maxWidth: 420,
-                    width: '100%',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                    fontSize: '1rem',
-                }}
-            >
-                <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.15rem' }}>
-                    {infoModal.title}
-                </h2>
-                <p style={{ margin: '0 0 1.25rem', lineHeight: 1.4 }}>
-                    {infoModal.message}
-                </p>
-                <div style={{ textAlign: 'right' }}>
-                    <button
-                        type='button'
-                        onClick={() => {
-                            setInfoModal(null);
-                            closeSuccessAndExit();
-                        }}
-                        style={{
-                            background: '#2563eb',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 6,
-                            padding: '0.6rem 1.1rem',
-                            cursor: 'pointer',
-                            fontWeight: 600,
-                        }}
-                    >
-                        OK
-                    </button>
-                </div>
-            </div>
-        </div>
-    ) : null;
-
-    const DeleteConfirmModal = deleteModalOpen ? (
-        <div
-            role='dialog'
-            aria-modal='true'
-            style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 9999,
-                padding: '1rem',
-            }}
-        >
-            <div
-                style={{
-                    background: '#fff',
-                    borderRadius: 8,
-                    padding: '1.25rem 1.5rem',
-                    maxWidth: 480,
-                    width: '100%',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                    fontSize: '1rem',
-                }}
-            >
-                <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.15rem' }}>
-                    {deleteModalTitle}
-                </h2>
-                <p style={{ margin: '0 0 0.75rem', lineHeight: 1.45 }}>
-                    Esta exclusão é definitiva e também removerá:
-                </p>
-                <ul style={{ margin: '0 0 1rem 1.2rem', lineHeight: 1.5 }}>
-                    <li>agendamentos e compromissos antigos e futuros</li>
-                    <li>dados financeiros e cobranças deste cliente</li>
-                    <li>anamnese, prontuário e histórico relacionado</li>
-                </ul>
-                <p style={{ margin: '0 0 1.25rem', lineHeight: 1.45 }}>
-                    Após excluir, esses dados não poderão ser recuperados.
-                </p>
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        gap: '0.75rem',
-                    }}
-                >
-                    <button
-                        type='button'
-                        onClick={() => setDeleteModalOpen(false)}
-                        style={{
-                            background: '#e5e7eb',
-                            color: '#111827',
-                            border: 'none',
-                            borderRadius: 6,
-                            padding: '0.6rem 1.1rem',
-                            cursor: 'pointer',
-                            fontWeight: 600,
-                        }}
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type='button'
-                        onClick={confirmDelete}
-                        style={{
-                            background: '#dc2626',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 6,
-                            padding: '0.6rem 1.1rem',
-                            cursor: 'pointer',
-                            fontWeight: 600,
-                        }}
-                    >
-                        Excluir
-                    </button>
-                </div>
-            </div>
-        </div>
-    ) : null;
+    const deleteModalTitle = [cliente?.first_name, cliente?.last_name].filter(Boolean).join(' ').trim() || 'Excluir cliente';
 
     return (
         <>
@@ -1150,8 +410,20 @@ export default function ClientForm({
                     </button>
                 </div>
             </form>
-            {SuccessModal}
-            {DeleteConfirmModal}
+            {infoModal && (
+                <InfoModal
+                    title={infoModal.title}
+                    message={infoModal.message}
+                    onClose={() => { setInfoModal(null); closeSuccessAndExit(); }}
+                />
+            )}
+            {deleteModalOpen && (
+                <DeleteConfirmModal
+                    title={deleteModalTitle}
+                    onConfirm={confirmDelete}
+                    onCancel={cancelDelete}
+                />
+            )}
         </>
     );
 }

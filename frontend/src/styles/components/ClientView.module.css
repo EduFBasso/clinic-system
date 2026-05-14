@@ -39,15 +39,6 @@
     overflow: hidden;
 }
 
-.avatar {
-    width: 64px;
-    height: 64px;
-    border-radius: 999px;
-    object-fit: cover;
-    border: 1px solid var(--color-border);
-    flex: 0 0 auto;
-}
-
 .avatarFallback {
     width: 64px;
     height: 64px;

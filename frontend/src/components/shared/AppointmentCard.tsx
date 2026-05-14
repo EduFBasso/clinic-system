@@ -22,8 +22,6 @@ export interface SharedAppointmentLike {
     notes?: string;
     client_name?: string;
     client?: { id: number; name: string } | number;
-    // Optional pre-fetched photo URL for the client; avoids an extra fetch in details modal when available
-    client_photo?: string | null;
     // True once the professional opened WhatsApp to notify the client
     whatsapp_confirmed?: boolean;
 }

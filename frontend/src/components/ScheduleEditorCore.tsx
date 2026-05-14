@@ -1,20 +1,18 @@
 import React from 'react';
 import { formatTime } from '../utils/timeFormat';
-import { focusClientCard } from '../utils/focusClientCard';
 import { getNow } from '../utils/now';
 import type { ClientBasic } from '../types/ClientBasic';
 import { useAppointments } from '../hooks/useAppointments';
 import type { Appointment } from '../hooks/useAppointments';
-import { apiFetch, ApiError } from '../utils/apiFetch';
-import { isTokenExpired } from '../utils/jwt';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import {
     getWorkTimesFromSnapshot,
 } from '../utils/agendaSettings';
 import { useAgendaSettings } from '../hooks/useAgendaSettings';
-import { getAccessToken } from '../utils/auth/session';
 import { pad2 } from '../utils/hmTime';
 import { toISODate } from '../utils/date';
+import { useAvailabilityCalc } from '../hooks/useAvailabilityCalc';
+import { useScheduleSave } from '../hooks/useScheduleSave';
 
 type DurationOption = 30 | 60 | 90 | 120 | 150;
 
@@ -98,7 +96,6 @@ export default function ScheduleEditorCore({
     }, [items, loading]);
     const effectiveItems = loading ? stableItems : items;
 
-    const BUFFER = 30;
     const [duration, setDuration] = React.useState<DurationOption>(() =>
         agendaSettings.defaultDuration,
     );
@@ -127,10 +124,6 @@ export default function ScheduleEditorCore({
     }, [agendaSettings.slotInterval, selectedDay, workTimes]);
     const [hour, setHour] = React.useState<number>(initialHM.h);
     const [minute, setMinute] = React.useState<number>(initialHM.m);
-    const [saving, setSaving] = React.useState(false);
-    const [error, setError] = React.useState<string | null>(null);
-    const [offerReplace, setOfferReplace] = React.useState(false);
-    const [conflicts, setConflicts] = React.useState<Appointment[]>([]);
     const [visitType, setVisitType] = React.useState<
         'consulta' | 'avaliacao' | 'retorno' | 'procedimento' | 'outro'
     >(() => agendaSettings.defaultVisitType);
@@ -194,190 +187,61 @@ export default function ScheduleEditorCore({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, editAppointment?.id]);
 
-    const busy = React.useMemo(() => {
-        const blocks = effectiveItems
-            .filter(a => a.status !== 'canceled')
-            .map(a => ({
-                start: new Date(a.start_at),
-                end: new Date(a.end_at),
-            }))
-            .map(({ start, end }) => ({
-                start: addMinutes(start, -BUFFER),
-                end: addMinutes(end, BUFFER),
-            }))
-            .sort((a, b) => a.start.getTime() - b.start.getTime());
-        const merged: { start: Date; end: Date }[] = [];
-        for (const b of blocks) {
-            if (!merged.length) merged.push(b);
-            else {
-                const last = merged[merged.length - 1];
-                if (b.start <= last.end)
-                    last.end = b.end > last.end ? b.end : last.end;
-                else merged.push(b);
-            }
-        }
-        return merged;
-    }, [effectiveItems]);
-
-    const rawBusy = React.useMemo(() => {
-        return effectiveItems
-            .filter(a => a.status !== 'canceled')
-            .map(a => ({
-                start: new Date(a.start_at),
-                end: new Date(a.end_at),
-            }))
-            .sort((a, b) => a.start.getTime() - b.start.getTime());
-    }, [effectiveItems]);
-
-    interface FreeSeg {
-        start: Date;
-        end: Date;
-        lengthMin: number;
-    }
-
-    const slotInterval = agendaSettings.slotInterval;
-    const minutesList = React.useMemo(() => {
-        const step = Math.max(1, Math.min(30, slotInterval));
-        const arr: number[] = [];
-        for (let m = 0; m < 60; m += step) arr.push(m);
-        return arr;
-    }, [slotInterval]);
+    const {
+        busy,
+        dayFreeSegments,
+        startCandidate,
+        endCandidate,
+        workStartBound,
+        workEndBound,
+        startAllowed,
+        isRetroactive,
+        canSubmit,
+        hourHasAnyValidMinute,
+        hoursRange,
+        minutesList,
+        clientConflicts,
+        hasConflict,
+        startISO,
+        endISO,
+    } = useAvailabilityCalc({
+        effectiveItems,
+        selectedDay,
+        dayISO,
+        workTimes,
+        agendaSettings,
+        duration,
+        hour,
+        minute,
+        editingId,
+    });
 
     const cutNoon = 12;
     const cutEvening = 18;
-
-    const dayFreeSegments = React.useMemo(() => {
-        const start = new Date(selectedDay);
-        start.setHours(workTimes.startHour, workTimes.startMin, 0, 0);
-        const end = new Date(selectedDay);
-        end.setHours(workTimes.endHour, workTimes.endMin, 0, 0);
-        const segs: FreeSeg[] = [];
-        let cursor = start;
-        for (const b of rawBusy) {
-            if (b.end <= start || b.start >= end) continue;
-            const bs = b.start < start ? start : b.start;
-            const be = b.end > end ? end : b.end;
-            if (bs > cursor) {
-                const len = (bs.getTime() - cursor.getTime()) / 60000;
-                if (len >= 15)
-                    segs.push({
-                        start: new Date(cursor),
-                        end: new Date(bs),
-                        lengthMin: len,
-                    });
-            }
-            if (be > cursor) cursor = new Date(be);
-            if (cursor >= end) break;
-        }
-        if (cursor < end) {
-            const len = (end.getTime() - cursor.getTime()) / 60000;
-            if (len >= 15)
-                segs.push({
-                    start: new Date(cursor),
-                    end: new Date(end),
-                    lengthMin: len,
-                });
-        }
-        return segs.sort((a, b) => a.start.getTime() - b.start.getTime());
-    }, [
-        rawBusy,
-        selectedDay,
-        workTimes.startHour,
-        workTimes.startMin,
-        workTimes.endHour,
-        workTimes.endMin,
-    ]);
 
     function fmtHM(d: Date) {
         return formatTime(d, { mode: 'local' });
     }
 
-    const startCandidate = React.useMemo(
-        () => makeDayTime(dayISO, hour, minute),
-        [dayISO, hour, minute],
-    );
-    const endCandidate = React.useMemo(
-        () => addMinutes(startCandidate, duration),
-        [startCandidate, duration],
-    );
-
-    const workStartBound = React.useMemo(
-        () => makeDayTime(dayISO, workTimes.startHour, workTimes.startMin),
-        [dayISO, workTimes.startHour, workTimes.startMin],
-    );
-    const workEndBound = React.useMemo(
-        () => makeDayTime(dayISO, workTimes.endHour, workTimes.endMin),
-        [dayISO, workTimes.endHour, workTimes.endMin],
-    );
-
-    const startAllowed = React.useMemo(
-        () =>
-            startCandidate >= workStartBound &&
-            endCandidate <= workEndBound &&
-            !busy.some(b =>
-                overlaps(startCandidate, endCandidate, b.start, b.end),
-            ),
-        [busy, startCandidate, endCandidate, workStartBound, workEndBound],
-    );
-    const isRetroactive = React.useMemo(() => {
-        const now = new Date();
-        const todayISO = toISODate(now);
-        if (dayISO < todayISO) return true;
-        if (dayISO > todayISO) return false;
-        return startCandidate < now;
-    }, [dayISO, startCandidate]);
-    const canSubmit = startAllowed && !isRetroactive;
-
-    const hoursRange = React.useMemo(() => {
-        const startH = Math.max(0, Math.min(23, workTimes.startHour));
-        const endH = Math.max(startH, Math.min(23, workTimes.endHour));
-        const len = endH - startH + 1;
-        return Array.from({ length: len }, (_, i) => startH + i);
-    }, [workTimes.startHour, workTimes.endHour]);
-
-    const hourHasAnyValidMinute = React.useMemo(() => {
-        const map: Record<number, boolean> = {};
-        for (const h of hoursRange) {
-            let ok = false;
-            for (const m of minutesList) {
-                const s = makeDayTime(dayISO, h, m);
-                const e = addMinutes(s, duration);
-                if (
-                    s >= workStartBound &&
-                    e <= workEndBound &&
-                    !busy.some(b => overlaps(s, e, b.start, b.end))
-                ) {
-                    ok = true;
-                    break;
-                }
-            }
-            map[h] = ok;
-        }
-        return map;
-    }, [
-        hoursRange,
-        minutesList,
-        dayISO,
-        duration,
-        busy,
-        workStartBound,
-        workEndBound,
-    ]);
-
-    const clientConflicts = React.useMemo(() => {
-        const s = new Date(`${dayISO}T${toHHMM(startCandidate)}:00`);
-        const e = new Date(`${dayISO}T${toHHMM(endCandidate)}:00`);
-        return effectiveItems.filter(
-            a =>
-                a.status === 'scheduled' &&
-                overlaps(s, e, new Date(a.start_at), new Date(a.end_at)),
-        );
-    }, [effectiveItems, dayISO, startCandidate, endCandidate]);
-
-    const hasConflict = React.useMemo(
-        () => clientConflicts.length > 0,
-        [clientConflicts.length],
-    );
+    const {
+        saving,
+        error,
+        offerReplace,
+        conflicts,
+        setError: _setError,
+        setOfferReplace,
+        submitCreate,
+        replaceConflictsAndCreate,
+    } = useScheduleSave({
+        client,
+        editingId,
+        startISO,
+        endISO,
+        visitType,
+        notes,
+        onClose,
+    });
+    void _setError; // available if needed
 
     const DURATION_OPTIONS: DurationOption[] = [30, 60, 90, 120, 150];
     function formatDurationLabel(mins: DurationOption) {
@@ -392,118 +256,6 @@ export default function ScheduleEditorCore({
                 return '2:00 hs';
             case 150:
                 return '2:30 hs';
-        }
-    }
-
-    async function submitCreate(replacing = false) {
-        setError(null);
-        const token = getAccessToken();
-        if (isTokenExpired(token)) {
-            setError('Sessão expirada. Faça login novamente.');
-            return;
-        }
-        const startISO = new Date(
-            `${dayISO}T${toHHMM(startCandidate)}:00`,
-        ).toISOString();
-        const endISO = new Date(
-            `${dayISO}T${toHHMM(endCandidate)}:00`,
-        ).toISOString();
-        setSaving(true);
-        try {
-            const isEdit = !!editingId;
-            const path = isEdit
-                ? `/agenda/appointments/${editingId}/`
-                : `/agenda/appointments/`;
-            const method = isEdit ? 'PATCH' : 'POST';
-            if (!client) {
-                setError('Selecione um cliente antes de salvar.');
-                setSaving(false);
-                return;
-            }
-            const payload = isEdit
-                ? { start_at: startISO, end_at: endISO, notes, visit_type: visitType }
-                : { client: client.id, title: 'Consulta', visit_type: visitType, start_at: startISO, end_at: endISO, status: 'scheduled', notes };
-            try {
-                await apiFetch(path, { method, body: payload });
-            } catch (e) {
-                const err = e as ApiError | Error;
-                const txt = err.message || '';
-                if (!replacing && (/Conflito|conflict/i.test(txt) || (err as ApiError).status === 400)) {
-                    setOfferReplace(true);
-                    try {
-                        const list = await apiFetch(
-                            `/agenda/appointments/?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}&status=scheduled`,
-                        ) as unknown;
-                        setConflicts((Array.isArray(list) ? list : []) as Appointment[]);
-                    } catch { /* ignore */ }
-                    setError('Conflito detectado. Confirme se deseja substituir.');
-                    return;
-                }
-                throw new Error(txt || 'Falha ao agendar.');
-            }
-            try {
-                void window.dispatchEvent(new Event('updateClients'));
-                void window.dispatchEvent(
-                    new CustomEvent('appointments:changed', { detail: {} }),
-                );
-                setTimeout(() => {
-                    try {
-                        if (client) focusClientCard(client.id);
-                        window.dispatchEvent(
-                            new CustomEvent('systemMessage', {
-                                detail: {
-                                    type: 'success',
-                                    message: editingId
-                                        ? 'Agendamento atualizado com sucesso'
-                                        : 'Agendamento criado com sucesso',
-                                },
-                            }),
-                        );
-                    } catch (e) {
-                        void e;
-                    }
-                }, 50);
-            } catch (err) {
-                void err;
-            }
-            onClose();
-        } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : 'Erro ao agendar.');
-        } finally {
-            setSaving(false);
-        }
-    }
-
-    async function replaceConflictsAndCreate() {
-        setOfferReplace(false);
-        setError(null);
-        const token = getAccessToken();
-        if (isTokenExpired(token)) {
-            setError('Sessão expirada. Faça login novamente.');
-            return;
-        }
-        const startISO = new Date(
-            `${dayISO}T${toHHMM(startCandidate)}:00`,
-        ).toISOString();
-        const endISO = new Date(
-            `${dayISO}T${toHHMM(endCandidate)}:00`,
-        ).toISOString();
-        setSaving(true);
-        try {
-            const list = await apiFetch(
-                `/agenda/appointments/?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}&status=scheduled`,
-            ) as unknown;
-            const conflictList = (Array.isArray(list) ? list : []) as Array<{ id: number; status: string }>;
-            for (const c of conflictList) {
-                try {
-                    await apiFetch(`/agenda/appointments/${c.id}/`, { method: 'PATCH', body: { status: 'canceled' } });
-                } catch { /* ignore individual cancel errors */ }
-            }
-            await submitCreate(true);
-        } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : 'Falha ao substituir conflitos.');
-        } finally {
-            setSaving(false);
         }
     }
 

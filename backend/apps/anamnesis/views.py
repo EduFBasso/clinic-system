@@ -10,11 +10,10 @@ from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 
 from apps.clients.models import Client
-from .models import AnamnesisField, AnamnesisResponse, AnamnesisPhoto
+from .models import AnamnesisField, AnamnesisResponse
 from .serializers import (
     AnamnesisFieldSerializer,
     AnamnesisResponseSerializer,
-    AnamnesisPhotoSerializer,
     AnamnesisResponseBulkSerializer,
 )
 
@@ -48,7 +47,7 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
         req = cast(DRFRequest, self.request)
         qs = AnamnesisResponse.objects.filter(
             field__professional=req.user,
-        ).select_related('field').prefetch_related('photos')
+        ).select_related('field')
 
         client_id = req.query_params.get('client')
         if client_id:
@@ -112,15 +111,4 @@ class AnamnesisResponseViewSet(viewsets.ModelViewSet):
         )
 
 
-class AnamnesisPhotoViewSet(viewsets.ModelViewSet):
-    """
-    Upload/delete photos attached to an anamnesis response.
-    POST /anamnesis/photos/  multipart/form-data  { response: <id>, image: <file> }
-    """
-    serializer_class = AnamnesisPhotoSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self) -> QuerySet[AnamnesisPhoto]:  # type: ignore[override]
-        return AnamnesisPhoto.objects.filter(
-            response__field__professional=self.request.user,
-        ).select_related('response')

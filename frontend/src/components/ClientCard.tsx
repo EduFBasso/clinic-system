@@ -383,32 +383,8 @@ function ClientCard({
                             e.stopPropagation();
                             onView(client);
                         }}
-                        style={
-                            client.photo
-                                ? { padding: 0, overflow: 'hidden' }
-                                : undefined
-                        }
                     >
-                        {client.photo ? (
-                            <img
-                                src={client.photo}
-                                alt={`Foto de ${client.first_name} ${client.last_name}`}
-                                className={styles.clientThumb}
-                                loading='lazy'
-                                decoding='async'
-                                onError={ev => {
-                                    try {
-                                        (
-                                            ev.currentTarget as HTMLImageElement
-                                        ).style.display = 'none';
-                                    } catch {
-                                        /* noop */
-                                    }
-                                }}
-                            />
-                        ) : (
-                            <FaEye color={iconColor} />
-                        )}
+                        <FaEye color={iconColor} />
                     </button>
                 </div>
             </div>

@@ -40,10 +40,3 @@ def test_online_mutation_lock_blocks_patch_but_not_get(django_user_model):
 
     assert get_response.status_code == 200
     assert patch_response.status_code == 423
-
-
-@override_settings(DEBUG=False, SERVE_MEDIA_FILES=True)
-def test_media_route_available_when_media_serving_enabled(client):
-    response = client.get('/media/client_photos/nonexistent.jpg')
-
-    assert response.status_code == 404

@@ -211,17 +211,6 @@
     margin-left: 4px;
 }
 
-/* Circular client thumbnail (small) */
-.clientThumb {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    object-fit: cover;
-    display: block;
-    background: var(--color-surface-strong);
-    border: 1.5px solid var(--color-primary);
-}
-
 /* Ações do card: botões de texto com sensação de pressionar */
 .actionButton {
     -webkit-appearance: button;

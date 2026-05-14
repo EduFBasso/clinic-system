@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AnamnesisField, AnamnesisResponse, AnamnesisPhoto
+from .models import AnamnesisField, AnamnesisResponse
 
 
 class AnamnesisFieldAdmin(admin.ModelAdmin):
@@ -26,4 +26,3 @@ class AnamnesisResponseAdmin(admin.ModelAdmin):
 
 admin.site.register(AnamnesisField, AnamnesisFieldAdmin)
 admin.site.register(AnamnesisResponse, AnamnesisResponseAdmin)
-admin.site.register(AnamnesisPhoto)
