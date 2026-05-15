@@ -247,6 +247,12 @@ html {
 }
 body {
     overflow-x: hidden;
+    /* Oculta a scrollbar visualmente sem remover a funcionalidade de rolagem */
+    scrollbar-width: none; /* Firefox */
+}
+
+body::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Edge */
 }
 
 /* Evita que o iOS "encolha" a área visível e desloque o conteúdo de forma abrupta */

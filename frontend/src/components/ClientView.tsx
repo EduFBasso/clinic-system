@@ -11,6 +11,7 @@ import { formatCpf, formatCnpj, formatRg, formatCep } from '../utils/formatCpf';
 import { API_BASE } from '../config/api';
 import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
 import { useTheme } from '../contexts/ThemeContext';
+import { getAccessToken } from '../utils/auth/session';
 
 interface ClientViewProps {
     client: ClientData & {
@@ -115,7 +116,6 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
         });
     }, [client.id, openToken]);
 
-    const photoUrl = client.photo || null;
     const initials = React.useMemo(() => {
         const fn = String(client.first_name || '').trim();
         const ln = String(client.last_name || '').trim();
@@ -128,7 +128,7 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
 
     useEffect(() => {
         if (!client.id) return;
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) return;
         fetch(`${API_BASE}/anamnesis/responses/?client=${client.id}`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -221,32 +221,13 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
         <div ref={rootRef} className={styles.viewRoot}>
             {/* ── Header: avatar + nome ── */}
             <div data-theme={theme} className={styles.headerCard}>
-                {photoUrl ? (
-                    <img
-                        src={photoUrl}
-                        alt={`Foto de ${client.first_name} ${client.last_name}`}
-                        className={styles.avatar}
-                        loading='lazy'
-                        decoding='async'
-                        onError={ev => {
-                            try {
-                                (
-                                    ev.currentTarget as HTMLImageElement
-                                ).style.display = 'none';
-                            } catch {
-                                /* noop */
-                            }
-                        }}
-                    />
-                ) : (
-                    <div
+                <div
                         className={styles.avatarFallback}
                         data-avatar-fallback
                         aria-hidden
                     >
                         {initials}
                     </div>
-                )}
                 <div className={styles.headerText}>
                     <div className={styles.clientName}>
                         {client.first_name} {client.last_name}

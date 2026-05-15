@@ -146,30 +146,3 @@ class AnamnesisResponse(models.Model):
     def __str__(self):
         field_info = self.field_label_snap or (str(self.field) if self.field else 'campo excluído')
         return f'{self.client} — {field_info}: {self.value[:40]}'
-
-
-class AnamnesisPhoto(models.Model):
-    """
-    Optional photos attached to an anamnesis response (e.g. foot photos).
-    """
-
-    response = models.ForeignKey(
-        AnamnesisResponse,
-        on_delete=models.CASCADE,
-        related_name='photos',
-        verbose_name='Resposta',
-    )
-    image = models.ImageField(
-        'Foto',
-        upload_to='anamnesis_photos/',
-    )
-    caption = models.CharField('Legenda', max_length=200, blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        app_label = 'anamnesis'
-        verbose_name = 'Foto de anamnese'
-        verbose_name_plural = 'Fotos de anamnese'
-
-    def __str__(self):
-        return f'Foto de {self.response} em {self.uploaded_at:%d/%m/%Y}'

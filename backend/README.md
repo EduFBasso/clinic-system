@@ -40,6 +40,24 @@ pip install -r requirements.txt
 docker-compose -f docker-compose.local.yml up -d db
 ```
 
+### 3.1) Reaproveitar uma base Docker ja populada (sem migrar dados)
+
+Se voce ja tiver um volume Docker com clientes reais de teste, nao recrie o banco.
+Suba o compose apontando para o volume existente:
+
+```bash
+DB_DOCKER_VOLUME_NAME=nome_do_volume_existente \
+DB_DOCKER_VOLUME_EXTERNAL=true \
+docker compose -f docker-compose.local.yml up -d db
+```
+
+Regras praticas:
+
+- nao rode `docker compose down -v`
+- mantenha `DB_NAME=clinic_local`, `DB_USER=clinic`, `DB_PASSWORD=clinicpass`
+- se o volume antigo usar outro nome de container, isso nao importa; o dado reaproveitado vem do volume
+- usuario operacional de teste local: `brunadentista@mail.com`
+
 ### 4) Migrações
 
 ```bash
@@ -61,12 +79,14 @@ python manage.py runserver
 bash dev.sh
 ```
 
-Sobe o Django em `0.0.0.0:8000` e simultaneamente roda `send_reminders` a cada 60 s em background,
+Sobe o Django em `0.0.0.0:8000` e simultaneamente roda `send_reminders` a cada 5 minutos em background,
 simulando o cron job de produção. Prefixo `[reminders]` nos logs distingue as saídas.
 Se `APPOINTMENT_REMINDERS_ENABLED=false`, o comando fica em modo desativado e não envia nada.
 Encerre com **Ctrl+C** — ambos os processos são encerrados juntos.
 
-> **Produção**: não use `dev.sh`. Enquanto reminders estiverem desativados, remova ou pause o cron job do Render. Quando o recurso voltar, reative o job `* * * * * python manage.py send_reminders`.
+Use `REMINDERS_LOOP_INTERVAL_SECONDS` para override local do intervalo quando precisar depurar.
+
+> **Produção**: não use `dev.sh`. Enquanto reminders estiverem desativados, remova ou pause o cron job do Render. Quando o recurso voltar, reative o job `*/5 * * * * python manage.py send_reminders`.
 
 **LAN (testar em dispositivos na mesma rede)**
 
@@ -85,9 +105,12 @@ Detecta IPs privados automaticamente, configura DJANGO_ALLOWED_HOSTS e CORS.
 
 **Auth**
 
-- `POST /register/auth/request-code/` — enviar OTP via email
-- `POST /register/auth/verify-code/` — verificar código → JWT
+- `POST /register/auth/totp/verify/` — autenticar com email + TOTP → JWT
+- `POST /register/auth/webauthn/login-begin/` — iniciar login com passkey/WebAuthn
+- `POST /register/auth/webauthn/login-complete/` — concluir login com passkey/WebAuthn
 - `POST /register/auth/logout-device/` — logout + terminar sessão
+
+Observacao: o fluxo antigo por OTP enviado por email nao e mais o fluxo principal do sistema.
 
 **Clientes**
 
@@ -124,6 +147,24 @@ DB_PASSWORD=clinicpass
 ```
 
 Para detalhes e opções avançadas, veja [.env](.env).
+
+### Arquivo `.env` para online protegido
+
+Quando quiser testar no servidor online sem permitir alteracoes destrutivas:
+
+```bash
+ONLINE_MUTATION_LOCK_ENABLED=True
+ONLINE_MUTATION_LOCK_METHODS=PUT,PATCH,DELETE
+SERVE_MEDIA_FILES=True
+```
+
+Efeito:
+
+- `POST` continua permitido para testes controlados
+- `PUT`, `PATCH` e `DELETE` retornam `423 Locked`
+- arquivos em `/media/` continuam roteados pelo backend
+
+Importante: para as fotos sobreviverem a restart/deploy no Render, use disco persistente ou storage externo.
 
 ## Testes
 

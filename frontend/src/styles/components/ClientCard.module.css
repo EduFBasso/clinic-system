@@ -103,6 +103,19 @@
     word-break: break-word;
 }
 
+.statusChip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.24rem 0.55rem;
+    font-size: 0.74rem;
+    font-weight: 800;
+    line-height: 1.1;
+    white-space: nowrap;
+    margin-left: 0.45rem;
+}
+
 .iconButton {
     background: none;
     border: none;
@@ -196,17 +209,6 @@
     gap: 4px;
     align-items: center; /* centers eye/edit on same vertical line */
     margin-left: 4px;
-}
-
-/* Circular client thumbnail (small) */
-.clientThumb {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    object-fit: cover;
-    display: block;
-    background: var(--color-surface-strong);
-    border: 1.5px solid var(--color-primary);
 }
 
 /* Ações do card: botões de texto com sensação de pressionar */

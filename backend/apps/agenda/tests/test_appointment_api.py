@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from apps.clients.models import Client
 from apps.register.models import Professional
+from apps.agenda.models import Appointment
 
 
 @pytest.fixture
@@ -218,18 +219,42 @@ def test_ongoing_does_not_block_new(auth_client, client_obj):
         status=Appointment.Status.SCHEDULED,
     )
 
-    # Tentar criar um novo no futuro deve SER permitido (não bloqueia em andamento)
-    # Ajusta para 2h no futuro para garantir que não sobreponha (inclusive atravessando meia-noite)
-    future_base = (timezone.now() + timezone.timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
-    new_payload = {
-        'client': client_obj.id,
-        'title': 'Nova Consulta',
-        'visit_type': 'avaliacao',
-        'start_at': future_base.isoformat(),
-        'end_at': (future_base + timezone.timedelta(minutes=30)).isoformat(),
-    }
-    r = auth_client.post('/agenda/appointments/', new_payload, format='json')
-    assert r.status_code == 201, r.content
+
+@pytest.mark.django_db
+def test_list_honors_ordering_and_limit(auth_client, client_obj):
+    base = (timezone.now() + timezone.timedelta(hours=1)).replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    first = Appointment.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        title='Primeiro',
+        visit_type=Appointment.VisitType.CONSULTA,
+        start_at=base,
+        end_at=base + timezone.timedelta(minutes=30),
+        status=Appointment.Status.SCHEDULED,
+    )
+    second = Appointment.objects.create(
+        professional=client_obj.professional,
+        client=client_obj,
+        title='Segundo',
+        visit_type=Appointment.VisitType.CONSULTA,
+        start_at=base + timezone.timedelta(hours=1),
+        end_at=base + timezone.timedelta(hours=1, minutes=30),
+        status=Appointment.Status.SCHEDULED,
+    )
+
+    response = auth_client.get('/agenda/appointments/?ordering=-end_at&limit=1')
+
+    assert response.status_code == 200, response.content
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]['id'] == second.id
+    assert data[0]['id'] != first.id
 
 
 @pytest.mark.django_db

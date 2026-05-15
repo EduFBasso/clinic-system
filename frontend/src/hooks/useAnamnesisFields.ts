@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { API_BASE } from '../config/api';
 import type { AnamnesisField } from '../types/AnamnesisTypes';
+import { getAccessToken } from '../utils/auth/session';
 
 export function useAnamnesisFields() {
     const [fields, setFields] = useState<AnamnesisField[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) {
             setLoading(false);
             return;

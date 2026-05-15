@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { isTokenExpired } from '../utils/jwt';
+import { getAccessToken } from '../utils/auth/session';
 
 export interface Appointment {
     id: number;
@@ -50,7 +51,7 @@ export function useAppointmentsRange(
     } | null>(null);
 
     useEffect(() => {
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (isTokenExpired(token)) {
             setItems([]);
             setLoading(false);
@@ -80,7 +81,8 @@ export function useAppointmentsRange(
                 return r.json();
             })
             .then(data => {
-                setItems(Array.isArray(data) ? data : []);
+                const appts = Array.isArray(data) ? data : [];
+                setItems(appts);
                 setLoading(false);
             })
             .catch(err => {

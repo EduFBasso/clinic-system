@@ -38,6 +38,7 @@ import { openClientForm } from '../utils/openClientForm';
 import BudgetModal from './BudgetModal';
 import { useNowTick } from '../hooks/useNowTick';
 import { emit } from '../events/bus';
+import { getAccessToken } from '../utils/auth/session';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -47,16 +48,19 @@ interface ClientCardProps {
     /** Quando definido, o botão "Avisar" usa este agendamento em vez do next_appointment do cliente.
      *  Útil quando o filtro ativo é "Amanhã" e o cliente tem um agendamento amanhã distinto do next. */
     notifyAppt?: { start_at?: string; end_at?: string; title?: string };
+    /** Dados do compromisso pendente para exibir data/hora no card pending. */
+    pendingAppt?: { start_at?: string; end_at?: string };
     /** Modo de filtro ativo. Quando 'today' ou 'tomorrow', o card exibe apenas o dia filtrado. */
     filterMode?: 'all' | 'pending' | 'today' | 'tomorrow';
 }
 
-export default function ClientCard({
+function ClientCard({
     client,
     onView,
     selected,
     onSelect,
     notifyAppt,
+    pendingAppt,
     filterMode = 'all',
 }: ClientCardProps) {
     const navigate = useNavigate();
@@ -168,8 +172,7 @@ export default function ClientCard({
     const effectiveOngoing = isOngoing && !isTomorrowFilter;
 
     const hasAgendaLine =
-        !isPending &&
-        (isScheduled || effectiveOngoing || futureAppointments.length > 0);
+        (isScheduled || effectiveOngoing || futureAppointments.length > 0) && !isPending;
 
     // Ações unificadas (+) para agenda e fallback
     const createActionAgenda = useClientCreateAction({
@@ -314,7 +317,11 @@ export default function ClientCard({
             ref={cardRef}
             className={cardClassNames}
             style={containerStyle}
-            onClick={() => onSelect?.()}
+            onClick={e => {
+                // Não disparar onSelect se o clique veio de um botão interno (ex.: Finalizar)
+                if ((e.target as HTMLElement).closest('button')) return;
+                onSelect?.();
+            }}
             onMouseDown={() => setPressed(true)}
             onMouseUp={() => setPressed(false)}
             onMouseLeave={() => setPressed(false)}
@@ -359,12 +366,12 @@ export default function ClientCard({
                         title='Editar cliente'
                         onClick={e => {
                             e.stopPropagation();
-                            const token = localStorage.getItem('accessToken');
+                            const token = getAccessToken();
                             if (!token) {
                                 onView(client);
                                 return;
                             }
-                            openClientForm({ id: client.id });
+                            openClientForm({ id: client.id, navigate });
                         }}
                     >
                         <FaEdit color={iconColor} />
@@ -376,32 +383,8 @@ export default function ClientCard({
                             e.stopPropagation();
                             onView(client);
                         }}
-                        style={
-                            client.photo
-                                ? { padding: 0, overflow: 'hidden' }
-                                : undefined
-                        }
                     >
-                        {client.photo ? (
-                            <img
-                                src={client.photo}
-                                alt={`Foto de ${client.first_name} ${client.last_name}`}
-                                className={styles.clientThumb}
-                                loading='lazy'
-                                decoding='async'
-                                onError={ev => {
-                                    try {
-                                        (
-                                            ev.currentTarget as HTMLImageElement
-                                        ).style.display = 'none';
-                                    } catch {
-                                        /* noop */
-                                    }
-                                }}
-                            />
-                        ) : (
-                            <FaEye color={iconColor} />
-                        )}
+                        <FaEye color={iconColor} />
                     </button>
                 </div>
             </div>
@@ -645,7 +628,7 @@ export default function ClientCard({
                                 onClick={e => {
                                     e.stopPropagation();
                                     const token =
-                                        localStorage.getItem('accessToken');
+                                        getAccessToken();
                                     fetch(
                                         `${API_BASE}/agenda/appointments/${client.next_appointment_id}/`,
                                         {
@@ -745,10 +728,14 @@ export default function ClientCard({
                                 <button
                                     type='button'
                                     className={`${styles.actionButton} ${styles.actionScheduled}`}
-                                    title='Enviar aviso de confirmação via WhatsApp'
-                                    style={{ fontWeight: 700 }}
+                                    title={client.phone ? 'Enviar aviso de confirmação via WhatsApp' : 'Telefone não cadastrado'}
+                                    style={{ fontWeight: 700, opacity: client.phone ? 1 : 0.45 }}
                                     onClick={e => {
                                         e.stopPropagation();
+                                        if (!client.phone) {
+                                            alert('Telefone não cadastrado para este cliente.');
+                                            return;
+                                        }
                                         // Prioridade: activeStartISO (já resolve tomorrow ou today corretamente)
                                         const sIso = activeStartISO;
                                         const time = sIso
@@ -870,43 +857,74 @@ export default function ClientCard({
                 </div>
             )}
 
-            {/* Bloco compacto de pendência substitui linha Data e ícones quando pendente (independente de scheduled). */}
+            {/* Bloco pendente: separador + linha Data + linha Status/Solucionar */}
             {isPending && !isOngoing && (
-                <div
-                    className={styles.infoRow}
-                    style={{ alignItems: 'center' }}
-                >
-                    <span
-                        className={styles.label}
-                        style={{ color: labelColor, fontWeight: 'bold' }}
-                    >
-                        Status:
-                    </span>
-                    <span
-                        className={styles.value}
+                <>
+                    <div
+                        aria-hidden
                         style={{
-                            color: 'var(--color-text-secondary, #6b7280)',
-                            fontStyle: 'italic',
-                        }}
-                    >
-                        Compromisso pendente
-                    </span>
-                    <SolveButton
-                        onSolve={async () => {
-                            try {
-                                onSelect?.();
-                            } catch {
-                                /* noop */
-                            }
-                            await tryOpenPendingElseQuick(() => {
-                                /* noop fallback */
-                            }, {
-                                kind: 'home',
-                                clientId: client.id,
-                            });
+                            height: 1,
+                            background: separatorColor,
+                            opacity: separatorOpacity,
+                            margin: '12px 0 12px',
+                            borderRadius: 1,
                         }}
                     />
-                </div>
+                    {(client.next_appointment_start_at || pendingAppt?.start_at) && (
+                        <div className={styles.infoRow}>
+                            <span className={styles.label} style={{ color: labelColor, fontWeight: 'bold' }}>Data:</span>
+                            <span className={styles.value} style={{ color: valueColor }}>
+                                {(() => {
+                                    const sIso = (client.next_appointment_start_at || pendingAppt?.start_at)!;
+                                    const eIso = client.next_appointment_end_at || pendingAppt?.end_at || null;
+                                    const s = new Date(sIso);
+                                    const wd = s.toLocaleDateString('pt-BR', { weekday: 'short' })
+                                        .replace('.', '').replace(/\b(\w)/, c => c.toUpperCase());
+                                    const dd = String(s.getDate()).padStart(2, '0');
+                                    const mm = String(s.getMonth() + 1).padStart(2, '0');
+                                    const fs = formatTime(sIso);
+                                    const fe = eIso ? formatTime(eIso) : '';
+                                    return `${wd} ${dd}/${mm}, ${fs}${fe ? ` - ${fe}` : ''}`;
+                                })()}
+                            </span>
+                        </div>
+                    )}
+                    <div
+                        className={styles.infoRow}
+                        style={{ alignItems: 'center' }}
+                    >
+                        <span
+                            className={styles.label}
+                            style={{ color: labelColor, fontWeight: 'bold' }}
+                        >
+                            Status:
+                        </span>
+                        <span
+                            className={styles.value}
+                            style={{
+                                color: 'var(--color-text-secondary, #6b7280)',
+                                fontStyle: 'italic',
+                            }}
+                        >
+                            Pendente
+                        </span>
+                        <SolveButton
+                            onSolve={async () => {
+                                try {
+                                    onSelect?.();
+                                } catch {
+                                    /* noop */
+                                }
+                                await tryOpenPendingElseQuick(() => {
+                                    /* noop fallback */
+                                }, {
+                                    kind: 'home',
+                                    clientId: client.id,
+                                });
+                            }}
+                        />
+                    </div>
+                </>
             )}
 
             {/* Notas do próximo agendamento removidas conforme solicitação */}
@@ -967,3 +985,23 @@ export default function ClientCard({
         </div>
     );
 }
+
+function sameNotifyAppt(
+    left?: ClientCardProps['notifyAppt'],
+    right?: ClientCardProps['notifyAppt'],
+) {
+    return (
+        left?.start_at === right?.start_at &&
+        left?.end_at === right?.end_at &&
+        left?.title === right?.title
+    );
+}
+
+export default React.memo(ClientCard, (prev, next) => {
+    return (
+        prev.client === next.client &&
+        prev.selected === next.selected &&
+        prev.filterMode === next.filterMode &&
+        sameNotifyAppt(prev.notifyAppt, next.notifyAppt)
+    );
+});

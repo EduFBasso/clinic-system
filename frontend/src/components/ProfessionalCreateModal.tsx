@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import AppModal from './Modal';
 import { API_BASE } from '../config/api';
 import '../styles/modal-message.css';
+import { getAccessToken } from '../utils/auth/session';
 
 interface Props {
     open: boolean;
@@ -91,7 +92,7 @@ const ProfessionalCreateModal: React.FC<Props> = ({ open, onClose }) => {
         }
         setLoading(true);
         try {
-            const token = localStorage.getItem('accessToken') ?? '';
+            const token = getAccessToken();
             const res = await fetch(
                 `${API_BASE}/register/auth/professional-create/`,
                 {

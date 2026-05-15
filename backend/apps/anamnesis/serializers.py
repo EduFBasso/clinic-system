@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import AnamnesisField, AnamnesisResponse, AnamnesisPhoto
+from .models import AnamnesisField, AnamnesisResponse
 
 
 class AnamnesisFieldSerializer(serializers.ModelSerializer):
@@ -13,23 +13,14 @@ class AnamnesisFieldSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
-class AnamnesisPhotoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AnamnesisPhoto
-        fields = ['id', 'image', 'caption', 'uploaded_at']
-        read_only_fields = ['id', 'uploaded_at']
-
-
 class AnamnesisResponseSerializer(serializers.ModelSerializer):
-    photos = AnamnesisPhotoSerializer(many=True, read_only=True)
-
     class Meta:
         model = AnamnesisResponse
         fields = [
             'id', 'client', 'field', 'field_label_snap',
-            'value', 'updated_at', 'photos',
+            'value', 'updated_at',
         ]
-        read_only_fields = ['id', 'updated_at', 'photos']
+        read_only_fields = ['id', 'updated_at']
 
     def create(self, validated_data):
         # Auto-fill field_label_snap from the field if not provided

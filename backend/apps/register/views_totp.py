@@ -92,8 +92,12 @@ def totp_verify(request):
         )
 
     totp = pyotp.TOTP(professional.totp_secret)
-    # valid_window=1 allows ±30s clock drift (one window before/after)
-    if not totp.verify(code, valid_window=1):
+    valid_window = max(0, int(getattr(settings, "TOTP_VALID_WINDOW", 4)))
+    # valid_window=4 accepts codes ±120s from server time.
+    # On iOS the user must: see code in authenticator → switch app → type → submit.
+    # That round-trip easily spans 20-40s; if the code is near end-of-window this
+    # exceeds the ±60s tolerance of valid_window=2, causing silent rejections on iPhone.
+    if not totp.verify(code, valid_window=valid_window):
         logger.warning("[TOTP Verify] Invalid code for user=%s", red_email)
         return Response(
             {"valid": False, "message": "Código inválido ou expirado."},

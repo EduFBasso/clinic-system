@@ -10,6 +10,7 @@ import ensureDeviceSession from '../services/sessions';
 import { pad2, toMinutes, fromMinutes } from '../utils/hmTime';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import { unlockPageScroll } from '../utils/unlockPageScroll';
+import { getAccessToken } from '../utils/auth/session';
 
 export interface UseQuickScheduleSaveParams {
     selectedDate: Date;
@@ -137,7 +138,7 @@ export function useQuickScheduleSave({
             outro: 'Outro',
         };
         const title = visitTitles[String(visitType)] || 'Consulta';
-        const token = localStorage.getItem('accessToken') || '';
+        const token = getAccessToken();
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
@@ -245,7 +246,7 @@ export function useQuickScheduleSave({
                     if (/pendente/i.test(text)) {
                         try {
                             const token2 =
-                                localStorage.getItem('accessToken') || '';
+                                getAccessToken();
                             const headers2: Record<string, string> = {};
                             if (token2)
                                 headers2['Authorization'] = `Bearer ${token2}`;

@@ -1,9 +1,5 @@
 import React from 'react';
 import { findFirstPendingForClient } from '../services/pending';
-import {
-    getAppointmentOverride,
-    subscribeOverrides,
-} from '../utils/appointments/overrides';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { PendingReturnContext } from '../types/agendaFlow';
@@ -57,7 +53,7 @@ export function useClientPendingState({
         return false;
     }, [client]);
 
-    // Override: busca no servidor se nenhum dos critérios acima detectou, mas pode haver pendência "oculta"
+    // Probe override: set when API confirms a pending appointment not visible via heuristic
     const [pendingOverride, setPendingOverride] = React.useState(false);
     // Marca local de resolução imediata (finalize/cancel) até que dados reais do cliente cheguem
     const [pendingResolvedLocal, setPendingResolvedLocal] =
@@ -67,21 +63,11 @@ export function useClientPendingState({
     React.useEffect(() => {
         let cancelled = false;
         if (isPendingHeuristic) {
-            // Heurística já confirma pendência: limpa override para evitar estado duplo
-            setPendingOverride(false);
-            return () => {
-                cancelled = true;
-            };
+            return () => { cancelled = true; };
         }
         if (!probeEnabled) {
-            // Probe desabilitado — evita N×2 requests em listas grandes.
-            // O set global loadPendingClientIds (MainContent) já cobre esses casos.
-            return () => {
-                cancelled = true;
-            };
+            return () => { cancelled = true; };
         }
-        // Só consulta o servidor quando a heurística não detectou — usa nowRef para não
-        // reexecutar a cada tick de relógio (a cada 5 s), apenas em mudanças reais de estado.
         (async () => {
             const appt = await findFirstPendingForClient(
                 client.id,
@@ -92,16 +78,7 @@ export function useClientPendingState({
         return () => {
             cancelled = true;
         };
-    }, [isPendingHeuristic, client.id, probeEnabled]); // removido: now, pendingOverride (causavam 12×/min por cartão)
-
-    // Observa override para o next_appointment_id (se existir)
-    const overrideStatus = React.useMemo(() => {
-        if (client.next_appointment_id != null) {
-            const ov = getAppointmentOverride(client.next_appointment_id);
-            return ov?.status;
-        }
-        return undefined;
-    }, [client.next_appointment_id]);
+    }, [isPendingHeuristic, client.id, probeEnabled]);
 
     // Escuta eventos globais de resolução imediata
     React.useEffect(() => {
@@ -127,26 +104,16 @@ export function useClientPendingState({
             );
     }, [client.id]);
 
-    // Escuta mudanças em overrides para limpar pendente se status final aplicado
+    // Escuta mudanças de status: se o appointment do cliente foi para done/canceled,
+    // dispara resolução local imediata
     React.useEffect(() => {
-        if (client.next_appointment_id == null) return;
-        const unsub = subscribeOverrides(ids => {
-            if (ids && !ids.includes(client.next_appointment_id!)) return;
-            const ov = getAppointmentOverride(client.next_appointment_id!);
-            if (ov && (ov.status === 'done' || ov.status === 'canceled')) {
-                setPendingOverride(false); // limpa override: rawPending fica false direto
-                setPendingResolvedLocal(true);
-                setPendingBlockUntil(Date.now() + 4000);
-            }
-        });
-        return () => {
-            try {
-                unsub();
-            } catch {
-                /* noop */
-            }
-        };
-    }, [client.next_appointment_id]);
+        const status = client.next_appointment_status;
+        if (status === 'done' || status === 'canceled') {
+            setPendingOverride(false);
+            setPendingResolvedLocal(true);
+            setPendingBlockUntil(Date.now() + 4000);
+        }
+    }, [client.next_appointment_status]);
 
     // Reset local resolved flag quando dados do cliente confirmam estado terminal
     React.useEffect(() => {
@@ -184,9 +151,6 @@ export function useClientPendingState({
     }, [rawPending]);
 
     let effectivePending = pendingStable;
-    if (overrideStatus === 'done' || overrideStatus === 'canceled') {
-        effectivePending = false;
-    }
     if (pendingResolvedLocal) {
         effectivePending = false;
     }

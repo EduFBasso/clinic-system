@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import AppModal from './Modal';
 import { API_BASE } from '../config/api';
 import '../styles/modal-message.css';
+import { getAccessToken } from '../utils/auth/session';
 
 interface ProfessionalOption {
     id: number;
@@ -33,7 +34,7 @@ const TotpAdminResetModal: React.FC<Props> = ({ open, onClose }) => {
         setError('');
         setQrDataUrl('');
         setLoadingList(true);
-        const token = localStorage.getItem('accessToken') ?? '';
+        const token = getAccessToken();
         fetch(`${API_BASE}/register/professionals/`, {
             headers: { Authorization: `Bearer ${token}` },
         })
@@ -53,7 +54,7 @@ const TotpAdminResetModal: React.FC<Props> = ({ open, onClose }) => {
         setError('');
         setLoading(true);
         try {
-            const token = localStorage.getItem('accessToken') ?? '';
+            const token = getAccessToken();
             const res = await fetch(
                 `${API_BASE}/register/auth/totp/admin-reset/`,
                 {

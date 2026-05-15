@@ -8,6 +8,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { API_BASE } from '../config/api';
+import { getAccessToken } from '../utils/auth/session';
 
 export type AppTheme = 'blue' | 'green' | 'pink' | 'black';
 
@@ -68,7 +69,7 @@ function patchStoredTheme(theme: AppTheme) {
 
 /** Envia PATCH /register/professionals/me/ { ui_theme } de forma silenciosa. */
 function persistThemeToBackend(theme: AppTheme) {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (!token) return;
     fetch(`${API_BASE}/register/professionals/me/`, {
         method: 'PATCH',
@@ -131,6 +132,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme(): ThemeContextValue {
     const ctx = useContext(ThemeContextStrict);
     if (!ctx) {

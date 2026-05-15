@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 // (no direct imports needed here besides apiFetch)
 import { apiFetch, ApiError } from '../utils/apiFetch';
+import { getAccessToken } from '../utils/auth/session';
 
 // Lightweight session summary + list fetching with simple in-memory caching.
 // Phase 1+2: no polling; fetch on demand when About/Sobre modal opens or when explicitly refreshed.
@@ -38,7 +39,7 @@ export function useSessionsSummary(trigger: number | boolean) {
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (!token) {
                 // Sem token não tenta buscar; garante estado neutro
                 setSummary(null);
@@ -78,7 +79,7 @@ export function useSessionsList({
     const fetchList = useCallback(
         async (force = false) => {
             if (!open) return;
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (!token) return; // evita chamada sem token
             const now = Date.now();
             if (

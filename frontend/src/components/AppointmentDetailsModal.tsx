@@ -8,6 +8,7 @@ import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
 import type { PendingReturnContext } from '../types/agendaFlow';
 
+
 type ChargeItem = {
     id: number;
     item_type: 'service' | 'product' | 'custom';
@@ -101,8 +102,6 @@ export default function AppointmentDetailsModal({
         );
     }, [appt]);
 
-    // Photo: prefer provided photo (client_photo) when available; else best-effort fetch by client id
-    const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
     // Charges for this appointment
     const [charges, setCharges] = React.useState<Charge[]>([]);
     React.useEffect(() => {
@@ -121,52 +120,6 @@ export default function AppointmentDetailsModal({
             .catch(() => {
                 /* silently ignore — charges are optional */
             });
-    }, [open, appt]);
-
-    React.useEffect(() => {
-        // Prefer existing photo if present in payload
-        try {
-            if (
-                appt &&
-                typeof appt.client_photo === 'string' &&
-                appt.client_photo
-            ) {
-                setPhotoUrl(appt.client_photo);
-            } else {
-                setPhotoUrl(null);
-            }
-        } catch {
-            setPhotoUrl(null);
-        }
-        try {
-            if (!open || !appt) return;
-            if (appt && appt.client_photo) return; // already have photo
-            const clientId =
-                typeof appt.client === 'number'
-                    ? appt.client
-                    : typeof appt.client === 'object' && appt.client
-                      ? (appt.client as { id?: number }).id
-                      : undefined;
-            if (!clientId) return;
-            const token = localStorage.getItem('accessToken');
-            fetch(`${API_BASE}/register/clients/${clientId}/`, {
-                headers: {
-                    Authorization: token ? `Bearer ${token}` : '',
-                },
-                cache: 'no-store',
-            })
-                .then(r => (r.ok ? r.json() : null))
-                .then(data => {
-                    if (data && typeof data.photo === 'string') {
-                        setPhotoUrl(data.photo as string);
-                    }
-                })
-                .catch(() => {
-                    /* ignore */
-                });
-        } catch {
-            /* noop */
-        }
     }, [open, appt]);
 
     const initials = React.useMemo(() => {
@@ -300,31 +253,7 @@ export default function AppointmentDetailsModal({
                             padding: '2px 0 6px',
                         }}
                     >
-                        {photoUrl ? (
-                            <img
-                                src={photoUrl}
-                                alt={`Foto de ${clientName}`}
-                                style={{
-                                    width: 56,
-                                    height: 56,
-                                    borderRadius: '999px',
-                                    objectFit: 'cover',
-                                    border: '1px solid var(--color-border)',
-                                }}
-                                loading='lazy'
-                                decoding='async'
-                                onError={ev => {
-                                    try {
-                                        (
-                                            ev.currentTarget as HTMLImageElement
-                                        ).style.display = 'none';
-                                    } catch {
-                                        /* noop */
-                                    }
-                                }}
-                            />
-                        ) : (
-                            <div
+                        <div
                                 aria-hidden
                                 style={{
                                     width: 56,
@@ -344,7 +273,6 @@ export default function AppointmentDetailsModal({
                             >
                                 {initials}
                             </div>
-                        )}
                         <div style={{ minWidth: 0 }}>
                             <div
                                 style={{

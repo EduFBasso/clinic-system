@@ -76,12 +76,46 @@
     padding: 0; /* acompanha o padding do .main para alinhamento à esquerda */
 }
 
-.filterInput {
+.filterInputWrapper {
+    position: relative;
     flex: 1;
-    padding: 0.5rem;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.filterInput {
+    width: 100%;
+    padding: 0.5rem 2rem 0.5rem 0.5rem;
     border: 1px solid var(--color-border);
     border-radius: 4px;
     min-width: 0;
+}
+
+.filterClearBtn {
+    position: absolute;
+    right: 0.3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #666;
+    font-size: 1.1rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.filterClearBtn:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: #111;
 }
 
 .filterActionsDesktop {
@@ -144,8 +178,39 @@
     line-height: 1.2;
 }
 
+/* Vermelho quando há pendentes e nenhum filtro ativo — chama atenção para resolver */
+.filtersMenuButtonPending {
+    background: #dc2626;
+}
+
 .filtersMenuButtonActive {
     background: #dc2626;
+}
+
+.countBadge {
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+@keyframes badgePulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.15);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.noResultsMessage {
+    padding: 1rem 0.25rem;
+    font-size: 0.95rem;
+    color: rgba(17, 24, 39, 0.6);
+    text-align: center;
 }
 
 .filtersMenuPanel {
@@ -234,6 +299,11 @@
         align-items: center;
     }
 
+    .filterInputWrapper {
+        flex: 1 1 auto;
+        max-width: none;
+    }
+
     .filterInput {
         flex: 1 1 auto;
         max-width: none;
@@ -267,6 +337,11 @@
 
     .filterActionsMobile {
         display: none;
+    }
+
+    .filterInputWrapper {
+        flex: 0 1 35vw;
+        max-width: 35vw;
     }
 
     .filterInput {

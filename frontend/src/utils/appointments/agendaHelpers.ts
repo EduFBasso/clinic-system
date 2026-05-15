@@ -92,17 +92,15 @@ export function makeClientBasic(
 export function matchesStatusFilter(
     filter: 'all' | 'active' | 'past' | 'done' | 'canceled' | 'ongoing',
     a: EnrichedAppointment,
-    overrideStatus?: string,
 ): boolean {
-    const status =
-        (overrideStatus as EnrichedAppointment['status']) ?? a.status;
+    const status = a.status;
     switch (filter) {
         case 'all':
             return true;
         case 'active':
             return status === 'scheduled' && !a._isPast && !a._isOngoing;
         case 'past':
-            return status === 'scheduled' && a._isPast;
+            return status === 'pending' || (status === 'scheduled' && a._isPast);
         case 'done':
             return status === 'done';
         case 'canceled':

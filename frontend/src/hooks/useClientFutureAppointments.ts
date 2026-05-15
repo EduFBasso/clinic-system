@@ -3,6 +3,7 @@ import { API_BASE } from '../config/api';
 import { getMaxScheduledPerClient } from '../config/limits';
 import type { Appointment } from './useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
+import { getAccessToken } from '../utils/auth/session';
 
 interface Params {
     client: ClientBasic;
@@ -39,7 +40,7 @@ export function useClientFutureAppointments({
             setFutureAppointments(emptyRef.current);
             return;
         }
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) return;
         const startRef = client.next_appointment_start_at;
         if (!startRef) return;

@@ -28,6 +28,43 @@ interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
     suppressAutoLogout?: boolean;
     // If relative path provided, it's joined with API_BASE.
     body?: RequestInit['body'] | JsonSerializable;
+    timeoutMs?: number;
+}
+
+function createRequestSignal(signal?: AbortSignal, timeoutMs?: number) {
+    if (!timeoutMs || timeoutMs <= 0) {
+        return {
+            signal,
+            cleanup: () => {},
+            didTimeout: () => false,
+        };
+    }
+
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
+
+    const abortFromSource = () => controller.abort();
+
+    if (signal) {
+        if (signal.aborted) {
+            abortFromSource();
+        } else {
+            signal.addEventListener('abort', abortFromSource, { once: true });
+        }
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            clearTimeout(timeoutId);
+            signal?.removeEventListener('abort', abortFromSource);
+        },
+        didTimeout: () => timedOut,
+    };
 }
 
 // Back-end messages to match for device session invalidation (Portuguese messages from authentication class)
@@ -63,7 +100,7 @@ function performLocalLogout(reason: string) {
 }
 
 export async function apiFetch(path: string, options: ApiFetchOptions = {}) {
-    const { suppressAutoLogout, headers, ...rest } = options;
+    const { suppressAutoLogout, headers, timeoutMs, signal, ...rest } = options;
     const deviceId = getOrCreateDeviceId('device_id');
     const token =
         typeof window !== 'undefined'
@@ -95,6 +132,7 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}) {
     }
 
     const url = path.startsWith('http') ? path : `${API_BASE || ''}${path}`;
+    const requestSignal = createRequestSignal(signal ?? undefined, timeoutMs);
     let response: Response;
     // Ensure body type matches fetch signature (string, FormData, Blob, etc.)
     let fetchBody: BodyInit | null | undefined = rest.body as
@@ -118,11 +156,17 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}) {
             ...rest,
             body: fetchBody,
             headers: finalHeaders,
+            signal: requestSignal.signal,
         });
     } catch (e) {
+        requestSignal.cleanup();
+        if (requestSignal.didTimeout()) {
+            throw new ApiError('Tempo limite da requisicao excedido.', 0, 'timeout');
+        }
         const message = e instanceof Error ? e.message : 'Network error';
         throw new ApiError(message, 0);
     }
+    requestSignal.cleanup();
 
     const contentType = response.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');

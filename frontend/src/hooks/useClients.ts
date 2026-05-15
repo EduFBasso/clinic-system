@@ -2,20 +2,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config/api';
 import { emit } from '../events/bus';
+import { apiFetch } from '../utils/apiFetch';
 import { isTokenExpired } from '../utils/jwt';
 import type { ClientBasic } from '../types/ClientBasic';
+import { getAccessToken } from '../utils/auth/session';
 
 export function useClients() {
     const [clients, setClients] = useState<ClientBasic[]>([]);
-    const [loading, setLoading] = useState(false);
+    // Inicia como `true` quando há token válido para evitar flash
+    // vazio → carregando durante a primeira montagem.
+    const [loading, setLoading] = useState<boolean>(() => {
+        try {
+            const t = getAccessToken();
+            return !!t && !isTokenExpired(t);
+        } catch {
+            return false;
+        }
+    });
     const [error, setError] = useState<string | null>(null);
     // Keep a ref for current clients length to decide initial vs background loading
     const clientsRef = useRef<ClientBasic[]>([]);
     const debounceRef = useRef<number | null>(null);
+    const lastFetchAtRef = useRef(0);
 
     useEffect(() => {
         const fetchClients = () => {
-            const token = localStorage.getItem('accessToken');
+            lastFetchAtRef.current = Date.now();
+            const token = getAccessToken();
             if (isTokenExpired(token)) {
                 const hadLoggedProfessional = !!localStorage.getItem(
                     'loggedProfessional',
@@ -38,29 +51,22 @@ export function useClients() {
             if (isInitial) setLoading(true);
             const url = `${API_BASE}/register/clients-basic/`;
             console.debug('[useClients] API_BASE =', API_BASE, 'fetching', url);
-            fetch(url, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+            apiFetch('/register/clients-basic/', {
+                timeoutMs: 12000,
             })
-                .then(res => {
-                    if (res.status === 401)
-                        throw new Error(
-                            'Sessão expirada. É necessário fazer login novamente.',
-                        );
-                    if (!res.ok) throw new Error('Erro ao buscar clientes');
-                    return res.json();
-                })
                 .then(data => {
-                    setClients(data);
-                    clientsRef.current = data;
+                    const nextClients = Array.isArray(data)
+                        ? (data as ClientBasic[])
+                        : [];
+                    setClients(nextClients);
+                    clientsRef.current = nextClients;
                     setLoading(false); // hide big loading (initial)
                 })
                 .catch(err => {
                     const rawMessage =
                         err instanceof Error ? err.message : String(err);
                     const isNetworkError =
-                        /Failed to fetch|NetworkError|Load failed/i.test(
+                        /Failed to fetch|NetworkError|Load failed|Tempo limite/i.test(
                             rawMessage,
                         );
                     const hasCachedClients =
@@ -110,6 +116,9 @@ export function useClients() {
         };
         // Handler para atualizar clientes ao focar na janela
         const handleFocus = () => {
+            if (Date.now() - lastFetchAtRef.current < 45_000) {
+                return;
+            }
             scheduleFetch();
         };
         window.addEventListener('clearClients', handleClearClients);

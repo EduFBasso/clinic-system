@@ -3,6 +3,8 @@ import styles from '../../styles/components/ClientCard.module.css';
 import type { Appointment } from '../../hooks/useAppointments';
 import { API_BASE } from '../../config/api';
 import { FaEdit } from 'react-icons/fa';
+import { getAccessToken } from '../../utils/auth/session';
+import { pad2, weekdayLabel } from '../../utils/hmTime';
 
 type Props = {
     items: Appointment[];
@@ -40,12 +42,9 @@ export default function FutureAppointmentsList({
                 {items.slice(0, 7).map(f => {
                     const s = new Date(f.start_at);
                     const e = new Date(f.end_at);
-                    const wd = s
-                        .toLocaleDateString('pt-BR', { weekday: 'short' })
-                        .replace('.', '')
-                        .replace(/\b(\w)/, c => c.toUpperCase());
-                    const dd = String(s.getDate()).padStart(2, '0');
-                    const mm = String(s.getMonth() + 1).padStart(2, '0');
+                    const wd = weekdayLabel(s);
+                    const dd = pad2(s.getDate());
+                    const mm = pad2(s.getMonth() + 1);
                     const fmt = (d: Date) => formatTime(d, { mode: 'local' });
                     return (
                         <div
@@ -98,7 +97,7 @@ export default function FutureAppointmentsList({
                                 onClick={e => {
                                     e.stopPropagation();
                                     const token =
-                                        localStorage.getItem('accessToken');
+                                        getAccessToken();
                                     fetch(
                                         `${API_BASE}/agenda/appointments/${f.id}/`,
                                         {

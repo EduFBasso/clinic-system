@@ -38,7 +38,7 @@ describe('AppointmentCard', () => {
     it('renders status badge "Em andamento" for ongoing', () => {
         const s = new Date(Date.now() - 60_000).toISOString();
         const e = new Date(Date.now() + 60_000).toISOString();
-        const appt = makeAppt({ start_at: s, end_at: e });
+        const appt = makeAppt({ start_at: s, end_at: e, status: 'ongoing' });
         render(<AppointmentCard appt={appt} now={new Date()} />);
         expect(screen.getByText('Em andamento')).toBeInTheDocument();
     });
@@ -191,7 +191,7 @@ describe('AppointmentCard', () => {
     it('ongoing without finalize handler stays non-interactive', () => {
         const s = new Date(Date.now() - 60_000).toISOString();
         const e = new Date(Date.now() + 60_000).toISOString();
-        const appt = makeAppt({ start_at: s, end_at: e });
+        const appt = makeAppt({ start_at: s, end_at: e, status: 'ongoing' });
         const onResolvePending = vi.fn();
         const onEdit = vi.fn();
         const onUseTime = vi.fn();
@@ -260,7 +260,7 @@ describe('AppointmentCard', () => {
     it('ongoing: opens finalize prompt and confirms finalization', () => {
         const s = new Date(Date.now() - 60_000).toISOString();
         const e = new Date(Date.now() + 60_000).toISOString();
-        const appt = makeAppt({ start_at: s, end_at: e });
+        const appt = makeAppt({ start_at: s, end_at: e, status: 'ongoing' });
         const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const onFinalize = vi.fn();
         render(
@@ -284,7 +284,7 @@ describe('AppointmentCard', () => {
     it('ongoing: allows cancellation from the shared action prompt', () => {
         const s = new Date(Date.now() - 60_000).toISOString();
         const e = new Date(Date.now() + 60_000).toISOString();
-        const appt = makeAppt({ start_at: s, end_at: e });
+        const appt = makeAppt({ start_at: s, end_at: e, status: 'ongoing' });
         const onCancel = vi.fn();
 
         render(

@@ -5,7 +5,7 @@ import StickyModalHeader from './shared/StickyModalHeader';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import ClientCardRow from './shared/ClientCardRow';
 import { enrichList } from '../utils/appointments/status';
-import { getAppointmentOverride } from '../utils/appointments/overrides';
+import { toISODate } from '../utils/date';
 import {
     STATUS_ORDER,
     makeClientBasic,
@@ -43,13 +43,6 @@ function addDays(d: Date, n: number) {
     x.setDate(x.getDate() + n);
     return x;
 }
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 export default function DailyAgendaModal({
     open,
@@ -238,8 +231,7 @@ export default function DailyAgendaModal({
     }, [open, enriched]);
 
     const filtered = enriched.filter(a => {
-        const ov = getAppointmentOverride(a.id)?.status;
-        return matchesStatusFilter(statusFilter, a, ov);
+        return matchesStatusFilter(statusFilter, a);
     });
 
     const sorted = filtered.slice().sort((a, b) => {

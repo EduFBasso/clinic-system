@@ -8,7 +8,7 @@ import type {
 } from '../types/agendaFlow';
 import type { Appointment } from './useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
-import { focusClientCard } from '../utils/focusClientCard';
+import { getAccessToken } from '../utils/auth/session';
 
 type SysMsg = {
     text: string;
@@ -95,17 +95,8 @@ export function useHomeResumeFlows(params: {
 
         const resumeHomeRaw = consumeString(RESUME_HOME_FOCUS_KEY);
         if (resumeHomeRaw) {
-            try {
-                const parsed = JSON.parse(resumeHomeRaw) as {
-                    clientId?: number;
-                };
-                if (typeof parsed.clientId === 'number') {
-                    focusClientCard(parsed.clientId, { delayMs: 180 });
-                    focusClientCard(parsed.clientId, { delayMs: 680 });
-                }
-            } catch {
-                /* noop */
-            }
+            // Scroll position is restored by MainContent's own scroll restoration.
+            // Just consume the key without auto-scrolling — the list stays at its last position.
             return;
         }
 
@@ -172,7 +163,7 @@ export function useHomeResumeFlows(params: {
         }
         if (!payload?.appointmentId) return;
 
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
         if (!token) return;
 
         fetch(`${API_BASE}/agenda/appointments/${payload.appointmentId}/`, {

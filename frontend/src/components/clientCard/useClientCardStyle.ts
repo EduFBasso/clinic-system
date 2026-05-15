@@ -85,7 +85,7 @@ export function useClientCardStyle({
         boxShadow: selected && showStateBorder ? 'none' : undefined,
         transform: pressed ? 'scale(0.995)' : 'scale(1)',
         transition:
-            'background 0.3s, border 0.2s ease, box-shadow 0.35s, transform 0.07s',
+            'background 0.3s ease, border 0.2s ease, box-shadow 0.35s ease, transform 0.07s ease, color 0.3s ease, fill 0.3s ease',
     };
 
     // Separador entre dados pessoais e agenda

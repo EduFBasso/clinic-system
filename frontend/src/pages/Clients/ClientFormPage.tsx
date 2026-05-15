@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import ClientForm from '../../components/ClientForm';
 import { API_BASE } from '../../config/api';
+import { getAccessToken } from '../../utils/auth/session';
 
 export default function ClientFormPage() {
     const { id } = useParams();
@@ -36,7 +37,7 @@ export default function ClientFormPage() {
         if (id) {
             setLoading(true);
             setError('');
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             const url = `${API_BASE}/register/clients/${id}/`;
             console.debug('[ClientFormPage] fetching', url);
             fetch(url, {
@@ -135,7 +136,7 @@ export default function ClientFormPage() {
                             Endpoint usado:{' '}
                             {API_BASE + '/register/clients/' + id + '/'}
                         </div>
-                        <div>Token: {localStorage.getItem('accessToken')}</div>
+                        <div>Token: {getAccessToken()}</div>
                     </div>
                     <span>Cliente não encontrado.</span>
                 </div>

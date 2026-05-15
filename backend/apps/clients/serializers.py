@@ -74,7 +74,6 @@ class ClientSerializer(serializers.ModelSerializer):
             "date_of_birth": {"required": False, "allow_null": True},
             "address_number": {"required": False, "allow_null": True, "allow_blank": True},
             "address_complement": {"required": False, "allow_null": True, "allow_blank": True},
-            "photo": {"required": False, "allow_null": True},
             # Campos pessoais adicionais
             "rg": {"required": False, "allow_null": True, "allow_blank": True},
             "document_type": {"required": False, "allow_null": True, "allow_blank": True},
@@ -161,7 +160,7 @@ class ClientBasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = [
-            'id', 'first_name', 'last_name', 'phone', 'email', 'photo',
+            'id', 'first_name', 'last_name', 'phone', 'email',
             'address', 'address_number', 'address_complement', 'neighborhood', 'city', 'state', 'date_of_birth',
             'next_appointment_start_at', 'next_appointment_end_at', 'next_appointment_title', 'next_appointment_visit_type', 'next_appointment_notes', 'next_appointment_status',
             'next_appointment_id',

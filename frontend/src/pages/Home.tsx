@@ -32,6 +32,7 @@ import { usePendingActionsListeners } from '../hooks/usePendingActionsListeners'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useHomeResumeFlows } from '../hooks/useHomeResumeFlows';
 import { unlockPageScroll } from '../utils/unlockPageScroll';
+import { getAccessToken } from '../utils/auth/session';
 
 export default function Home() {
     const navigate = useNavigate();
@@ -82,7 +83,6 @@ export default function Home() {
         setDetailsAppt,
         detailsReturnContext,
         setDetailsReturnContext,
-        openMonthly,
         openWeekly,
         openDaily,
         clearAgendaRouteFlags,
@@ -139,7 +139,7 @@ export default function Home() {
                     const clientBasic = await ensureClientBasic(Number(cid));
                     setRouteClient(clientBasic);
                     try {
-                        const token = localStorage.getItem('accessToken');
+                        const token = getAccessToken();
                         let appt: Appointment | null = null;
                         if (token) {
                             const res = await fetch(
@@ -177,6 +177,7 @@ export default function Home() {
                 /* ignore */
             }
         })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -264,7 +265,9 @@ export default function Home() {
 
     const closeClientView = React.useCallback(() => {
         setClientViewOpen(false);
-        setClientViewData(null);
+        // Keep clientViewData alive so content doesn't flash-disappear during the
+        // modal's close transition. Clear it after the animation completes.
+        setTimeout(() => setClientViewData(null), 300);
         try {
             if (
                 window.history.state &&
@@ -281,7 +284,7 @@ export default function Home() {
         function onPopState() {
             if (clientViewOpen) {
                 setClientViewOpen(false);
-                setClientViewData(null);
+                setTimeout(() => setClientViewData(null), 300);
             }
         }
         window.addEventListener('popstate', onPopState);

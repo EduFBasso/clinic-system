@@ -6,12 +6,12 @@ import QuickScheduleModal from '../components/QuickScheduleModal';
 // PendingActionsModal agora é gerenciado globalmente em Home via evento 'pendingActions:open'
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import type { Appointment } from '../hooks/useAppointments';
+import { toISODate } from '../utils/date';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
 import InlineAppointmentEditor from '../components/InlineAppointmentEditor';
 import TimeRangeLabel from '../components/shared/TimeRangeLabel';
 import { enrichList } from '../utils/appointments/status';
-import { getAppointmentOverride } from '../utils/appointments/overrides';
 import {
     STATUS_ORDER,
     makeClientBasic,
@@ -19,7 +19,7 @@ import {
     type ClientLike,
 } from '../utils/appointments/agendaHelpers';
 import { useNowTick } from '../hooks/useNowTick';
-import { API_BASE } from '../config/api';
+import { apiFetch } from '../utils/apiFetch';
 import { useLocation } from 'react-router-dom';
 import type {
     PendingReturnContext,
@@ -40,13 +40,6 @@ function addDays(d: Date, n: number) {
     x.setDate(x.getDate() + n);
     return x;
 }
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
 type RawClientField = ClientLike | number | undefined | null;
 type EnrichedAppt = Appointment & {
@@ -141,22 +134,15 @@ export default function DesktopAgendaPage() {
             if (apptId) payload = { appointmentId: apptId };
         }
         if (!payload?.appointmentId) return;
-        const token = localStorage.getItem('accessToken');
-        if (!token) return;
-        fetch(`${API_BASE}/agenda/appointments/${payload.appointmentId}/`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then(r => (r.ok ? r.json() : null))
+        apiFetch(`/agenda/appointments/${payload.appointmentId}/`)
             .then(appt => {
                 if (appt) {
                     setDetailsReturnContext(payload?.returnContext ?? null);
-                    setDetailsAppt(appt as Appointment);
+                    setDetailsAppt(appt as unknown as Appointment);
                     setDetailsOpen(true);
                 }
             })
-            .catch(() => {
-                /* noop */
-            });
+            .catch(() => { /* noop */ });
     }, [location]);
 
     const dayStart = React.useMemo(
@@ -232,8 +218,7 @@ export default function DesktopAgendaPage() {
     }, [items, effectiveNowRef]);
 
     const filtered = enriched.filter(a => {
-        const ov = getAppointmentOverride(a.id)?.status;
-        return matchesStatusFilter(statusFilter, a, ov);
+        return matchesStatusFilter(statusFilter, a);
     });
 
     const sorted = filtered.slice().sort((a, b) => {

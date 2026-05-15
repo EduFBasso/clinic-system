@@ -1,4 +1,4 @@
-import { API_BASE } from '../config/api';
+import { apiFetch } from '../utils/apiFetch';
 import type { Appointment } from '../hooks/useAppointments';
 import type { SharedAppointmentLike } from '../components/shared/AppointmentCard';
 
@@ -6,18 +6,15 @@ async function fetchAppointmentsForStatus(
     clientId: number,
     status: 'scheduled' | 'pending',
 ): Promise<Appointment[] | null> {
-    const token = localStorage.getItem('accessToken') || '';
-    if (!token) return null;
-
-    const url = `${API_BASE}/agenda/appointments/?client=${clientId}&status=${status}&ordering=-end_at&limit=50&ts=${Date.now()}`;
-    const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-    });
-    if (!r.ok) return null;
-
-    const data = (await r.json()) as Appointment[];
-    return Array.isArray(data) ? data : null;
+    try {
+        const data = await apiFetch(
+            `/agenda/appointments/?client=${clientId}&status=${status}&ordering=-end_at&limit=50&ts=${Date.now()}`,
+            { cache: 'no-store' },
+        ) as unknown as Appointment[];
+        return Array.isArray(data) ? data : null;
+    } catch {
+        return null;
+    }
 }
 
 export async function findFirstPendingForClient(

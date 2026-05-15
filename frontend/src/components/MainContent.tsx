@@ -1,5 +1,4 @@
 // frontend\src\components\MainContent.tsx
-import { API_BASE } from '../config/api';
 import React, { useState } from 'react';
 import styles from '../styles/components/Main.module.css';
 import { useClients } from '../hooks/useClients';
@@ -9,6 +8,13 @@ import AppModal from './Modal';
 import type { ClientData } from '../types/ClientData';
 import SessionExpiredModal from './SessionExpiredModal';
 import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
+import { apiFetch } from '../utils/apiFetch';
+import { useAppointmentSets } from '../hooks/useAppointmentSets';
+
+import { useScrollPersistence } from '../hooks/useScrollPersistence';
+import { useIosKeyboard } from '../hooks/useIosKeyboard';
+import FilterBar from './FilterBar';
+import type { FilterMode } from './FilterBar';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -26,41 +32,10 @@ interface MainContentProps {
     // ...outros props se necessário...
 }
 
-type FilterMode = 'all' | 'pending' | 'today' | 'tomorrow';
+const FILTER_SESSION_KEY = 'home.filter';
+const LOAD_BATCH = 50;
 
-interface PendingAppointmentLike {
-    id: number;
-    status: 'scheduled' | 'pending';
-    start_at?: string;
-    end_at?: string;
-    client?: number | { id?: number } | null;
-    title?: string;
-}
-
-function unwrapAppointmentsList(
-    payload: unknown,
-): PendingAppointmentLike[] {
-    if (Array.isArray(payload)) {
-        return payload as PendingAppointmentLike[];
-    }
-    if (
-        payload &&
-        typeof payload === 'object' &&
-        Array.isArray((payload as { results?: unknown[] }).results)
-    ) {
-        return (payload as { results: PendingAppointmentLike[] }).results;
-    }
-    return [];
-}
-
-function resolveAppointmentClientId(appt: PendingAppointmentLike): number | null {
-    if (typeof appt.client === 'number') return appt.client;
-    if (appt.client && typeof appt.client === 'object') {
-        const id = appt.client.id;
-        return typeof id === 'number' ? id : null;
-    }
-    return null;
-}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
@@ -69,20 +44,15 @@ const MainContent: React.FC<MainContentProps> = ({
     // ...outros props...
 }) => {
     const { clients, loading, error, setError } = useClients();
-    const [filter, setFilter] = useState('');
+    const [filter, setFilter] = useState<string>(() => {
+        try { return sessionStorage.getItem(FILTER_SESSION_KEY) ?? ''; } catch { return ''; }
+    });
     const [filterMode, setFilterMode] = useState<FilterMode>('all');
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-    const [pendingClientIds, setPendingClientIds] = useState<Set<number>>(
-        () => new Set(),
-    );
-    const [tomorrowClientIds, setTomorrowClientIds] = useState<Set<number>>(
-        () => new Set(),
-    );
-    // Mapa clientId → primeiro agendamento de amanhã (para o botão Avisar com horário correto)
-    const [tomorrowClientAppts, setTomorrowClientAppts] = useState<Map<number, PendingAppointmentLike>>(
-        () => new Map(),
-    );
-    const [noResultsOpen, setNoResultsOpen] = useState(false);
+    const { pendingIds: pendingClientIds, pendingAppts: pendingClientAppts, tomorrowIds: tomorrowClientIds, tomorrowAppts: tomorrowClientAppts } =
+        useAppointmentSets(clients.length);
+    const [visibleCount, setVisibleCount] = useState(LOAD_BATCH);
+    const sentinelRef = React.useRef<HTMLDivElement | null>(null);
     // Agenda selection mode state
     const [selectMode, setSelectMode] = useState(false);
     const [returnUrl, setReturnUrl] = useState<string | null>(null);
@@ -90,6 +60,8 @@ const MainContent: React.FC<MainContentProps> = ({
     const [confirmClient, setConfirmClient] = useState<ClientBasic | null>(
         null,
     );
+    const detailCacheRef = React.useRef<Map<number, ClientData>>(new Map());
+    const cardsGridRef = React.useRef<HTMLDivElement | null>(null);
     const lastNotifiedFilterRef = React.useRef<string>('');
     const mobileFiltersOpenedAtRef = React.useRef(0);
     const mobileFiltersButtonRef = React.useRef<HTMLButtonElement | null>(
@@ -117,12 +89,6 @@ const MainContent: React.FC<MainContentProps> = ({
             width: menuWidth,
         });
     }, []);
-
-    const openMobileFilters = React.useCallback(() => {
-        updateMobileFiltersMenuPosition();
-        mobileFiltersOpenedAtRef.current = Date.now();
-        setMobileFiltersOpen(true);
-    }, [updateMobileFiltersMenuPosition]);
 
     const closeMobileFilters = React.useCallback(() => {
         setMobileFiltersOpen(false);
@@ -163,7 +129,10 @@ const MainContent: React.FC<MainContentProps> = ({
 
     const applyFilterMode = React.useCallback(
         (mode: FilterMode) => {
-            setFilterMode(prev => (prev === mode ? 'all' : mode));
+            React.startTransition(() => {
+                setFilterMode(prev => (prev === mode ? 'all' : mode));
+                setVisibleCount(LOAD_BATCH);
+            });
             setFilter('');
             closeMobileFilters();
         },
@@ -187,14 +156,30 @@ const MainContent: React.FC<MainContentProps> = ({
     React.useEffect(() => {
         const handleClear = () => {
             setFilter('');
-            setNoResultsOpen(false);
+            detailCacheRef.current.clear();
         };
         window.addEventListener('clearClients', handleClear);
         return () => window.removeEventListener('clearClients', handleClear);
     }, []);
 
-    // Pós-exclusão: se viermos da tela de edição após deletar, limpamos o filtro
-    // e evitamos mostrar o modal de "nenhum resultado" para o termo anterior.
+    React.useEffect(() => {
+        const handleRefreshSignals = () => {
+            detailCacheRef.current.clear();
+        };
+
+        window.addEventListener('updateClients', handleRefreshSignals);
+        window.addEventListener('clients:forceRefresh', handleRefreshSignals);
+
+        return () => {
+            window.removeEventListener('updateClients', handleRefreshSignals);
+            window.removeEventListener(
+                'clients:forceRefresh',
+                handleRefreshSignals,
+            );
+        };
+    }, []);
+
+    // Pós-exclusão: limpa o filtro e foca o input.
     React.useEffect(() => {
         try {
             const action = localStorage.getItem('postDeleteAction');
@@ -202,7 +187,6 @@ const MainContent: React.FC<MainContentProps> = ({
                 localStorage.removeItem('postDeleteAction');
                 setFilter('');
                 setSelectedClientId(null);
-                setNoResultsOpen(false);
                 lastNotifiedFilterRef.current = '';
                 setTimeout(() => {
                     (
@@ -215,93 +199,10 @@ const MainContent: React.FC<MainContentProps> = ({
         } catch {
             /* noop */
         }
-        // dependências: apenas setter de seleção vindo de props
     }, [setSelectedClientId]);
 
-    // Mantém o filtro visível quando o teclado virtual abre (iOS/Android)
-    React.useEffect(() => {
-        const isMobileUA = /iPhone|iPad|iPod|Android/i.test(
-            navigator.userAgent,
-        );
-        if (!isMobileUA) return;
+    useIosKeyboard(styles.filterContainer);
 
-        const input = document.getElementById('client-filter');
-        const filterEl = document.querySelector(
-            `.${styles.filterContainer}`,
-        ) as HTMLElement | null;
-        const add = () => document.body.classList.add('keyboardOpen');
-        const remove = () => document.body.classList.remove('keyboardOpen');
-        input?.addEventListener('focus', add);
-        input?.addEventListener('blur', remove);
-
-        // Apoio com VisualViewport: detecta redução de altura quando teclado aparece
-        const vv = window.visualViewport;
-        let baseline = vv?.height || window.innerHeight;
-        const onResize = () => {
-            if (!vv) return;
-            const activeEl = document.activeElement as HTMLElement | null;
-            const isInputFocused =
-                !!activeEl &&
-                (activeEl.tagName === 'INPUT' ||
-                    activeEl.tagName === 'TEXTAREA');
-            // Recalibra baseline quando nenhum input está focado (evita falso positivo por UI do Safari)
-            if (!isInputFocused) {
-                baseline = vv.height;
-            }
-            const delta = Math.max(0, baseline - vv.height);
-            const keyboardLikelyOpen = isInputFocused && delta > 150;
-            document.body.classList.toggle('keyboardOpen', keyboardLikelyOpen);
-            // Expõe altura do teclado como variável CSS para ajustes visuais
-            (document.documentElement as HTMLElement).style.setProperty(
-                '--kb-h',
-                keyboardLikelyOpen ? `${Math.round(delta)}px` : '0px',
-            );
-            // Atualiza a altura efetiva do filtro para o CSS calcular o painel
-            const fh = filterEl?.getBoundingClientRect().height || 120;
-            (document.documentElement as HTMLElement).style.setProperty(
-                '--filter-h',
-                `${Math.round(fh)}px`,
-            );
-            // Mantém input visível mesmo com reflows; força alinhamento do caret
-            if (keyboardLikelyOpen && document.activeElement === input) {
-                setTimeout(() => {
-                    input?.scrollIntoView({
-                        block: 'start',
-                        behavior: 'instant' as ScrollBehavior,
-                    });
-                }, 0);
-            }
-        };
-        vv?.addEventListener('resize', onResize);
-
-        return () => {
-            input?.removeEventListener('focus', add);
-            input?.removeEventListener('blur', remove);
-            vv?.removeEventListener('resize', onResize);
-            document.body.classList.remove('keyboardOpen');
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--kb-h',
-            );
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--filter-h',
-            );
-        };
-    }, []);
-
-    // Hard reset: garante que não iniciamos com o body travado no mobile
-    React.useEffect(() => {
-        document.body.classList.remove('keyboardOpen');
-        try {
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--kb-h',
-            );
-            (document.documentElement as HTMLElement).style.removeProperty(
-                '--filter-h',
-            );
-        } catch {
-            /* noop */
-        }
-    }, []);
     const cardRefs = React.useRef<{ [key: number]: HTMLDivElement | null }>({});
     const lastPrefixTargetRef = React.useRef<number | null>(null);
     const debounceRef = React.useRef<number | null>(null);
@@ -347,6 +248,14 @@ const MainContent: React.FC<MainContentProps> = ({
         const t = window.setTimeout(() => refreshAndUnlock(), 0);
         return () => window.clearTimeout(t);
     }, [refreshAndUnlock]);
+
+    // Persiste texto do filtro para sobreviver à navegação (editar e voltar).
+    React.useEffect(() => {
+        try { sessionStorage.setItem(FILTER_SESSION_KEY, filter); } catch { /* noop */ }
+    }, [filter]);
+
+    // Salva posição de scroll e restaura após carregamento inicial.
+    useScrollPersistence(loading, clients.length);
 
     // Modo seleção vindo da Agenda: se URL tiver selectClientFor=agenda, foca filtro e aplica retorno
     React.useEffect(() => {
@@ -430,13 +339,22 @@ const MainContent: React.FC<MainContentProps> = ({
         };
     }, [selectedClientId]);
 
-    // Filtra clientes por nome (acentos/maiúsculas ignorados)
-    const normalizedFilter = normalizeText(filter);
-    const filteredClients = clients.filter(client =>
-        normalizeText(`${client.first_name} ${client.last_name}`).includes(
-            normalizedFilter,
-        ),
-    );
+    // Filtra clientes por nome (acentos/maiúsculas ignorados) e ordena com colisão pt-BR.
+    // Memoizado: só recalcula quando `clients` ou `filter` mudam — evita .sort() de 1235 itens a cada render.
+    const filteredClients = React.useMemo(() => {
+        const norm = normalizeText(filter);
+        return clients
+            .filter(client =>
+                normalizeText(`${client.first_name} ${client.last_name}`).includes(norm),
+            )
+            .sort((a, b) =>
+                `${a.first_name} ${a.last_name}`.localeCompare(
+                    `${b.first_name} ${b.last_name}`,
+                    'pt-BR',
+                    { sensitivity: 'base' },
+                ),
+            );
+    }, [clients, filter]);
 
     const sortByPeriodThenTime = React.useCallback(
         (a: ClientBasic, b: ClientBasic) => {
@@ -498,120 +416,6 @@ const MainContent: React.FC<MainContentProps> = ({
     // Clientes com compromisso pendente.
     // Fonte de verdade: backend (status='pending' + resumo no payload de clientes).
     // A lista scheduled abaixo é usada somente para o bloco de "amanhã".
-    React.useEffect(() => {
-        let cancelled = false;
-
-        async function loadPendingClientIds() {
-            const token = localStorage.getItem('accessToken');
-            if (!token || clients.length === 0) {
-                if (!cancelled) {
-                    setPendingClientIds(new Set());
-                    setTomorrowClientIds(new Set());
-                    setTomorrowClientAppts(new Map());
-                }
-                return;
-            }
-
-            const headers = { Authorization: `Bearer ${token}` };
-            const pendingUrl = `${API_BASE}/agenda/appointments/?status=pending&ordering=-end_at&limit=300&ts=${Date.now()}`;
-            const scheduledUrl = `${API_BASE}/agenda/appointments/?status=scheduled&ordering=-end_at&limit=300&ts=${Date.now()}`;
-
-            try {
-                const [pendingRes, scheduledRes] = await Promise.all([
-                    fetch(pendingUrl, { headers, cache: 'no-store' }),
-                    fetch(scheduledUrl, { headers, cache: 'no-store' }),
-                ]);
-
-                const pendingData = pendingRes.ok
-                    ? unwrapAppointmentsList(await pendingRes.json())
-                    : [];
-                const scheduledData = scheduledRes.ok
-                    ? unwrapAppointmentsList(await scheduledRes.json())
-                    : [];
-
-                const ids = new Set<number>();
-                const tomorrowIds = new Set<number>();
-                // Primeiro agendamento de amanhã por cliente (horário mais cedo)
-                const tomorrowAppts = new Map<number, PendingAppointmentLike>();
-
-                // Calcula os limites do dia de amanhã em hora local
-                const tmw = new Date();
-                tmw.setDate(tmw.getDate() + 1);
-                const tmwStart = new Date(tmw.getFullYear(), tmw.getMonth(), tmw.getDate(), 0, 0, 0, 0).getTime();
-                const tmwEnd   = new Date(tmw.getFullYear(), tmw.getMonth(), tmw.getDate(), 23, 59, 59, 999).getTime();
-
-                pendingData.forEach(appt => {
-                    const clientId = resolveAppointmentClientId(appt);
-                    if (clientId != null) ids.add(clientId);
-                });
-
-                // Complemento via resumo de clientes para consistência com cartões
-                clients.forEach(c => {
-                    const anyClient = c as unknown as Record<string, unknown>;
-                    if (anyClient.has_pending_appointment === true) {
-                        ids.add(c.id);
-                        return;
-                    }
-                    if (
-                        c.next_appointment_status === 'pending' ||
-                        c.last_appointment_status === 'pending'
-                    ) {
-                        ids.add(c.id);
-                    }
-                });
-
-                // Ordena agendados por start_at para garantir que o primeiro de amanhã seja o mais cedo
-                const sortedScheduled = [...scheduledData].sort((a, b) => {
-                    const ta = a.start_at ? new Date(a.start_at).getTime() : 0;
-                    const tb = b.start_at ? new Date(b.start_at).getTime() : 0;
-                    return ta - tb;
-                });
-
-                sortedScheduled.forEach(appt => {
-                    const clientId = resolveAppointmentClientId(appt);
-                    if (clientId == null) return;
-
-                    // Agendados para amanhã (qualquer horário do dia)
-                    const startMs = appt.start_at
-                        ? new Date(appt.start_at).getTime()
-                        : NaN;
-                    if (Number.isFinite(startMs) && startMs >= tmwStart && startMs <= tmwEnd) {
-                        tomorrowIds.add(clientId);
-                        // Guarda apenas o mais cedo (lista já ordenada)
-                        if (!tomorrowAppts.has(clientId)) {
-                            tomorrowAppts.set(clientId, appt);
-                        }
-                    }
-                });
-
-                if (!cancelled) {
-                    setPendingClientIds(ids);
-                    setTomorrowClientIds(tomorrowIds);
-                    setTomorrowClientAppts(tomorrowAppts);
-                }
-            } catch {
-                if (!cancelled) {
-                    setPendingClientIds(new Set());
-                    setTomorrowClientIds(new Set());
-                    setTomorrowClientAppts(new Map());
-                }
-            }
-        }
-
-        void loadPendingClientIds();
-
-        const onUpdateClients = () => {
-            void loadPendingClientIds();
-        };
-        window.addEventListener('updateClients', onUpdateClients);
-        window.addEventListener('appointments:changed', onUpdateClients);
-
-        return () => {
-            cancelled = true;
-            window.removeEventListener('updateClients', onUpdateClients);
-            window.removeEventListener('appointments:changed', onUpdateClients);
-        };
-    }, [clients.length]);
 
     const pendingClients = React.useMemo(() => {
         return clients
@@ -631,44 +435,86 @@ const MainContent: React.FC<MainContentProps> = ({
     const todayCount = todayClients.length;
     const tomorrowCount = tomorrowClients.length;
 
+    // Clientes em atendimento agora: status 'ongoing' vem do servidor.
+    const ongoingClients = React.useMemo(() => {
+        return clients.filter(c => c.next_appointment_status === 'ongoing');
+    }, [clients]);
+    const ongoingCount = ongoingClients.length;
+
+    // Fase 2: estado de fade suave para reset do filtro ongoing
+    const [isResettingFilter, setIsResettingFilter] = React.useState(false);
+
     // Se o filtro de pendentes estiver ativo mas não houver mais pendentes, desativa
     React.useEffect(() => {
         if (filterMode === 'pending' && pendingCount === 0) {
-            setFilterMode('all');
+            React.startTransition(() => setFilterMode('all'));
         }
     }, [filterMode, pendingCount]);
+
+    // Se o filtro de em atendimento estiver ativo mas não houver mais, desativa com fade
+    React.useEffect(() => {
+        if (filterMode === 'ongoing' && ongoingCount === 0) {
+            setIsResettingFilter(true);
+            const timer = setTimeout(() => {
+                setFilterMode('all');
+                setVisibleCount(LOAD_BATCH);
+                setIsResettingFilter(false);
+            }, 280);
+            return () => clearTimeout(timer);
+        }
+    }, [filterMode, ongoingCount]);
 
     const displayedClients = React.useMemo(() => {
         if (filterMode === 'pending') return pendingClients;
         if (filterMode === 'today') return todayClients;
         if (filterMode === 'tomorrow') return tomorrowClients;
+        if (filterMode === 'ongoing') return ongoingClients;
         return filteredClients;
     }, [
         filterMode,
         pendingClients,
         todayClients,
         tomorrowClients,
+        ongoingClients,
         filteredClients,
     ]);
 
-    // Abre modal de "Nenhum cliente encontrado" quando não houver resultados.
+    const deferredDisplayedClients = React.useDeferredValue(displayedClients);
+    const totalDisplayed = deferredDisplayedClients.length;
+    const hasMore = visibleCount < totalDisplayed;
+    const visibleClients = React.useMemo(
+        () => deferredDisplayedClients.slice(0, visibleCount),
+        [deferredDisplayedClients, visibleCount],
+    );
+
+    // Ao mudar filterMode: reseta contagem e volta ao topo
     React.useEffect(() => {
-        if (!filter) {
-            lastNotifiedFilterRef.current = '';
-            if (noResultsOpen) setNoResultsOpen(false);
-            return;
-        }
-        if (
-            filteredClients.length === 0 &&
-            lastNotifiedFilterRef.current !== filter
-        ) {
-            lastNotifiedFilterRef.current = filter;
-            setNoResultsOpen(true);
-        }
-        if (filteredClients.length > 0 && noResultsOpen) {
-            setNoResultsOpen(false);
-        }
-    }, [filter, filteredClients.length, noResultsOpen]);
+        React.startTransition(() => setVisibleCount(LOAD_BATCH));
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    }, [filterMode]);
+
+    // IntersectionObserver: carrega mais ao rolar até o sentinela
+    React.useEffect(() => {
+        const sentinel = sentinelRef.current;
+        if (!sentinel) return;
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting && hasMore) {
+                    React.startTransition(() => {
+                        setVisibleCount(n => Math.min(n + LOAD_BATCH, totalDisplayed));
+                    });
+                }
+            },
+            { rootMargin: '200px' },
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, totalDisplayed]);
+
+    // Reseta referência de notificação quando o filtro muda (não exibe modal — apenas tracking interno).
+    React.useEffect(() => {
+        if (!filter) lastNotifiedFilterRef.current = '';
+    }, [filter]);
 
     // Navega automaticamente para o primeiro cartão cujo nome comece com o filtro digitado.
     // Debounce curto e só rola se o alvo mudou, evitando "vai e volta" a cada tecla.
@@ -718,6 +564,9 @@ const MainContent: React.FC<MainContentProps> = ({
                 `.${styles.filterContainer}`,
             ) as HTMLElement | null;
             requestAnimationFrame(() => {
+                // Se o input de filtro ainda estiver focado (usuário digitando), não rola a página
+                // para evitar que o iOS dispense o teclado virtual ao detectar scroll programático.
+                if (document.activeElement === inputEl) return;
                 const targetRect = el.getBoundingClientRect();
                 const filterRect = filterEl?.getBoundingClientRect();
                 const desiredTop = (filterRect ? filterRect.bottom : 0) + 24; // respiro maior para não ficar sob o filtro
@@ -736,16 +585,6 @@ const MainContent: React.FC<MainContentProps> = ({
                         window.scrollBy({ top: delta, behavior: 'smooth' });
                     }
                 }
-                // Se o teclado estiver aberto, mantém o input visível
-                if (
-                    document.body.classList.contains('keyboardOpen') &&
-                    document.activeElement === inputEl
-                ) {
-                    inputEl?.scrollIntoView({
-                        block: 'start',
-                        behavior: 'instant' as ScrollBehavior,
-                    });
-                }
             });
         }, 140);
 
@@ -757,8 +596,30 @@ const MainContent: React.FC<MainContentProps> = ({
         };
     }, [filter, filteredClients, selectedClientId, setSelectedClientId]);
 
+    const handleFilterChange = React.useCallback((value: string) => {
+        setFilter(value);
+        if (filterMode !== 'all') React.startTransition(() => setFilterMode('all'));
+    }, [filterMode]);
+
+    const handleFilterClear = React.useCallback(() => {
+        setFilter('');
+        document.getElementById('client-filter')?.focus();
+    }, []);
+
+    const handleOpenMobileFilters = React.useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        updateMobileFiltersMenuPosition();
+        mobileFiltersOpenedAtRef.current = Date.now();
+        setMobileFiltersOpen(true);
+    }, [updateMobileFiltersMenuPosition]);
+
     function handleView(cliente: ClientBasic) {
         if (!requireActiveSession()) {
+            return;
+        }
+        const cached = detailCacheRef.current.get(cliente.id);
+        if (cached) {
+            onClientViewData?.(cached);
             return;
         }
         // Solta qualquer foco ativo antes de abrir a visualização, evitando foco "grudado" caso o item seja removido depois
@@ -767,14 +628,13 @@ const MainContent: React.FC<MainContentProps> = ({
         } catch {
             /* noop */
         }
-        fetch(`${API_BASE}/register/clients/${cliente.id}/`, {
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-            },
+        apiFetch(`/register/clients/${cliente.id}/`, {
+            timeoutMs: 12000,
         })
-            .then(res => res.json())
-            .then((data: ClientData) => {
-                onClientViewData?.(data);
+            .then((data) => {
+                const clientData = data as unknown as ClientData;
+                detailCacheRef.current.set(cliente.id, clientData);
+                onClientViewData?.(clientData);
             })
             .catch(() => {
                 alert('Erro ao buscar dados completos do cliente');
@@ -783,117 +643,23 @@ const MainContent: React.FC<MainContentProps> = ({
 
     return (
         <main className={styles.main}>
-            <div
-                className={`${styles.filterContainer}${mobileFiltersOpen ? ` ${styles.filterContainerMenuOpen}` : ''}`}
-            >
-                <div className={styles.filterRow}>
-                    <input
-                        id='client-filter'
-                        type='text'
-                        className={styles.filterInput}
-                        placeholder='Digite o nome do cliente...'
-                        value={filter}
-                        onChange={e => {
-                            setFilter(e.target.value);
-                            if (filterMode !== 'all') setFilterMode('all');
-                        }}
-                    />
-                    <div className={styles.filterActionsDesktop}>
-                        <button
-                            className={`${styles.filterToggleBtn}${filterMode === 'pending' ? ' ' + styles.filterToggleBtnActive : ''}`}
-                            onClick={() => applyFilterMode('pending')}
-                            title='Filtrar por compromissos pendentes'
-                        >
-                            {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
-                        </button>
-                        <button
-                            className={`${styles.filterToggleBtn}${filterMode === 'today' ? ' ' + styles.filterToggleBtnActive : ''}`}
-                            onClick={() => applyFilterMode('today')}
-                            title='Filtrar compromissos de hoje'
-                        >
-                            Hoje {todayCount > 0 ? `(${todayCount})` : ''}
-                        </button>
-                        <button
-                            className={`${styles.filterToggleBtn}${filterMode === 'tomorrow' ? ' ' + styles.filterToggleBtnActive : ''}`}
-                            onClick={() => applyFilterMode('tomorrow')}
-                            title='Filtrar compromissos de amanhã'
-                        >
-                            Amanhã {tomorrowCount > 0 ? `(${tomorrowCount})` : ''}
-                        </button>
-                    </div>
-
-                    <div className={styles.filterActionsMobile}>
-                        <button
-                            ref={mobileFiltersButtonRef}
-                            className={`${styles.filtersMenuButton}${filterMode !== 'all' ? ' ' + styles.filtersMenuButtonActive : ''}`}
-                            onClick={e => {
-                                e.stopPropagation();
-                                if (mobileFiltersOpen) {
-                                    closeMobileFilters();
-                                } else {
-                                    openMobileFilters();
-                                }
-                            }}
-                            aria-expanded={mobileFiltersOpen}
-                            aria-haspopup='menu'
-                            title='Abrir filtros'
-                        >
-                            Filtros
-                        </button>
-
-                        {mobileFiltersOpen && (
-                            <button
-                                type='button'
-                                className={styles.filtersMenuBackdrop}
-                                onClick={closeMobileFiltersFromBackdrop}
-                                aria-label='Fechar filtros'
-                            />
-                        )}
-
-                        {mobileFiltersOpen && (
-                            <div
-                                className={styles.filtersMenuPanel}
-                                style={mobileFiltersMenuStyle}
-                                role='menu'
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <button
-                                    className={`${styles.filtersMenuItem}${filterMode === 'all' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                    onClick={() => {
-                                        setFilterMode('all');
-                                        setFilter('');
-                                        closeMobileFilters();
-                                    }}
-                                    role='menuitem'
-                                >
-                                    Sem filtro
-                                </button>
-                                <button
-                                    className={`${styles.filtersMenuItem}${filterMode === 'pending' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                    onClick={() => applyFilterMode('pending')}
-                                    role='menuitem'
-                                >
-                                    Pendentes ({pendingCount})
-                                </button>
-                                <button
-                                    className={`${styles.filtersMenuItem}${filterMode === 'today' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                    onClick={() => applyFilterMode('today')}
-                                    role='menuitem'
-                                >
-                                    Hoje ({todayCount})
-                                </button>
-                                <button
-                                    className={`${styles.filtersMenuItem}${filterMode === 'tomorrow' ? ' ' + styles.filtersMenuItemActive : ''}`}
-                                    onClick={() => applyFilterMode('tomorrow')}
-                                    role='menuitem'
-                                >
-                                    Amanhã ({tomorrowCount})
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <FilterBar
+                filter={filter}
+                filterMode={filterMode}
+                pendingCount={pendingCount}
+                todayCount={todayCount}
+                tomorrowCount={tomorrowCount}
+                ongoingCount={ongoingCount}
+                mobileFiltersOpen={mobileFiltersOpen}
+                mobileFiltersMenuStyle={mobileFiltersMenuStyle}
+                mobileFiltersButtonRef={mobileFiltersButtonRef}
+                onFilterChange={handleFilterChange}
+                onFilterClear={handleFilterClear}
+                onApplyFilterMode={applyFilterMode}
+                onOpenMobileFilters={handleOpenMobileFilters}
+                onCloseMobileFilters={closeMobileFilters}
+                onCloseMobileFiltersFromBackdrop={closeMobileFiltersFromBackdrop}
+            />
             {loading && clients.length === 0 && (
                 <div>Carregando clientes...</div>
             )}
@@ -927,8 +693,20 @@ const MainContent: React.FC<MainContentProps> = ({
                     Selecione um cliente para agendar
                 </div>
             )}
-            <div className={styles.cardsGrid}>
-                {displayedClients.map(client => (
+            <div
+                ref={cardsGridRef}
+                className={styles.cardsGrid}
+                style={{
+                    opacity: isResettingFilter ? 0 : 1,
+                    transition: 'opacity 280ms ease',
+                }}
+            >
+                {!loading && filter && visibleClients.length === 0 && (
+                    <p className={styles.noResultsMessage}>
+                        Nenhum cliente encontrado para &ldquo;{filter}&rdquo;.
+                    </p>
+                )}
+                {visibleClients.map(client => (
                     <div
                         key={client.id}
                         ref={el => {
@@ -938,8 +716,9 @@ const MainContent: React.FC<MainContentProps> = ({
                         <ClientCard
                             client={client}
                             selected={selectedClientId === client.id}
-                            filterMode={filterMode}
+                            filterMode={filterMode === 'ongoing' ? undefined : filterMode}
                             notifyAppt={filterMode === 'tomorrow' ? tomorrowClientAppts.get(client.id) : undefined}
+                            pendingAppt={pendingClientIds.has(client.id) ? pendingClientAppts.get(client.id) : undefined}
                             onSelect={() => {
                                 if (!requireActiveSession()) {
                                     return;
@@ -963,8 +742,9 @@ const MainContent: React.FC<MainContentProps> = ({
                     </div>
                 ))}
             </div>
+            {/* sentinela: IntersectionObserver dispara quando chega ao fim da lista */}
+            <div ref={sentinelRef} aria-hidden='true' style={{ height: 1 }} />
 
-            {/* Confirmation modal for Agenda selection */}
             <AppModal
                 open={confirmOpen}
                 onClose={() => setConfirmOpen(false)}
@@ -1050,91 +830,7 @@ const MainContent: React.FC<MainContentProps> = ({
                 </div>
             </AppModal>
 
-            {/* Modal de nenhum resultado encontrado */}
-            <AppModal
-                open={noResultsOpen}
-                onClose={() => {
-                    setNoResultsOpen(false);
-                    const input = document.getElementById(
-                        'client-filter',
-                    ) as HTMLInputElement | null;
-                    if (input) {
-                        input.focus();
-                        const len = input.value.length;
-                        input.setSelectionRange(len, len);
-                    }
-                }}
-                showCloseButton
-                closeOnEnter
-                closeOnEscape
-                disableBackdropClose
-                disableEscapeKeyDown
-            >
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 12,
-                    }}
-                >
-                    <h3 style={{ margin: 0 }}>Nenhum cliente encontrado</h3>
-                    <p style={{ margin: 0 }}>
-                        Nenhum resultado para "{filter}". Apague uma letra ou
-                        comece do zero.
-                    </p>
-                    <div
-                        style={{
-                            display: 'flex',
-                            gap: 8,
-                            marginTop: 12,
-                            justifyContent: 'flex-end',
-                        }}
-                    >
-                        <button
-                            onClick={() => {
-                                setFilter('');
-                                setNoResultsOpen(false);
-                                const input = document.getElementById(
-                                    'client-filter',
-                                ) as HTMLInputElement | null;
-                                if (input) {
-                                    input.focus();
-                                }
-                            }}
-                            style={{
-                                padding: '8px 12px',
-                                borderRadius: 6,
-                                border: '1px solid var(--border-color, rgba(0,0,0,0.12))',
-                                background: 'var(--color-bg, #fff)',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Começar do zero
-                        </button>
-                        <button
-                            onClick={() => {
-                                setNoResultsOpen(false);
-                                const input = document.getElementById(
-                                    'client-filter',
-                                ) as HTMLInputElement | null;
-                                if (input) {
-                                    input.focus();
-                                }
-                            }}
-                            style={{
-                                padding: '8px 12px',
-                                borderRadius: 6,
-                                border: 'none',
-                                background: 'var(--color-primary, #1976d2)',
-                                color: '#fff',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Ok
-                        </button>
-                    </div>
-                </div>
-            </AppModal>
+            {/* modal removido — nenhum resultado é exibido inline no cardsGrid */}
         </main>
     );
 };

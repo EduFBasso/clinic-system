@@ -1,14 +1,13 @@
 import React from 'react';
-import { dispatchers } from '../events/dispatchers';
 import AppModal from './Modal';
 import TimePicker10 from './TimePicker10';
 import FloatingDatePicker from './FloatingDatePicker';
 import QuickScheduleHeader from './quickschedule/QuickScheduleHeader';
 import DateControlsHeader from './shared/DateControlsHeader';
+import PendingBanner from './quickschedule/PendingBanner';
 import QuickScheduleDayList, {
     type DayFilter,
 } from './quickschedule/QuickScheduleDayList';
-// PendingActionsModal é global (Home)
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
@@ -18,18 +17,14 @@ import type {
 } from '../types/agendaFlow';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import { getNow } from '../utils/now';
-import {
-    getWorkTimesFromSnapshot,
-} from '../utils/agendaSettings';
-import { API_BASE } from '../config/api';
-import { track } from '../utils/telemetry';
+import { getWorkTimesFromSnapshot } from '../utils/agendaSettings';
 import { usePendingGuard } from '../hooks/usePendingGuard';
-import { focusClientCard } from '../utils/focusClientCard';
-import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
 import { useQuickScheduleSave } from '../hooks/useQuickScheduleSave';
 import { useAgendaSettings } from '../hooks/useAgendaSettings';
 import { pad2, toMinutes, fromMinutes, weekdayLabel } from '../utils/hmTime';
 import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
+import { useConflictFlow } from '../hooks/useConflictFlow';
+import { useAppointmentCancel } from '../hooks/useAppointmentCancel';
 
 type VisitType = Appointment['visit_type'];
 type ClientMaybeNext = ClientBasic & { next_appointment_id?: number };
@@ -87,6 +82,7 @@ export default function QuickScheduleModal({
         [agendaSettings],
     );
     const slotInterval = agendaSettings.slotInterval as 1 | 5 | 10 | 15 | 20 | 30;
+
     const [selectedDate, setSelectedDate] = React.useState<Date>(() => {
         if (isInitialEdit && editAppointment)
             return new Date(editAppointment.start_at);
@@ -121,7 +117,6 @@ export default function QuickScheduleModal({
             ? editAppointment.visit_type
             : initialDraft?.visitType || 'consulta') as VisitType,
     );
-    // removed: 'definir como padrão' toggle; managed in Agenda settings
     const [notes, setNotes] = React.useState<string>(
         (isInitialEdit && editAppointment && editAppointment.notes) ||
             initialDraft?.notes ||
@@ -133,23 +128,11 @@ export default function QuickScheduleModal({
     );
     const [lastEditedId, setLastEditedId] = React.useState<number | null>(null);
     const [highlightId, setHighlightId] = React.useState<number | null>(null);
-    const [conflictHighlightIds, setConflictHighlightIds] = React.useState<
-        number[]
-    >([]);
     const [editingHighlightId, setEditingHighlightId] = React.useState<
         number | null
     >(currentEdit?.id ?? null);
-    const [pendingConflictSelection, setPendingConflictSelection] =
-        React.useState(false);
-    const [conflictFocusId, setConflictFocusId] = React.useState<number | null>(
-        null,
-    );
-    const [conflictReturnDraft, setConflictReturnDraft] = React.useState<
-        QuickScheduleInitialDraft | null
-    >(null);
     const [showPicker, setShowPicker] = React.useState(false);
     const listRef = React.useRef<HTMLDivElement | null>(null);
-    // Removed: flexible minute mode (minuto livre) — simplificação: sempre respeita intervalo configurado
 
     // Day range for list
     const dayStart = React.useMemo(() => {
@@ -163,61 +146,26 @@ export default function QuickScheduleModal({
         return d;
     }, [dayStart]);
 
-    // Important: QuickSchedule shows the day grid like Daily/Weekly, irrespective of client.
-    // Do NOT filter by client here; the day list must show all appointments to avoid double-booking.
     const { items: dayAppointments, loading: dayLoading } =
         useAppointmentsRange(dayStart, dayEnd, undefined, reloadKey);
 
     const [dayFilter, setDayFilter] = React.useState<DayFilter>('todos');
 
-    // Details modal for viewing completed (done) appointments
     const [detailsOpen, setDetailsOpen] = React.useState(false);
     const [detailsAppt, setDetailsAppt] = React.useState<Appointment | null>(
         null,
     );
+
     const { handleFinalize } = useAgendaFinalizeAction(() => {
         setReloadKey(k => k + 1);
     });
+
     const isEditing = !!currentEdit;
-    const isConflictEditing = conflictFocusId !== null;
     const baseClientFullName = `${client.first_name} ${client.last_name}`.trim();
     const currentEditClientFullName = React.useMemo(
         () => getAppointmentClientFullName(currentEdit),
         [currentEdit],
     );
-
-    const showSystemMessage = React.useCallback(
-        (
-            text: string,
-            type: 'success' | 'error' | 'info' | 'warning',
-            autoCloseMs?: number,
-        ) => {
-            try {
-                window.dispatchEvent(
-                    new CustomEvent('systemMessage', {
-                        detail: { text, type, autoCloseMs },
-                    }),
-                );
-            } catch {
-                /* noop */
-            }
-        },
-        [],
-    );
-
-    const resetConflictFlow = React.useCallback(() => {
-        setPendingConflictSelection(false);
-        setConflictFocusId(null);
-        setConflictHighlightIds([]);
-    }, []);
-
-    const clearPendingConflictSelection = React.useCallback(() => {
-        if (!currentEdit) {
-            setPendingConflictSelection(false);
-            setConflictFocusId(null);
-            setConflictHighlightIds([]);
-        }
-    }, [currentEdit]);
 
     const getAutoEndHM = React.useCallback(
         (startValue: string) => {
@@ -271,26 +219,6 @@ export default function QuickScheduleModal({
         startHM,
     ]);
 
-    // Title helpers
-    // removed: separate subtitle; DateControlsHeader label covers the date context
-    const sectionDateTitle = React.useMemo(() => {
-        const d = selectedDate;
-        const dd = `${pad2(d.getDate())}/${pad2(
-            d.getMonth() + 1,
-        )}/${d.getFullYear()}`;
-        return `${weekdayLabel(d)} — ${dd}`;
-    }, [selectedDate]);
-
-    // Past-date guard — disable Criar when selected date is before today
-    const isSelectedPast = React.useMemo(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const sel = new Date(selectedDate);
-        sel.setHours(0, 0, 0, 0);
-        return sel.getTime() < today.getTime();
-    }, [selectedDate]);
-
-    // Pending guard (block create when client has pending)
     const { found: pendingFound, refresh: refreshPendingGuard } =
         usePendingGuard({
             open,
@@ -298,42 +226,29 @@ export default function QuickScheduleModal({
             clientId: client.id,
         });
     const isPending = !!pendingFound;
-    // PendingActions é global — sem estado local
 
-    // Removido alinhamento local — Home coordena
-    React.useEffect(() => {
-        if (!dayLoading && lastEditedId) {
-            const exists = dayAppointments.some(a => a.id === lastEditedId);
-            if (exists) {
-                setHighlightId(lastEditedId);
-                requestAnimationFrame(() => {
-                    try {
-                        const el = document.getElementById(
-                            `appt-card-${lastEditedId}`,
-                        );
-                        if (el && el.scrollIntoView)
-                            el.scrollIntoView({ block: 'center' });
-                    } catch {
-                        /* noop */
-                    }
-                });
-                const t = window.setTimeout(() => setHighlightId(null), 2500);
-                return () => window.clearTimeout(t);
-            }
-        }
-        return;
-    }, [dayLoading, lastEditedId, dayAppointments]);
-
-    // Recarrega a lista do dia quando houver mudanças externas de compromissos
-    React.useEffect(() => {
-        if (!open) return;
-        const onChanged = () => setReloadKey(k => k + 1);
-        window.addEventListener('appointments:changed', onChanged);
-        return () =>
-            window.removeEventListener('appointments:changed', onChanged);
-    }, [open]);
-
-    // buildDateStr no longer needed; we construct dates via Date API
+    // --- Conflict flow state & derived values ---
+    const {
+        pendingConflictSelection,
+        setPendingConflictSelection,
+        conflictFocusId,
+        setConflictFocusId,
+        conflictHighlightIds,
+        setConflictHighlightIds,
+        conflictReturnDraft,
+        setConflictReturnDraft,
+        resetConflictFlow,
+        clearPendingConflictSelection,
+        conflictMatches,
+        visibleAppointments,
+        isConflictEditing,
+    } = useConflictFlow({
+        currentEdit,
+        selectedDate,
+        startHM,
+        endHM,
+        dayAppointments,
+    });
 
     const handleImmediateClose = React.useCallback(() => {
         resetConflictFlow();
@@ -382,6 +297,31 @@ export default function QuickScheduleModal({
         emitGlobalErrorMessage: true,
     });
 
+    // Drive conflict highlights from save error
+    React.useEffect(() => {
+        if (/conflito/i.test(error || '')) {
+            setPendingConflictSelection(true);
+        }
+    }, [error, setPendingConflictSelection]);
+
+    React.useEffect(() => {
+        if (!/conflito/i.test(error || '')) return;
+        const ids = conflictMatches.map(appt => appt.id);
+        setConflictHighlightIds(ids);
+        const firstId = ids[0];
+        if (!firstId) return;
+        requestAnimationFrame(() => {
+            try {
+                const el = document.getElementById(`appt-card-${firstId}`);
+                if (el && el.scrollIntoView) {
+                    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            } catch {
+                /* noop */
+            }
+        });
+    }, [conflictMatches, error, setConflictHighlightIds]);
+
     React.useEffect(() => {
         if (currentEdit) clearError();
     }, [currentEdit, clearError]);
@@ -404,76 +344,55 @@ export default function QuickScheduleModal({
         initialDraft,
         open,
         resetConflictFlow,
+        setConflictReturnDraft,
     ]);
 
     React.useEffect(() => {
-        if (/conflito/i.test(error || '')) {
-            setPendingConflictSelection(true);
+        if (!dayLoading && lastEditedId) {
+            const exists = dayAppointments.some(a => a.id === lastEditedId);
+            if (exists) {
+                setHighlightId(lastEditedId);
+                requestAnimationFrame(() => {
+                    try {
+                        const el = document.getElementById(
+                            `appt-card-${lastEditedId}`,
+                        );
+                        if (el && el.scrollIntoView)
+                            el.scrollIntoView({ block: 'center' });
+                    } catch {
+                        /* noop */
+                    }
+                });
+                const t = window.setTimeout(() => setHighlightId(null), 2500);
+                return () => window.clearTimeout(t);
+            }
         }
-    }, [error]);
-
-    const conflictMatches = React.useMemo(() => {
-        const baseDate = new Date(selectedDate);
-        const startMinutes = toMinutes(startHM);
-        const endMinutes = toMinutes(endHM);
-        if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
-            return [] as Appointment[];
-        }
-        const rangeStart = new Date(baseDate);
-        rangeStart.setHours(
-            Math.floor(startMinutes / 60),
-            startMinutes % 60,
-            0,
-            0,
-        );
-        const rangeEnd = new Date(baseDate);
-        rangeEnd.setHours(
-            Math.floor(endMinutes / 60),
-            endMinutes % 60,
-            0,
-            0,
-        );
-        const rangeStartMs = rangeStart.getTime();
-        const rangeEndMs = rangeEnd.getTime();
-        return dayAppointments
-            .filter(appt => {
-                if (currentEdit?.id === appt.id) return false;
-                if (appt.status !== 'scheduled' && appt.status !== 'ongoing') {
-                    return false;
-                }
-                const apptStartMs = new Date(appt.start_at).getTime();
-                const apptEndMs = new Date(appt.end_at).getTime();
-                return apptStartMs < rangeEndMs && apptEndMs > rangeStartMs;
-            })
-            .sort(
-                (left, right) =>
-                    new Date(left.start_at).getTime() -
-                    new Date(right.start_at).getTime(),
-            );
-    }, [currentEdit?.id, dayAppointments, endHM, selectedDate, startHM]);
+        return;
+    }, [dayLoading, lastEditedId, dayAppointments]);
 
     React.useEffect(() => {
-        if (!/conflito/i.test(error || '')) return;
-        const ids = conflictMatches.map(appt => appt.id);
-        setConflictHighlightIds(ids);
-        const firstId = ids[0];
-        if (!firstId) return;
-        requestAnimationFrame(() => {
-            try {
-                const el = document.getElementById(`appt-card-${firstId}`);
-                if (el && el.scrollIntoView) {
-                    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                }
-            } catch {
-                /* noop */
-            }
-        });
-    }, [conflictMatches, error]);
+        if (!open) return;
+        const onChanged = () => setReloadKey(k => k + 1);
+        window.addEventListener('appointments:changed', onChanged);
+        return () =>
+            window.removeEventListener('appointments:changed', onChanged);
+    }, [open]);
 
-    const visibleAppointments = React.useMemo(() => {
-        if (conflictFocusId === null) return dayAppointments;
-        return dayAppointments.filter(appt => appt.id === conflictFocusId);
-    }, [conflictFocusId, dayAppointments]);
+    const sectionDateTitle = React.useMemo(() => {
+        const d = selectedDate;
+        const dd = `${pad2(d.getDate())}/${pad2(
+            d.getMonth() + 1,
+        )}/${d.getFullYear()}`;
+        return `${weekdayLabel(d)} — ${dd}`;
+    }, [selectedDate]);
+
+    const isSelectedPast = React.useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const sel = new Date(selectedDate);
+        sel.setHours(0, 0, 0, 0);
+        return sel.getTime() < today.getTime();
+    }, [selectedDate]);
 
     const headerClientFullName =
         currentEditClientFullName || baseClientFullName;
@@ -494,16 +413,10 @@ export default function QuickScheduleModal({
 
     const finalizeReturnContext = React.useMemo<QuickScheduleReturnContext | null>(() => {
         if (!open || client.id <= 0) return null;
-
         if (conflictReturnDraft) {
-            return {
-                kind: 'quick-schedule',
-                draft: conflictReturnDraft,
-            };
+            return { kind: 'quick-schedule', draft: conflictReturnDraft };
         }
-
         if (currentEdit) return null;
-
         return {
             kind: 'quick-schedule',
             draft: {
@@ -526,6 +439,19 @@ export default function QuickScheduleModal({
         startHM,
         visitType,
     ]);
+
+    const { handleCancel } = useAppointmentCancel({
+        clientId: client.id,
+        currentEdit,
+        lastEditedId,
+        setCurrentEdit,
+        setEditingHighlightId,
+        resetConflictFlow,
+        setReloadKey,
+        setLastEditedId,
+        setHighlightId,
+        handleImmediateClose,
+    });
 
     return (
         <>
@@ -551,7 +477,6 @@ export default function QuickScheduleModal({
                         width: '100%',
                     }}
                 >
-                    {/* Title + client info remain; date controls standardized below */}
                     <QuickScheduleHeader
                         clientFullName={headerClientFullName}
                         isEditing={isEditing}
@@ -587,20 +512,18 @@ export default function QuickScheduleModal({
                             if (prev.getTime() >= today.getTime())
                                 setSelectedDate(prev);
                         }}
-                        onNext={() =>
-                            {
-                                clearError();
-                                clearPendingConflictSelection();
-                                setSelectedDate(
-                                    d =>
-                                        new Date(
-                                            d.getFullYear(),
-                                            d.getMonth(),
-                                            d.getDate() + 1,
-                                        ),
-                                );
-                            }
-                        }
+                        onNext={() => {
+                            clearError();
+                            clearPendingConflictSelection();
+                            setSelectedDate(
+                                d =>
+                                    new Date(
+                                        d.getFullYear(),
+                                        d.getMonth(),
+                                        d.getDate() + 1,
+                                    ),
+                            );
+                        }}
                         onToday={() => {
                             clearError();
                             clearPendingConflictSelection();
@@ -612,117 +535,13 @@ export default function QuickScheduleModal({
                         }}
                     />
 
-                    {/** Compact status switch moved next to the minicards (inside QuickScheduleDayList). Removed big toggle here to save space. **/}
-
-                    {!isEditing && isPending && (
-                        <div
-                            style={{
-                                background: '#f3f4f6',
-                                border: '1px solid #d1d5db',
-                                color: '#374151',
-                                padding: '8px 10px',
-                                borderRadius: 8,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                            }}
-                        >
-                            <div>
-                                <strong>Atenção:</strong> há um compromisso
-                                pendente para este cliente. Finalize-o antes de
-                                criar um novo.
-                            </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                    onClick={async () => {
-                                        try {
-                                            const id = (pendingFound?.id ||
-                                                (client as ClientMaybeNext)
-                                                    .next_appointment_id) as
-                                                | number
-                                                | undefined;
-                                            if (!id) {
-                                                focusClientCard(client.id);
-                                                return;
-                                            }
-                                            const token =
-                                                localStorage.getItem(
-                                                    'accessToken',
-                                                );
-                                            const headers: Record<
-                                                string,
-                                                string
-                                            > = {
-                                                'Content-Type':
-                                                    'application/json',
-                                            };
-                                            if (token)
-                                                headers['Authorization'] =
-                                                    `Bearer ${token}`;
-                                            const resp = await fetch(
-                                                `${API_BASE}/agenda/appointments/${id}/`,
-                                                { headers },
-                                            );
-                                            if (!resp.ok)
-                                                throw new Error(
-                                                    'Falha ao carregar compromisso pendente',
-                                                );
-                                            const appt =
-                                                (await resp.json()) as Appointment;
-                                            try {
-                                                const a = appt as Appointment;
-                                                openPendingActionsForAppointment(a);
-                                            } catch {
-                                                /* noop */
-                                            }
-                                        } catch (e) {
-                                            const msg =
-                                                e &&
-                                                typeof e === 'object' &&
-                                                'message' in e
-                                                    ? String(
-                                                          (e as Error).message,
-                                                      )
-                                                    : 'Erro ao abrir pendência';
-                                            try {
-                                                window.dispatchEvent(
-                                                    new CustomEvent(
-                                                        'systemMessage',
-                                                        {
-                                                            detail: {
-                                                                text: msg,
-                                                                type: 'warning',
-                                                            },
-                                                        },
-                                                    ),
-                                                );
-                                            } catch {
-                                                /* noop */
-                                            }
-                                        }
-                                    }}
-                                    style={{
-                                        padding: '6px 10px',
-                                        background: '#e5e7eb',
-                                    }}
-                                >
-                                    Resolver agora
-                                </button>
-                                <button
-                                    onClick={handleImmediateClose}
-                                    style={{
-                                        padding: '6px 10px',
-                                        background: '#e5e7eb',
-                                    }}
-                                >
-                                    Fechar
-                                </button>
-                            </div>
-                        </div>
+                    {!isEditing && isPending && pendingFound && (
+                        <PendingBanner
+                            pendingFound={pendingFound}
+                            client={client as ClientMaybeNext}
+                            onClose={handleImmediateClose}
+                        />
                     )}
-
-                    {/* PendingActionsModal é global (Home) */}
 
                     <div
                         style={{
@@ -772,7 +591,6 @@ export default function QuickScheduleModal({
                             )}`}
                             stepMinutes={slotInterval}
                         />
-                        {/* Removed: "Minuto livre" checkbox (flexible minute mode) */}
                         <label
                             style={{ display: 'flex', flexDirection: 'column' }}
                         >
@@ -790,13 +608,10 @@ export default function QuickScheduleModal({
                                 <option value='consulta'>Consulta</option>
                                 <option value='avaliacao'>Avaliação</option>
                                 <option value='retorno'>Retorno</option>
-                                <option value='procedimento'>
-                                    Serviço
-                                </option>
+                                <option value='procedimento'>Serviço</option>
                                 <option value='outro'>Outro</option>
                             </select>
                         </label>
-                        {/** Removed 'Definir como padrão' toggle (managed in settings) **/}
                     </div>
 
                     <textarea
@@ -830,7 +645,6 @@ export default function QuickScheduleModal({
                             background: 'var(--color-bg)',
                         }}
                     >
-                        {/* Right actions: Cancel + Create/Save grouped together */}
                         <div
                             style={{
                                 display: 'flex',
@@ -850,7 +664,7 @@ export default function QuickScheduleModal({
                                 className={`ui-btn ${
                                     !isEditing && isSelectedPast
                                         ? 'ui-btn--disabled'
-                                                                                : 'ui-btn--theme'
+                                        : 'ui-btn--theme'
                                 }`}
                                 disabled={saving || (!isEditing && isSelectedPast)}
                                 title={
@@ -859,12 +673,10 @@ export default function QuickScheduleModal({
                                         : undefined
                                 }
                             >
-                                {saving && (
-                                    <span className='ui-btn__spinner' />
-                                )}
+                                {saving && <span className='ui-btn__spinner' />}
                                 {saving
                                     ? 'Salvando...'
-                                                                        : isEditing
+                                    : isEditing
                                       ? 'Salvar'
                                       : 'Criar'}
                             </button>
@@ -914,75 +726,7 @@ export default function QuickScheduleModal({
                                 setPendingConflictSelection(false);
                             }
                         }}
-                        onCancel={async a => {
-                            try {
-                                const { cancelAppointment } =
-                                    await import('../services/appointments');
-                                const res = await cancelAppointment(a.id);
-                                if (!res.ok) {
-                                    throw new Error(
-                                        res.text || 'Erro ao cancelar',
-                                    );
-                                }
-                                setReloadKey(k => k + 1);
-                                try {
-                                    track({
-                                        type: 'appointment_cancel_succeeded',
-                                        payload: { id: a.id },
-                                    });
-                                } catch {
-                                    /* noop */
-                                }
-                                try {
-                                    dispatchers.updateClients();
-                                    dispatchers.appointmentsChanged();
-                                } catch {
-                                    /* noop */
-                                }
-                                setTimeout(
-                                    () => focusClientCard(client.id),
-                                    120,
-                                );
-                                if (currentEdit?.id === a.id) {
-                                    setCurrentEdit(null);
-                                    setEditingHighlightId(null);
-                                    resetConflictFlow();
-                                }
-                                if (lastEditedId === a.id) {
-                                    setLastEditedId(null);
-                                    setHighlightId(null);
-                                }
-                                try {
-                                    handleImmediateClose();
-                                } catch {
-                                    /* noop */
-                                }
-                            } catch (err) {
-                                const msg =
-                                    err &&
-                                    typeof err === 'object' &&
-                                    'message' in err
-                                        ? String((err as Error).message)
-                                        : 'Erro ao cancelar';
-                                try {
-                                    console.warn(
-                                        '[QuickSchedule] cancel failed',
-                                        { id: a.id, msg },
-                                    );
-                                } catch {
-                                    /* noop */
-                                }
-                                showSystemMessage(msg, 'error');
-                                try {
-                                    track({
-                                        type: 'appointment_cancel_failed',
-                                        payload: { id: a.id, error: msg },
-                                    });
-                                } catch {
-                                    /* noop */
-                                }
-                            }
-                        }}
+                        onCancel={handleCancel}
                         onFinalize={handleFinalize}
                         finalizeRequestContext={finalizeReturnContext}
                     />

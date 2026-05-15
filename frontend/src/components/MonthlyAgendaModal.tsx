@@ -6,9 +6,9 @@ import {
 } from '../hooks/useAppointments';
 import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
-import { getAppointmentOverride } from '../utils/appointments/overrides';
+import { matchesStatusFilter } from '../utils/appointments/agendaHelpers';
 import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
-import { deriveStatus } from '../utils/appointments/status';
+import { enrichList, deriveStatus } from '../utils/appointments/status';
 import ClientCardRow from './shared/ClientCardRow';
 // PendingActionsModal é global (Home)
 import StickyModalHeader from './shared/StickyModalHeader';
@@ -20,6 +20,7 @@ import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
 import type { PendingReturnContext } from '../types/agendaFlow';
 import QuickScheduleModal from './QuickScheduleModal';
 import { makeClientBasic } from '../utils/appointments/agendaHelpers';
+import { toISODate } from '../utils/date';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -31,13 +32,6 @@ function endOfMonth(d: Date) {
     const x = startOfMonth(d);
     x.setMonth(x.getMonth() + 1);
     return x; // exclusive end
-}
-
-function toISODate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
 }
 
 function parseISODateLocal(iso: string) {
@@ -116,31 +110,8 @@ export default function MonthlyAgendaModal({
     });
 
     const filteredItems = React.useMemo(() => {
-        const now = effectiveNowRef;
-        return items.filter(a => {
-            const ov = getAppointmentOverride(a.id)?.status;
-            const status =
-                (ov as 'scheduled' | 'pending' | 'done' | 'canceled') ??
-                a.status;
-            const start = new Date(a.start_at);
-            const end = new Date(a.end_at);
-            switch (statusFilter) {
-                case 'all':
-                    return true;
-                case 'active':
-                    return status === 'scheduled' && end >= now;
-                case 'ongoing':
-                    return status === 'scheduled' && start <= now && end > now;
-                case 'past':
-                    return status === 'pending' ||
-                        (status === 'scheduled' && end < now);
-                case 'done':
-                    return status === 'done';
-                case 'canceled':
-                    return status === 'canceled';
-                default:
-                    return false;
-            }
+        return enrichList(items, effectiveNowRef).filter(a => {
+            return matchesStatusFilter(statusFilter, a);
         });
     }, [items, statusFilter, effectiveNowRef]);
 
@@ -431,6 +402,12 @@ export default function MonthlyAgendaModal({
                                                                       buildReturnContext(),
                                                                   )
                                                             : undefined
+                                                    }
+                                                    onResolvePending={appt =>
+                                                        openPendingActionsForAppointment(
+                                                            appt as Appointment,
+                                                            buildReturnContext(),
+                                                        )
                                                     }
                                                     onDetails={
                                                         a.status === 'done'

@@ -103,9 +103,6 @@ class Client(models.Model):
     sensitivity_test = models.TextField("Teste de sensibilidade", null=True, blank=True)
     other_procedures = models.TextField("Outros procedimentos", null=True, blank=True)
 
-    # Foto do cliente (opcional)
-    photo = models.ImageField("Foto", upload_to="client_photos/", null=True, blank=True)
-
     class Meta:
         app_label = 'clients'
         db_table = 'register_client'  # mantém a tabela existente

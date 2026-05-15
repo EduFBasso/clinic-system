@@ -7,23 +7,23 @@ import AppointmentCard, {
 } from '../shared/AppointmentCard';
 
 // Utility to build an appointment starting "now" and ending +30m
-function buildAppt(start: Date): SharedAppointmentLike {
+function buildAppt(start: Date, status: SharedAppointmentLike['status'] = 'scheduled'): SharedAppointmentLike {
     const end = new Date(start.getTime() + 30 * 60 * 1000);
     return {
         id: 1,
         start_at: start.toISOString(),
         end_at: end.toISOString(),
-        status: 'scheduled',
+        status,
         title: 'Consulta',
         client_name: 'Cliente Teste',
     };
 }
 
 describe('ServerTimeProvider (local-time only behavior)', () => {
-    it('marks as ongoing when start is now (local)', () => {
+    it('marks as ongoing when status is ongoing', () => {
         const localNow = new Date();
-        const appt = buildAppt(localNow);
-        // Even if a fixedOffset is provided, the UI now relies on local time only
+        const appt = buildAppt(localNow, 'ongoing');
+        // ongoing status comes from server; AppointmentCard renders "Em andamento" badge
         render(
             <ServerTimeProvider fixedOffsetMs={-120000} disableFetch>
                 <AppointmentCard appt={appt} />

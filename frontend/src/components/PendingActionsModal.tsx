@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppModal from './Modal';
-import { clearOngoingSnapshot } from '../hooks/useOngoingSnapshot';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
 import { dispatchers } from '../events/dispatchers';
 import { emit } from '../events/bus';
@@ -10,13 +9,9 @@ import { finalizeFlow } from '../services/flows/finalizeFlow';
 import { formatTime } from '../utils/timeFormat';
 import { API_BASE } from '../config/api';
 import { apiFetch } from '../utils/apiFetch';
-import {
-    setAppointmentOverride,
-    getAppointmentOverride,
-    subscribeOverrides,
-} from '../utils/appointments/overrides';
 import type { PendingReturnContext } from '../types/agendaFlow';
 import { step, debugLog, isStepEnabled } from '../debug/stepper';
+import { postDone } from '../services/appointments';
 
 interface PendingActionsModalProps {
     open: boolean;
@@ -24,17 +19,6 @@ interface PendingActionsModalProps {
     appt: SharedAppointmentLike | null;
     returnContext?: PendingReturnContext;
 }
-
-const labelStyle: React.CSSProperties = {
-    fontSize: 14,
-    color: 'var(--color-pending)',
-    fontWeight: 700,
-};
-
-const valueStyle: React.CSSProperties = {
-    fontSize: 14,
-    color: 'var(--color-heading)',
-};
 
 type AppointmentCharge = {
     id: number;
@@ -59,12 +43,6 @@ const actionBtnBaseStyle: React.CSSProperties = {
     fontSize: 'var(--font-body)',
     fontWeight: 'var(--btn-font-weight)',
     lineHeight: 1,
-};
-
-const actionBtnNeutralStyle: React.CSSProperties = {
-    background: 'var(--btn-neutral-bg)',
-    borderColor: 'var(--btn-neutral-border)',
-    color: 'var(--btn-neutral-text)',
 };
 
 const actionBtnSecondaryStyle: React.CSSProperties = {
@@ -93,11 +71,10 @@ export default function PendingActionsModal({
     appt,
     returnContext,
 }: PendingActionsModalProps) {
-    const [busy, setBusy] = React.useState<'cancel' | 'finalize' | null>(null);
+    const [busy, setBusy] = React.useState<'cancel' | 'finalize' | 'finalize-no-record' | null>(null);
     const [closing, setClosing] = React.useState(false);
     const [errorText, setErrorText] = React.useState<string | null>(null);
     const [hasPaidCharge, setHasPaidCharge] = React.useState(false);
-    const [, forceRender] = React.useState(0);
     React.useEffect(() => {
         if (!open || !appt) {
             setHasPaidCharge(false);
@@ -134,49 +111,6 @@ export default function PendingActionsModal({
 
     React.useEffect(() => {
         if (!appt) return undefined;
-        const unsub = subscribeOverrides(ids => {
-            if (ids && !ids.includes(appt.id)) return;
-            // Re-render to reflect override changes
-            forceRender(t => t + 1);
-            try {
-                const ov = getAppointmentOverride(appt.id);
-                // Auto-close when override indicates terminal status even if parent 'appt' prop still shows scheduled
-                if (
-                    ov &&
-                    (ov.status === 'done' || ov.status === 'canceled') &&
-                    open
-                ) {
-                    debugLog(
-                        'PendingActions: auto-close via override terminal status',
-                        { id: appt.id, ovStatus: ov.status },
-                    );
-                    // Prevent double-close loops
-                    setClosing(true);
-                    try {
-                        onClose();
-                    } catch {
-                        /* noop */
-                    }
-                    try {
-                        window.dispatchEvent(
-                            new Event('pendingActions:forceClose'),
-                        );
-                        window.dispatchEvent(new Event('ensureScrollUnlocked'));
-                    } catch {
-                        /* noop */
-                    }
-                }
-            } catch {
-                /* noop */
-            }
-        });
-        return () => {
-            try {
-                unsub();
-            } catch {
-                /* ignore unsubscribe issues */
-            }
-        };
     }, [appt, open, onClose]);
 
     async function sleep(ms: number) {
@@ -212,6 +146,7 @@ export default function PendingActionsModal({
         if (
             st &&
             st.toLowerCase() !== 'scheduled' &&
+            st.toLowerCase() !== 'ongoing' &&
             st.toLowerCase() !== 'pending'
         ) {
             try {
@@ -239,56 +174,6 @@ export default function PendingActionsModal({
         }
     }, [open, appt, onClose]);
 
-    // Dynamic time status hooks first (can't be after early return)
-    const [nowTick, setNowTick] = React.useState(() => Date.now());
-    React.useEffect(() => {
-        if (!open) return; // skip while closed
-        const id = setInterval(() => setNowTick(Date.now()), 40000);
-        return () => clearInterval(id);
-    }, [open]);
-    let timeStatus: {
-        label: string;
-        tone: 'neutral' | 'progress' | 'late' | 'future';
-        detail?: string;
-    } = { label: '—', tone: 'neutral' };
-    if (appt) {
-        const startDate = new Date(appt.start_at);
-        const endDate = new Date(appt.end_at);
-        const nowMs = nowTick;
-        const startMs = startDate.getTime();
-        const endMs = endDate.getTime();
-        if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
-            if (nowMs < startMs) {
-                const minsTo = Math.max(
-                    0,
-                    Math.round((startMs - nowMs) / 60000),
-                );
-                timeStatus = {
-                    label: 'Aguardando início',
-                    tone: 'future',
-                    detail: `Começa em ${minsTo} min`,
-                };
-            } else if (nowMs >= startMs && nowMs < endMs) {
-                const elapsed = Math.round((nowMs - startMs) / 60000);
-                const remaining = Math.max(
-                    0,
-                    Math.round((endMs - nowMs) / 60000),
-                );
-                timeStatus = {
-                    label: 'Em andamento',
-                    tone: 'progress',
-                    detail: `${elapsed} min decorridos · ${remaining} min restantes`,
-                };
-            } else if (nowMs >= endMs) {
-                const late = Math.round((nowMs - endMs) / 60000);
-                timeStatus = {
-                    label: 'Após horário planejado',
-                    tone: 'late',
-                    detail: `Terminou há ${late} min`,
-                };
-            }
-        }
-    }
     const navigate = useNavigate();
     if (!appt) return null;
     // Regra revisada: permitir finalizar assim que o compromisso INICIA (antes o bloqueio aguardava o fim)
@@ -305,7 +190,6 @@ export default function PendingActionsModal({
         appt.status === 'scheduled' && !Number.isNaN(startPlannedMs)
             ? !inconsistentWindow && nowMsForButtons < startPlannedMs
             : false;
-    const closeDisabled = !!busy || closing;
     const finalizeDisabled = !!busy || closing || finalizeTimeLock;
     const cancelDisabled = !!busy || closing;
     const apptId = appt.id; // safe after null check
@@ -335,26 +219,7 @@ export default function PendingActionsModal({
         return `${weekday} ${day}/${month}, ${sh} - ${eh}`;
     })();
 
-    // Real closed timestamp (override first, fallback to backend fields if appt has them when scheduled changed externally)
-    let realClosedLine: string | null = null;
-    if (appt) {
-        const ov = getAppointmentOverride(appt.id);
-        const iso = ov?.real_closed_at;
-        const reason = ov?.real_closed_reason;
-        if (iso) {
-            try {
-                const d = new Date(iso);
-                if (!Number.isNaN(d.getTime())) {
-                    const hm = formatTime(d, { mode: 'local' });
-                    realClosedLine = `${
-                        reason === 'canceled' ? 'Cancelado' : 'Concluído'
-                    } às ${hm}`;
-                }
-            } catch {
-                /* ignore parse */
-            }
-        }
-    }
+    const realClosedLine: string | null = null;
 
     async function doCancel() {
         if (busy) return;
@@ -406,15 +271,6 @@ export default function PendingActionsModal({
                         nowMs < endMs;
                     if (wasInProgress) {
                         const adjustedEndIso = new Date(nowMs).toISOString();
-                        try {
-                            // Grava override local com end_at encurtado para refletir imediatamente no Card compartilhado
-                            setAppointmentOverride(appt.id, {
-                                status: 'canceled',
-                                end_at: adjustedEndIso,
-                            });
-                        } catch {
-                            /* noop override set */
-                        }
                         window.dispatchEvent(
                             new CustomEvent('appointment:statusChanged', {
                                 detail: {
@@ -611,10 +467,6 @@ export default function PendingActionsModal({
             if (!res.ok) throw new Error(res.error || 'Falha ao finalizar');
             // Dispara eventos de atualização com pequeno backoff para evitar corrida
             try {
-                // Limpa snapshot local, caso exista (garante remoção do estilo de atendimento)
-                if (typeof apptClientId === 'number') {
-                    clearOngoingSnapshot(apptClientId);
-                }
                 // Coalesce refresh events to avoid bursts
                 dispatchers.appointmentsChanged();
                 dispatchers.updateClients();
@@ -725,6 +577,106 @@ export default function PendingActionsModal({
         }
     }
 
+    async function doFinalizeWithoutRecord() {
+        if (busy) return;
+        setBusy('finalize-no-record');
+        setErrorText(null);
+        const capturedStatus = appt?.status ?? 'scheduled';
+        try {
+            const id = apptId;
+            // Se ainda não está pending, finaliza primeiro (scheduled → pending)
+            if (capturedStatus !== 'pending') {
+                const res = await finalizeFlow(id);
+                debugLog('PendingActions: finalizeFlow response (no-record)', res);
+                if (!res.ok) throw new Error(res.error || 'Falha ao finalizar');
+            }
+            // Conclui direto (pending → done) sem criar Charge
+            const done = await postDone(id);
+            debugLog('PendingActions: postDone response (no-record)', done);
+            if (!done) throw new Error('Falha ao concluir atendimento');
+            // Atualiza estado local
+            try {
+                dispatchers.appointmentsChanged();
+                dispatchers.updateClients();
+                try {
+                    localStorage.setItem(
+                        'appointments.changed',
+                        String(Date.now()),
+                    );
+                } catch {
+                    /* noop */
+                }
+                if (typeof apptClientId === 'number') {
+                    window.dispatchEvent(
+                        new CustomEvent('client:clearOngoing', {
+                            detail: { clientId: apptClientId },
+                        }),
+                    );
+                    debugLog(
+                        'PendingActions: client:clearOngoing dispatched (no-record)',
+                        { clientId: apptClientId },
+                    );
+                }
+            } catch {
+                /* noop */
+            }
+            setClosing(true);
+            onClose();
+            setTimeout(() => {
+                try {
+                    window.dispatchEvent(new Event('ensureScrollUnlocked'));
+                    window.dispatchEvent(
+                        new Event('pendingActions:forceClose'),
+                    );
+                } catch {
+                    /* noop */
+                }
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent('systemMessage', {
+                            detail: {
+                                text: 'Consulta concluída.',
+                                type: 'success',
+                            },
+                        }),
+                    );
+                } catch {
+                    /* noop */
+                }
+                setTimeout(() => {
+                    try {
+                        window.dispatchEvent(
+                            new Event('ensureScrollUnlocked'),
+                        );
+                    } catch {
+                        /* noop */
+                    }
+                }, 120);
+            }, 120);
+        } catch (e) {
+            const msg =
+                e instanceof Error ? e.message : 'Falha ao concluir';
+            try {
+                window.dispatchEvent(
+                    new CustomEvent('systemMessage', {
+                        detail: { text: msg, type: 'error' },
+                    }),
+                );
+                window.dispatchEvent(new Event('ensureScrollUnlocked'));
+                debugLog('PendingActions: systemMessage error (no-record)', {
+                    msg,
+                });
+            } catch {
+                /* noop */
+            }
+            setErrorText(msg);
+        } finally {
+            setBusy(null);
+            setClosing(false);
+            debugLog('PendingActions: doFinalizeWithoutRecord finally');
+        }
+    }
+
     return (
         <AppModal
             open={open}
@@ -738,174 +690,208 @@ export default function PendingActionsModal({
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 12,
-                    minWidth: 320,
+                    gap: 16,
+                    minWidth: 280,
                 }}
                 data-modal='PendingActions'
                 data-appt-id={appt?.id ?? undefined}
                 data-instance={instanceId}
             >
-                <h3 style={{ margin: 0 }}>Ação Pendente</h3>
-                <div style={{ display: 'grid', gap: 6 }}>
-                    <div>
-                        <span style={labelStyle}>Cliente: </span>
-                        <span style={valueStyle}>{clientName}</span>
-                    </div>
-                    <div>
-                        <span style={labelStyle}>Horário: </span>
-                        <span style={valueStyle}>{timeRange}</span>
-                    </div>
+                {/* Cabeçalho: nome do cliente em destaque + horário */}
+                <div>
+                    <h3
+                        style={{
+                            margin: 0,
+                            fontSize: 20,
+                            fontWeight: 700,
+                            color: '#1f2937',
+                            lineHeight: 1.2,
+                        }}
+                    >
+                        {clientName}
+                    </h3>
+                    <p
+                        style={{
+                            margin: '4px 0 0',
+                            fontSize: 14,
+                            color: '#6b7280',
+                        }}
+                    >
+                        {timeRange}
+                    </p>
                     {realClosedLine && (
-                        <div>
-                            <span style={labelStyle}>Encerrado real: </span>
-                            <span
-                                style={{
-                                    ...valueStyle,
-                                    color: 'var(--color-success)',
-                                }}
-                            >
-                                {realClosedLine}
-                            </span>
-                        </div>
-                    )}
-                    <div>
-                        <span style={labelStyle}>Status tempo: </span>
-                        <span
+                        <p
                             style={{
-                                ...valueStyle,
-                                color:
-                                    timeStatus.tone === 'progress'
-                                        ? '#2563eb'
-                                        : timeStatus.tone === 'late'
-                                          ? 'var(--color-canceled)'
-                                          : timeStatus.tone === 'future'
-                                            ? '#4b5563'
-                                            : undefined,
-                            }}
-                        >
-                            {timeStatus.label}
-                            {timeStatus.detail ? ` — ${timeStatus.detail}` : ''}
-                        </span>
-                    </div>
-                    {hasPaidCharge && (
-                        <div
-                            style={{
-                                marginTop: 4,
-                                padding: '10px 12px',
-                                borderRadius: 10,
-                                background: '#fff7ed',
-                                border: '1px solid #fdba74',
-                                color: '#9a3412',
+                                margin: '4px 0 0',
                                 fontSize: 13,
-                                lineHeight: 1.35,
+                                color: 'var(--color-success)',
                                 fontWeight: 600,
                             }}
-                            role='status'
                         >
-                            Aviso: esta consulta ja possui cobranca ou anotacao marcada como paga. Se desmarcar o compromisso, revise depois a cobranca para manter o registro consistente.
-                        </div>
+                            {realClosedLine}
+                        </p>
                     )}
                 </div>
-                {/* Campo de motivo removido por ora. Backend ainda não coleta. */}
+
+                {/* Aviso cobrança paga */}
+                {hasPaidCharge && (
+                    <div
+                        style={{
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            background: '#fff7ed',
+                            border: '1px solid #fdba74',
+                            color: '#9a3412',
+                            fontSize: 13,
+                            lineHeight: 1.35,
+                            fontWeight: 600,
+                        }}
+                        role='status'
+                    >
+                        Aviso: esta consulta ja possui cobranca ou anotacao marcada como paga. Se cancelar, revise depois a cobranca para manter o registro consistente.
+                    </div>
+                )}
+
+                {/* Erro inline */}
+                {errorText && (
+                    <div
+                        style={{
+                            color: 'var(--color-canceled)',
+                            fontSize: 13,
+                            lineHeight: 1.2,
+                        }}
+                        role='alert'
+                    >
+                        {errorText}
+                    </div>
+                )}
+
+                {/* Dois grupos lado a lado: Concluir | Cancelar */}
                 <div
                     style={{
-                        display: 'flex',
-                        gap: 8,
-                        justifyContent: 'flex-end',
-                        marginTop: 4,
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: 16,
                     }}
                 >
-                    {/* Inline error when cancel/finalize fails */}
-                    {errorText && (
-                        <div
+                    {/* Esquerda: Concluir Consulta */}
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                        }}
+                    >
+                        <p
                             style={{
-                                marginRight: 'auto',
-                                color: 'var(--color-canceled)',
-                                fontSize: 13,
-                                lineHeight: 1.2,
-                                maxWidth: 360,
+                                margin: 0,
+                                fontWeight: 700,
+                                fontSize: 12,
+                                color: '#1f2937',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
                             }}
-                            role='alert'
                         >
-                            {errorText}
-                        </div>
-                    )}
-                    <button
-                        onClick={() => {
-                            if (busy) return;
-                            setClosing(true);
-                            onClose();
-                            // Fallback de desbloqueio de scroll
-                            try {
-                                window.dispatchEvent(
-                                    new Event('ensureScrollUnlocked'),
-                                );
-                                window.dispatchEvent(
-                                    new Event('pendingActions:forceClose'),
-                                );
-                            } catch {
-                                /* noop */
+                            Concluir Consulta
+                        </p>
+                        <button
+                            onClick={doFinalize}
+                            disabled={finalizeDisabled}
+                            className={`ui-btn ${
+                                finalizeTimeLock
+                                    ? 'ui-btn--disabled'
+                                    : 'ui-btn--secondary'
+                            }`}
+                            style={{
+                                ...actionBtnBaseStyle,
+                                ...(finalizeDisabled
+                                    ? actionBtnDisabledStyle
+                                    : actionBtnSecondaryStyle),
+                                width: '100%',
+                            }}
+                            title={
+                                finalizeTimeLock
+                                    ? 'Aguardando início para permitir avançar'
+                                    : 'Registrar dados financeiros e concluir'
                             }
-                        }}
-                        className='ui-btn ui-btn--neutral'
-                        disabled={closeDisabled}
+                        >
+                            {busy === 'finalize'
+                                ? 'Abrindo…'
+                                : finalizeTimeLock
+                                  ? 'Aguardando início'
+                                  : 'Com Registro'}
+                        </button>
+                        <button
+                            onClick={doFinalizeWithoutRecord}
+                            disabled={finalizeDisabled}
+                            className={`ui-btn ${
+                                finalizeTimeLock
+                                    ? 'ui-btn--disabled'
+                                    : 'ui-btn--secondary'
+                            }`}
+                            style={{
+                                ...actionBtnBaseStyle,
+                                ...(finalizeDisabled
+                                    ? actionBtnDisabledStyle
+                                    : actionBtnSecondaryStyle),
+                                width: '100%',
+                            }}
+                            title={
+                                finalizeTimeLock
+                                    ? 'Aguardando início para permitir avançar'
+                                    : 'Concluir sem registrar dados financeiros'
+                            }
+                        >
+                            {busy === 'finalize-no-record'
+                                ? 'Concluindo…'
+                                : finalizeTimeLock
+                                  ? 'Aguardando início'
+                                  : 'Sem Registro'}
+                        </button>
+                    </div>
+
+                    {/* Direita: Cancelar Consulta */}
+                    <div
                         style={{
-                            ...actionBtnBaseStyle,
-                            ...(closeDisabled
-                                ? actionBtnDisabledStyle
-                                : actionBtnNeutralStyle),
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            paddingLeft: 16,
+                            borderLeft: '1px solid var(--color-border)',
                         }}
                     >
-                        Fechar
-                    </button>
-                    <button
-                        onClick={doFinalize}
-                        disabled={finalizeDisabled}
-                        className={`ui-btn ${
-                            finalizeTimeLock
-                                ? 'ui-btn--disabled'
-                                : 'ui-btn--secondary'
-                        }`}
-                        style={{
-                            ...actionBtnBaseStyle,
-                            ...(finalizeDisabled
-                                ? actionBtnDisabledStyle
-                                : actionBtnSecondaryStyle),
-                        }}
-                        title={
-                            finalizeTimeLock
-                                                                ? 'Aguardando início para permitir avançar'
-                                                                : appt.status === 'pending'
-                                                                    ? 'Ir para a consulta'
-                                                                    : 'Encerrar atendimento e seguir para a consulta'
-                        }
-                    >
-                        {busy === 'finalize'
-                                                        ? 'Abrindo…'
-                            : finalizeTimeLock
-                              ? 'Aguardando início'
-                                                            : appt.status === 'pending'
-                                                                ? 'Ir para Consulta'
-                                                                : 'Encerrar e Ir'}
-                    </button>
-                    <button
-                        onClick={doCancel}
-                        disabled={cancelDisabled}
-                        className='ui-btn ui-btn--danger'
-                        style={{
-                            ...actionBtnBaseStyle,
-                            ...(cancelDisabled
-                                ? actionBtnDisabledStyle
-                                : actionBtnDangerStyle),
-                        }}
-                        title={
-                            hasPaidCharge
-                                ? 'Cancelar compromisso com cobrança paga associada'
-                                : 'Cancelar compromisso'
-                        }
-                    >
-                        {busy === 'cancel' ? 'Cancelando…' : 'Cancelar'}
-                    </button>
+                        <p
+                            style={{
+                                margin: 0,
+                                fontWeight: 700,
+                                fontSize: 12,
+                                color: '#1f2937',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
+                            }}
+                        >
+                            Cancelar Consulta
+                        </p>
+                        <button
+                            onClick={doCancel}
+                            disabled={cancelDisabled}
+                            className='ui-btn ui-btn--danger'
+                            style={{
+                                ...actionBtnBaseStyle,
+                                ...(cancelDisabled
+                                    ? actionBtnDisabledStyle
+                                    : actionBtnDangerStyle),
+                                width: '100%',
+                            }}
+                            title={
+                                hasPaidCharge
+                                    ? 'Cancelar compromisso com cobrança paga associada'
+                                    : 'Cancelar compromisso'
+                            }
+                        >
+                            {busy === 'cancel' ? 'Cancelando…' : 'Cancelar'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </AppModal>

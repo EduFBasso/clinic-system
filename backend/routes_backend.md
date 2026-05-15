@@ -678,9 +678,14 @@ from rest_framework.routers import DefaultRouter
 
 # ▶️ Importações de views
 
-from .views_auth import login_professional
-from .views_auth_code import request_otp_view, verify_code
-from .client_views import ClientViewSet, ClientBasicViewSet
+from .views_totp import totp_setup, totp_verify, professional_create, totp_admin_reset
+from .views_webauthn import (
+    webauthn_register_begin,
+    webauthn_register_complete,
+    webauthn_login_begin,
+    webauthn_login_complete,
+)
+from apps.clients.views import ClientViewSet, ClientBasicViewSet
 from .professional_views import ProfessionalViewSet, ProfessionalBasicViewSet
 
 # ▶️ ViewSets com rotas automáticas
@@ -694,9 +699,14 @@ router.register(r'professionals-basic', ProfessionalBasicViewSet, basename='prof
 # ▶️ Rotas manuais
 
 urlpatterns = [
-path('login/', login_professional),
-path('auth/request-code/', request_otp_view),
-path('auth/verify-code/', verify_code),
+path('auth/totp/setup/', totp_setup),
+path('auth/totp/verify/', totp_verify),
+path('auth/totp/admin-reset/', totp_admin_reset),
+path('auth/professional-create/', professional_create),
+path('auth/webauthn/register-begin/', webauthn_register_begin),
+path('auth/webauthn/register-complete/', webauthn_register_complete),
+path('auth/webauthn/login-begin/', webauthn_login_begin),
+path('auth/webauthn/login-complete/', webauthn_login_complete),
 path('', include(router.urls)),
 ]
 

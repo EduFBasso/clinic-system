@@ -12,6 +12,8 @@ import {
 import { useNowTick } from '../hooks/useNowTick';
 import DateControlsHeader from './shared/DateControlsHeader';
 import FloatingDatePicker from './FloatingDatePicker';
+import { toISODate } from '../utils/date';
+import { formatTime } from '../utils/timeFormat';
 
 type StatusFilter =
     | 'all'
@@ -27,18 +29,6 @@ const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'] as const;
 const WEEKDAY_COLORS: Record<string, string | undefined> = {
     Dom: 'var(--color-danger)',
 };
-
-function toISODate(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
-function formatTime(iso: string): string {
-    const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 function formatClientName(name: string | undefined): string {
     if (!name) return '';
@@ -142,7 +132,7 @@ export default function AgendaMonthlyGrid() {
         if (statusFilter === 'canceled')
             return items.filter(a => a.status === 'canceled');
         return items;
-    }, [items, statusFilter, now]);
+    }, [items, statusFilter]);
 
     const grouped = React.useMemo(() => groupByDay(filtered), [filtered]);
 
