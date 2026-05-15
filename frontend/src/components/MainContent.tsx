@@ -129,7 +129,10 @@ const MainContent: React.FC<MainContentProps> = ({
 
     const applyFilterMode = React.useCallback(
         (mode: FilterMode) => {
-            setFilterMode(prev => (prev === mode ? 'all' : mode));
+            React.startTransition(() => {
+                setFilterMode(prev => (prev === mode ? 'all' : mode));
+                setVisibleCount(LOAD_BATCH);
+            });
             setFilter('');
             closeMobileFilters();
         },
@@ -438,17 +441,26 @@ const MainContent: React.FC<MainContentProps> = ({
     }, [clients]);
     const ongoingCount = ongoingClients.length;
 
+    // Fase 2: estado de fade suave para reset do filtro ongoing
+    const [isResettingFilter, setIsResettingFilter] = React.useState(false);
+
     // Se o filtro de pendentes estiver ativo mas não houver mais pendentes, desativa
     React.useEffect(() => {
         if (filterMode === 'pending' && pendingCount === 0) {
-            setFilterMode('all');
+            React.startTransition(() => setFilterMode('all'));
         }
     }, [filterMode, pendingCount]);
 
-    // Se o filtro de em atendimento estiver ativo mas não houver mais, desativa
+    // Se o filtro de em atendimento estiver ativo mas não houver mais, desativa com fade
     React.useEffect(() => {
         if (filterMode === 'ongoing' && ongoingCount === 0) {
-            setFilterMode('all');
+            setIsResettingFilter(true);
+            const timer = setTimeout(() => {
+                setFilterMode('all');
+                setVisibleCount(LOAD_BATCH);
+                setIsResettingFilter(false);
+            }, 280);
+            return () => clearTimeout(timer);
         }
     }, [filterMode, ongoingCount]);
 
@@ -477,7 +489,7 @@ const MainContent: React.FC<MainContentProps> = ({
 
     // Ao mudar filterMode: reseta contagem e volta ao topo
     React.useEffect(() => {
-        setVisibleCount(LOAD_BATCH);
+        React.startTransition(() => setVisibleCount(LOAD_BATCH));
         window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     }, [filterMode]);
 
@@ -586,7 +598,7 @@ const MainContent: React.FC<MainContentProps> = ({
 
     const handleFilterChange = React.useCallback((value: string) => {
         setFilter(value);
-        if (filterMode !== 'all') setFilterMode('all');
+        if (filterMode !== 'all') React.startTransition(() => setFilterMode('all'));
     }, [filterMode]);
 
     const handleFilterClear = React.useCallback(() => {
@@ -681,7 +693,14 @@ const MainContent: React.FC<MainContentProps> = ({
                     Selecione um cliente para agendar
                 </div>
             )}
-            <div ref={cardsGridRef} className={styles.cardsGrid}>
+            <div
+                ref={cardsGridRef}
+                className={styles.cardsGrid}
+                style={{
+                    opacity: isResettingFilter ? 0 : 1,
+                    transition: 'opacity 280ms ease',
+                }}
+            >
                 {!loading && filter && visibleClients.length === 0 && (
                     <p className={styles.noResultsMessage}>
                         Nenhum cliente encontrado para &ldquo;{filter}&rdquo;.
