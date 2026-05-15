@@ -74,7 +74,20 @@ const FilterBar = React.memo(function FilterBar({
                         title='Filtrar clientes em atendimento agora'
                         style={ongoingCount === 0 ? { opacity: 0.5 } : undefined}
                     >
-                        Em atendimento {ongoingCount > 0 ? `(${ongoingCount})` : ''}
+                        Em atendimento{' '}
+                        {ongoingCount > 0 && (
+                            <span
+                                key={`ongoing-${ongoingCount}`}
+                                className={styles.countBadge}
+                                style={{
+                                    display: 'inline-block',
+                                    marginLeft: '4px',
+                                    animation: 'badgePulse 0.35s ease-out',
+                                }}
+                            >
+                                ({ongoingCount})
+                            </span>
+                        )}
                     </button>
                     <button
                         className={`${styles.filterToggleBtn}${filterMode === 'pending' ? ' ' + styles.filterToggleBtnActive : ''}`}
