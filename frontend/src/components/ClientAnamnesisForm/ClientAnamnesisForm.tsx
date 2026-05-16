@@ -76,6 +76,18 @@ export default function ClientAnamnesisForm({
                             (a, b) => a.order - b.order,
                         );
 
+                        const currentValue = values[field.id] ?? '';
+                        const hasOtherOption =
+                            field.field_type === 'radio' &&
+                            (field.options ?? []).includes('Outro');
+                        const otherIsSelected =
+                            hasOtherOption &&
+                            (currentValue === 'Outro' ||
+                                currentValue.startsWith('Outros: '));
+                        const otherText = currentValue.startsWith('Outros: ')
+                            ? currentValue.slice(8)
+                            : '';
+
                         return (
                             <div key={field.id} className={styles.fieldRow}>
                                 <span className={styles.fieldLabel}>
@@ -85,7 +97,10 @@ export default function ClientAnamnesisForm({
                                 {field.field_type === 'radio' && field.options && (
                                     <div className={styles.radioGroup}>
                                         {field.options.map(opt => {
-                                            const selected = values[field.id] === opt;
+                                            const selected =
+                                                opt === 'Outro'
+                                                    ? otherIsSelected
+                                                    : currentValue === opt;
                                             return (
                                                 <button
                                                     key={opt}
@@ -99,18 +114,46 @@ export default function ClientAnamnesisForm({
                                                             ? `${styles.radioBtn} ${styles.radioBtnSelected}`
                                                             : styles.radioBtn
                                                     }
-                                                    onClick={() =>
-                                                        onChange(
-                                                            field.id,
-                                                            selected ? '' : opt,
-                                                        )
-                                                    }
+                                                    onClick={() => {
+                                                        if (opt === 'Outro') {
+                                                            onChange(
+                                                                field.id,
+                                                                otherIsSelected ? '' : 'Outro',
+                                                            );
+                                                        } else {
+                                                            onChange(
+                                                                field.id,
+                                                                selected ? '' : opt,
+                                                            );
+                                                        }
+                                                    }}
                                                 >
                                                     {opt}
                                                 </button>
                                             );
                                         })}
                                     </div>
+                                )}
+
+                                {otherIsSelected && (
+                                    <>
+                                        <span className={styles.fieldLabel}>
+                                            Qual?
+                                        </span>
+                                        <input
+                                            type='text'
+                                            className={styles.textInput}
+                                            value={otherText}
+                                            placeholder='Informe...'
+                                            onChange={e => {
+                                                const text = e.target.value;
+                                                onChange(
+                                                    field.id,
+                                                    text ? `Outros: ${text}` : 'Outro',
+                                                );
+                                            }}
+                                        />
+                                    </>
                                 )}
 
                                 {field.field_type === 'text' && (

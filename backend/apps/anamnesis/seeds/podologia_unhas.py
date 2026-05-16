@@ -86,7 +86,7 @@ SECTORS = [
                 'code': 'footwear_used',
                 'label': 'Calçado utilizado',
                 'field_type': 'radio',
-                'options': ['Tênis', 'Sapatilha', 'Social', 'Salto alto', 'Rasteirinha', 'Descalço'],
+                'options': ['Tênis', 'Sapatilha', 'Social', 'Salto alto', 'Rasteirinha', 'Descalço', 'Outro'],
                 'order': 0,
             },
             {
