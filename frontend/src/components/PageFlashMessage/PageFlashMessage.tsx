@@ -31,7 +31,7 @@ const palette: Record<string, { bg: string; color: string; border: string }> = {
     },
 };
 
-export default function PageFlashMessage({
+export function PageFlashMessage({
     open,
     message,
     type = 'info',

@@ -2,7 +2,7 @@ import React from 'react';
 import { FaCalendarAlt } from 'react-icons/fa';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { useStickyHeaderHeight } from '../hooks/useStickyHeaderHeight';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import { track } from '../utils/telemetry';
 import FloatingDatePicker from './FloatingDatePicker';
 import AppointmentCard from './shared/AppointmentCard';

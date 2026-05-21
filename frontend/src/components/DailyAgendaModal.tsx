@@ -1,5 +1,5 @@
 import React from 'react';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import FloatingDatePicker from './FloatingDatePicker';
 import StickyModalHeader from './shared/StickyModalHeader';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';

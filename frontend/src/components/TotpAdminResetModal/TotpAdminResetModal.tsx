@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
-import AppModal from './Modal';
-import { API_BASE } from '../config/api';
-import '../styles/modal-message.css';
-import { getAccessToken } from '../utils/auth/session';
+import { AppModal } from '../Modal/Modal';
+import { API_BASE } from '../../config/api';
+import '../../styles/modal-message.css';
+import { getAccessToken } from '../../utils/auth/session';
 
 interface ProfessionalOption {
     id: number;
@@ -17,7 +17,7 @@ interface Props {
     onClose: () => void;
 }
 
-const TotpAdminResetModal: React.FC<Props> = ({ open, onClose }) => {
+export const TotpAdminResetModal: React.FC<Props> = ({ open, onClose }) => {
     const [professionals, setProfessionals] = useState<ProfessionalOption[]>(
         [],
     );
@@ -194,4 +194,3 @@ const TotpAdminResetModal: React.FC<Props> = ({ open, onClose }) => {
     );
 };
 
-export default TotpAdminResetModal;

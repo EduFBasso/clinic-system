@@ -2,7 +2,7 @@ import React from 'react';
 
 type State = { hasError: boolean; error?: Error };
 
-export default class ErrorBoundary extends React.Component<
+export class ErrorBoundary extends React.Component<
     React.PropsWithChildren,
     State
 > {

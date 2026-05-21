@@ -1,7 +1,7 @@
 import React from 'react';
-import AppModal from './Modal';
-import { coalesceVersion, fetchServerVersion } from '../hooks/useAppVersion';
-import { useTheme, type AppTheme } from '../contexts/ThemeContext';
+import { AppModal } from '../Modal/Modal';
+import { coalesceVersion, fetchServerVersion } from '../../hooks/useAppVersion';
+import { useTheme, type AppTheme } from '../../contexts/ThemeContext';
 
 const THEME_OPTIONS: Array<{
     value: AppTheme;
@@ -134,4 +134,3 @@ export const AboutModal: React.FC<AboutModalProps> = ({
     );
 };
 
-export default AboutModal;

@@ -1,5 +1,5 @@
 import React from 'react';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import TimePicker10 from './TimePicker10';
 import FloatingDatePicker from './FloatingDatePicker';
 import QuickScheduleHeader from './quickschedule/QuickScheduleHeader';

@@ -1,24 +1,24 @@
 // src/pages/Home.tsx
 import React, { useEffect, useState } from 'react';
 
-import Header from '../components/Header';
-import Faixa from '../components/Faixa';
+import { Header } from '../components/Header/Header';
+import { Faixa } from '../components/Faixa/Faixa';
 import NavBar from '../components/NavBar';
 import MainContent from '../components/MainContent';
-import Footer from '../components/Footer';
-import AppModal from '../components/Modal';
+import { Footer } from '../components/Footer/Footer';
+import { AppModal } from '../components/Modal/Modal';
 import ClientView from '../components/ClientView';
-import UpdateBanner from '../components/UpdateBanner';
+import { UpdateBanner } from '../components/UpdateBanner/UpdateBanner';
 import styles from '../styles/pages/Home.module.css';
 // ScheduleModal removido — usamos apenas QuickScheduleModal
 import QuickScheduleModal from '../components/QuickScheduleModal';
 import MonthlyAgendaModal from '../components/MonthlyAgendaModal';
 import WeeklyAgendaModal from '../components/WeeklyAgendaModal';
-import SystemMessageModal from '../components/SystemMessageModal';
+import { SystemMessageModal } from '../components/SystemMessageModal/SystemMessageModal';
 import DailyAgendaModal from '../components/DailyAgendaModal';
 import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
 import PendingActionsModal from '../components/PendingActionsModal';
-import PageFlashMessage from '../components/PageFlashMessage';
+import { PageFlashMessage } from '../components/PageFlashMessage/PageFlashMessage';
 import type { Appointment } from '../hooks/useAppointments';
 import type { ClientData } from '../types/ClientData';
 import { useAppVersionWatcher, acceptAndReload } from '../hooks/useAppVersion';

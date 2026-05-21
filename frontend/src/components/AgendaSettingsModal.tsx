@@ -1,5 +1,5 @@
 import React from 'react';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import modalStyles from '../styles/components/AgendaSettingsModal.module.css';
 import {
     DEFAULT_AGENDA_SETTINGS,

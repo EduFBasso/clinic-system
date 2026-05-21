@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, act } from '@testing-library/react';
-import AppModal from '../../components/Modal';
+import { AppModal } from '../../components/Modal/Modal';
 
 // Testa emissão de telemetria (open/update/close) para fullscreen com bottomComp.
 // Simula visualViewport diferente de window.innerHeight para forçar bottomComp > 0.

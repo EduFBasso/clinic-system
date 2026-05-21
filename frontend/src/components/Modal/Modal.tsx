@@ -1,10 +1,10 @@
 // frontend\src\components\Modal.tsx
 import React from 'react';
-import { emitModalViewportMetric } from '../utils/telemetry/modalViewport';
+import { emitModalViewportMetric } from '../../utils/telemetry/modalViewport';
 import Modal from '@mui/material/Modal';
 import Box from '@mui/material/Box';
-import ModalActionsBar from './ModalActionsBar';
-import { useModalCloseHotkeys } from '../hooks/useModalCloseHotkeys';
+import { ModalActionsBar } from '../ModalActionsBar/ModalActionsBar';
+import { useModalCloseHotkeys } from '../../hooks/useModalCloseHotkeys';
 
 interface AppModalProps {
     open: boolean;
@@ -53,7 +53,7 @@ const style = {
     overflowY: 'auto',
 };
 
-export default function AppModal(props: AppModalProps) {
+export function AppModal(props: AppModalProps) {
     const {
         open,
         onClose,

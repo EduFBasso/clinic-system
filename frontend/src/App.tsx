@@ -5,7 +5,7 @@ import Home from '../src/pages/Home';
 // DesktopAgendaPage carregado de forma lazy; se falhar import (arquivo ausente na branch remota), renderiza Home.
 import React from 'react';
 import { on } from './events/bus';
-import SystemMessageModal from './components/SystemMessageModal';
+import { SystemMessageModal } from './components/SystemMessageModal/SystemMessageModal';
 const LazyDesktopAgenda: React.ComponentType = React.lazy(async () => {
     try {
         return (await import('./pages/DesktopAgendaPage')) as unknown as {

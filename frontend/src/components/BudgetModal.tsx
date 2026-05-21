@@ -1,5 +1,5 @@
 import React from 'react';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import { shareText } from '../utils/share';
 import {
     buildBudgetMessage,

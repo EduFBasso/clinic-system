@@ -1,5 +1,5 @@
 import React from 'react';
-import AppModal from './Modal';
+import { AppModal } from '../Modal/Modal';
 
 interface SystemMessageModalProps {
     open: boolean;
@@ -28,7 +28,7 @@ const palette: Record<string, { bg: string; color: string; border: string }> = {
     info: { bg: '#eff6ff', color: '#1d4ed8', border: '#60a5fa' },
 };
 
-export default function SystemMessageModal({
+export function SystemMessageModal({
     open,
     message,
     type = 'info',

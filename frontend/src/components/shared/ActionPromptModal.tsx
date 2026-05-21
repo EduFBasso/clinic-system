@@ -1,5 +1,5 @@
 import React from 'react';
-import AppModal from '../Modal';
+import { AppModal } from '../Modal/Modal';
 
 type ActionVariant = 'neutral' | 'primary' | 'danger' | 'success';
 

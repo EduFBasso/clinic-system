@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStickyHeaderHeight } from '../hooks/useStickyHeaderHeight';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import StickyModalHeader from './shared/StickyModalHeader';
 import AgendaMonthlyGrid from './AgendaMonthlyGrid';
 import FloatingDatePicker from './FloatingDatePicker';

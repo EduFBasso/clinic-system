@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AppModal from '../Modal';
+import { AppModal } from '../Modal/Modal';
 
 // Utility wrapper to control open prop
 function ModalHarness({ initiallyOpen = true }: { initiallyOpen?: boolean }) {

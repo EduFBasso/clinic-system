@@ -1,5 +1,5 @@
 import React from 'react';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import { useFinalizeAudits } from '../hooks/useFinalizeAudits';
 
 interface FinalizeAuditsModalProps {

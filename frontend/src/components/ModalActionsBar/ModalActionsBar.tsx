@@ -12,7 +12,7 @@ export interface ModalActionsBarProps {
  * Sticky actions header for modals: renders a transparent close button (X)
  * no topo-direito. Fica visível enquanto o conteúdo do modal rola.
  */
-export default function ModalActionsBar({
+export function ModalActionsBar({
     onClose,
     showCloseButton = true,
     style,

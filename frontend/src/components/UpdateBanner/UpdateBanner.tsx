@@ -6,7 +6,7 @@ type Props = {
     message?: string;
 };
 
-export default function UpdateBanner({ onReload, onDismiss, message }: Props) {
+export function UpdateBanner({ onReload, onDismiss, message }: Props) {
     return (
         <div
             style={{

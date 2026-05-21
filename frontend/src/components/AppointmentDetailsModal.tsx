@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import type { SharedAppointmentLike } from './shared/AppointmentCard';
 import { formatTime } from '../utils/timeFormat';
 import StickyModalHeader from './shared/StickyModalHeader';

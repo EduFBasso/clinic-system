@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import { API_BASE } from '../config/api';
 import '../styles/modal-message.css';
 import { getAccessToken } from '../utils/auth/session';

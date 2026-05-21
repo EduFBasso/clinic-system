@@ -9,8 +9,8 @@ function isMobileDevice() {
 }
 // frontend\src\components\NavBar.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import AboutModal from './AboutModal';
-import SessionExpiredModal from './SessionExpiredModal';
+import { AboutModal } from './AboutModal/AboutModal';
+import { SessionExpiredModal } from './SessionExpiredModal/SessionExpiredModal';
 import { API_BASE } from '../config/api';
 import { openClientForm } from '../utils/openClientForm';
 import { getOrCreateDeviceId } from '../utils/device';
@@ -26,7 +26,7 @@ import type { Professional as ProfessionalBasic } from '../types/models';
 import styles from '../styles/components/NavBar.module.css';
 import AgendaSettingsModal from './AgendaSettingsModal';
 // formatTime removido: não exibimos mais relógio no header
-import AppModal from './Modal';
+import { AppModal } from './Modal/Modal';
 import '../styles/modal-message.css';
 import { isTokenExpired } from '../utils/jwt';
 import { emit, on } from '../events/bus';
@@ -37,7 +37,7 @@ import {
     getAccessToken,
 } from '../utils/auth/session';
 import ProfessionalCreateModal from './ProfessionalCreateModal';
-import TotpAdminResetModal from './TotpAdminResetModal';
+import { TotpAdminResetModal } from './TotpAdminResetModal/TotpAdminResetModal';
 import {
     startRegistration,
     startAuthentication,

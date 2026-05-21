@@ -1,6 +1,6 @@
 // src/components/SessionExpiredModal.tsx
 import React from 'react';
-import AppModal from './Modal';
+import { AppModal } from '../Modal/Modal';
 
 interface SessionExpiredModalProps {
     open: boolean;
@@ -9,7 +9,7 @@ interface SessionExpiredModalProps {
     color?: string;
 }
 
-export default function SessionExpiredModal({
+export function SessionExpiredModal({
     open,
     onClose,
     message = 'Sua sessão expirou. Por favor, faça login novamente.',
