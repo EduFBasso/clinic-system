@@ -3,6 +3,7 @@ import ClientDayList from '../shared/ClientDayList';
 import type { Appointment } from '../../hooks/useAppointments';
 import type { PendingReturnContext } from '../../types/agendaFlow';
 import { openPendingActionsForAppointment } from '../../utils/appointments/openPendingActions';
+import { getNow } from '../../utils/now';
 
 export type DayFilter = 'todos' | 'ativos' | 'cancelados';
 
@@ -51,7 +52,7 @@ export const QuickScheduleDayList: React.FC<QuickScheduleDayListProps> = ({
                 // No modo de criação: só mostra ativos que ainda não terminaram
                 if (a.status !== 'scheduled' && a.status !== 'ongoing')
                     return false;
-                return new Date(a.end_at).getTime() >= Date.now();
+                return new Date(a.end_at).getTime() >= getNow().getTime();
             }
             if (dayFilter === 'todos') return true;
             if (dayFilter === 'ativos')

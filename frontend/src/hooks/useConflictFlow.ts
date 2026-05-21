@@ -92,7 +92,12 @@ export function useConflictFlow({
                 }
                 const apptStartMs = new Date(appt.start_at).getTime();
                 const apptEndMs = new Date(appt.end_at).getTime();
-                return apptStartMs < rangeEndMs && apptEndMs > rangeStartMs;
+                // Tolerância de 30s: sobreposições menores que 30s (ex: horário final == início) não são conflito.
+                const CONFLICT_TOLERANCE_MS = 30_000;
+                return (
+                    apptStartMs + CONFLICT_TOLERANCE_MS < rangeEndMs &&
+                    apptEndMs - CONFLICT_TOLERANCE_MS > rangeStartMs
+                );
             })
             .sort(
                 (left, right) =>

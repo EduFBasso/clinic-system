@@ -380,8 +380,8 @@ export function DailyAgendaModal({
                                     border: 'none',
                                     cursor: 'pointer',
                                     color: 'var(--color-primary)',
-                                    fontWeight:
-                                        'var(--heading-weight-md)' as unknown as number,
+                                    fontSize: 'clamp(15px, 4vw, var(--font-title-md))',
+                                    fontWeight: 600,
                                     whiteSpace: 'nowrap',
                                     userSelect: 'none',
                                 }}

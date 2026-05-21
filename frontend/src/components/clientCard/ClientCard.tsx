@@ -906,7 +906,7 @@ function ClientCardBase({
                                 fontStyle: 'italic',
                             }}
                         >
-                            Pendente
+                            Compromisso pendente
                         </span>
                         <SolveButton
                             onSolve={async () => {
