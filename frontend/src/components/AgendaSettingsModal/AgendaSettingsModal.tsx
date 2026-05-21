@@ -1,6 +1,6 @@
 import React from 'react';
-import { AppModal } from './Modal/Modal';
-import modalStyles from '../styles/components/AgendaSettingsModal.module.css';
+import { AppModal } from '../Modal/Modal';
+import modalStyles from './AgendaSettingsModal.module.css';
 import {
     DEFAULT_AGENDA_SETTINGS,
     type DefaultDuration,
@@ -11,8 +11,8 @@ import {
     startTelegramLink,
     verifyTelegramLink,
     sendTelegramTest,
-} from '../utils/agendaSettings';
-import { emit } from '../events/bus';
+} from '../../utils/agendaSettings';
+import { emit } from '../../events/bus';
 
 interface AgendaSettingsModalProps {
     open: boolean;
@@ -42,7 +42,7 @@ function clampHM(v: string, fallback: string) {
 
 const DEFAULTS = DEFAULT_AGENDA_SETTINGS;
 
-const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
+export const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     open,
     onClose,
     onApply,
@@ -796,4 +796,3 @@ const AgendaSettingsModal: React.FC<AgendaSettingsModalProps> = ({
     );
 };
 
-export default AgendaSettingsModal;

@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../styles/components/Main.module.css';
+import styles from '../../styles/components/Main.module.css';
 
 export type FilterMode = 'all' | 'pending' | 'today' | 'tomorrow' | 'ongoing';
 
@@ -24,7 +24,7 @@ export interface FilterBarProps {
 // IMPORTANTE: definido fora de MainContent para que a referência da função seja estável.
 // Se definido dentro, cada re-render de MainContent cria uma nova referência → React
 // desmonta e remonta o FilterBar → input perde o foco a cada keystroke.
-const FilterBar = React.memo(function FilterBar({
+export const FilterBar = React.memo(function FilterBar({
     filter,
     filterMode,
     pendingCount,
@@ -190,4 +190,3 @@ const FilterBar = React.memo(function FilterBar({
     );
 });
 
-export default FilterBar;

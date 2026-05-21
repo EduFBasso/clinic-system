@@ -1,13 +1,13 @@
 import React from 'react';
-import { AppModal } from './Modal/Modal';
-import { useFinalizeAudits } from '../hooks/useFinalizeAudits';
+import { AppModal } from '../Modal/Modal';
+import { useFinalizeAudits } from '../../hooks/useFinalizeAudits';
 
 interface FinalizeAuditsModalProps {
     open: boolean;
     onClose: () => void;
 }
 
-export default function FinalizeAuditsModal({
+export function FinalizeAuditsModal({
     open,
     onClose,
 }: FinalizeAuditsModalProps) {

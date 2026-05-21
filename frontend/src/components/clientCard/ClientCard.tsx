@@ -1,7 +1,7 @@
 // frontend/src/components/ClientCard.tsx
 import React from 'react';
-import { focusClientCard } from '../utils/focusClientCard';
-import styles from '../styles/components/ClientCard.module.css';
+import { focusClientCard } from '../../utils/focusClientCard';
+import styles from './ClientCard.module.css';
 import {
     FaEye,
     FaWhatsapp,
@@ -10,35 +10,35 @@ import {
     FaTooth,
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
-import { useClientCreateAction } from '../hooks/useClientCreateAction';
-import { API_BASE } from '../config/api';
-import type { Appointment } from '../hooks/useAppointments';
-import type { ClientBasic } from '../types/ClientBasic';
-import { formatPhone } from '../utils/formatPhone';
+import { useClientCreateAction } from '../../hooks/useClientCreateAction';
+import { API_BASE } from '../../config/api';
+import type { Appointment } from '../../hooks/useAppointments';
+import type { ClientBasic } from '../../types/ClientBasic';
+import { formatPhone } from '../../utils/formatPhone';
 import { FaEdit } from 'react-icons/fa';
-import '../styles/palette.css';
-import { parseDOB, calcAge } from '../utils/dateOfBirth';
-import { useClientCardStyle } from './clientCard/useClientCardStyle';
+import '../../styles/palette.css';
+import { parseDOB, calcAge } from '../../utils/dateOfBirth';
+import { useClientCardStyle } from '../clientCard/useClientCardStyle';
 // PendingActionsModal é gerenciado globalmente (Home) via evento 'pendingActions:open'
-import { useClientPendingState } from '../hooks/useClientPendingState';
-import FinalizeButton from './clientCard/FinalizeButton';
+import { useClientPendingState } from '../../hooks/useClientPendingState';
+import FinalizeButton from '../clientCard/FinalizeButton';
 // SolveButton lives in clientCard folder along with FinalizeButton
-import SolveButton from './clientCard/SolveButton';
-import { useClientCardFocusScroll } from './clientCard/useClientCardFocusScroll';
+import SolveButton from '../clientCard/SolveButton';
+import { useClientCardFocusScroll } from '../clientCard/useClientCardFocusScroll';
 import {
     FutureAppointmentsList,
     useClientFutureAppointments,
-} from '../domain/futureAppointments';
+} from '../../domain/futureAppointments';
 // (hysteresis & appointment state consolidated inside hooks)
-import { useFinalizeAppointment } from '../hooks/useFinalizeAppointment';
+import { useFinalizeAppointment } from '../../hooks/useFinalizeAppointment';
 // Replaced latch/snapshot/sweep logic by consolidated hook
-import { useClientOngoingState } from '../hooks/useClientOngoingState';
-import { formatTime } from '../utils/timeFormat';
-import { openClientForm } from '../utils/openClientForm';
-import BudgetModal from './BudgetModal';
-import { useNowTick } from '../hooks/useNowTick';
-import { emit } from '../events/bus';
-import { getAccessToken } from '../utils/auth/session';
+import { useClientOngoingState } from '../../hooks/useClientOngoingState';
+import { formatTime } from '../../utils/timeFormat';
+import { openClientForm } from '../../utils/openClientForm';
+import { BudgetModal } from '../BudgetModal/BudgetModal';
+import { useNowTick } from '../../hooks/useNowTick';
+import { emit } from '../../events/bus';
+import { getAccessToken } from '../../utils/auth/session';
 
 interface ClientCardProps {
     client: ClientBasic;
@@ -54,7 +54,7 @@ interface ClientCardProps {
     filterMode?: 'all' | 'pending' | 'today' | 'tomorrow';
 }
 
-function ClientCard({
+function ClientCardBase({
     client,
     onView,
     selected,
@@ -997,7 +997,7 @@ function sameNotifyAppt(
     );
 }
 
-export default React.memo(ClientCard, (prev, next) => {
+export const ClientCard = React.memo(ClientCardBase, (prev, next) => {
     return (
         prev.client === next.client &&
         prev.selected === next.selected &&

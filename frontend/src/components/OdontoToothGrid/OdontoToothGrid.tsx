@@ -1,6 +1,6 @@
 import React from 'react';
-import type { ToothItem } from '../pages/odontoArcadeHelpers';
-import styles from '../styles/components/OdontoToothGrid.module.css';
+import type { ToothItem } from '../../pages/odontoArcadeHelpers';
+import styles from './OdontoToothGrid.module.css';
 
 interface OdontoToothGridProps {
     orderedTeeth: ToothItem[];

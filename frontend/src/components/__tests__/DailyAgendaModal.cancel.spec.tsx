@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import DailyAgendaModal from '../DailyAgendaModal';
+import { DailyAgendaModal } from '../DailyAgendaModal/DailyAgendaModal';
 import type { Appointment } from '../../hooks/useAppointments';
 
 vi.mock('../../hooks/useAppointments', () => ({

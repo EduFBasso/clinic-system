@@ -1,17 +1,17 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppModal } from './Modal/Modal';
-import type { SharedAppointmentLike } from './shared/AppointmentCard';
-import { dispatchers } from '../events/dispatchers';
-import { emit } from '../events/bus';
-import { cancelFlow } from '../services/flows/cancelFlow';
-import { finalizeFlow } from '../services/flows/finalizeFlow';
-import { formatTime } from '../utils/timeFormat';
-import { API_BASE } from '../config/api';
-import { apiFetch } from '../utils/apiFetch';
-import type { PendingReturnContext } from '../types/agendaFlow';
-import { step, debugLog, isStepEnabled } from '../debug/stepper';
-import { postDone } from '../services/appointments';
+import { AppModal } from '../Modal/Modal';
+import type { SharedAppointmentLike } from '../shared/AppointmentCard';
+import { dispatchers } from '../../events/dispatchers';
+import { emit } from '../../events/bus';
+import { cancelFlow } from '../../services/flows/cancelFlow';
+import { finalizeFlow } from '../../services/flows/finalizeFlow';
+import { formatTime } from '../../utils/timeFormat';
+import { API_BASE } from '../../config/api';
+import { apiFetch } from '../../utils/apiFetch';
+import type { PendingReturnContext } from '../../types/agendaFlow';
+import { step, debugLog, isStepEnabled } from '../../debug/stepper';
+import { postDone } from '../../services/appointments';
 
 interface PendingActionsModalProps {
     open: boolean;
@@ -65,7 +65,7 @@ const actionBtnDisabledStyle: React.CSSProperties = {
     cursor: 'not-allowed',
 };
 
-export default function PendingActionsModal({
+export function PendingActionsModal({
     open,
     onClose,
     appt,

@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import type { ClientData } from '../types/ClientData';
+import type { ClientData } from '../../types/ClientData';
 import type {
     AnamnesisField,
     AnamnesisResponse,
-} from '../types/AnamnesisTypes';
-import styles from '../styles/components/ClientView.module.css';
-import { formatPhone } from '../utils/formatPhone';
-import { formatDOBWithAge } from '../utils/dateOfBirth';
-import { formatCpf, formatCnpj, formatRg, formatCep } from '../utils/formatCpf';
-import { API_BASE } from '../config/api';
-import { useAnamnesisFields } from '../hooks/useAnamnesisFields';
-import { useTheme } from '../contexts/ThemeContext';
-import { getAccessToken } from '../utils/auth/session';
+} from '../../types/AnamnesisTypes';
+import styles from './ClientView.module.css';
+import { formatPhone } from '../../utils/formatPhone';
+import { formatDOBWithAge } from '../../utils/dateOfBirth';
+import { formatCpf, formatCnpj, formatRg, formatCep } from '../../utils/formatCpf';
+import { API_BASE } from '../../config/api';
+import { useAnamnesisFields } from '../../hooks/useAnamnesisFields';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getAccessToken } from '../../utils/auth/session';
 
 interface ClientViewProps {
     client: ClientData & {
@@ -103,7 +103,7 @@ function ViewSection({
 
 // ── main component ───────────────────────────────────────────────────────────
 
-const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
+export const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
     const { theme } = useTheme();
     const rootRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -328,4 +328,3 @@ const ClientView: React.FC<ClientViewProps> = ({ client, openToken }) => {
     );
 };
 
-export default ClientView;

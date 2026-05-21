@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '../../contexts/ThemeContext';
-import NavBar from '../../components/NavBar';
+import { NavBar } from '../../components/NavBar/NavBar';
 // Mock clock hook to avoid alignment timers & network drift during test
 vi.mock('../../hooks/useUtcClock', () => ({
     useUtcClock: () => ({

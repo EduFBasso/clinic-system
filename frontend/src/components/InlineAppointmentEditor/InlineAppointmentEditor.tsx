@@ -1,11 +1,11 @@
 import React from 'react';
-import { getNow } from '../utils/now';
-import FloatingDatePicker from './FloatingDatePicker';
-import TimePicker10 from './TimePicker10';
-import { API_BASE } from '../config/api';
-import type { Appointment } from '../hooks/useAppointments';
-import { getAccessToken } from '../utils/auth/session';
-import { pad2 } from '../utils/hmTime';
+import { getNow } from '../../utils/now';
+import FloatingDatePicker from '../FloatingDatePicker';
+import { TimePicker10 } from '../TimePicker10/TimePicker10';
+import { API_BASE } from '../../config/api';
+import type { Appointment } from '../../hooks/useAppointments';
+import { getAccessToken } from '../../utils/auth/session';
+import { pad2 } from '../../utils/hmTime';
 
 export interface InlineAppointmentEditorProps {
     /** Preferred prop name */
@@ -23,7 +23,7 @@ function toISO(date: Date, hm: string) {
     return d.toISOString();
 }
 
-export default function InlineAppointmentEditor({
+export function InlineAppointmentEditor({
     appt,
     appointment,
     onCancel,

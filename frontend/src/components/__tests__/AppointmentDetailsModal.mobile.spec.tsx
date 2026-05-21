@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import AppointmentDetailsModal from '../AppointmentDetailsModal';
+import { AppointmentDetailsModal } from '../AppointmentDetailsModal/AppointmentDetailsModal';
 import type { SharedAppointmentLike } from '../shared/AppointmentCard';
 
 vi.mock('../../utils/apiFetch', () => ({

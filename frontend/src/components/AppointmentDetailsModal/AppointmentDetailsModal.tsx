@@ -1,12 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppModal } from './Modal/Modal';
-import type { SharedAppointmentLike } from './shared/AppointmentCard';
-import { formatTime } from '../utils/timeFormat';
-import StickyModalHeader from './shared/StickyModalHeader';
-import { API_BASE } from '../config/api';
-import { apiFetch } from '../utils/apiFetch';
-import type { PendingReturnContext } from '../types/agendaFlow';
+import { AppModal } from '../Modal/Modal';
+import type { SharedAppointmentLike } from '../shared/AppointmentCard';
+import { formatTime } from '../../utils/timeFormat';
+import StickyModalHeader from '../shared/StickyModalHeader';
+import { API_BASE } from '../../config/api';
+import { apiFetch } from '../../utils/apiFetch';
+import type { PendingReturnContext } from '../../types/agendaFlow';
 
 
 type ChargeItem = {
@@ -58,7 +58,7 @@ function fmtDateTimeRange(startISO: string, endISO: string) {
     return `${day}, ${sh} - ${eh}`;
 }
 
-export default function AppointmentDetailsModal({
+export function AppointmentDetailsModal({
     open,
     onClose,
     appt,

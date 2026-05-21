@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppModal } from './Modal/Modal';
-import TimePicker10 from './TimePicker10';
+import { TimePicker10 } from './TimePicker10/TimePicker10';
 import FloatingDatePicker from './FloatingDatePicker';
 import QuickScheduleHeader from './quickschedule/QuickScheduleHeader';
 import DateControlsHeader from './shared/DateControlsHeader';
@@ -8,7 +8,7 @@ import PendingBanner from './quickschedule/PendingBanner';
 import QuickScheduleDayList, {
     type DayFilter,
 } from './quickschedule/QuickScheduleDayList';
-import AppointmentDetailsModal from './AppointmentDetailsModal';
+import { AppointmentDetailsModal } from './AppointmentDetailsModal/AppointmentDetailsModal';
 import type { ClientBasic } from '../types/ClientBasic';
 import type { Appointment } from '../hooks/useAppointments';
 import type {

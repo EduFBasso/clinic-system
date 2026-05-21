@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../../styles/components/ClientCard.module.css';
+import styles from './ClientCard.module.css';
 import { requestFinalizeAppointment } from '../../utils/appointments/requestFinalizeAppointment';
 
 type Props = {

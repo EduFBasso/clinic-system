@@ -1,20 +1,20 @@
 // frontend\src\components\MainContent.tsx
 import React, { useState } from 'react';
-import styles from '../styles/components/Main.module.css';
-import { useClients } from '../hooks/useClients';
-import ClientCard from './ClientCard';
-import type { ClientBasic } from '../types/ClientBasic';
-import { AppModal } from './Modal/Modal';
-import type { ClientData } from '../types/ClientData';
-import { SessionExpiredModal } from './SessionExpiredModal/SessionExpiredModal';
-import { dispatchLogout, hasActiveSession } from '../utils/auth/session';
-import { apiFetch } from '../utils/apiFetch';
-import { useAppointmentSets } from '../hooks/useAppointmentSets';
+import styles from '../../styles/components/Main.module.css';
+import { useClients } from '../../hooks/useClients';
+import { ClientCard } from '../clientCard/ClientCard';
+import type { ClientBasic } from '../../types/ClientBasic';
+import { AppModal } from '../Modal/Modal';
+import type { ClientData } from '../../types/ClientData';
+import { SessionExpiredModal } from '../SessionExpiredModal/SessionExpiredModal';
+import { dispatchLogout, hasActiveSession } from '../../utils/auth/session';
+import { apiFetch } from '../../utils/apiFetch';
+import { useAppointmentSets } from '../../hooks/useAppointmentSets';
 
-import { useScrollPersistence } from '../hooks/useScrollPersistence';
-import { useIosKeyboard } from '../hooks/useIosKeyboard';
-import FilterBar from './FilterBar';
-import type { FilterMode } from './FilterBar';
+import { useScrollPersistence } from '../../hooks/useScrollPersistence';
+import { useIosKeyboard } from '../../hooks/useIosKeyboard';
+import { FilterBar } from '../FilterBar/FilterBar';
+import type { FilterMode } from '../FilterBar/FilterBar';
 
 // Normaliza texto para comparação: remove acentos, espaços extras e ignora caixa
 function normalizeText(s: string) {
@@ -37,7 +37,7 @@ const LOAD_BATCH = 50;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MainContent: React.FC<MainContentProps> = ({
+export const MainContent: React.FC<MainContentProps> = ({
     selectedClientId,
     setSelectedClientId,
     onClientViewData,
@@ -835,4 +835,3 @@ const MainContent: React.FC<MainContentProps> = ({
     );
 };
 
-export default MainContent;

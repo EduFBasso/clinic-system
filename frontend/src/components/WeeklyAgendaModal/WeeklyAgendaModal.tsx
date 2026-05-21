@@ -1,28 +1,28 @@
 import React from 'react';
-import { useStickyHeaderHeight } from '../hooks/useStickyHeaderHeight';
-import { AppModal } from './Modal/Modal';
-import StickyModalHeader from './shared/StickyModalHeader';
-import AgendaMonthlyGrid from './AgendaMonthlyGrid';
-import FloatingDatePicker from './FloatingDatePicker';
-import DateControlsHeader from './shared/DateControlsHeader';
+import { useStickyHeaderHeight } from '../../hooks/useStickyHeaderHeight';
+import { AppModal } from '../Modal/Modal';
+import StickyModalHeader from '../shared/StickyModalHeader';
+import { AgendaMonthlyGrid } from '../AgendaMonthlyGrid/AgendaMonthlyGrid';
+import FloatingDatePicker from '../FloatingDatePicker';
+import DateControlsHeader from '../shared/DateControlsHeader';
 // AppointmentCard replaced by ClientCardRow for consistency with Daily agenda
-import ClientCardRow from './shared/ClientCardRow';
-import { deriveStatus } from '../utils/appointments/status';
-import { toISODate } from '../utils/date';
+import ClientCardRow from '../shared/ClientCardRow';
+import { deriveStatus } from '../../utils/appointments/status';
+import { toISODate } from '../../utils/date';
 import {
     useAppointmentsRange,
     type Appointment,
-} from '../hooks/useAppointments';
-import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
-import { useNowTick } from '../hooks/useNowTick';
-import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
-import { cancelAppointment } from '../services/appointments';
-import { dispatchers } from '../events/dispatchers';
-import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
-import type { PendingReturnContext } from '../types/agendaFlow';
-import QuickScheduleModal from './QuickScheduleModal';
-import { makeClientBasic } from '../utils/appointments/agendaHelpers';
-import type { ClientBasic } from '../types/ClientBasic';
+} from '../../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../../hooks/useAppointmentDetailsModal';
+import { useNowTick } from '../../hooks/useNowTick';
+import { openPendingActionsForAppointment } from '../../utils/appointments/openPendingActions';
+import { cancelAppointment } from '../../services/appointments';
+import { dispatchers } from '../../events/dispatchers';
+import { useAgendaFinalizeAction } from '../../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../../types/agendaFlow';
+import QuickScheduleModal from '../QuickScheduleModal';
+import { makeClientBasic } from '../../utils/appointments/agendaHelpers';
+import type { ClientBasic } from '../../types/ClientBasic';
  
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -631,7 +631,7 @@ function WeeklyAgendaContent({
     );
 }
 
-export default function WeeklyAgendaModal({
+export function WeeklyAgendaModal({
     open,
     onClose,
     initialDate,

@@ -4,7 +4,7 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import ClientForm from '../../components/ClientForm';
+import { ClientForm } from '../../components/ClientForm/ClientForm';
 import { API_BASE } from '../../config/api';
 import { getAccessToken } from '../../utils/auth/session';
 

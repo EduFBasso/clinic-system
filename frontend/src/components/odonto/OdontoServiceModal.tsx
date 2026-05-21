@@ -1,5 +1,5 @@
 import React from 'react';
-import { OdontoToothGrid } from '../OdontoToothGrid';
+import { OdontoToothGrid } from '../OdontoToothGrid/OdontoToothGrid';
 import type { ServiceFlowType, ServiceRow, ToothItem } from '../../pages/odontoArcadeHelpers';
 import {
     ARCADE_OPTIONS,

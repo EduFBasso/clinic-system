@@ -1,23 +1,23 @@
 // frontend\src\components\ClientForm.tsx
-import { API_BASE } from '../config/api';
+import { API_BASE } from '../../config/api';
 import React, { useEffect, useRef, useState } from 'react';
-import { normalizeDOBForApi } from '../utils/dateOfBirth';
-import type { ClientData } from '../types/ClientData';
-import ClientPersonalDataForm from './ClientPersonalDataForm/ClientPersonalDataForm';
-import ClientAddressForm from './ClientAddressForm/ClientAddressForm';
-import ClientAnamnesisForm from './ClientAnamnesisForm/ClientAnamnesisForm';
-import styles from './ClientForm.module.css';
-import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard';
-import { useClientAnamnesis } from '../hooks/useClientAnamnesis';
-import { useClientDelete } from '../hooks/useClientDelete';
-import { parseApiError } from '../utils/parseApiError';
-import InfoModal from './shared/InfoModal';
-import DeleteConfirmModal from './shared/DeleteConfirmModal';
+import { normalizeDOBForApi } from '../../utils/dateOfBirth';
+import type { ClientData } from '../../types/ClientData';
+import ClientPersonalDataForm from '../ClientPersonalDataForm/ClientPersonalDataForm';
+import ClientAddressForm from '../ClientAddressForm/ClientAddressForm';
+import ClientAnamnesisForm from '../ClientAnamnesisForm/ClientAnamnesisForm';
+import styles from '../ClientForm.module.css';
+import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
+import { useClientAnamnesis } from '../../hooks/useClientAnamnesis';
+import { useClientDelete } from '../../hooks/useClientDelete';
+import { parseApiError } from '../../utils/parseApiError';
+import InfoModal from '../shared/InfoModal';
+import DeleteConfirmModal from '../shared/DeleteConfirmModal';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../contexts/ThemeContext';
-import { getAccessToken } from '../utils/auth/session';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getAccessToken } from '../../utils/auth/session';
 
-export default function ClientForm({
+export function ClientForm({
     cliente,
 }: {
     cliente?: Partial<ClientData>;

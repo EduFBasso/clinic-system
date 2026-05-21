@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { AppModal } from './Modal/Modal';
-import { API_BASE } from '../config/api';
-import '../styles/modal-message.css';
-import { getAccessToken } from '../utils/auth/session';
+import { AppModal } from '../Modal/Modal';
+import { API_BASE } from '../../config/api';
+import '../../styles/modal-message.css';
+import { getAccessToken } from '../../utils/auth/session';
 
 interface Props {
     open: boolean;
@@ -45,7 +45,7 @@ const EMPTY_FORM: FormData = {
     state: '',
 };
 
-const ProfessionalCreateModal: React.FC<Props> = ({ open, onClose }) => {
+export const ProfessionalCreateModal: React.FC<Props> = ({ open, onClose }) => {
     const [step, setStep] = useState<Step>('form');
     const [form, setForm] = useState<FormData>(EMPTY_FORM);
     const [loading, setLoading] = useState(false);
@@ -312,4 +312,3 @@ const ProfessionalCreateModal: React.FC<Props> = ({ open, onClose }) => {
     );
 };
 
-export default ProfessionalCreateModal;

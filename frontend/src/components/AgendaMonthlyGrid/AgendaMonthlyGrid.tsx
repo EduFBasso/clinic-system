@@ -1,19 +1,19 @@
 import React from 'react';
-import { emit } from '../events/bus';
+import { emit } from '../../events/bus';
 import {
     useAppointmentsRange,
     type Appointment,
-} from '../hooks/useAppointments';
+} from '../../hooks/useAppointments';
 import {
     enrichAppointment,
     statusStripeColor,
     statusBackgroundColor,
-} from '../utils/appointments/status';
-import { useNowTick } from '../hooks/useNowTick';
-import DateControlsHeader from './shared/DateControlsHeader';
-import FloatingDatePicker from './FloatingDatePicker';
-import { toISODate } from '../utils/date';
-import { formatTime } from '../utils/timeFormat';
+} from '../../utils/appointments/status';
+import { useNowTick } from '../../hooks/useNowTick';
+import DateControlsHeader from '../shared/DateControlsHeader';
+import FloatingDatePicker from '../FloatingDatePicker';
+import { toISODate } from '../../utils/date';
+import { formatTime } from '../../utils/timeFormat';
 
 type StatusFilter =
     | 'all'
@@ -68,7 +68,7 @@ function groupByDay(items: Appointment[]): Record<string, Appointment[]> {
     return map;
 }
 
-export default function AgendaMonthlyGrid() {
+export function AgendaMonthlyGrid() {
     const todayISO = React.useMemo(() => toISODate(new Date()), []);
 
     // Ticks every 30 s (shared interval) so ongoing/past detection stays accurate

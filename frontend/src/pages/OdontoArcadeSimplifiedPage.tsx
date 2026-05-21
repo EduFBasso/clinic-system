@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { OdontoToothGrid } from '../components/OdontoToothGrid';
+import { OdontoToothGrid } from '../components/OdontoToothGrid/OdontoToothGrid';
 import OdontoProcedureCard from '../components/odonto/OdontoProcedureCard';
 import OdontoServiceModal from '../components/odonto/OdontoServiceModal';
 import OdontoProductModal from '../components/odonto/OdontoProductModal';

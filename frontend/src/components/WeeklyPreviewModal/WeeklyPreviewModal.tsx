@@ -1,22 +1,22 @@
 import React from 'react';
 import { FaCalendarAlt } from 'react-icons/fa';
-import StickyModalHeader from './shared/StickyModalHeader';
-import { useStickyHeaderHeight } from '../hooks/useStickyHeaderHeight';
-import { AppModal } from './Modal/Modal';
-import { track } from '../utils/telemetry';
-import FloatingDatePicker from './FloatingDatePicker';
-import AppointmentCard from './shared/AppointmentCard';
-import { deriveStatus } from '../utils/appointments/status';
+import StickyModalHeader from '../shared/StickyModalHeader';
+import { useStickyHeaderHeight } from '../../hooks/useStickyHeaderHeight';
+import { AppModal } from '../Modal/Modal';
+import { track } from '../../utils/telemetry';
+import FloatingDatePicker from '../FloatingDatePicker';
+import AppointmentCard from '../shared/AppointmentCard';
+import { deriveStatus } from '../../utils/appointments/status';
 import {
     useAppointmentsRange,
     type Appointment,
-} from '../hooks/useAppointments';
-import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
-import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
-import { cancelAppointment } from '../services/appointments';
-import { dispatchers } from '../events/dispatchers';
-import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
-import { toISODate } from '../utils/date';
+} from '../../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../../hooks/useAppointmentDetailsModal';
+import { openPendingActionsForAppointment } from '../../utils/appointments/openPendingActions';
+import { cancelAppointment } from '../../services/appointments';
+import { dispatchers } from '../../events/dispatchers';
+import { useAgendaFinalizeAction } from '../../hooks/useAgendaFinalizeAction';
+import { toISODate } from '../../utils/date';
  
 function startOfDay(d: Date) {
     const x = new Date(d);
@@ -51,7 +51,7 @@ function groupByDay(items: Appointment[]) {
     return map;
 }
 
-export default function WeeklyPreviewModal({
+export function WeeklyPreviewModal({
     open,
     onClose,
     initialDate,

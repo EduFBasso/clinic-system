@@ -1,30 +1,30 @@
 import React from 'react';
-import { AppModal } from './Modal/Modal';
-import FloatingDatePicker from './FloatingDatePicker';
-import StickyModalHeader from './shared/StickyModalHeader';
+import { AppModal } from '../Modal/Modal';
+import FloatingDatePicker from '../FloatingDatePicker';
+import StickyModalHeader from '../shared/StickyModalHeader';
 import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
-import ClientCardRow from './shared/ClientCardRow';
-import { enrichList } from '../utils/appointments/status';
-import { toISODate } from '../utils/date';
+import ClientCardRow from '../shared/ClientCardRow';
+import { enrichList } from '../../utils/appointments/status';
+import { toISODate } from '../../utils/date';
 import {
     STATUS_ORDER,
     makeClientBasic,
     matchesStatusFilter,
     type ClientLike,
-} from '../utils/appointments/agendaHelpers';
-import { useNowTick } from '../hooks/useNowTick';
-import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
-import QuickScheduleModal from './QuickScheduleModal';
+} from '../../utils/appointments/agendaHelpers';
+import { useNowTick } from '../../hooks/useNowTick';
+import { openPendingActionsForAppointment } from '../../utils/appointments/openPendingActions';
+import QuickScheduleModal from '../QuickScheduleModal';
 // PendingActionsModal é global (Home)
-import type { Appointment } from '../hooks/useAppointments';
-import { useAppointmentsRange } from '../hooks/useAppointments';
-import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
-import type { ClientBasic } from '../types/ClientBasic';
-import { focusClientCard } from '../utils/focusClientCard';
-import { cancelAppointment } from '../services/appointments';
-import { dispatchers } from '../events/dispatchers';
-import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
-import type { PendingReturnContext } from '../types/agendaFlow';
+import type { Appointment } from '../../hooks/useAppointments';
+import { useAppointmentsRange } from '../../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../../hooks/useAppointmentDetailsModal';
+import type { ClientBasic } from '../../types/ClientBasic';
+import { focusClientCard } from '../../utils/focusClientCard';
+import { cancelAppointment } from '../../services/appointments';
+import { dispatchers } from '../../events/dispatchers';
+import { useAgendaFinalizeAction } from '../../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../../types/agendaFlow';
 
 interface DailyAgendaModalProps {
     open: boolean;
@@ -44,7 +44,7 @@ function addDays(d: Date, n: number) {
     return x;
 }
 type StatusKey = 'scheduled' | 'done' | 'canceled' | 'ongoing';
-export default function DailyAgendaModal({
+export function DailyAgendaModal({
     open,
     date,
     onClose,

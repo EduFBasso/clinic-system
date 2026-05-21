@@ -1,15 +1,15 @@
 import React from 'react';
-import { AppModal } from './Modal/Modal';
-import { shareText } from '../utils/share';
+import { AppModal } from '../Modal/Modal';
+import { shareText } from '../../utils/share';
 import {
     buildBudgetMessage,
     type ChargeItem,
     formatBRL,
-} from '../utils/messages';
-import { apiFetch, ApiError } from '../utils/apiFetch';
-import { API_BASE } from '../config/api';
-import { buildPixCopiaCola } from '../utils/pix';
-import { getAccessToken } from '../utils/auth/session';
+} from '../../utils/messages';
+import { apiFetch, ApiError } from '../../utils/apiFetch';
+import { API_BASE } from '../../config/api';
+import { buildPixCopiaCola } from '../../utils/pix';
+import { getAccessToken } from '../../utils/auth/session';
 
 // no extra phone helpers here; we'll normalize inline when sending
 
@@ -34,7 +34,7 @@ interface BudgetModalProps {
     professionalTitle?: string;
 }
 
-export default function BudgetModal({
+export function BudgetModal({
     open,
     onClose,
     clientName,

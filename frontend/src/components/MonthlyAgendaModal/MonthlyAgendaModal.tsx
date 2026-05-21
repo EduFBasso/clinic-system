@@ -1,26 +1,26 @@
 import React from 'react';
-import { AppModal } from './Modal/Modal';
+import { AppModal } from '../Modal/Modal';
 import {
     useAppointmentsRange,
     type Appointment,
-} from '../hooks/useAppointments';
-import { useAppointmentDetailsModal } from '../hooks/useAppointmentDetailsModal';
-import type { ClientBasic } from '../types/ClientBasic';
-import { matchesStatusFilter } from '../utils/appointments/agendaHelpers';
-import { openPendingActionsForAppointment } from '../utils/appointments/openPendingActions';
-import { enrichList, deriveStatus } from '../utils/appointments/status';
-import ClientCardRow from './shared/ClientCardRow';
+} from '../../hooks/useAppointments';
+import { useAppointmentDetailsModal } from '../../hooks/useAppointmentDetailsModal';
+import type { ClientBasic } from '../../types/ClientBasic';
+import { matchesStatusFilter } from '../../utils/appointments/agendaHelpers';
+import { openPendingActionsForAppointment } from '../../utils/appointments/openPendingActions';
+import { enrichList, deriveStatus } from '../../utils/appointments/status';
+import ClientCardRow from '../shared/ClientCardRow';
 // PendingActionsModal é global (Home)
-import StickyModalHeader from './shared/StickyModalHeader';
+import StickyModalHeader from '../shared/StickyModalHeader';
 import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
-import FloatingDatePicker from './FloatingDatePicker';
-import { cancelAppointment } from '../services/appointments';
-import { dispatchers } from '../events/dispatchers';
-import { useAgendaFinalizeAction } from '../hooks/useAgendaFinalizeAction';
-import type { PendingReturnContext } from '../types/agendaFlow';
-import QuickScheduleModal from './QuickScheduleModal';
-import { makeClientBasic } from '../utils/appointments/agendaHelpers';
-import { toISODate } from '../utils/date';
+import FloatingDatePicker from '../FloatingDatePicker';
+import { cancelAppointment } from '../../services/appointments';
+import { dispatchers } from '../../events/dispatchers';
+import { useAgendaFinalizeAction } from '../../hooks/useAgendaFinalizeAction';
+import type { PendingReturnContext } from '../../types/agendaFlow';
+import QuickScheduleModal from '../QuickScheduleModal';
+import { makeClientBasic } from '../../utils/appointments/agendaHelpers';
+import { toISODate } from '../../utils/date';
 
 function startOfMonth(d: Date) {
     const x = new Date(d);
@@ -50,7 +50,7 @@ function groupByDay(items: Appointment[]) {
     return out;
 }
 
-export default function MonthlyAgendaModal({
+export function MonthlyAgendaModal({
     open,
     onClose,
     client,
