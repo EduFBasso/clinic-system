@@ -24,7 +24,7 @@
     border-radius: var(--radius-control);
     padding: var(--button-padding-lg);
     font-size: 1rem;
-    font-weight: var(--button-font-weight);
+    font-weight: var(--btn-font-weight);
     cursor: pointer;
     margin-top: 12px;
     transition: background 0.2s;

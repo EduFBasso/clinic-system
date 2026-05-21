@@ -1,125 +1,120 @@
-/* frontend\src\styles\palette.css */
+/* frontend/src/styles/palette.css */
+/* Fonte única de tokens de design. Não adicione valores hardcoded nos componentes.  */
+/* Temas disponíveis: blue (padrão), green, pink                                     */
 
-/* Paleta azul */
+/* ─── Base / Fallback ────────────────────────────────────────────────────────
+   Valores aplicados quando nenhum data-theme está presente (SSR, print, testes).
+   Os blocos [data-theme] abaixo sobrescrevem os tokens que variam por tema.       */
 :root {
+    /* Cor primária (fallback azul — sobrescrita por cada tema) */
     --color-primary: #004aad;
     --color-primary-light: #e6f0fa;
     --color-secondary: #007bff;
     --color-accent: #ffb300;
-    --color-bg: #f7f7f7; /* opaco; ajuste aqui a cor escura desejada para o main */
-    --color-screenoff: #252424;
-    --color-bg-section: #ffffff; /* opaco para contraste dos cartões */
-    /* Card background (padrão segue a seção) */
+    --color-bg: #f7f7f7;
+    --color-bg-section: #ffffff;
     --card-bg: var(--color-bg-section);
     --color-border: #e0e0e0;
     --color-border-focus: #007bff;
     --color-shadow: rgba(0, 0, 0, 0.06);
     --color-text: #222;
     --color-text-light: #333;
-    --color-text-muted: #6b7280; /* cinza 600-700 */
-    --color-heading: #111827; /* quase preto para títulos */
-    --color-disabled: #9ca3af; /* cinza para ícones/controles desabilitados */
-    /* Legacy error tokens (mantidos para compatibilidade) */
+    --color-text-muted: #6b7280;
+    --color-heading: #111827;
+    --color-disabled: #9ca3af;
+
+    /* Seleção */
+    --color-selected-bg: #eaf2ff;
+    --color-selected-border: #155eef;
+
+    /* ── Semânticos de estado ────────────────────────────────────────────── */
+    /* Error (formulários, campos inválidos) */
     --color-error: #d32f2f;
     --color-error-light: #ffeaea;
     --color-error-dark: #a31515;
     --color-error-border: #a31515;
 
-    /* Semantic tokens - use estes em componentes */
-    /* Success (verdes) - azul/verde escuro para alto contraste + fundo claro */
-    --color-success: #065f46; /* mais escuro (antes: #059669) */
+    /* Success */
+    --color-success: #065f46;
     --color-success-dark: #064e3b;
-    --color-success-darker: #052e22; /* hover mais escuro */
-    --color-success-deep: #03261a; /* active/pressed */
-    --color-success-bg: #ecfdf5; /* mantém fundo claro */
+    --color-success-darker: #052e22;
+    --color-success-deep: #03261a;
+    --color-success-bg: #ecfdf5;
 
-    /* Danger (vermelhos) */
-    --color-danger: #b91c1c; /* principal - botões/ênfase (genérico) */
-    --color-danger-dark: #991b1b; /* bordas/textos */
-    --color-danger-bg: #fef2f2; /* plano de fundo de alerta */
-    /* Canceled (derivado do danger) — vermelho vivo e alto contraste */
-    --color-canceled: #b91c1c; /* vermelho forte para textos/faixa de cancelado */
-    --color-canceled-bg: #fdf1f1; /* mais claro para facilitar leitura com mais textos vermelhos */
+    /* Danger */
+    --color-danger: #b91c1c;
+    --color-danger-dark: #991b1b;
+    --color-danger-bg: #fef2f2;
 
-    /* Warning (ambar) */
-    --color-warning: #f59e0b;
-    --color-warning-dark: #b45309; /* amber-700 — texto/ícone em superfície clara */
+    /* Canceled (estado de agendamento) */
+    --color-canceled: #b91c1c;
+    --color-canceled-bg: #fdf1f1;
+
+    /* Warning */
+    --color-warning-dark: #b45309;
     --color-warning-bg: #fef3c7;
 
-    /* Ongoing (atendimento em curso) - laranja para diferenciar de "concluído" */
-    --color-ongoing: #ea580c; /* laranja (Tailwind orange-600) */
-    --color-ongoing-bg: #fff7ed; /* laranja claríssimo (Tailwind orange-50) */
+    /* Ongoing — atendimento em curso */
+    --color-ongoing: #ea580c;
+    --color-ongoing-bg: #fff7ed;
 
-    /* Hoje — indicador do dia atual na grid mensal (e botão de atalho) */
-    --color-hoje: #ea580c; /* mesmo laranja de "em atendimento" */
+    /* Hoje — indicador do dia atual */
+    --color-hoje: #ea580c;
 
-    /* Done (atendimento finalizado) - azul escuro (alto contraste) + fundo claro */
-    --color-done: #1e3a8a; /* azul bem escuro (antes: #2563eb) */
-    --color-done-bg: #eff6ff; /* mantém azul clarinho no fundo para conforto visual */
+    /* Done — atendimento finalizado */
+    --color-done: #1e3a8a;
+    --color-done-bg: #eff6ff;
 
-    /* Pending (vencido/aguardando ação) - cinza mais escuro para contraste + fundo claro */
-    --color-pending: #374151; /* mais escuro (antes: #6b7280) */
-    --color-pending-bg: #f3f4f6; /* mantém fundo claro */
+    /* Pending — vencido/aguardando ação */
+    --color-pending: #374151;
+    --color-pending-bg: #f3f4f6;
 
-    /* Ícones e bordas (linkar a tokens existentes) */
-    --color-icon-default: var(--color-primary);
-    --color-card-border: var(--color-border);
+    /* ── Tipografia ──────────────────────────────────────────────────────── */
+    --font-title-lg: 22px;
+    --font-title-md: 18px;
+    --font-body: 14px;
+    --icon-size-lg: 20px;
+    --heading-weight-md: 600;
 
-    --color-selected-bg: #eaf2ff;
-    --color-selected-border: #155eef;
-
-    /* Font sizes (tokens de tipografia) */
-    --font-title-lg: 22px; /* títulos de modais principais */
-    --font-title-md: 18px; /* subtítulos, seções */
-    --font-body: 14px; /* texto padrão */
-    --font-small: 12px; /* rótulos pequenos */
-    --icon-size-md: 18px; /* ícones padrão */
-    --icon-size-lg: 20px; /* ícones de cabeçalho */
-
-    /* Heading weights (padronizar títulos entre telas) */
-    --heading-weight-lg: 700; /* título principal (evita bold excessivo) */
-    --heading-weight-md: 600; /* rótulos/headers médios */
-
-    /* Typography/layout tokens for minicards (AppointmentCard) */
+    /* ── Tokens de minicard (AppointmentCard) ────────────────────────────── */
     --card-font-family:
         system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
         'Apple Color Emoji', 'Segoe UI Emoji';
-    --card-name-size: 15px; /* tamanho do nome do cliente */
-    --card-type-size: 12px; /* tamanho do tipo de visita */
-    --card-text-size: 12px; /* tamanho do corpo/notas */
-    /* new: weight tokens to tune boldness across platforms */
-    --card-name-weight: 700; /* was 800 */
-    --card-type-weight: 600; /* label/type */
-    --card-time-weight: 600; /* time labels (left and inline) */
-    --card-radius: 8px; /* raio da borda do cartão */
-    --card-padding-md: 8px 10px; /* padding padrão */
-    --card-padding-compact: 6px 8px; /* padding compacto */
+    --card-name-size: 15px;
+    --card-type-size: 12px;
+    --card-text-size: 12px;
+    --card-name-weight: 700;
+    --card-type-weight: 600;
+    --card-time-weight: 600;
+    --card-radius: 8px;
+    --card-padding-md: 8px 10px;
+    --card-padding-compact: 6px 8px;
 
-    /* Shared control tokens - first step for CSS consolidation */
-    --radius-control: 6px;
-    --radius-surface: 8px;
-    --radius-panel: 10px;
+    /* ── Radius ──────────────────────────────────────────────────────────── */
+    --radius-control: 6px;   /* inputs, selects, botões */
+    --radius-surface: 8px;   /* cards, painéis pequenos */
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-pill: 999px;
+
+    /* ── Sombras ─────────────────────────────────────────────────────────── */
+    --shadow-soft-sm: 0 2px 16px var(--color-shadow);
+    --shadow-panel: 0 24px 70px rgb(15 23 42 / 0.12);
+
+    /* ── Botões — padding e tipografia ──────────────────────────────────── */
     --button-padding-sm: 6px 10px;
     --button-padding-md: 8px 20px;
     --button-padding-lg: 8px 24px;
-    --button-font-weight: 700;
-    --shadow-soft-sm: 0 2px 16px var(--color-shadow);
-
-    /* Semantic action button tokens */
-    --btn-radius: 6px;
     --btn-font-weight: 700;
     --btn-padding-md: 8px 12px;
 
+    /* ── Botões — variantes semânticas ──────────────────────────────────── */
     --btn-primary-bg: var(--color-success-dark);
     --btn-primary-border: var(--color-success-darker);
     --btn-primary-text: #ffffff;
 
     --btn-secondary-bg: var(--color-done);
-    --btn-secondary-border: color-mix(
-        in oklab,
-        var(--color-done) 60%,
-        #0000
-    );
+    --btn-secondary-border: color-mix(in oklab, var(--color-done) 60%, #0000);
     --btn-secondary-text: #ffffff;
 
     --btn-neutral-bg: #e5e7eb;
@@ -139,56 +134,13 @@
     --btn-disabled-text: #f9fafb;
 }
 
-/* Removido override mobile para manter contraste entre cartões e fundo do main */
-
-/* // Paleta verde */
-/* :root {
-    --color-primary: #218838;
-    --color-primary-light: #e6f9ea;
-    --color-secondary: #28a745;
-    --color-accent: #b2dfdb;
-    --color-bg: #f6fff8;
-    --color-bg-section: #fff;
-    --color-border: #b7e4c7;
-    --color-border-focus: #28a745;
-    --color-text: #1b3a2b;
-    --color-text-light: #3a5a40;
-    --color-error: #d32f2f;
-} */
-
-/* // Paleta escura */
-
-/* :root {
-    --color-primary: #313131;
-    --color-primary-light: #cdcdcd;
-    --color-secondary: #222;
-    --color-accent: #888;
-    --color-bg: #dddddd;
-    --color-bg-section: #f2f2f2;
-    --color-border: #333;
-    --color-border-focus: #555;
-    --color-text: #222;
-    --color-text-light: #4d4d4d;
-    --color-error: #d32f2f;
-} */
-
-/* ─── Design System — Lab tokens ─────────────────────────────────────────── */
-/* Tokens de layout/tipografia (não dependem de tema) */
-:root {
-    --radius-lg: 16px;
-    --radius-xl: 24px;
-    --radius-pill: 999px;
-    --shadow-soft: 0 8px 24px rgb(12 22 44 / 0.08);
-    --shadow-panel: 0 24px 70px rgb(15 23 42 / 0.12);
-}
-
+/* ─── Tema Azul ──────────────────────────────────────────────────────────── */
 [data-theme='blue'] {
     --color-primary: #004aad;
     --color-primary-light: #e6f0fa;
     --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.78);
     --color-surface: #ffffff;
-    --color-surface-alt: #eaf2ff;
     --color-input: #fdfefe;
     --color-text-main: #132238;
     --color-text-soft: #5b6b82;
@@ -197,27 +149,23 @@
     --color-border-strong: rgb(26 75 140 / 0.24);
     --color-accent: #4d8cff;
     --color-accent-strong: #155eef;
-    --color-accent-soft: rgb(77 140 255 / 0.14);
     --color-accent-ring: rgb(77 140 255 / 0.18);
-    --color-on-accent: #f8fbff;
     --color-danger: #e05666;
     --color-danger-strong: #ba2339;
     --color-danger-soft: #fde5e8;
     --color-danger-ink: #8b2232;
     --color-danger-ring: rgb(224 86 102 / 0.16);
-    --color-card-dark-top: #143459;
-    --color-card-dark-bottom: #0f223a;
     --color-selected-bg: #eaf2ff;
     --color-selected-border: var(--color-primary);
 }
 
+/* ─── Tema Verde ─────────────────────────────────────────────────────────── */
 [data-theme='green'] {
     --color-primary: #15803d;
     --color-primary-light: #e6f9ea;
     --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.82);
     --color-surface: #ffffff;
-    --color-surface-alt: #ebf8ef;
     --color-input: #fbfffc;
     --color-text-main: #173128;
     --color-text-soft: #567064;
@@ -226,27 +174,23 @@
     --color-border-strong: rgb(21 128 61 / 0.25);
     --color-accent: #2fb26f;
     --color-accent-strong: #15803d;
-    --color-accent-soft: rgb(47 178 111 / 0.14);
     --color-accent-ring: rgb(47 178 111 / 0.18);
-    --color-on-accent: #f4fff7;
     --color-danger: #df5a63;
     --color-danger-strong: #b42318;
     --color-danger-soft: #fce9ea;
     --color-danger-ink: #7f1d1d;
     --color-danger-ring: rgb(223 90 99 / 0.16);
-    --color-card-dark-top: #183a2c;
-    --color-card-dark-bottom: #10271e;
     --color-selected-bg: #e8f6ec;
     --color-selected-border: var(--color-primary);
 }
 
+/* ─── Tema Rosa ──────────────────────────────────────────────────────────── */
 [data-theme='pink'] {
     --color-primary: #be185d;
     --color-primary-light: #fff0f6;
     --color-bg: #f3f7fb;
     --color-panel: rgb(255 255 255 / 0.8);
     --color-surface: #ffffff;
-    --color-surface-alt: #fff0f6;
     --color-input: #fffdfd;
     --color-text-main: #3d1730;
     --color-text-soft: #76596a;
@@ -255,43 +199,12 @@
     --color-border-strong: rgb(190 24 93 / 0.25);
     --color-accent: #f05b95;
     --color-accent-strong: #be185d;
-    --color-accent-soft: rgb(240 91 149 / 0.14);
     --color-accent-ring: rgb(240 91 149 / 0.18);
-    --color-on-accent: #fff7fb;
     --color-danger: #db4967;
     --color-danger-strong: #b91c1c;
     --color-danger-soft: #fde7eb;
     --color-danger-ink: #8b2037;
     --color-danger-ring: rgb(219 73 103 / 0.16);
-    --color-card-dark-top: #4b1838;
-    --color-card-dark-bottom: #321024;
     --color-selected-bg: #fdebf4;
     --color-selected-border: var(--color-primary);
-}
-
-[data-theme='black'] {
-    --color-bg: #0d1117;
-    --color-panel: rgb(20 25 34 / 0.84);
-    --color-surface: #161b22;
-    --color-surface-alt: #202833;
-    --color-input: #121822;
-    --color-text-main: #f4f7fb;
-    --color-text-soft: #a3b0c2;
-    --color-text-muted: #7f8ea4;
-    --color-border: rgb(148 163 184 / 0.13);
-    --color-border-strong: rgb(148 163 184 / 0.25);
-    --color-accent: #60a5fa;
-    --color-accent-strong: #3b82f6;
-    --color-accent-soft: rgb(59 130 246 / 0.18);
-    --color-accent-ring: rgb(59 130 246 / 0.2);
-    --color-on-accent: #f5f9ff;
-    --color-danger: #fb7185;
-    --color-danger-strong: #f43f5e;
-    --color-danger-soft: #401826;
-    --color-danger-ink: #ffb4c1;
-    --color-danger-ring: rgb(244 63 94 / 0.17);
-    --color-card-dark-top: #111827;
-    --color-card-dark-bottom: #090d14;
-    --color-selected-bg: #1f2937;
-    --color-selected-border: #60a5fa;
 }

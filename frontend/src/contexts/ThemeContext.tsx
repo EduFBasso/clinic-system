@@ -10,16 +10,15 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { API_BASE } from '../config/api';
 import { getAccessToken } from '../utils/auth/session';
 
-export type AppTheme = 'blue' | 'green' | 'pink' | 'black';
+export type AppTheme = 'blue' | 'green' | 'pink';
 
-const VALID_THEMES: AppTheme[] = ['blue', 'green', 'pink', 'black'];
+const VALID_THEMES: AppTheme[] = ['blue', 'green', 'pink'];
 const DEFAULT_THEME: AppTheme = 'blue';
 
 const THEME_META_COLOR: Record<AppTheme, string> = {
     blue: '#004aad',
     green: '#15803d',
     pink: '#be185d',
-    black: '#0d1117',
 };
 
 function applyThemeMetaColor(theme: AppTheme) {

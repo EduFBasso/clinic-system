@@ -37,7 +37,7 @@ const actionBtnBaseStyle: React.CSSProperties = {
     gap: 8,
     minHeight: 40,
     padding: '8px 12px',
-    borderRadius: 'var(--btn-radius)',
+    borderRadius: 'var(--radius-control)',
     borderWidth: 1,
     borderStyle: 'solid',
     fontSize: 'var(--font-body)',

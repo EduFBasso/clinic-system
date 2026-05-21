@@ -11,9 +11,6 @@ const THEME_OPTIONS: Array<{
     { value: 'blue', label: 'Azul', swatch: '#155eef' },
     { value: 'green', label: 'Verde', swatch: '#15803d' },
     { value: 'pink', label: 'Rosa', swatch: '#be185d' },
-    /* RETOMADA: Tema escuro 'black' deferred até que theme system esteja estável.
-       Para reativar, descomente a linha abaixo e adicione refinements ao palette.css.
-       { value: 'black', label: 'Escuro', swatch: '#111827' }, */
 ];
 
 interface AboutModalProps {
