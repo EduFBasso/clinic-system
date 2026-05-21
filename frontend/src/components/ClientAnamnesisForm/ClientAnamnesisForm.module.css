@@ -70,7 +70,48 @@
     color: var(--color-text-muted, #555);
 }
 
-/* ── Radio pills ─────────────────────────────────── */
+/* ── Checkbox pills (multi-select) ──────────────── */
+
+.checkHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.checkBtn {
+    border: 1.5px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    padding: 0.42rem 0.85rem;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--color-surface);
+    color: var(--color-text-main);
+    transition:
+        background 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    line-height: 1.4;
+    display: inline-flex;
+    align-items: center;
+}
+
+.checkBtn:hover {
+    border-color: var(--color-primary);
+}
+
+.checkBtnSelected {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #ffffff;
+}
+
+/* ── Radio pills (legado — mantido para compatibilidade) ── */
 
 .radioGroup {
     display: flex;

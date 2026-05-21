@@ -40,7 +40,12 @@ export default function ClientAnamnesisForm({
 
         const parentValue = values[field.depends_on] ?? '';
         if (field.show_when_value) {
-            return parentValue === field.show_when_value;
+            // Suporta multi-select: verifica se alguma seleção bate com show_when_value
+            const parentSelections = parentValue
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
+            return parentSelections.includes(field.show_when_value);
         }
         return parentValue !== '';
     }
@@ -77,16 +82,54 @@ export default function ClientAnamnesisForm({
                         );
 
                         const currentValue = values[field.id] ?? '';
+
+                        // Multi-select: parse valor atual em array de seleções
+                        const selections = currentValue
+                            ? currentValue
+                                  .split(',')
+                                  .map(s => s.trim())
+                                  .filter(Boolean)
+                            : [];
+
                         const hasOtherOption =
                             field.field_type === 'radio' &&
                             (field.options ?? []).includes('Outro');
                         const otherIsSelected =
                             hasOtherOption &&
-                            (currentValue === 'Outro' ||
-                                currentValue.startsWith('Outros: '));
-                        const otherText = currentValue.startsWith('Outros: ')
-                            ? currentValue.slice(8)
-                            : '';
+                            selections.some(
+                                s => s === 'Outro' || s.startsWith('Outro: '),
+                            );
+                        const otherText = (() => {
+                            const entry = selections.find(s =>
+                                s.startsWith('Outro: '),
+                            );
+                            return entry ? entry.slice(7) : '';
+                        })();
+
+                        /** Helpers multi-select */
+                        const toggleOption = (opt: string) => {
+                            if (opt === 'Outro') {
+                                if (otherIsSelected) {
+                                    // Remove 'Outro' e qualquer 'Outro: xxx'
+                                    const next = selections.filter(
+                                        s =>
+                                            s !== 'Outro' &&
+                                            !s.startsWith('Outro: '),
+                                    );
+                                    onChange(field.id, next.join(', '));
+                                } else {
+                                    onChange(
+                                        field.id,
+                                        [...selections, 'Outro'].join(', '),
+                                    );
+                                }
+                            } else {
+                                const next = selections.includes(opt)
+                                    ? selections.filter(s => s !== opt)
+                                    : [...selections, opt];
+                                onChange(field.id, next.join(', '));
+                            }
+                        };
 
                         return (
                             <div key={field.id} className={styles.fieldRow}>
@@ -100,36 +143,32 @@ export default function ClientAnamnesisForm({
                                             const selected =
                                                 opt === 'Outro'
                                                     ? otherIsSelected
-                                                    : currentValue === opt;
+                                                    : selections.includes(opt);
                                             return (
-                                                <button
+                                                <label
                                                     key={opt}
-                                                    type='button'
                                                     data-anamnesis-pill=''
                                                     data-selected={
                                                         selected ? '' : undefined
                                                     }
                                                     className={
                                                         selected
-                                                            ? `${styles.radioBtn} ${styles.radioBtnSelected}`
-                                                            : styles.radioBtn
+                                                            ? `${styles.checkBtn} ${styles.checkBtnSelected}`
+                                                            : styles.checkBtn
                                                     }
-                                                    onClick={() => {
-                                                        if (opt === 'Outro') {
-                                                            onChange(
-                                                                field.id,
-                                                                otherIsSelected ? '' : 'Outro',
-                                                            );
-                                                        } else {
-                                                            onChange(
-                                                                field.id,
-                                                                selected ? '' : opt,
-                                                            );
-                                                        }
-                                                    }}
                                                 >
+                                                    <input
+                                                        type='checkbox'
+                                                        checked={selected}
+                                                        onChange={() =>
+                                                            toggleOption(opt)
+                                                        }
+                                                        className={
+                                                            styles.checkHidden
+                                                        }
+                                                    />
                                                     {opt}
-                                                </button>
+                                                </label>
                                             );
                                         })}
                                     </div>
@@ -147,9 +186,23 @@ export default function ClientAnamnesisForm({
                                             placeholder='Informe...'
                                             onChange={e => {
                                                 const text = e.target.value;
+                                                const withoutOther =
+                                                    selections.filter(
+                                                        s =>
+                                                            s !== 'Outro' &&
+                                                            !s.startsWith(
+                                                                'Outro: ',
+                                                            ),
+                                                    );
+                                                const newEntry = text
+                                                    ? `Outro: ${text}`
+                                                    : 'Outro';
                                                 onChange(
                                                     field.id,
-                                                    text ? `Outros: ${text}` : 'Outro',
+                                                    [
+                                                        ...withoutOther,
+                                                        newEntry,
+                                                    ].join(', '),
                                                 );
                                             }}
                                         />

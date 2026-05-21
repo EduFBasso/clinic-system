@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { ClientData } from '../../types/ClientData';
 import InputField from '../FormElements/InputField/InputField';
 import SelectField from '../FormElements/SelectField/SelectField';
@@ -30,6 +31,18 @@ export default function ClientPersonalDataForm({
     isEdit = false,
 }: Props) {
     const { theme } = useTheme();
+
+    // Estado local para o valor raw do input[type=date] (ISO: YYYY-MM-DD).
+    // Necessário pois o browser dispara onChange a cada dígito do ano (ex: "3" → "0003",
+    // "19" → "0019"), e um componente controlado resetaria o campo a cada tecla.
+    const [dobInputValue, setDobInputValue] = useState<string>(
+        normalizeDOBForApi(formData.date_of_birth) ?? '',
+    );
+
+    // Sincroniza quando date_of_birth muda externamente (ex: carregando cliente existente).
+    useEffect(() => {
+        setDobInputValue(normalizeDOBForApi(formData.date_of_birth) ?? '');
+    }, [formData.date_of_birth]);
 
     return (
         <div data-theme={theme} className={styles.wrapper}>
@@ -106,12 +119,22 @@ export default function ClientPersonalDataForm({
                     <InputField
                         label='Nascimento'
                         name='date_of_birth'
-                        value={normalizeDOBForApi(formData.date_of_birth) ?? ''}
+                        value={dobInputValue}
                         onChange={e => {
                             const iso = e.target.value;
-                            const [y, m, d] = iso.split('-');
-                            const dob = iso ? `${d}/${m}/${y}` : '';
-                            handleChange('date_of_birth', dob);
+                            setDobInputValue(iso);
+                            if (!iso) {
+                                handleChange('date_of_birth', '');
+                                return;
+                            }
+                            const parts = iso.split('-');
+                            if (parts.length !== 3) return;
+                            const [y, m, d] = parts;
+                            const year = parseInt(y, 10);
+                            // Só propaga para o formData quando o ano estiver completo
+                            if (year >= 1900 && year <= 2100) {
+                                handleChange('date_of_birth', `${d}/${m}/${y}`);
+                            }
                         }}
                         type='date'
                     />
