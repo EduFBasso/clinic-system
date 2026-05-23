@@ -49,7 +49,7 @@ export function OptionWithOtherField({
             <SectionTitle className={titleClassName}>{label}</SectionTitle>
             <div className={styles.optionGroup}>
                 {options.map(option => (
-                    <label key={option} className='flex items-center space-x-2'>
+                    <label key={option} className={styles.optionLabel}>
                         <input
                             type='radio'
                             name={name}
@@ -77,7 +77,7 @@ export function OptionWithOtherField({
                                 : ''
                         }
                         onChange={handleOtherInputChange}
-                        className='ml-2 px-2 py-1 border rounded'
+                        className={styles.otherInput}
                     />
                 )}
             </div>

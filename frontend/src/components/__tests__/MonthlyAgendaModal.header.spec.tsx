@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import MonthlyAgendaModal from '../../components/MonthlyAgendaModal';
+import { MonthlyAgendaModal } from '../../components/MonthlyAgendaModal/MonthlyAgendaModal';
 import type { ClientBasic } from '../../types/ClientBasic';
 import type { Appointment } from '../../hooks/useAppointments';
 

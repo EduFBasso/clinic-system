@@ -1,8 +1,8 @@
 import React from 'react';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { render } from '@testing-library/react';
-import DailyAgendaModal from '../DailyAgendaModal';
-import WeeklyAgendaModal from '../WeeklyAgendaModal';
+import { DailyAgendaModal } from '../DailyAgendaModal/DailyAgendaModal';
+import { WeeklyAgendaModal } from '../WeeklyAgendaModal/WeeklyAgendaModal';
 
 // We rely on the real AppModal inside each AgendaModal. JSDOM scrolling is shallow, so we simulate by mutating scrollTop on the modal root.
 

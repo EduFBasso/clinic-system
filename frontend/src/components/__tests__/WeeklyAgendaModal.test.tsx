@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import WeeklyAgendaModal from '../WeeklyAgendaModal';
+import { WeeklyAgendaModal } from '../WeeklyAgendaModal/WeeklyAgendaModal';
 
 // Fixed reference date for deterministic assertions (Wednesday)
 const FIXED_NOW = new Date('2025-10-01T10:00:00');

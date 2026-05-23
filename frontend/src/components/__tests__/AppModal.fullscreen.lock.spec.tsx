@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import AppModal from '../../components/Modal';
+import { AppModal } from '../../components/Modal/Modal';
 
 // Smoke test: ensures fullscreen modal sets body overflow hidden and data attribute present
 

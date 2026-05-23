@@ -1,8 +1,8 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import DailyAgendaModal from '../DailyAgendaModal';
-import WeeklyAgendaModal from '../WeeklyAgendaModal';
+import { DailyAgendaModal } from '../DailyAgendaModal/DailyAgendaModal';
+import { WeeklyAgendaModal } from '../WeeklyAgendaModal/WeeklyAgendaModal';
 
 // Helper to snapshot lock-related styles/classes
 function getLockSnapshot() {

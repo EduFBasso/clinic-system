@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import AppModal from '../Modal';
+import { AppModal } from '../Modal/Modal';
 
 // Simple test to ensure fullscreen AppModal renders bottom buffer with expected style referencing env safe-area + var compensation.
 

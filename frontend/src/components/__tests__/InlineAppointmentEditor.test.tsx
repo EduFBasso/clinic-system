@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import InlineAppointmentEditor from '../InlineAppointmentEditor';
+import { InlineAppointmentEditor } from '../InlineAppointmentEditor/InlineAppointmentEditor';
 import type { Appointment } from '../../hooks/useAppointments';
 
 function makeAppt(partial: Partial<Appointment> = {}): Appointment {

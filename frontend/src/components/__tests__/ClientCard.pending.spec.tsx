@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import ClientCard from '../ClientCard';
+import { ClientCard } from '../clientCard/ClientCard';
 import type { ClientBasic } from '../../types/ClientBasic';
 
 // Mock focus util to avoid scroll logic noise

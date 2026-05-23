@@ -1,5 +1,5 @@
 import { formatTime } from '../../utils/timeFormat';
-import styles from '../../styles/components/ClientCard.module.css';
+import styles from './ClientCard.module.css';
 import type { Appointment } from '../../hooks/useAppointments';
 import { API_BASE } from '../../config/api';
 import { FaEdit } from 'react-icons/fa';

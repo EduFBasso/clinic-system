@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import AgendaSettingsModal from '../AgendaSettingsModal';
+import { AgendaSettingsModal } from '../AgendaSettingsModal/AgendaSettingsModal';
 import { resetAgendaSettings } from '../../utils/agendaSettings';
 
 const emitMock = vi.hoisted(() => vi.fn());

@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
 import type { Professional } from '../types/models';
 import { API_BASE } from '../config/api';
-import ProfessionalCreateModal from '../components/ProfessionalCreateModal';
-import AppModal from '../components/Modal';
+import { ProfessionalCreateModal } from '../components/ProfessionalCreateModal/ProfessionalCreateModal';
+import { AppModal } from '../components/Modal/Modal';
 import '../styles/modal-message.css';
 import { getAccessToken } from '../utils/auth/session';
 

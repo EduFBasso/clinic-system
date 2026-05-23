@@ -4,12 +4,12 @@ import { FaArrowLeft, FaArrowRight, FaCalendarAlt } from 'react-icons/fa';
 import ClientCardRow from '../components/shared/ClientCardRow';
 import QuickScheduleModal from '../components/QuickScheduleModal';
 // PendingActionsModal agora é gerenciado globalmente em Home via evento 'pendingActions:open'
-import AppointmentDetailsModal from '../components/AppointmentDetailsModal';
+import { AppointmentDetailsModal } from '../components/AppointmentDetailsModal/AppointmentDetailsModal';
 import type { Appointment } from '../hooks/useAppointments';
 import { toISODate } from '../utils/date';
 import { useAppointmentsRange } from '../hooks/useAppointments';
 import type { ClientBasic } from '../types/ClientBasic';
-import InlineAppointmentEditor from '../components/InlineAppointmentEditor';
+import { InlineAppointmentEditor } from '../components/InlineAppointmentEditor/InlineAppointmentEditor';
 import TimeRangeLabel from '../components/shared/TimeRangeLabel';
 import { enrichList } from '../utils/appointments/status';
 import {

@@ -258,7 +258,7 @@ function AppointmentCardViewInner<T extends SharedAppointmentLike>({
                     return;
                 }
                 if (status === 'ongoing') {
-                    if (onFinalize || onCancel) requestFinalize();
+                    if (onFinalize || onCancel) setActionPrompt('ongoing');
                     return;
                 }
                 // Novo: para concluídos, o clique do cartão abre detalhes (ícone removido)

@@ -56,8 +56,8 @@ const elisaClient: ClientBasic = {
 const { useAppointmentsRange } = await import('../hooks/useAppointments');
 
 function makeScheduledAppt(): Appointment {
-    const start = new Date(Date.now() + 3 * 60 * 60 * 1000);
-    start.setMinutes(0, 0, 0);
+    const start = new Date();
+    start.setHours(10, 0, 0, 0);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     return {
         id: 77,
@@ -81,6 +81,15 @@ function openModal() {
 
 beforeEach(() => {
     vi.restoreAllMocks();
+    // Fixa "agora" em hoje às 09:00 para que o appointment 10:00-11:00 seja sempre futuro.
+    // Usa toFake:['Date'] para não afetar setTimeout/setInterval (waitFor continua funcional).
+    const fixedNow = new Date();
+    fixedNow.setHours(9, 0, 0, 0);
+    fixedNow.setSeconds(0);
+    fixedNow.setMilliseconds(0);
+    vi.useFakeTimers({ now: fixedNow.getTime(), toFake: ['Date'] });
+    // Torna requestAnimationFrame síncrono para que runAfterPromptClose dispare imediatamente.
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
     vi.stubGlobal('fetch', vi.fn());
     vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
     vi.spyOn(window.localStorage, 'getItem').mockReturnValue('token');
@@ -92,6 +101,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.resetAllMocks();
 });
 
@@ -240,29 +250,29 @@ describe('QuickScheduleModal', () => {
         fireEvent.click(await screen.findByText('C L'));
         fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
 
+        const startDate = new Date(appt.start_at);
+        const endDate = new Date(appt.end_at);
+
         await waitFor(() => {
             expect(
                 screen.getByRole('button', { name: 'Salvar' }),
             ).toBeInTheDocument();
+            const comboboxes = screen.getAllByRole('combobox');
+            expect((comboboxes[0] as HTMLSelectElement).value).toBe(
+                String(startDate.getHours()).padStart(2, '0'),
+            );
+            expect((comboboxes[1] as HTMLSelectElement).value).toBe(
+                String(startDate.getMinutes()).padStart(2, '0'),
+            );
+            expect((comboboxes[2] as HTMLSelectElement).value).toBe(
+                String(endDate.getHours()).padStart(2, '0'),
+            );
+            expect((comboboxes[3] as HTMLSelectElement).value).toBe(
+                String(endDate.getMinutes()).padStart(2, '0'),
+            );
+            expect((comboboxes[4] as HTMLSelectElement).value).toBe('consulta');
+            expect(screen.getByRole('textbox')).toHaveValue('ajustar horario');
         });
-
-        const startDate = new Date(appt.start_at);
-        const endDate = new Date(appt.end_at);
-        const comboboxes = screen.getAllByRole('combobox');
-        expect((comboboxes[0] as HTMLSelectElement).value).toBe(
-            String(startDate.getHours()).padStart(2, '0'),
-        );
-        expect((comboboxes[1] as HTMLSelectElement).value).toBe(
-            String(startDate.getMinutes()).padStart(2, '0'),
-        );
-        expect((comboboxes[2] as HTMLSelectElement).value).toBe(
-            String(endDate.getHours()).padStart(2, '0'),
-        );
-        expect((comboboxes[3] as HTMLSelectElement).value).toBe(
-            String(endDate.getMinutes()).padStart(2, '0'),
-        );
-        expect((comboboxes[4] as HTMLSelectElement).value).toBe('consulta');
-        expect(screen.getByRole('textbox')).toHaveValue('ajustar horario');
     });
 
     it('restores the preserved draft when reopening the scheduler after another flow', async () => {
